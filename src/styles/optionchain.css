@@ -87,12 +87,15 @@
 
 /* ATM Row */
 .oc-row--atm {
-  background: rgba(99, 102, 241, 0.08) !important;
+  background: rgba(99, 102, 241, 0.12) !important;
+  border-top: 2px solid var(--accent);
+  border-bottom: 2px solid var(--accent);
 }
 
 .oc-row--atm .oc-cell-strike {
   font-weight: 700;
   color: var(--accent);
+  font-size: 13px;
 }
 
 /* Cell styles */

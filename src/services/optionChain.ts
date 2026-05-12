@@ -1,5 +1,54 @@
 import { getAuthHeader } from './kiteAuth';
 
+const DB_NAME = 'optiontrap_instruments';
+const DB_VERSION = 1;
+const STORE_NAME = 'nfo_data';
+
+function openDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const request = indexedDB.open(DB_NAME, DB_VERSION);
+    request.onupgradeneeded = () => {
+      const db = request.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME);
+      }
+    };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+async function getCachedCSV(): Promise<{ csv: string; date: string } | null> {
+  const db = await openDB();
+  return new Promise((resolve) => {
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const store = tx.objectStore(STORE_NAME);
+    const req = store.get('nfo_instruments');
+    req.onsuccess = () => resolve(req.result || null);
+    req.onerror = () => resolve(null);
+  });
+}
+
+async function setCachedCSV(csv: string, date: string): Promise<void> {
+  const db = await openDB();
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    store.put({ csv, date }, 'nfo_instruments');
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+function getTodayIST(): string {
+  const now = new Date();
+  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const year = ist.getFullYear();
+  const month = String(ist.getMonth() + 1).padStart(2, '0');
+  const day = String(ist.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export interface OptionInstrument {
   instrumentToken: number;
   exchangeToken: number;
@@ -19,12 +68,23 @@ export interface OptionChainRow {
 }
 
 /**
- * Fetch NFO instruments CSV and parse NIFTY options
+ * Fetch NFO instruments CSV — cached daily in IndexedDB
  */
 export async function fetchNiftyOptions(): Promise<OptionInstrument[]> {
+  const today = getTodayIST();
+
+  // Check cache first
+  const cached = await getCachedCSV();
+  if (cached && cached.date === today) {
+    console.log('[OptionChain] Using cached instruments from', cached.date);
+    return parseNiftyOptions(cached.csv);
+  }
+
+  // Fetch fresh data
   const authHeader = getAuthHeader();
   if (!authHeader) throw new Error('Not authenticated');
 
+  console.log('[OptionChain] Fetching fresh instruments data...');
   const response = await fetch('/api/instruments/NFO', {
     headers: {
       'X-Kite-Version': '3',
@@ -42,9 +102,13 @@ export async function fetchNiftyOptions(): Promise<OptionInstrument[]> {
   }
 
   const csv = await response.text();
+  console.log('[OptionChain] CSV fetched, storing in cache...');
+
+  // Store in IndexedDB for today
+  await setCachedCSV(csv, today);
+
   const firstLines = csv.split('\n').slice(0, 3);
   console.log('[OptionChain] CSV header:', firstLines[0]);
-  console.log('[OptionChain] CSV sample:', firstLines[1]);
   const result = parseNiftyOptions(csv);
   console.log('[OptionChain] Parsed NIFTY options:', result.length);
   if (result.length > 0) {
