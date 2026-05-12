@@ -1,0 +1,149 @@
+import { getAuthHeader } from './kiteAuth';
+
+export interface OptionInstrument {
+  instrumentToken: number;
+  exchangeToken: number;
+  tradingsymbol: string;
+  name: string;
+  expiry: string;
+  strike: number;
+  instrumentType: 'CE' | 'PE';
+  lotSize: number;
+  lastPrice: number;
+}
+
+export interface OptionChainRow {
+  strike: number;
+  ce: OptionInstrument | null;
+  pe: OptionInstrument | null;
+}
+
+/**
+ * Fetch NFO instruments CSV and parse NIFTY options
+ */
+export async function fetchNiftyOptions(): Promise<OptionInstrument[]> {
+  const authHeader = getAuthHeader();
+  if (!authHeader) throw new Error('Not authenticated');
+
+  const response = await fetch('/api/instruments/NFO', {
+    headers: {
+      'X-Kite-Version': '3',
+      'Authorization': authHeader,
+    },
+  });
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    console.error('[OptionChain] Fetch failed:', response.status, text.slice(0, 200));
+    if (response.status === 403 || text.toLowerCase().includes('api_key') || text.toLowerCase().includes('access_token')) {
+      throw new Error('Session expired. Please login again from the Profile page.');
+    }
+    throw new Error('Failed to fetch instruments');
+  }
+
+  const csv = await response.text();
+  const firstLines = csv.split('\n').slice(0, 3);
+  console.log('[OptionChain] CSV header:', firstLines[0]);
+  console.log('[OptionChain] CSV sample:', firstLines[1]);
+  const result = parseNiftyOptions(csv);
+  console.log('[OptionChain] Parsed NIFTY options:', result.length);
+  if (result.length > 0) {
+    console.log('[OptionChain] Sample option:', result[0]);
+  }
+  return result;
+}
+
+function parseNiftyOptions(csv: string): OptionInstrument[] {
+  const lines = csv.trim().split('\n');
+  if (lines.length < 2) return [];
+
+  const headers = parseCsvLine(lines[0]);
+  const tokenIdx = headers.indexOf('instrument_token');
+  const exchangeTokenIdx = headers.indexOf('exchange_token');
+  const symbolIdx = headers.indexOf('tradingsymbol');
+  const nameIdx = headers.indexOf('name');
+  const expiryIdx = headers.indexOf('expiry');
+  const strikeIdx = headers.indexOf('strike');
+  const typeIdx = headers.indexOf('instrument_type');
+  const lotIdx = headers.indexOf('lot_size');
+  const lastPriceIdx = headers.indexOf('last_price');
+
+  const options: OptionInstrument[] = [];
+
+  for (let i = 1; i < lines.length; i++) {
+    const cols = parseCsvLine(lines[i]);
+    if (cols.length < headers.length) continue;
+
+    const name = cols[nameIdx];
+    const instrumentType = cols[typeIdx];
+
+    if (name !== 'NIFTY') continue;
+    if (instrumentType !== 'CE' && instrumentType !== 'PE') continue;
+
+    options.push({
+      instrumentToken: parseInt(cols[tokenIdx], 10),
+      exchangeToken: parseInt(cols[exchangeTokenIdx], 10),
+      tradingsymbol: cols[symbolIdx],
+      name,
+      expiry: cols[expiryIdx],
+      strike: parseFloat(cols[strikeIdx]),
+      instrumentType: instrumentType as 'CE' | 'PE',
+      lotSize: parseInt(cols[lotIdx], 10),
+      lastPrice: parseFloat(cols[lastPriceIdx]) || 0,
+    });
+  }
+
+  return options;
+}
+
+/**
+ * Parse a CSV line handling quoted fields
+ */
+function parseCsvLine(line: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      inQuotes = !inQuotes;
+    } else if (char === ',' && !inQuotes) {
+      result.push(current.trim());
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+
+/**
+ * Get unique expiry dates sorted ascending
+ */
+export function getExpiries(options: OptionInstrument[]): string[] {
+  const expiries = [...new Set(options.map((o) => o.expiry))];
+  return expiries.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+}
+
+/**
+ * Build option chain rows for a given expiry
+ */
+export function buildOptionChain(options: OptionInstrument[], expiry: string): OptionChainRow[] {
+  const filtered = options.filter((o) => o.expiry === expiry);
+  const strikeMap = new Map<number, { ce: OptionInstrument | null; pe: OptionInstrument | null }>();
+
+  for (const opt of filtered) {
+    if (!strikeMap.has(opt.strike)) {
+      strikeMap.set(opt.strike, { ce: null, pe: null });
+    }
+    const row = strikeMap.get(opt.strike)!;
+    if (opt.instrumentType === 'CE') row.ce = opt;
+    else row.pe = opt;
+  }
+
+  return Array.from(strikeMap.entries())
+    .map(([strike, { ce, pe }]) => ({ strike, ce, pe }))
+    .sort((a, b) => a.strike - b.strike);
+}

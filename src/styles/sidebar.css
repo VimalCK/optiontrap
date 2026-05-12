@@ -1,0 +1,235 @@
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  width: var(--sidebar-width-expanded);
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--sidebar-border);
+  display: flex;
+  flex-direction: column;
+  transition: width var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 100;
+}
+
+.sidebar.collapsed {
+  width: var(--sidebar-width-collapsed);
+}
+
+/* Header / Brand */
+.sidebar__header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 20px 16px;
+  min-height: 64px;
+  border-bottom: 1px solid var(--sidebar-border);
+  overflow: hidden;
+}
+
+.sidebar__logo {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  border-radius: 10px;
+  box-shadow: 0 4px 12px var(--accent-glow);
+}
+
+.sidebar__logo svg {
+  width: 20px;
+  height: 20px;
+  color: #fff;
+}
+
+.sidebar__brand {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+  opacity: 1;
+  transition: opacity var(--transition-speed) ease;
+}
+
+.sidebar.collapsed .sidebar__brand {
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  overflow: hidden;
+}
+
+/* Toggle Button */
+.sidebar__toggle {
+  position: absolute;
+  top: 20px;
+  right: -14px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--sidebar-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+  z-index: 101;
+}
+
+.sidebar.collapsed .sidebar__toggle {
+  right: -14px;
+}
+
+.sidebar__toggle:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.sidebar__toggle svg {
+  width: 14px;
+  height: 14px;
+  transition: transform var(--transition-speed) ease;
+}
+
+.sidebar.collapsed .sidebar__toggle svg {
+  transform: rotate(180deg);
+}
+
+/* Navigation */
+.sidebar__nav {
+  flex: 1;
+  padding: 12px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sidebar__nav-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  position: relative;
+  overflow: hidden;
+}
+
+.sidebar__nav-item:hover {
+  background: var(--sidebar-hover);
+  color: var(--text-primary);
+}
+
+.sidebar__nav-item.active {
+  background: var(--sidebar-active);
+  color: var(--accent);
+}
+
+.sidebar__nav-item.active::before {
+  content: '';
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 20px;
+  background: var(--accent);
+  border-radius: 0 3px 3px 0;
+}
+
+.sidebar__nav-icon {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar__nav-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.sidebar__nav-label {
+  opacity: 1;
+  transition: opacity var(--transition-speed) ease;
+}
+
+.sidebar.collapsed .sidebar__nav-label {
+  opacity: 0;
+  pointer-events: none;
+  width: 0;
+  overflow: hidden;
+}
+
+/* Collapsed state: center icons properly */
+.sidebar.collapsed .sidebar__nav-item {
+  justify-content: center;
+  padding: 10px;
+  gap: 0;
+}
+
+.sidebar.collapsed .sidebar__header {
+  justify-content: center;
+  padding: 20px 10px;
+  gap: 0;
+}
+
+/* Footer */
+.sidebar__footer {
+  padding: 12px 8px;
+  border-top: 1px solid var(--sidebar-border);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Unsigned indicator */
+.sidebar__nav-icon--unsigned {
+  position: relative;
+}
+
+.sidebar__unsigned-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  background: #ef4444;
+  border-radius: 50%;
+  border: 2px solid var(--sidebar-bg);
+}
+
+.sidebar__signed-dot {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  background: #22c55e;
+  border-radius: 50%;
+  border: 2px solid var(--sidebar-bg);
+}
+
+.sidebar__nav-icon--signed {
+  position: relative;
+}
+
+/* Sidebar Avatar */
+.sidebar__avatar {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1.5px solid var(--accent);
+}

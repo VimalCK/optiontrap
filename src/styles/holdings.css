@@ -1,0 +1,468 @@
+/* Holdings Stats */
+.card-grid--four-col {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+@media (max-width: 1024px) {
+  .card-grid--four-col {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 600px) {
+  .card-grid--four-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.holdings-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 20px;
+}
+
+.holdings-stat__label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.holdings-stat__value {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+
+.holdings-stat__value small {
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* P&L Colors */
+.positive {
+  color: #22c55e;
+}
+
+.negative {
+  color: #ef4444;
+}
+
+/* Allocation */
+.allocation-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.allocation-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.allocation-item:hover {
+  background: var(--sidebar-hover);
+}
+
+.allocation-item--expanded {
+  background: var(--sidebar-hover);
+}
+
+.allocation-item__row {
+  display: grid;
+  grid-template-columns: 140px 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+@media (max-width: 600px) {
+  .allocation-item__row {
+    grid-template-columns: 100px 1fr auto;
+  }
+}
+
+/* Expanded detail row */
+.allocation-item__detail {
+  display: flex;
+  gap: 12px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--card-border);
+}
+
+.allocation-detail__chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 12px;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  min-width: 90px;
+}
+
+.allocation-detail__label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.allocation-detail__value {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.allocation-item__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.allocation-item__symbol {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.allocation-item__exchange {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.allocation-item__bar-wrapper {
+  height: 6px;
+  background: var(--card-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.allocation-item__bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent), #8b5cf6);
+  border-radius: 3px;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.allocation-item__pct {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: right;
+}
+
+.allocation-item__pnl {
+  font-size: 11px;
+  font-weight: 500;
+}
+
+/* Holdings Table */
+.holdings-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.holdings-table th {
+  text-align: left;
+  padding: 10px 12px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--card-border);
+  white-space: nowrap;
+}
+
+.holdings-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--card-border);
+  white-space: nowrap;
+}
+
+.holdings-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.holdings-table tbody tr:hover {
+  background: var(--sidebar-hover);
+}
+
+.holdings-table__symbol {
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-right: 6px;
+}
+
+.holdings-table__exchange {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--sidebar-active);
+  padding: 2px 5px;
+  border-radius: 3px;
+}
+
+.holdings-table td small {
+  font-size: 11px;
+  opacity: 0.8;
+}
+
+/* Loading */
+.holdings-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 60px 0;
+  color: var(--text-secondary);
+}
+
+.holdings-error {
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #ef4444;
+}
+
+/* Pledged Badge */
+.badge-pledged {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 9px;
+  font-weight: 700;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.15);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+  border-radius: 4px;
+  margin-left: 6px;
+  vertical-align: middle;
+  line-height: 1;
+}
+
+/* Allocation Header with Toggle */
+.allocation-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+}
+
+.allocation-toggle {
+  display: flex;
+  gap: 2px;
+  background: var(--sidebar-hover);
+  border-radius: 8px;
+  padding: 3px;
+}
+
+.allocation-toggle__btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+}
+
+.allocation-toggle__btn:hover {
+  color: var(--text-primary);
+}
+
+.allocation-toggle__btn.active {
+  background: var(--accent);
+  color: #fff;
+  box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+/* Pie Chart Container */
+.allocation-pie-container {
+  display: flex;
+  align-items: center;
+  gap: 32px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 600px) {
+  .allocation-pie-container {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+.pie-chart {
+  flex-shrink: 0;
+}
+
+/* Pie Legend */
+.allocation-pie-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 200px;
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.pie-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pie-legend-item__color {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  flex-shrink: 0;
+}
+
+.pie-legend-item__symbol {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.pie-legend-item__pct {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* Live Badge */
+.live-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.3);
+  border-radius: 12px;
+  padding: 3px 10px;
+  margin-left: 12px;
+  vertical-align: middle;
+  letter-spacing: 0.5px;
+  animation: pulse-live 2s ease-in-out infinite;
+}
+
+.live-badge--preopen {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+  border-color: rgba(245, 158, 11, 0.3);
+}
+
+.live-badge--closed {
+  color: var(--text-secondary);
+  background: rgba(161, 161, 170, 0.1);
+  border-color: rgba(161, 161, 170, 0.2);
+  animation: none;
+}
+
+@keyframes pulse-live {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* Treemap */
+.treemap {
+  position: relative;
+  width: 100%;
+  height: 360px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.treemap__cell {
+  position: absolute;
+  border: 1.5px solid var(--content-bg);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  transition: filter 0.15s ease;
+  cursor: default;
+}
+
+.treemap__cell:hover {
+  filter: brightness(1.2);
+  z-index: 1;
+}
+
+.treemap__cell-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  text-align: center;
+}
+
+.treemap__cell-symbol {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.treemap__cell-pnl {
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.treemap__cell-pct {
+  font-size: 10px;
+  color: var(--text-secondary);
+  line-height: 1.2;
+}
+
+/* Allocation Summary */
+.allocation-summary {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+.allocation-summary__item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.allocation-summary__label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.allocation-summary__value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.allocation-summary__divider {
+  width: 1px;
+  height: 32px;
+  background: var(--card-border);
+}
