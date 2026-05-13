@@ -466,3 +466,37 @@
   height: 32px;
   background: var(--card-border);
 }
+
+/* Privacy Mode */
+.page-header__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.privacy-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--text-secondary);
+  transition: all 0.15s ease;
+}
+
+.privacy-toggle:hover {
+  background: var(--sidebar-hover);
+  color: var(--text-primary);
+}
+
+.privacy-toggle.active {
+  color: var(--accent);
+  background: var(--sidebar-active);
+}
+
+.blurred {
+  filter: blur(8px);
+  user-select: none;
+  transition: filter 0.2s ease;
+}

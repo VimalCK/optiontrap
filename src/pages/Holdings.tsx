@@ -26,6 +26,7 @@ const Holdings: React.FC = () => {
   const [allocationView, setAllocationView] = useState<AllocationView>('bar');
   const [marketStatus, setMarketStatus] = useState<MarketStatus>(getMarketStatus);
   const [expandedStock, setExpandedStock] = useState<string | null>(null);
+  const [privacyMode, setPrivacyMode] = useState(false);
   const tickerRef = useRef<KiteTicker | null>(null);
 
   const session = getSession();
@@ -160,16 +161,37 @@ const Holdings: React.FC = () => {
   return (
     <div>
       <div className="page-header">
-        <h1 className="page-header__title">
-          Holdings
-          {marketStatus === 'live' && <span className="live-badge">● LIVE</span>}
-          {marketStatus === 'pre-open' && <span className="live-badge live-badge--preopen">● PRE-OPEN</span>}
-          {marketStatus === 'closed' && <span className="live-badge live-badge--closed">● CLOSED</span>}
-        </h1>
+        <div className="page-header__row">
+          <h1 className="page-header__title">
+            Holdings
+            {marketStatus === 'live' && <span className="live-badge">● LIVE</span>}
+            {marketStatus === 'pre-open' && <span className="live-badge live-badge--preopen">● PRE-OPEN</span>}
+            {marketStatus === 'closed' && <span className="live-badge live-badge--closed">● CLOSED</span>}
+          </h1>
+          <button
+            className={`privacy-toggle ${privacyMode ? 'active' : ''}`}
+            onClick={() => setPrivacyMode((p) => !p)}
+            title={privacyMode ? 'Show values' : 'Hide values'}
+            aria-pressed={privacyMode}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              {privacyMode ? (
+                <>
+                  <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+                  <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+                  <path d="M1 1l22 22" />
+                </>
+              ) : (
+                <>
+                  <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                  <circle cx="12" cy="12" r="3" />
+                </>
+              )}
+            </svg>
+          </button>
+        </div>
         <p className="page-header__subtitle">
-          {holdings.length > 0
-            ? `${holdings.length} instruments · ${totalCurrentValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })} current value`
-            : 'Track your current positions and portfolio allocation'}
+          {holdings.length > 0 ? `${holdings.length} holdings` : 'No holdings'}
         </p>
       </div>
 
@@ -195,7 +217,7 @@ const Holdings: React.FC = () => {
           <div className="card-grid card-grid--two-col">
             <div className="card holdings-stat">
               <span className="holdings-stat__label">Total P&L</span>
-              <span className={`holdings-stat__value ${totalPnl >= 0 ? 'positive' : 'negative'}`}>
+              <span className={`holdings-stat__value ${totalPnl >= 0 ? 'positive' : 'negative'} ${privacyMode ? 'blurred' : ''}`}>
                 {totalPnl >= 0 ? '+' : ''}{totalPnl.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
                 <small>
                   {' '}({totalInvestment > 0 ? ((totalPnl / totalInvestment) * 100).toFixed(2) : '0.00'}%)
@@ -224,12 +246,12 @@ const Holdings: React.FC = () => {
                 <div className="allocation-summary">
                   <span className="allocation-summary__item">
                     <span className="allocation-summary__label">Invested</span>
-                    <span className="allocation-summary__value">{totalInvestment.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                    <span className={`allocation-summary__value ${privacyMode ? 'blurred' : ''}`}>{totalInvestment.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
                   </span>
                   <span className="allocation-summary__divider" />
                   <span className="allocation-summary__item">
                     <span className="allocation-summary__label">Current</span>
-                    <span className="allocation-summary__value">{totalCurrentValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                    <span className={`allocation-summary__value ${privacyMode ? 'blurred' : ''}`}>{totalCurrentValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
                   </span>
                 </div>
               </div>
@@ -288,15 +310,15 @@ const Holdings: React.FC = () => {
                         <div className="allocation-item__detail">
                           <div className="allocation-detail__chip">
                             <span className="allocation-detail__label">Invested</span>
-                            <span className="allocation-detail__value">{item.investedValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                            <span className={`allocation-detail__value ${privacyMode ? 'blurred' : ''}`}>{item.investedValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                           </div>
                           <div className="allocation-detail__chip">
                             <span className="allocation-detail__label">Current</span>
-                            <span className="allocation-detail__value">{item.currentValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                            <span className={`allocation-detail__value ${privacyMode ? 'blurred' : ''}`}>{item.currentValue.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
                           </div>
                           <div className="allocation-detail__chip">
                             <span className="allocation-detail__label">P&L</span>
-                            <span className={`allocation-detail__value ${item.pnl >= 0 ? 'positive' : 'negative'}`}>
+                            <span className={`allocation-detail__value ${item.pnl >= 0 ? 'positive' : 'negative'} ${privacyMode ? 'blurred' : ''}`}>
                               {item.pnl >= 0 ? '+' : ''}{item.pnl.toLocaleString('en-IN', { maximumFractionDigits: 0 })} ({item.pnlPercentage.toFixed(2)}%)
                             </span>
                           </div>
@@ -339,13 +361,13 @@ const Holdings: React.FC = () => {
                         {isPledged && <span className="badge-pledged" title="Pledged">P</span>}
                         <span className="holdings-table__exchange">{h.exchange}</span>
                       </td>
-                      <td>{qty}{isPledged && h.quantity === 0 ? '' : ''}</td>
-                      <td>{h.average_price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className={privacyMode ? 'blurred' : ''}>{qty}{isPledged && h.quantity === 0 ? '' : ''}</td>
+                      <td className={privacyMode ? 'blurred' : ''}>{h.average_price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td>{h.last_price.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td className={h.day_change >= 0 ? 'positive' : 'negative'}>
                         {h.day_change >= 0 ? '+' : ''}{h.day_change.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
-                      <td className={h.pnl >= 0 ? 'positive' : 'negative'}>
+                      <td className={`${h.pnl >= 0 ? 'positive' : 'negative'} ${privacyMode ? 'blurred' : ''}`}>
                         {h.pnl >= 0 ? '+' : ''}{h.pnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         <small> ({pnlPct.toFixed(2)}%)</small>
                       </td>
