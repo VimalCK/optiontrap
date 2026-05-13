@@ -48,12 +48,20 @@
 }
 
 .option-chain-table th {
+  text-align: center;
   padding: 8px 10px;
   font-size: 10px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--text-secondary);
+  border-bottom: 1px solid var(--card-border);
+  white-space: nowrap;
+}
+
+.option-chain-table td {
+  text-align: center;
+  padding: 8px 10px;
   border-bottom: 1px solid var(--card-border);
   white-space: nowrap;
 }
@@ -73,12 +81,6 @@
 .oc-header-strike {
   text-align: center;
   background: var(--sidebar-hover);
-}
-
-.option-chain-table td {
-  padding: 8px 10px;
-  border-bottom: 1px solid var(--card-border);
-  white-space: nowrap;
 }
 
 .option-chain-table tbody tr:hover {
@@ -125,4 +127,12 @@
   font-size: 11px;
   color: var(--text-secondary);
   text-align: center;
+}
+
+/* OI Cell */
+.oc-cell-oi {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
 }

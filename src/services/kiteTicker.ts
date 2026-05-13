@@ -12,6 +12,7 @@ export interface Tick {
   highPrice?: number;
   lowPrice?: number;
   closePrice?: number;
+  oi?: number;
 }
 
 type TickCallback = (ticks: Tick[]) => void;
@@ -42,7 +43,7 @@ export class KiteTicker {
     this.ws.onopen = () => {
       console.log('[KiteTicker] Connected');
       this.subscribe(instrumentTokens);
-      this.setMode('quote', instrumentTokens);
+      this.setMode('full', instrumentTokens);
     };
 
     this.ws.onmessage = (event) => {
@@ -150,6 +151,11 @@ export class KiteTicker {
       tick.highPrice = data.getInt32(start + 32) / divisor;
       tick.lowPrice = data.getInt32(start + 36) / divisor;
       tick.closePrice = data.getInt32(start + 40) / divisor;
+    }
+
+    // Full mode: 184 bytes — includes OI
+    if (length >= 60) {
+      tick.oi = data.getInt32(start + 48);
     }
 
     return tick;

@@ -21,6 +21,7 @@ const Trades: React.FC = () => {
   const [selectedExpiry, setSelectedExpiry] = useState<string>('');
   const [livePrices, setLivePrices] = useState<Map<number, number>>(new Map());
   const [openPrices, setOpenPrices] = useState<Map<number, number>>(new Map());
+  const [oiData, setOiData] = useState<Map<number, number>>(new Map());
   const [niftySpot, setNiftySpot] = useState<number>(0);
   const [isStreaming, setIsStreaming] = useState(false);
   const tickerRef = useRef<KiteTicker | null>(null);
@@ -45,6 +46,15 @@ const Trades: React.FC = () => {
       ticks.forEach((t) => {
         if (t.openPrice !== undefined && t.openPrice > 0 && t.instrumentToken !== NIFTY_INDEX_TOKEN) {
           next.set(t.instrumentToken, t.openPrice);
+        }
+      });
+      return next;
+    });
+    setOiData((prev) => {
+      const next = new Map(prev);
+      ticks.forEach((t) => {
+        if (t.oi !== undefined && t.instrumentToken !== NIFTY_INDEX_TOKEN) {
+          next.set(t.instrumentToken, t.oi);
         }
       });
       return next;
@@ -245,9 +255,16 @@ const Trades: React.FC = () => {
             <table className="option-chain-table">
               <thead>
                 <tr>
-                  <th className="oc-header-ce">CALLS</th>
+                  <th className="oc-header-ce" colSpan={2}>CALLS</th>
                   <th className="oc-header-strike">STRIKE</th>
-                  <th className="oc-header-pe">PUTS</th>
+                  <th className="oc-header-pe" colSpan={2}>PUTS</th>
+                </tr>
+                <tr>
+                  <th>OI</th>
+                  <th>LTP</th>
+                  <th></th>
+                  <th>LTP</th>
+                  <th>OI</th>
                 </tr>
               </thead>
               <tbody>
@@ -255,8 +272,11 @@ const Trades: React.FC = () => {
                   const isAtm = row.strike === atmStrike;
                   const cePrice = getPrice(row.ce);
                   const pePrice = getPrice(row.pe);
+                  const ceOi = row.ce ? oiData.get(row.ce.instrumentToken) : undefined;
+                  const peOi = row.pe ? oiData.get(row.pe.instrumentToken) : undefined;
                   return (
                     <tr key={row.strike} className={isAtm ? 'oc-row--atm' : ''}>
+                      <td className="oc-cell-oi">{ceOi !== undefined ? ceOi.toLocaleString('en-IN') : '-'}</td>
                       <td className={`oc-cell-ltp ${getPriceColor(row.ce)}`}>
                         {cePrice !== null ? cePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                       </td>
@@ -264,6 +284,7 @@ const Trades: React.FC = () => {
                       <td className={`oc-cell-ltp ${getPriceColor(row.pe)}`}>
                         {pePrice !== null ? pePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                       </td>
+                      <td className="oc-cell-oi">{peOi !== undefined ? peOi.toLocaleString('en-IN') : '-'}</td>
                     </tr>
                   );
                 })}
