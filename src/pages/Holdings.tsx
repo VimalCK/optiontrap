@@ -106,8 +106,11 @@ const Holdings: React.FC = () => {
     }
   };
 
-  // Compute allocation — use collateral_quantity for pledged stocks
-  const getEffectiveQty = (h: Holding) => h.quantity > 0 ? h.quantity : h.collateral_quantity;
+  // Compute allocation — use t1_quantity + realised_quantity - used_quantity, fallback to collateral_quantity for pledged stocks
+  const getEffectiveQty = (h: Holding) => {
+    const qty = h.t1_quantity + h.realised_quantity - h.used_quantity;
+    return qty > 0 ? qty : h.collateral_quantity;
+  };
 
   const totalInvestment = holdings.reduce((sum, h) => sum + h.average_price * getEffectiveQty(h), 0);
   const totalCurrentValue = holdings.reduce((sum, h) => sum + h.last_price * getEffectiveQty(h), 0);

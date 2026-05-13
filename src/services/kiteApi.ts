@@ -54,7 +54,10 @@ export interface Holding {
   isin: string;
   product: string;
   quantity: number;
+  opening_quantity: number;
   t1_quantity: number;
+  realised_quantity: number;
+  used_quantity: number;
   average_price: number;
   last_price: number;
   close_price: number;
