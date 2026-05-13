@@ -26,7 +26,9 @@ const Holdings: React.FC = () => {
   const [allocationView, setAllocationView] = useState<AllocationView>('bar');
   const [marketStatus, setMarketStatus] = useState<MarketStatus>(getMarketStatus);
   const [expandedStock, setExpandedStock] = useState<string | null>(null);
-  const [privacyMode, setPrivacyMode] = useState(false);
+  const [privacyMode, setPrivacyMode] = useState(() => {
+    return localStorage.getItem('optiontrap_privacy_mode') === 'true';
+  });
   const tickerRef = useRef<KiteTicker | null>(null);
 
   const session = getSession();
@@ -170,8 +172,12 @@ const Holdings: React.FC = () => {
           </h1>
           <button
             className={`privacy-toggle ${privacyMode ? 'active' : ''}`}
-            onClick={() => setPrivacyMode((p) => !p)}
-            title={privacyMode ? 'Show values' : 'Hide values'}
+            onClick={() => setPrivacyMode((p) => {
+              const next = !p;
+              localStorage.setItem('optiontrap_privacy_mode', String(next));
+              return next;
+            })}
+            title="Privacy mode"
             aria-pressed={privacyMode}
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
