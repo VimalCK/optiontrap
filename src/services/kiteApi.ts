@@ -46,6 +46,67 @@ async function kiteRequest<T>(endpoint: string, options: RequestOptions = {}): P
   return result.data;
 }
 
+/**
+ * Fetch full quotes for multiple instruments (max 500 per call)
+ * Returns a map of instrument identifier to quote data
+ */
+export interface QuoteData {
+  last_price: number;
+  oi: number;
+  ohlc: { open: number; high: number; low: number; close: number };
+  volume: number;
+}
+
+export async function fetchQuotes(instruments: string[]): Promise<Map<string, QuoteData>> {
+  const authHeader = getAuthHeader();
+  if (!authHeader) throw new Error('Not authenticated');
+
+  const results = new Map<string, QuoteData>();
+
+  // Kite /quote API accepts max 500 instruments, but URL length is the real
+  // constraint. Each instrument like "NFO:NIFTY2560524500CE" is ~22 chars,
+  // URL-encoded with "i=" prefix and "&" separator ≈ 30 chars each.
+  // Keep batches small enough so the full URL stays well under 2048 chars.
+  const batchSize = 40;
+
+  for (let i = 0; i < instruments.length; i += batchSize) {
+    const batch = instruments.slice(i, i + batchSize);
+    const params = batch.map((inst) => `i=${encodeURIComponent(inst)}`).join('&');
+
+    try {
+      const response = await fetch(`/api/quote?${params}`, {
+        headers: {
+          'X-Kite-Version': '3',
+          'Authorization': authHeader,
+        },
+      });
+
+      if (!response.ok) {
+        console.warn(`[fetchQuotes] Batch ${i / batchSize + 1} failed with status ${response.status}`);
+        continue;
+      }
+
+      const result = await response.json();
+      const data = result.data;
+      if (data) {
+        for (const [key, value] of Object.entries(data)) {
+          const v = value as { last_price: number; oi: number; ohlc: { open: number; high: number; low: number; close: number }; volume: number };
+          results.set(key, {
+            last_price: v.last_price || 0,
+            oi: v.oi || 0,
+            ohlc: v.ohlc || { open: 0, high: 0, low: 0, close: 0 },
+            volume: v.volume || 0,
+          });
+        }
+      }
+    } catch (err) {
+      console.warn(`[fetchQuotes] Batch ${i / batchSize + 1} error:`, err);
+    }
+  }
+
+  return results;
+}
+
 // Holdings
 export interface Holding {
   tradingsymbol: string;

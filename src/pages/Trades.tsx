@@ -1,6 +1,9 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { TradesIcon } from '@/components/icons/Icons';
-import { getSession } from '@/services/kiteAuth';
+import { getSession, clearSession } from '@/services/kiteAuth';
+import { notifySessionChange } from '@/hooks/useKiteSession';
+import { fetchQuotes } from '@/services/kiteApi';
 import {
   fetchNiftyOptions,
   getExpiries,
@@ -15,6 +18,7 @@ import '@/styles/optionchain.css';
 const NIFTY_INDEX_TOKEN = 256265; // NSE:NIFTY 50
 
 const Trades: React.FC = () => {
+  const navigate = useNavigate();
   const [options, setOptions] = useState<OptionInstrument[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -27,7 +31,7 @@ const Trades: React.FC = () => {
   const tickerRef = useRef<KiteTicker | null>(null);
   const subscribedTokensRef = useRef<number[]>([]);
 
-  const session = getSession();
+  const [session, setSession] = useState(getSession);
 
   const handleTicks = useCallback((ticks: Tick[]) => {
     setLivePrices((prev) => {
@@ -84,7 +88,14 @@ const Trades: React.FC = () => {
         setSelectedExpiry(expiries[0]);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load option chain');
+      const msg = err instanceof Error ? err.message : 'Failed to load option chain';
+      if (msg.toLowerCase().includes('session expired') || msg.toLowerCase().includes('login again')) {
+        clearSession();
+        notifySessionChange();
+        setSession(null);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -126,7 +137,7 @@ const Trades: React.FC = () => {
     return chain.slice(start, end);
   }, [chain, atmStrike]);
 
-  // Connect/reconnect WebSocket when visible chain changes
+  // Connect/reconnect WebSocket when visible chain changes (only during market hours)
   useEffect(() => {
     if (!session || visibleChain.length === 0 || !isMarketLive()) return;
 
@@ -155,11 +166,83 @@ const Trades: React.FC = () => {
     tickerRef.current = ticker;
     subscribedTokensRef.current = tokens;
     setIsStreaming(true);
-
-    return () => {
-      // Cleanup handled by the top-level unmount effect
-    };
   }, [visibleChain, session, handleTicks]);
+
+  // Market closed: fetch quotes when chain is ready.
+  // Two-phase approach: first fetch NIFTY spot to determine correct ATM,
+  // then fetch all option strikes around the real ATM.
+  const quoteFetchedRef = useRef<string>('');
+  useEffect(() => {
+    if (!session || chain.length === 0 || isMarketLive()) return;
+
+    // Build a key from the visible strikes to detect when ATM shifts
+    const atmIndex = chain.findIndex((r) => r.strike === atmStrike);
+    const start = Math.max(0, atmIndex - 15);
+    const end = Math.min(chain.length, atmIndex + 16);
+    const strikes = chain.slice(start, end);
+    const fetchKey = `${selectedExpiry}_${strikes[0]?.strike}_${strikes[strikes.length - 1]?.strike}`;
+
+    // Skip if we already fetched for this exact range
+    if (quoteFetchedRef.current === fetchKey) return;
+    quoteFetchedRef.current = fetchKey;
+
+    const instruments: string[] = ['NSE:NIFTY 50'];
+    strikes.forEach((row) => {
+      if (row.ce) instruments.push(`NFO:${row.ce.tradingsymbol}`);
+      if (row.pe) instruments.push(`NFO:${row.pe.tradingsymbol}`);
+    });
+
+    console.log(`[Trades] Fetching quotes for ${instruments.length} instruments (strikes ${strikes[0]?.strike}–${strikes[strikes.length - 1]?.strike})`);
+
+    fetchQuotes(instruments).then((quotes) => {
+      const priceMap = new Map<number, number>();
+      const oiMap = new Map<number, number>();
+      strikes.forEach((row) => {
+        if (row.ce) {
+          const q = quotes.get(`NFO:${row.ce.tradingsymbol}`);
+          if (q) {
+            priceMap.set(row.ce.instrumentToken, q.last_price);
+            oiMap.set(row.ce.instrumentToken, q.oi);
+          }
+        }
+        if (row.pe) {
+          const q = quotes.get(`NFO:${row.pe.tradingsymbol}`);
+          if (q) {
+            priceMap.set(row.pe.instrumentToken, q.last_price);
+            oiMap.set(row.pe.instrumentToken, q.oi);
+          }
+        }
+      });
+      setLivePrices(priceMap);
+      setOiData(oiMap);
+
+      const niftyQuote = quotes.get('NSE:NIFTY 50');
+      if (niftyQuote) setNiftySpot(niftyQuote.last_price);
+
+      console.log(`[Trades] Got quotes for ${priceMap.size} options, spot: ${niftyQuote?.last_price}`);
+
+      // Update cache
+      const cacheKey = `optiontrap_oc_ltp_${selectedExpiry}`;
+      const pricesObj: Record<string, number> = {};
+      priceMap.forEach((v, k) => { pricesObj[String(k)] = v; });
+      const oiObj: Record<string, number> = {};
+      oiMap.forEach((v, k) => { oiObj[String(k)] = v; });
+      localStorage.setItem(cacheKey, JSON.stringify({ prices: pricesObj, oi: oiObj, spot: niftyQuote?.last_price || 0 }));
+    }).catch((err) => {
+      console.error('[Trades] Failed to fetch quotes:', err);
+      // Reset so it can retry
+      quoteFetchedRef.current = '';
+      // Fallback to cache
+      const cacheKey = `optiontrap_oc_ltp_${selectedExpiry}`;
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { prices, oi, spot } = JSON.parse(cached);
+        setLivePrices(new Map(Object.entries(prices).map(([k, v]) => [Number(k), v as number])));
+        setOiData(new Map(Object.entries(oi || {}).map(([k, v]) => [Number(k), v as number])));
+        if (spot) setNiftySpot(spot);
+      }
+    });
+  }, [chain, atmStrike, session, selectedExpiry]);
 
   // Helper to get live price or fallback to CSV price
   const getPrice = (instrument: OptionInstrument | null): number | null => {
@@ -191,6 +274,9 @@ const Trades: React.FC = () => {
           <div className="card__icon"><TradesIcon /></div>
           <h3 className="card__title">Not Connected</h3>
           <p className="card__description">Login to Kite Connect from the Profile page to view the option chain.</p>
+          <button className="btn btn--primary" onClick={() => navigate('/profile')} style={{ marginTop: 12 }}>
+            Login back
+          </button>
         </div>
       </div>
     );

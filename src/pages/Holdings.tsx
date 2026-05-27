@@ -1,7 +1,9 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { HoldingsIcon } from '@/components/icons/Icons';
 import { fetchHoldings, Holding } from '@/services/kiteApi';
-import { getSession } from '@/services/kiteAuth';
+import { getSession, clearSession } from '@/services/kiteAuth';
+import { notifySessionChange } from '@/hooks/useKiteSession';
 import { KiteTicker, Tick } from '@/services/kiteTicker';
 import { getMarketStatus, MarketStatus } from '@/utils/marketStatus';
 import '@/styles/holdings.css';
@@ -20,6 +22,7 @@ interface AllocationItem {
 }
 
 const Holdings: React.FC = () => {
+  const navigate = useNavigate();
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,7 +34,7 @@ const Holdings: React.FC = () => {
   });
   const tickerRef = useRef<KiteTicker | null>(null);
 
-  const session = getSession();
+  const [session, setSession] = useState(getSession);
 
   const handleTicks = useCallback((ticks: Tick[]) => {
     setHoldings((prev) => {
@@ -103,7 +106,14 @@ const Holdings: React.FC = () => {
       const data = await fetchHoldings();
       setHoldings(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load holdings');
+      const msg = err instanceof Error ? err.message : 'Failed to load holdings';
+      if (msg.toLowerCase().includes('session expired') || msg.toLowerCase().includes('login again')) {
+        clearSession();
+        notifySessionChange();
+        setSession(null);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -155,6 +165,9 @@ const Holdings: React.FC = () => {
           <p className="card__description">
             Login to Kite Connect from the Profile page to view your holdings.
           </p>
+          <button className="btn btn--primary" onClick={() => navigate('/profile')} style={{ marginTop: 12 }}>
+            Login back
+          </button>
         </div>
       </div>
     );
