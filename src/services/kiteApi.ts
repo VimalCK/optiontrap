@@ -55,6 +55,8 @@ export interface QuoteData {
   oi: number;
   ohlc: { open: number; high: number; low: number; close: number };
   volume: number;
+  oi_day_high?: number;
+  oi_day_low?: number;
 }
 
 export async function fetchQuotes(instruments: string[]): Promise<Map<string, QuoteData>> {
@@ -90,12 +92,14 @@ export async function fetchQuotes(instruments: string[]): Promise<Map<string, Qu
       const data = result.data;
       if (data) {
         for (const [key, value] of Object.entries(data)) {
-          const v = value as { last_price: number; oi: number; ohlc: { open: number; high: number; low: number; close: number }; volume: number };
+          const v = value as { last_price: number; oi: number; ohlc: { open: number; high: number; low: number; close: number }; volume: number; oi_day_high?: number; oi_day_low?: number };
           results.set(key, {
             last_price: v.last_price || 0,
             oi: v.oi || 0,
             ohlc: v.ohlc || { open: 0, high: 0, low: 0, close: 0 },
             volume: v.volume || 0,
+            oi_day_high: v.oi_day_high,
+            oi_day_low: v.oi_day_low,
           });
         }
       }

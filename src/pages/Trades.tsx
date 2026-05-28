@@ -4,6 +4,7 @@ import { TradesIcon } from '@/components/icons/Icons';
 import { getSession, clearSession } from '@/services/kiteAuth';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import { fetchQuotes } from '@/services/kiteApi';
+import { cacheGet, cacheSet } from '@/services/cacheDb';
 import {
   fetchNiftyOptions,
   getExpiries,
@@ -24,7 +25,7 @@ const Trades: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedExpiry, setSelectedExpiry] = useState<string>('');
   const [livePrices, setLivePrices] = useState<Map<number, number>>(new Map());
-  const [openPrices, setOpenPrices] = useState<Map<number, number>>(new Map());
+  const [closePrices, setClosePrices] = useState<Map<number, number>>(new Map());
   const [oiData, setOiData] = useState<Map<number, number>>(new Map());
   const [niftySpot, setNiftySpot] = useState<number>(0);
   const [isStreaming, setIsStreaming] = useState(false);
@@ -45,11 +46,11 @@ const Trades: React.FC = () => {
       });
       return next;
     });
-    setOpenPrices((prev) => {
+    setClosePrices((prev) => {
       const next = new Map(prev);
       ticks.forEach((t) => {
-        if (t.openPrice !== undefined && t.openPrice > 0 && t.instrumentToken !== NIFTY_INDEX_TOKEN) {
-          next.set(t.instrumentToken, t.openPrice);
+        if (t.closePrice !== undefined && t.closePrice > 0 && t.instrumentToken !== NIFTY_INDEX_TOKEN) {
+          next.set(t.instrumentToken, t.closePrice);
         }
       });
       return next;
@@ -197,12 +198,14 @@ const Trades: React.FC = () => {
     fetchQuotes(instruments).then((quotes) => {
       const priceMap = new Map<number, number>();
       const oiMap = new Map<number, number>();
+      const closeMap = new Map<number, number>();
       strikes.forEach((row) => {
         if (row.ce) {
           const q = quotes.get(`NFO:${row.ce.tradingsymbol}`);
           if (q) {
             priceMap.set(row.ce.instrumentToken, q.last_price);
             oiMap.set(row.ce.instrumentToken, q.oi);
+            if (q.ohlc.close > 0) closeMap.set(row.ce.instrumentToken, q.ohlc.close);
           }
         }
         if (row.pe) {
@@ -210,37 +213,42 @@ const Trades: React.FC = () => {
           if (q) {
             priceMap.set(row.pe.instrumentToken, q.last_price);
             oiMap.set(row.pe.instrumentToken, q.oi);
+            if (q.ohlc.close > 0) closeMap.set(row.pe.instrumentToken, q.ohlc.close);
           }
         }
       });
       setLivePrices(priceMap);
       setOiData(oiMap);
+      setClosePrices(closeMap);
 
       const niftyQuote = quotes.get('NSE:NIFTY 50');
       if (niftyQuote) setNiftySpot(niftyQuote.last_price);
 
       console.log(`[Trades] Got quotes for ${priceMap.size} options, spot: ${niftyQuote?.last_price}`);
 
-      // Update cache
-      const cacheKey = `optiontrap_oc_ltp_${selectedExpiry}`;
+      // Update cache in IndexedDB
+      const cacheKey = `oc_ltp_${selectedExpiry}`;
       const pricesObj: Record<string, number> = {};
       priceMap.forEach((v, k) => { pricesObj[String(k)] = v; });
       const oiObj: Record<string, number> = {};
       oiMap.forEach((v, k) => { oiObj[String(k)] = v; });
-      localStorage.setItem(cacheKey, JSON.stringify({ prices: pricesObj, oi: oiObj, spot: niftyQuote?.last_price || 0 }));
+      const closeObj: Record<string, number> = {};
+      closeMap.forEach((v, k) => { closeObj[String(k)] = v; });
+      cacheSet(cacheKey, { prices: pricesObj, oi: oiObj, close: closeObj, spot: niftyQuote?.last_price || 0 });
     }).catch((err) => {
       console.error('[Trades] Failed to fetch quotes:', err);
       // Reset so it can retry
       quoteFetchedRef.current = '';
-      // Fallback to cache
-      const cacheKey = `optiontrap_oc_ltp_${selectedExpiry}`;
-      const cached = localStorage.getItem(cacheKey);
-      if (cached) {
-        const { prices, oi, spot } = JSON.parse(cached);
-        setLivePrices(new Map(Object.entries(prices).map(([k, v]) => [Number(k), v as number])));
-        setOiData(new Map(Object.entries(oi || {}).map(([k, v]) => [Number(k), v as number])));
-        if (spot) setNiftySpot(spot);
-      }
+      // Fallback to IndexedDB cache
+      const cacheKey = `oc_ltp_${selectedExpiry}`;
+      cacheGet<{ prices: Record<string, number>; oi: Record<string, number>; close?: Record<string, number>; spot: number }>(cacheKey).then((cached) => {
+        if (cached) {
+          setLivePrices(new Map(Object.entries(cached.prices).map(([k, v]) => [Number(k), v])));
+          setOiData(new Map(Object.entries(cached.oi || {}).map(([k, v]) => [Number(k), v])));
+          if (cached.close) setClosePrices(new Map(Object.entries(cached.close).map(([k, v]) => [Number(k), v])));
+          if (cached.spot) setNiftySpot(cached.spot);
+        }
+      });
     });
   }, [chain, atmStrike, session, selectedExpiry]);
 
@@ -252,16 +260,17 @@ const Trades: React.FC = () => {
     return instrument.lastPrice > 0 ? instrument.lastPrice : null;
   };
 
-  // Helper to get price color class based on open price comparison
-  const getPriceColor = (instrument: OptionInstrument | null): string => {
-    if (!instrument) return '';
+  // Helper to get % change from previous day's close price (same as Zerodha)
+  const getPriceChange = (instrument: OptionInstrument | null): { pct: number; color: string } | null => {
+    if (!instrument) return null;
     const ltp = livePrices.get(instrument.instrumentToken);
-    const open = openPrices.get(instrument.instrumentToken);
-    if (ltp === undefined || open === undefined || open === 0) return '';
-    if (ltp > open) return 'positive';
-    if (ltp < open) return 'negative';
-    return '';
+    const prevClose = closePrices.get(instrument.instrumentToken);
+    if (ltp === undefined || prevClose === undefined || prevClose === 0) return null;
+    const pct = ((ltp - prevClose) / prevClose) * 100;
+    const color = pct > 0 ? 'positive' : pct < 0 ? 'negative' : '';
+    return { pct, color };
   };
+
 
   if (!session) {
     return (
@@ -360,17 +369,25 @@ const Trades: React.FC = () => {
                   const pePrice = getPrice(row.pe);
                   const ceOi = row.ce ? oiData.get(row.ce.instrumentToken) : undefined;
                   const peOi = row.pe ? oiData.get(row.pe.instrumentToken) : undefined;
+                  const ceChg = getPriceChange(row.ce);
+                  const peChg = getPriceChange(row.pe);
                   return (
                     <tr key={row.strike} className={isAtm ? 'oc-row--atm' : ''}>
-                      <td className="oc-cell-oi">{ceOi !== undefined ? ceOi.toLocaleString('en-IN') : '-'}</td>
-                      <td className={`oc-cell-ltp ${getPriceColor(row.ce)}`}>
+                      <td className="oc-cell-oi">
+                        {ceOi !== undefined ? ceOi.toLocaleString('en-IN') : '-'}
+                      </td>
+                      <td className="oc-cell-ltp">
                         {cePrice !== null ? cePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
+                        {ceChg && <span className={`oc-cell-chg ${ceChg.color}`}>{ceChg.pct >= 0 ? '+' : ''}{ceChg.pct.toFixed(2)}%</span>}
                       </td>
                       <td className="oc-cell-strike">{row.strike}</td>
-                      <td className={`oc-cell-ltp ${getPriceColor(row.pe)}`}>
+                      <td className="oc-cell-ltp">
                         {pePrice !== null ? pePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
+                        {peChg && <span className={`oc-cell-chg ${peChg.color}`}>{peChg.pct >= 0 ? '+' : ''}{peChg.pct.toFixed(2)}%</span>}
                       </td>
-                      <td className="oc-cell-oi">{peOi !== undefined ? peOi.toLocaleString('en-IN') : '-'}</td>
+                      <td className="oc-cell-oi">
+                        {peOi !== undefined ? peOi.toLocaleString('en-IN') : '-'}
+                      </td>
                     </tr>
                   );
                 })}
