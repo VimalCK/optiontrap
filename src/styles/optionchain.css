@@ -281,6 +281,7 @@
   flex: 1;
   position: relative;
   border-bottom: 1px solid var(--card-border);
+  border-left: 1px solid var(--card-border);
   margin-bottom: 24px;
 }
 
