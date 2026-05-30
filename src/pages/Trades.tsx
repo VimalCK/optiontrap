@@ -139,6 +139,18 @@ const Trades: React.FC = () => {
     return chain.slice(start, end);
   }, [chain, atmStrike]);
 
+  // Compute max OI across visible chain for bar width scaling
+  const maxOi = useMemo(() => {
+    let max = 0;
+    visibleChain.forEach((row) => {
+      const ceOi = row.ce ? oiData.get(row.ce.instrumentToken) || 0 : 0;
+      const peOi = row.pe ? oiData.get(row.pe.instrumentToken) || 0 : 0;
+      if (ceOi > max) max = ceOi;
+      if (peOi > max) max = peOi;
+    });
+    return max;
+  }, [visibleChain, oiData]);
+
   // Fetch previous day's closing OI for visible strikes (one-time on load)
   const prevOiFetchedRef = useRef<string>('');
   useEffect(() => {
@@ -421,23 +433,33 @@ const Trades: React.FC = () => {
                   const ceOiChg = getOiChange(row.ce);
                   const peOiChg = getOiChange(row.pe);
                   return (
-                    <tr key={row.strike} className={isAtm ? 'oc-row--atm' : ''}>
-                      <td className={`oc-cell-oi ${ceItm ? 'oc-cell--itm-ce' : ''}`}>
-                        {ceOi !== undefined ? ceOi.toLocaleString('en-IN') : '-'}
-                        {ceOiChg && <span className={`oc-cell-chg ${ceOiChg.color}`}>{ceOiChg.pct >= 0 ? '+' : ''}{ceOiChg.pct.toFixed(2)}%</span>}
+                    <tr key={row.strike} className={isAtm ? 'oc-row--atm' : ''} style={{ position: 'relative' }}>
+                      <td className={`oc-cell-oi oc-cell-oi--ce ${ceItm ? 'oc-cell--itm-ce' : ''}`}>
+                        <span className="oc-oi-content">
+                          {ceOi !== undefined ? ceOi.toLocaleString('en-IN') : '-'}
+                          {ceOiChg && <span className={`oc-cell-chg ${ceOiChg.color}`}>{ceOiChg.pct >= 0 ? '+' : ''}{ceOiChg.pct.toFixed(2)}%</span>}
+                        </span>
                       </td>
                       <td className={`oc-cell-ltp ${ceItm ? 'oc-cell--itm-ce' : ''}`}>
                         {cePrice !== null ? cePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                         {ceChg && <span className={`oc-cell-chg ${ceChg.color}`}>{ceChg.pct >= 0 ? '+' : ''}{ceChg.pct.toFixed(2)}%</span>}
                       </td>
-                      <td className="oc-cell-strike">{row.strike}</td>
+                      <td className="oc-cell-strike">
+                        <div className="oc-strike-bars">
+                          <div className="oc-oi-bar oc-oi-bar--ce" style={{ width: `${maxOi > 0 && ceOi ? (ceOi / maxOi) * 150 : 0}px` }} />
+                          <div className="oc-oi-bar oc-oi-bar--pe" style={{ width: `${maxOi > 0 && peOi ? (peOi / maxOi) * 150 : 0}px` }} />
+                        </div>
+                        {row.strike}
+                      </td>
                       <td className={`oc-cell-ltp ${peItm ? 'oc-cell--itm-pe' : ''}`}>
                         {pePrice !== null ? pePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                         {peChg && <span className={`oc-cell-chg ${peChg.color}`}>{peChg.pct >= 0 ? '+' : ''}{peChg.pct.toFixed(2)}%</span>}
                       </td>
-                      <td className={`oc-cell-oi ${peItm ? 'oc-cell--itm-pe' : ''}`}>
-                        {peOi !== undefined ? peOi.toLocaleString('en-IN') : '-'}
-                        {peOiChg && <span className={`oc-cell-chg ${peOiChg.color}`}>{peOiChg.pct >= 0 ? '+' : ''}{peOiChg.pct.toFixed(2)}%</span>}
+                      <td className={`oc-cell-oi oc-cell-oi--pe ${peItm ? 'oc-cell--itm-pe' : ''}`}>
+                        <span className="oc-oi-content">
+                          {peOi !== undefined ? peOi.toLocaleString('en-IN') : '-'}
+                          {peOiChg && <span className={`oc-cell-chg ${peOiChg.color}`}>{peOiChg.pct >= 0 ? '+' : ''}{peOiChg.pct.toFixed(2)}%</span>}
+                        </span>
                       </td>
                     </tr>
                   );

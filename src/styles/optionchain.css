@@ -107,6 +107,8 @@
   background: var(--sidebar-hover);
   border-left: 1px solid var(--card-border);
   border-right: 1px solid var(--card-border);
+  position: relative;
+  overflow: visible;
 }
 
 .oc-cell-ltp {
@@ -134,6 +136,50 @@
   color: var(--text-secondary);
   text-align: center;
   font-variant-numeric: tabular-nums;
+  position: relative;
+}
+
+.oc-cell-oi--ce {
+  text-align: right;
+}
+
+.oc-cell-oi--pe {
+  text-align: left;
+}
+
+/* OI Bar — originates from strike cell center */
+.oc-strike-bars {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.oc-oi-bar {
+  position: absolute;
+  bottom: 0;
+  height: 3px;
+  transition: width 0.3s ease;
+}
+
+.oc-oi-bar--ce {
+  right: 50%;
+  background: #22c55e;
+  border-radius: 2px 0 0 2px;
+}
+
+.oc-oi-bar--pe {
+  left: 50%;
+  background: #ef4444;
+  border-radius: 0 2px 2px 0;
+}
+
+.oc-oi-content {
+  position: relative;
+  z-index: 1;
 }
 
 /* Change % Cell */
