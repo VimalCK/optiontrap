@@ -31,6 +31,7 @@ const Trades: React.FC = () => {
   const [niftySpot, setNiftySpot] = useState<number>(0);
   const [isStreaming, setIsStreaming] = useState(false);
   const [chainView, setChainView] = useState<'table' | 'chart'>('table');
+  const [selectedChartStrike, setSelectedChartStrike] = useState<number | null>(null);
   const tickerRef = useRef<KiteTicker | null>(null);
   const subscribedTokensRef = useRef<number[]>([]);
 
@@ -516,14 +517,58 @@ const Trades: React.FC = () => {
               {visibleChain.map((row) => {
                 const ceOi = row.ce ? oiData.get(row.ce.instrumentToken) || 0 : 0;
                 const peOi = row.pe ? oiData.get(row.pe.instrumentToken) || 0 : 0;
+                const cePrevOi = row.ce ? prevDayOi.get(row.ce.instrumentToken) || 0 : 0;
+                const pePrevOi = row.pe ? prevDayOi.get(row.pe.instrumentToken) || 0 : 0;
                 const ceHeight = maxOi > 0 ? (ceOi / maxOi) * 100 : 0;
                 const peHeight = maxOi > 0 ? (peOi / maxOi) * 100 : 0;
+                const cePrevHeight = maxOi > 0 ? (Math.min(cePrevOi, ceOi) / maxOi) * 100 : 0;
+                const pePrevHeight = maxOi > 0 ? (Math.min(pePrevOi, peOi) / maxOi) * 100 : 0;
+                // For decreased OI: show a marker at previous level
+                const ceDecreased = cePrevOi > ceOi && maxOi > 0;
+                const peDecreased = pePrevOi > peOi && maxOi > 0;
+                const cePrevMarker = ceDecreased ? (cePrevOi / maxOi) * 100 : 0;
+                const pePrevMarker = peDecreased ? (pePrevOi / maxOi) * 100 : 0;
                 const isAtm = row.strike === atmStrike;
                 return (
-                  <div key={row.strike} className={`oc-chart__col ${isAtm ? 'oc-chart__col--atm' : ''}`}>
+                  <div key={row.strike} className={`oc-chart__col ${isAtm ? 'oc-chart__col--atm' : ''} ${selectedChartStrike === row.strike ? 'oc-chart__col--selected' : ''}`} onClick={() => setSelectedChartStrike(selectedChartStrike === row.strike ? null : row.strike)}>
+                    {selectedChartStrike === row.strike && (
+                      <div className="oc-chart__tooltip">
+                        <div className="oc-chart__tooltip-title">{row.strike}</div>
+                        <div className="oc-chart__tooltip-row">
+                          <span className="oc-chart__tooltip-ce">CE OI:</span>
+                          <span>{ceOi.toLocaleString('en-IN')}</span>
+                        </div>
+                        {cePrevOi > 0 && <div className="oc-chart__tooltip-row">
+                          <span className="oc-chart__tooltip-ce">CE Chg:</span>
+                          <span className={ceOi >= cePrevOi ? 'positive' : 'negative'}>{ceOi >= cePrevOi ? '+' : ''}{(((ceOi - cePrevOi) / cePrevOi) * 100).toFixed(2)}%</span>
+                        </div>}
+                        <div className="oc-chart__tooltip-row">
+                          <span className="oc-chart__tooltip-pe">PE OI:</span>
+                          <span>{peOi.toLocaleString('en-IN')}</span>
+                        </div>
+                        {pePrevOi > 0 && <div className="oc-chart__tooltip-row">
+                          <span className="oc-chart__tooltip-pe">PE Chg:</span>
+                          <span className={peOi >= pePrevOi ? 'positive' : 'negative'}>{peOi >= pePrevOi ? '+' : ''}{(((peOi - pePrevOi) / pePrevOi) * 100).toFixed(2)}%</span>
+                        </div>}
+                        <div className="oc-chart__tooltip-row">
+                          <span>PCR:</span>
+                          <span>{ceOi > 0 ? (peOi / ceOi).toFixed(2) : '-'}</span>
+                        </div>
+                      </div>
+                    )}
                     <div className="oc-chart__bar-group">
-                      <div className="oc-chart__bar oc-chart__bar--ce" style={{ height: `${ceHeight}%` }} />
-                      <div className="oc-chart__bar oc-chart__bar--pe" style={{ height: `${peHeight}%` }} />
+                      <div className="oc-chart__bar-wrapper">
+                        {ceDecreased && <div className="oc-chart__bar-prev oc-chart__bar-prev--ce" style={{ height: `${cePrevMarker}%` }} />}
+                        <div className="oc-chart__bar oc-chart__bar--ce" style={{ height: `${ceHeight}%` }}>
+                          {ceOi > cePrevOi && cePrevOi > 0 && <div className="oc-chart__bar-added oc-chart__bar-added--ce" style={{ height: `${((ceHeight - cePrevHeight) / ceHeight) * 100}%` }} />}
+                        </div>
+                      </div>
+                      <div className="oc-chart__bar-wrapper">
+                        {peDecreased && <div className="oc-chart__bar-prev oc-chart__bar-prev--pe" style={{ height: `${pePrevMarker}%` }} />}
+                        <div className="oc-chart__bar oc-chart__bar--pe" style={{ height: `${peHeight}%` }}>
+                          {peOi > pePrevOi && pePrevOi > 0 && <div className="oc-chart__bar-added oc-chart__bar-added--pe" style={{ height: `${((peHeight - pePrevHeight) / peHeight) * 100}%` }} />}
+                        </div>
+                      </div>
                     </div>
                     <span className="oc-chart__strike-label">{row.strike % 100 === 0 ? row.strike : ''}</span>
                   </div>
