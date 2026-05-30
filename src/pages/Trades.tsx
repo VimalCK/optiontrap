@@ -30,6 +30,7 @@ const Trades: React.FC = () => {
   const [prevDayOi, setPrevDayOi] = useState<Map<number, number>>(new Map());
   const [niftySpot, setNiftySpot] = useState<number>(0);
   const [isStreaming, setIsStreaming] = useState(false);
+  const [chainView, setChainView] = useState<'table' | 'chart'>('table');
   const tickerRef = useRef<KiteTicker | null>(null);
   const subscribedTokensRef = useRef<number[]>([]);
 
@@ -367,23 +368,45 @@ const Trades: React.FC = () => {
             <div className="card__icon"><TradesIcon /></div>
             <h3 className="card__title">NIFTY Option Chain</h3>
           </div>
-          {expiries.length > 0 && (
-            <select
-              className="option-chain-expiry-select"
-              value={selectedExpiry}
-              onChange={(e) => setSelectedExpiry(e.target.value)}
-            >
-              {expiries.map((exp) => (
-                <option key={exp} value={exp}>
-                  {new Date(exp).toLocaleDateString('en-IN', {
-                    day: '2-digit',
-                    month: 'short',
-                    year: 'numeric',
-                  })}
-                </option>
-              ))}
-            </select>
-          )}
+          <div className="option-chain-controls">
+            <div className="oc-view-toggle">
+              <button
+                className={`oc-view-toggle__btn ${chainView === 'table' ? 'active' : ''}`}
+                onClick={() => setChainView('table')}
+                title="Table view"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/>
+                </svg>
+              </button>
+              <button
+                className={`oc-view-toggle__btn ${chainView === 'chart' ? 'active' : ''}`}
+                onClick={() => setChainView('chart')}
+                title="Bar chart view"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 3v18h18"/><path d="M7 16V8"/><path d="M11 16V4"/><path d="M15 16v-5"/><path d="M19 16v-2"/>
+                </svg>
+              </button>
+            </div>
+            {expiries.length > 0 && (
+              <select
+                className="option-chain-expiry-select"
+                value={selectedExpiry}
+                onChange={(e) => setSelectedExpiry(e.target.value)}
+              >
+                {expiries.map((exp) => (
+                  <option key={exp} value={exp}>
+                    {new Date(exp).toLocaleDateString('en-IN', {
+                      day: '2-digit',
+                      month: 'short',
+                      year: 'numeric',
+                    })}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
         </div>
 
         {loading && (
@@ -402,7 +425,7 @@ const Trades: React.FC = () => {
           </div>
         )}
 
-        {!loading && !error && visibleChain.length > 0 && (
+        {!loading && !error && visibleChain.length > 0 && chainView === 'table' && (
           <div className="option-chain-table-wrapper">
             <table className="option-chain-table">
               <thead>
@@ -466,6 +489,37 @@ const Trades: React.FC = () => {
                 })}
               </tbody>
             </table>
+          </div>
+        )}
+
+        {!loading && !error && visibleChain.length > 0 && chainView === 'chart' && (
+          <div className="oc-chart">
+            <div className="oc-chart__bars">
+              {visibleChain.map((row) => {
+                const ceOi = row.ce ? oiData.get(row.ce.instrumentToken) || 0 : 0;
+                const peOi = row.pe ? oiData.get(row.pe.instrumentToken) || 0 : 0;
+                const ceHeight = maxOi > 0 ? (ceOi / maxOi) * 100 : 0;
+                const peHeight = maxOi > 0 ? (peOi / maxOi) * 100 : 0;
+                const isAtm = row.strike === atmStrike;
+                return (
+                  <div key={row.strike} className={`oc-chart__col ${isAtm ? 'oc-chart__col--atm' : ''}`}>
+                    <div className="oc-chart__bar-group">
+                      <div className="oc-chart__bar oc-chart__bar--ce" style={{ height: `${ceHeight}%` }}>
+                        {ceOi > 0 && <span className="oc-chart__bar-label">{(ceOi / 1000).toFixed(0)}K</span>}
+                      </div>
+                      <div className="oc-chart__bar oc-chart__bar--pe" style={{ height: `${peHeight}%` }}>
+                        {peOi > 0 && <span className="oc-chart__bar-label">{(peOi / 1000).toFixed(0)}K</span>}
+                      </div>
+                    </div>
+                    <span className="oc-chart__strike-label">{row.strike}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="oc-chart__legend">
+              <span className="oc-chart__legend-item oc-chart__legend-item--ce">● CE OI</span>
+              <span className="oc-chart__legend-item oc-chart__legend-item--pe">● PE OI</span>
+            </div>
           </div>
         )}
 
