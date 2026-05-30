@@ -89,7 +89,6 @@
 
 /* ATM Row */
 .oc-row--atm {
-  background: rgba(99, 102, 241, 0.12) !important;
   border-top: 2px solid var(--accent);
   border-bottom: 2px solid var(--accent);
 }
@@ -153,4 +152,19 @@
 
 .oc-cell-chg.negative {
   color: #ef4444;
+}
+
+/* ITM Shading */
+.oc-cell--itm-ce {
+  background: rgba(34, 197, 94, 0.06);
+}
+
+.oc-cell--itm-pe {
+  background: rgba(239, 68, 68, 0.06);
+}
+
+/* Keep ATM row styling above ITM shading */
+.oc-row--atm .oc-cell--itm-ce,
+.oc-row--atm .oc-cell--itm-pe {
+  background: transparent;
 }

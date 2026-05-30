@@ -410,6 +410,8 @@ const Trades: React.FC = () => {
               <tbody>
                 {visibleChain.map((row) => {
                   const isAtm = row.strike === atmStrike;
+                  const ceItm = row.strike < atmStrike;
+                  const peItm = row.strike > atmStrike;
                   const cePrice = getPrice(row.ce);
                   const pePrice = getPrice(row.pe);
                   const ceOi = row.ce ? oiData.get(row.ce.instrumentToken) : undefined;
@@ -420,20 +422,20 @@ const Trades: React.FC = () => {
                   const peOiChg = getOiChange(row.pe);
                   return (
                     <tr key={row.strike} className={isAtm ? 'oc-row--atm' : ''}>
-                      <td className="oc-cell-oi">
+                      <td className={`oc-cell-oi ${ceItm ? 'oc-cell--itm-ce' : ''}`}>
                         {ceOi !== undefined ? ceOi.toLocaleString('en-IN') : '-'}
                         {ceOiChg && <span className={`oc-cell-chg ${ceOiChg.color}`}>{ceOiChg.pct >= 0 ? '+' : ''}{ceOiChg.pct.toFixed(2)}%</span>}
                       </td>
-                      <td className="oc-cell-ltp">
+                      <td className={`oc-cell-ltp ${ceItm ? 'oc-cell--itm-ce' : ''}`}>
                         {cePrice !== null ? cePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                         {ceChg && <span className={`oc-cell-chg ${ceChg.color}`}>{ceChg.pct >= 0 ? '+' : ''}{ceChg.pct.toFixed(2)}%</span>}
                       </td>
                       <td className="oc-cell-strike">{row.strike}</td>
-                      <td className="oc-cell-ltp">
+                      <td className={`oc-cell-ltp ${peItm ? 'oc-cell--itm-pe' : ''}`}>
                         {pePrice !== null ? pePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                         {peChg && <span className={`oc-cell-chg ${peChg.color}`}>{peChg.pct >= 0 ? '+' : ''}{peChg.pct.toFixed(2)}%</span>}
                       </td>
-                      <td className="oc-cell-oi">
+                      <td className={`oc-cell-oi ${peItm ? 'oc-cell--itm-pe' : ''}`}>
                         {peOi !== undefined ? peOi.toLocaleString('en-IN') : '-'}
                         {peOiChg && <span className={`oc-cell-chg ${peOiChg.color}`}>{peOiChg.pct >= 0 ? '+' : ''}{peOiChg.pct.toFixed(2)}%</span>}
                       </td>
