@@ -494,7 +494,25 @@ const Trades: React.FC = () => {
 
         {!loading && !error && visibleChain.length > 0 && chainView === 'chart' && (
           <div className="oc-chart">
-            <div className="oc-chart__bars">
+            <div className="oc-chart__body">
+              <div className="oc-chart__yaxis">
+                {[...Array(9)].map((_, i) => {
+                  const value = maxOi * (8 - i) / 8;
+                  let label = '0';
+                  if (value > 0) {
+                    if (value >= 10000000) label = `${(value / 10000000).toFixed(1)}Cr`;
+                    else if (value >= 100000) label = `${(value / 100000).toFixed(1)}L`;
+                    else label = `${(value / 1000).toFixed(0)}K`;
+                  }
+                  return <span key={i}>{label}</span>;
+                })}
+              </div>
+              <div className="oc-chart__bars">
+                <div className="oc-chart__gridlines">
+                  {[...Array(9)].map((_, i) => (
+                    <div key={i} className="oc-chart__gridline" style={{ top: `${(i / 8) * 100}%` }} />
+                  ))}
+                </div>
               {visibleChain.map((row) => {
                 const ceOi = row.ce ? oiData.get(row.ce.instrumentToken) || 0 : 0;
                 const peOi = row.pe ? oiData.get(row.pe.instrumentToken) || 0 : 0;
@@ -504,21 +522,18 @@ const Trades: React.FC = () => {
                 return (
                   <div key={row.strike} className={`oc-chart__col ${isAtm ? 'oc-chart__col--atm' : ''}`}>
                     <div className="oc-chart__bar-group">
-                      <div className="oc-chart__bar oc-chart__bar--ce" style={{ height: `${ceHeight}%` }}>
-                        {ceOi > 0 && <span className="oc-chart__bar-label">{(ceOi / 1000).toFixed(0)}K</span>}
-                      </div>
-                      <div className="oc-chart__bar oc-chart__bar--pe" style={{ height: `${peHeight}%` }}>
-                        {peOi > 0 && <span className="oc-chart__bar-label">{(peOi / 1000).toFixed(0)}K</span>}
-                      </div>
+                      <div className="oc-chart__bar oc-chart__bar--ce" style={{ height: `${ceHeight}%` }} />
+                      <div className="oc-chart__bar oc-chart__bar--pe" style={{ height: `${peHeight}%` }} />
                     </div>
-                    <span className="oc-chart__strike-label">{row.strike}</span>
+                    <span className="oc-chart__strike-label">{row.strike % 100 === 0 ? row.strike : ''}</span>
                   </div>
                 );
               })}
             </div>
+            </div>
             <div className="oc-chart__legend">
-              <span className="oc-chart__legend-item oc-chart__legend-item--ce">● CE OI</span>
-              <span className="oc-chart__legend-item oc-chart__legend-item--pe">● PE OI</span>
+              <span className="oc-chart__legend-item oc-chart__legend-item--ce"><span className="oc-chart__legend-dot oc-chart__legend-dot--ce"></span>CE OI</span>
+              <span className="oc-chart__legend-item oc-chart__legend-item--pe"><span className="oc-chart__legend-dot oc-chart__legend-dot--pe"></span>PE OI</span>
             </div>
           </div>
         )}
