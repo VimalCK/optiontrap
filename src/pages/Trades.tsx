@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { TradesIcon } from '@/components/icons/Icons';
 import { getSession, clearSession } from '@/services/kiteAuth';
 import { notifySessionChange } from '@/hooks/useKiteSession';
-import { fetchQuotes } from '@/services/kiteApi';
+import { fetchQuotes, fetchPreviousDayOI } from '@/services/kiteApi';
 import { cacheGet, cacheSet } from '@/services/cacheDb';
 import {
   fetchNiftyOptions,
@@ -27,6 +27,7 @@ const Trades: React.FC = () => {
   const [livePrices, setLivePrices] = useState<Map<number, number>>(new Map());
   const [closePrices, setClosePrices] = useState<Map<number, number>>(new Map());
   const [oiData, setOiData] = useState<Map<number, number>>(new Map());
+  const [prevDayOi, setPrevDayOi] = useState<Map<number, number>>(new Map());
   const [niftySpot, setNiftySpot] = useState<number>(0);
   const [isStreaming, setIsStreaming] = useState(false);
   const tickerRef = useRef<KiteTicker | null>(null);
@@ -138,6 +139,31 @@ const Trades: React.FC = () => {
     return chain.slice(start, end);
   }, [chain, atmStrike]);
 
+  // Fetch previous day's closing OI for visible strikes (one-time on load)
+  const prevOiFetchedRef = useRef<string>('');
+  useEffect(() => {
+    if (!session || visibleChain.length === 0) return;
+
+    // Build a key to avoid re-fetching for the same set
+    const tokens: number[] = [];
+    visibleChain.forEach((row) => {
+      if (row.ce) tokens.push(row.ce.instrumentToken);
+      if (row.pe) tokens.push(row.pe.instrumentToken);
+    });
+    const fetchKey = tokens.join(',');
+    if (prevOiFetchedRef.current === fetchKey) return;
+    prevOiFetchedRef.current = fetchKey;
+
+    fetchPreviousDayOI(tokens).then((prevOi) => {
+      if (prevOi.size > 0) {
+        setPrevDayOi(prevOi);
+        console.log(`[Trades] Loaded previous day OI for ${prevOi.size} instruments`);
+      }
+    }).catch((err) => {
+      console.warn('[Trades] Failed to fetch previous day OI:', err);
+    });
+  }, [visibleChain, session]);
+
   // Connect/reconnect WebSocket when visible chain changes (only during market hours)
   useEffect(() => {
     if (!session || visibleChain.length === 0 || !isMarketLive()) return;
@@ -224,6 +250,14 @@ const Trades: React.FC = () => {
       const niftyQuote = quotes.get('NSE:NIFTY 50');
       if (niftyQuote) setNiftySpot(niftyQuote.last_price);
 
+      // Log any missing instruments
+      const missing: string[] = [];
+      strikes.forEach((row) => {
+        if (row.ce && !quotes.has(`NFO:${row.ce.tradingsymbol}`)) missing.push(`NFO:${row.ce.tradingsymbol}`);
+        if (row.pe && !quotes.has(`NFO:${row.pe.tradingsymbol}`)) missing.push(`NFO:${row.pe.tradingsymbol}`);
+      });
+      if (missing.length > 0) console.warn(`[Trades] Missing quotes for: ${missing.join(', ')}`);
+
       console.log(`[Trades] Got quotes for ${priceMap.size} options, spot: ${niftyQuote?.last_price}`);
 
       // Update cache in IndexedDB
@@ -267,6 +301,17 @@ const Trades: React.FC = () => {
     const prevClose = closePrices.get(instrument.instrumentToken);
     if (ltp === undefined || prevClose === undefined || prevClose === 0) return null;
     const pct = ((ltp - prevClose) / prevClose) * 100;
+    const color = pct > 0 ? 'positive' : pct < 0 ? 'negative' : '';
+    return { pct, color };
+  };
+
+  // Helper to get OI % change from previous day's closing OI
+  const getOiChange = (instrument: OptionInstrument | null): { pct: number; color: string } | null => {
+    if (!instrument) return null;
+    const currentOi = oiData.get(instrument.instrumentToken);
+    const prevOi = prevDayOi.get(instrument.instrumentToken);
+    if (currentOi === undefined || prevOi === undefined || prevOi === 0) return null;
+    const pct = ((currentOi - prevOi) / prevOi) * 100;
     const color = pct > 0 ? 'positive' : pct < 0 ? 'negative' : '';
     return { pct, color };
   };
@@ -371,10 +416,13 @@ const Trades: React.FC = () => {
                   const peOi = row.pe ? oiData.get(row.pe.instrumentToken) : undefined;
                   const ceChg = getPriceChange(row.ce);
                   const peChg = getPriceChange(row.pe);
+                  const ceOiChg = getOiChange(row.ce);
+                  const peOiChg = getOiChange(row.pe);
                   return (
                     <tr key={row.strike} className={isAtm ? 'oc-row--atm' : ''}>
                       <td className="oc-cell-oi">
                         {ceOi !== undefined ? ceOi.toLocaleString('en-IN') : '-'}
+                        {ceOiChg && <span className={`oc-cell-chg ${ceOiChg.color}`}>{ceOiChg.pct >= 0 ? '+' : ''}{ceOiChg.pct.toFixed(2)}%</span>}
                       </td>
                       <td className="oc-cell-ltp">
                         {cePrice !== null ? cePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
@@ -387,6 +435,7 @@ const Trades: React.FC = () => {
                       </td>
                       <td className="oc-cell-oi">
                         {peOi !== undefined ? peOi.toLocaleString('en-IN') : '-'}
+                        {peOiChg && <span className={`oc-cell-chg ${peOiChg.color}`}>{peOiChg.pct >= 0 ? '+' : ''}{peOiChg.pct.toFixed(2)}%</span>}
                       </td>
                     </tr>
                   );

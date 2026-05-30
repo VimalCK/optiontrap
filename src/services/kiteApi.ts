@@ -169,3 +169,73 @@ export interface Margins {
 export function fetchMargins(): Promise<Margins> {
   return kiteRequest<Margins>('/user/margins');
 }
+
+/**
+ * Fetch previous trading day's closing OI for multiple instrument tokens
+ * using the Historical Data API (day candle with oi=1).
+ *
+ * Returns a Map of instrumentToken -> previous day's closing OI.
+ * We fetch day candles up to today and pick the SECOND-TO-LAST candle,
+ * which represents the previous trading day's close OI.
+ * (The last candle is today/most recent day — same as what /quote shows as current.)
+ */
+export async function fetchPreviousDayOI(instrumentTokens: number[]): Promise<Map<number, number>> {
+  const authHeader = getAuthHeader();
+  if (!authHeader) throw new Error('Not authenticated');
+
+  const results = new Map<number, number>();
+
+  const now = new Date();
+  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const today = new Date(ist.getFullYear(), ist.getMonth(), ist.getDate());
+
+  // Fetch candles from 10 days back to today to ensure we get at least 2 trading days
+  const from = new Date(today);
+  from.setDate(from.getDate() - 10);
+
+  const formatDate = (d: Date) =>
+    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  const fromStr = formatDate(from);
+  const toStr = formatDate(today);
+
+  // Fetch in parallel batches of 5 with delays to avoid rate limiting
+  const batchSize = 5;
+  for (let i = 0; i < instrumentTokens.length; i += batchSize) {
+    const batch = instrumentTokens.slice(i, i + batchSize);
+    const promises = batch.map(async (token) => {
+      try {
+        const url = `/api/instruments/historical/${token}/day?from=${fromStr}&to=${toStr}&oi=1`;
+        const response = await fetch(url, {
+          headers: {
+            'X-Kite-Version': '3',
+            'Authorization': authHeader,
+          },
+        });
+        if (!response.ok) return;
+
+        const result = await response.json();
+        const candles = result?.data?.candles;
+        if (candles && candles.length >= 2) {
+          // Second-to-last candle = previous trading day's close OI
+          const prevDayCandle = candles[candles.length - 2];
+          const oi = prevDayCandle[6];
+          if (oi !== undefined && oi > 0) {
+            results.set(token, oi);
+          }
+        }
+      } catch {
+        // Skip failed fetches silently
+      }
+    });
+
+    await Promise.all(promises);
+
+    // Small delay between batches to avoid hitting rate limits
+    if (i + batchSize < instrumentTokens.length) {
+      await new Promise((r) => setTimeout(r, 300));
+    }
+  }
+
+  return results;
+}
