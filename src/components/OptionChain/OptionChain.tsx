@@ -570,6 +570,25 @@ const OptionChain: React.FC = () => {
                     <div key={i} className="oc-chart__gridline" style={{ top: `${(i / 8) * 100}%` }} />
                   ))}
                 </div>
+                {/* Expected Range Overlay */}
+                {expectedMove > 0 && niftySpot > 0 && (() => {
+                  const totalStrikes = visibleChain.length;
+                  if (totalStrikes < 2) return null;
+                  // Find first and last strike index within expected range
+                  let startIdx = -1;
+                  let endIdx = -1;
+                  for (let i = 0; i < totalStrikes; i++) {
+                    const s = visibleChain[i].strike;
+                    if (s >= (niftySpot - expectedMove) && s <= (niftySpot + expectedMove)) {
+                      if (startIdx === -1) startIdx = i;
+                      endIdx = i;
+                    }
+                  }
+                  if (startIdx === -1) return null;
+                  const left = (startIdx / totalStrikes) * 100;
+                  const right = 100 - ((endIdx + 1) / totalStrikes) * 100;
+                  return <div className="oc-chart__expected-range" style={{ left: `${left}%`, right: `${right}%` }} />;
+                })()}
               {visibleChain.map((row) => {
                 const ceOi = row.ce ? oiData.get(row.ce.instrumentToken) || 0 : 0;
                 const peOi = row.pe ? oiData.get(row.pe.instrumentToken) || 0 : 0;
@@ -584,9 +603,8 @@ const OptionChain: React.FC = () => {
                 const cePrevMarker = ceDecreased ? (cePrevOi / maxOi) * 100 : 0;
                 const pePrevMarker = peDecreased ? (pePrevOi / maxOi) * 100 : 0;
                 const isAtm = row.strike === atmStrike;
-                const inExpectedRange = expectedMove > 0 && niftySpot > 0 && row.strike >= (niftySpot - expectedMove) && row.strike <= (niftySpot + expectedMove);
                 return (
-                  <div key={row.strike} className={`oc-chart__col ${isAtm ? 'oc-chart__col--atm' : ''} ${selectedChartStrike === row.strike ? 'oc-chart__col--selected' : ''} ${inExpectedRange ? 'oc-chart__col--in-range' : ''}`} onClick={() => setSelectedChartStrike(selectedChartStrike === row.strike ? null : row.strike)}>
+                  <div key={row.strike} className={`oc-chart__col ${isAtm ? 'oc-chart__col--atm' : ''} ${selectedChartStrike === row.strike ? 'oc-chart__col--selected' : ''}`} onClick={() => setSelectedChartStrike(selectedChartStrike === row.strike ? null : row.strike)}>
                     {selectedChartStrike === row.strike && (
                       <div className="oc-chart__tooltip">
                         <div className="oc-chart__tooltip-title">{row.strike}</div>
