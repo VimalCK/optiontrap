@@ -205,7 +205,6 @@
 .trap-card-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   margin-bottom: 8px;
 }
 
@@ -215,16 +214,12 @@
   gap: 8px;
 }
 
-.trap-info-panel {
-  /* no extra margin — button sits in the header row */
-}
-
 .trap-info-btn {
   background: none;
   border: none;
   color: var(--text-secondary);
   cursor: pointer;
-  padding: 2px;
+  padding: 4px;
   border-radius: 50%;
   transition: color 0.15s, background 0.15s;
   display: inline-flex;
@@ -238,7 +233,7 @@
 }
 
 .trap-info-detail {
-  margin-top: 12px;
+  margin-bottom: 16px;
   padding: 16px;
   background: var(--sidebar-hover);
   border-radius: 8px;
