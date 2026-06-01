@@ -354,6 +354,18 @@
   pointer-events: none;
 }
 
+.oc-chart__col--in-range {
+  background: rgba(99, 102, 241, 0.04);
+}
+
+.oc-chart__legend-dot--range {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  background: rgba(99, 102, 241, 0.15);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+}
+
 .oc-chart__bar-group {
   display: flex;
   align-items: flex-end;

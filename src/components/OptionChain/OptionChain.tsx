@@ -5,6 +5,7 @@ import { getSession, clearSession } from '@/services/kiteAuth';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
 import BestStrikes from '@/components/TrapAnalyzer/BestStrikes';
+import { calculateExpectedMove } from '@/services/edgeScore';
 
 const TrapInfoPanel: React.FC<{ onToggle: (show: boolean) => void; show: boolean }> = ({ onToggle, show }) => {
   return (
@@ -217,6 +218,12 @@ const OptionChain: React.FC = () => {
     const diff = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
     return Math.max(0, diff);
   }, [selectedExpiry]);
+
+  // Calculate expected move from ATM straddle
+  const expectedMove = useMemo(
+    () => calculateExpectedMove(visibleChain, atmStrike, livePrices),
+    [visibleChain, atmStrike, livePrices],
+  );
 
   // Fetch previous day's closing OI for visible strikes (one-time on load)
   const prevOiFetchedRef = useRef<string>('');
@@ -577,8 +584,9 @@ const OptionChain: React.FC = () => {
                 const cePrevMarker = ceDecreased ? (cePrevOi / maxOi) * 100 : 0;
                 const pePrevMarker = peDecreased ? (pePrevOi / maxOi) * 100 : 0;
                 const isAtm = row.strike === atmStrike;
+                const inExpectedRange = expectedMove > 0 && niftySpot > 0 && row.strike >= (niftySpot - expectedMove) && row.strike <= (niftySpot + expectedMove);
                 return (
-                  <div key={row.strike} className={`oc-chart__col ${isAtm ? 'oc-chart__col--atm' : ''} ${selectedChartStrike === row.strike ? 'oc-chart__col--selected' : ''}`} onClick={() => setSelectedChartStrike(selectedChartStrike === row.strike ? null : row.strike)}>
+                  <div key={row.strike} className={`oc-chart__col ${isAtm ? 'oc-chart__col--atm' : ''} ${selectedChartStrike === row.strike ? 'oc-chart__col--selected' : ''} ${inExpectedRange ? 'oc-chart__col--in-range' : ''}`} onClick={() => setSelectedChartStrike(selectedChartStrike === row.strike ? null : row.strike)}>
                     {selectedChartStrike === row.strike && (
                       <div className="oc-chart__tooltip">
                         <div className="oc-chart__tooltip-title">{row.strike}</div>
@@ -627,6 +635,7 @@ const OptionChain: React.FC = () => {
             <div className="oc-chart__legend">
               <span className="oc-chart__legend-item oc-chart__legend-item--ce"><span className="oc-chart__legend-dot oc-chart__legend-dot--ce"></span>CE OI</span>
               <span className="oc-chart__legend-item oc-chart__legend-item--pe"><span className="oc-chart__legend-dot oc-chart__legend-dot--pe"></span>PE OI</span>
+              {expectedMove > 0 && <span className="oc-chart__legend-item"><span className="oc-chart__legend-dot oc-chart__legend-dot--range"></span>Expected Range</span>}
             </div>
           </div>
         </div>
