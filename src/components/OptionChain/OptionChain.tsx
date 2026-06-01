@@ -4,6 +4,64 @@ import { TradesIcon } from '@/components/icons/Icons';
 import { getSession, clearSession } from '@/services/kiteAuth';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
+
+const TrapInfoPanel: React.FC = () => {
+  const [showInfo, setShowInfo] = React.useState(false);
+
+  return (
+    <div className="trap-info-panel">
+      <p className="card__description">
+        Check if your position is likely to get trapped
+        <button className="trap-info-btn" onClick={() => setShowInfo(!showInfo)} title="How does this work?">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+          </svg>
+        </button>
+      </p>
+      {showInfo && (
+        <div className="trap-info-detail">
+          <h4>How Position Analyzer Works</h4>
+          <p>The analyzer combines multiple data points to determine if your option position is at risk of getting trapped by smart money.</p>
+
+          <h5>1. Max Pain</h5>
+          <p>The strike price where maximum options expire worthless. Option sellers (institutions) benefit most at this price. NIFTY tends to gravitate toward max pain near expiry. If your position profits only far from max pain, you face "gravitational pull" risk.</p>
+
+          <h5>2. OI + Price Signal</h5>
+          <p>Combines Open Interest change with price movement to classify market activity:</p>
+          <ul>
+            <li><strong>Long Buildup</strong> — OI ↑ + Price ↑ — New buyers entering aggressively (bullish)</li>
+            <li><strong>Short Buildup</strong> — OI ↑ + Price ↓ — New sellers entering aggressively (bearish)</li>
+            <li><strong>Long Unwinding</strong> — OI ↓ + Price ↓ — Buyers exiting, giving up (bearish)</li>
+            <li><strong>Short Covering</strong> — OI ↓ + Price ↑ — Sellers exiting, bears giving up (bullish)</li>
+          </ul>
+
+          <h5>3. PCR (Put-Call Ratio)</h5>
+          <p>Total PE OI divided by Total CE OI across all strikes.</p>
+          <ul>
+            <li><strong>PCR &gt; 1.5</strong> — Heavy put selling, market unlikely to fall much (bullish bias)</li>
+            <li><strong>PCR &lt; 0.7</strong> — Heavy call selling, market unlikely to rise much (bearish bias)</li>
+            <li><strong>PCR ~1.0</strong> — Balanced, no strong directional bias</li>
+          </ul>
+
+          <h5>4. OI Walls (Support & Resistance)</h5>
+          <p>Strikes with significantly higher OI than average indicate levels where option sellers have large positions. They will defend these levels:</p>
+          <ul>
+            <li><strong>High CE OI at a strike</strong> = Resistance — call sellers will defend this level from being breached upward</li>
+            <li><strong>High PE OI at a strike</strong> = Support — put sellers will defend this level from being breached downward</li>
+          </ul>
+
+          <h5>Verdict Scoring</h5>
+          <p>Each factor contributes to a trap score. The final verdict is:</p>
+          <ul>
+            <li><strong>Safe</strong> — No significant signals against your position</li>
+            <li><strong>Caution</strong> — Some factors suggest risk, but not conclusive</li>
+            <li><strong>Likely Trapped</strong> — Multiple strong signals indicate your position may face headwinds</li>
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+};
 import { fetchQuotes, fetchPreviousDayOI } from '@/services/kiteApi';
 import { cacheGet, cacheSet } from '@/services/cacheDb';
 import {
@@ -578,7 +636,7 @@ const OptionChain: React.FC = () => {
         <div className="card" style={{ marginTop: 24 }}>
           <div className="card__icon"><TradesIcon /></div>
           <h3 className="card__title">Position Analyzer</h3>
-          <p className="card__description">Check if your position is likely to get trapped</p>
+          <TrapInfoPanel />
           <TrapAnalyzer
             chain={chain}
             oiData={oiData}
