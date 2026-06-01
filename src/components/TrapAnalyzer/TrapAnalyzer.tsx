@@ -203,38 +203,44 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
                 return <span key={i}>{value}</span>;
               })}
             </div>
-            <div className="trap-map__bars">
-              <div className="trap-map__gridlines">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="trap-map__gridline" style={{ top: `${(i / 4) * 100}%` }} />
+            <div className="trap-map__chart">
+              <div className="trap-map__bars">
+                <div className="trap-map__gridlines">
+                  {[...Array(5)].map((_, i) => (
+                    <div key={i} className="trap-map__gridline" style={{ top: `${(i / 4) * 100}%` }} />
+                  ))}
+                </div>
+                {/* Threshold zones */}
+                <div className="trap-map__zone trap-map__zone--trapped" style={{ height: `${((maxTrapScore - 4) / maxTrapScore) * 100}%` }} />
+                <div className="trap-map__zone trap-map__zone--caution" style={{ top: `${((maxTrapScore - 4) / maxTrapScore) * 100}%`, height: `${(2 / maxTrapScore) * 100}%` }} />
+                {mapData.map((item) => {
+                  const height = maxTrapScore > 0 ? (item.trapScore / maxTrapScore) * 100 : 0;
+                  const displayHeight = item.trapScore === 0 ? 8 : height; // minimum height for safe bars
+                  const isAtm = item.strike === atmStrike;
+                  const barColor = item.verdict === 'likely-trapped' ? 'var(--trap-red)' :
+                    item.verdict === 'caution' ? 'var(--trap-yellow)' : 'var(--trap-green)';
+                  return (
+                    <div
+                      key={item.strike}
+                      className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''}`}
+                      onClick={() => handleMapBarClick(item.strike)}
+                      title={`${item.strike}: ${item.verdictLabel} (score: ${item.trapScore})`}
+                    >
+                      <div
+                        className="trap-map__bar"
+                        style={{ height: `${displayHeight}%`, background: barColor }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="trap-map__xaxis">
+                {mapData.map((item) => (
+                  <span key={item.strike} className="trap-map__strike-label">
+                    {item.strike % 100 === 0 ? item.strike : ''}
+                  </span>
                 ))}
               </div>
-              {/* Threshold zones */}
-              <div className="trap-map__zone trap-map__zone--trapped" style={{ height: `${((maxTrapScore - 4) / maxTrapScore) * 100}%` }} />
-              <div className="trap-map__zone trap-map__zone--caution" style={{ top: `${((maxTrapScore - 4) / maxTrapScore) * 100}%`, height: `${(2 / maxTrapScore) * 100}%` }} />
-              {mapData.map((item) => {
-                const height = maxTrapScore > 0 ? (item.trapScore / maxTrapScore) * 100 : 0;
-                const displayHeight = item.trapScore === 0 ? 8 : height; // minimum height for safe bars
-                const isAtm = item.strike === atmStrike;
-                const barColor = item.verdict === 'likely-trapped' ? 'var(--trap-red)' :
-                  item.verdict === 'caution' ? 'var(--trap-yellow)' : 'var(--trap-green)';
-                return (
-                  <div
-                    key={item.strike}
-                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''}`}
-                    onClick={() => handleMapBarClick(item.strike)}
-                    title={`${item.strike}: ${item.verdictLabel} (score: ${item.trapScore})`}
-                  >
-                    <div
-                      className="trap-map__bar"
-                      style={{ height: `${displayHeight}%`, background: barColor }}
-                    />
-                    <span className="trap-map__strike-label">
-                      {item.strike % 100 === 0 ? item.strike : ''}
-                    </span>
-                  </div>
-                );
-              })}
             </div>
           </div>
           <div className="trap-map__legend">

@@ -626,7 +626,7 @@ const OptionChain: React.FC = () => {
           </div>
           {showTrapInfo && <TrapInfoDetail />}
           <TrapAnalyzer
-            chain={chain}
+            chain={visibleChain}
             oiData={oiData}
             prevDayOi={prevDayOi}
             closePrices={closePrices}
