@@ -59,7 +59,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   const maxTrapScore = useMemo(() => {
     if (mapData.length === 0) return 7;
     const max = Math.max(...mapData.map((d) => d.trapScore));
-    return Math.max(max, 4); // minimum 4 for y-axis scale
+    return Math.max(max, 7); // minimum 7 for y-axis scale
   }, [mapData]);
 
   const verdictClass = analysis ? `trap-verdict--${analysis.verdict}` : '';
@@ -200,7 +200,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
             <div className="trap-map__yaxis">
               {[...Array(5)].map((_, i) => {
                 const value = Math.round(maxTrapScore * (4 - i) / 4);
-                return <span key={i}>{value}</span>;
+                return <span key={i} style={{ top: `${(i / 4) * 100}%` }}>{value}</span>;
               })}
             </div>
             <div className="trap-map__chart">
