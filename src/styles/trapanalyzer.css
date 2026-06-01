@@ -352,7 +352,7 @@
   padding-right: 8px;
   width: 24px;
   flex-shrink: 0;
-  height: 322px; /* 160 + 2 + 160 for both halves + center line */
+  height: 362px; /* 180 + 2 + 180 for both halves + center line */
 }
 
 .trap-map__yaxis span {
@@ -377,7 +377,7 @@
   position: relative;
   overflow: hidden;
   gap: 1px;
-  height: 160px;
+  height: 180px;
 }
 
 .trap-map__bars--top {

@@ -207,6 +207,7 @@ export interface TrapAnalysis {
  * @param prevDayOi Previous day OI map (for change calculation)
  * @param closePrices Previous close prices (for price change)
  * @param livePrices Current prices
+ * @param daysToExpiry Days remaining until expiry (optional)
  */
 export function analyzeTrap(
   positionType: 'buy-ce' | 'buy-pe' | 'sell-ce' | 'sell-pe',
@@ -217,6 +218,7 @@ export function analyzeTrap(
   prevDayOi: Map<number, number>,
   closePrices: Map<number, number>,
   livePrices: Map<number, number>,
+  daysToExpiry?: number,
 ): TrapAnalysis {
   const reasons: string[] = [];
 
@@ -330,6 +332,24 @@ export function analyzeTrap(
     } else {
       reasons.push('No significant trap signals detected');
     }
+  }
+
+  // 6. Apply Expiry Time Pressure
+  // Closer to expiry = trap signals are more dangerous (max pain gravity is stronger,
+  // theta decay is faster, OI walls are harder to break with less time)
+  if (daysToExpiry !== undefined && daysToExpiry >= 0 && trapScore > 0) {
+    let timePressureBonus = 0;
+    if (daysToExpiry <= 1) {
+      // Expiry day or next day — maximum pressure
+      timePressureBonus = 2;
+      reasons.push(`Expiry in ${daysToExpiry}d — max pain gravity and theta decay at peak`);
+    } else if (daysToExpiry <= 3) {
+      // Within 3 days — high pressure
+      timePressureBonus = 1;
+      reasons.push(`Expiry in ${daysToExpiry}d — time pressure increasing significantly`);
+    }
+    // No bonus for 4+ days — time is still on your side
+    trapScore += timePressureBonus;
   }
 
   // Determine verdict

@@ -207,6 +207,17 @@ const OptionChain: React.FC = () => {
     return max;
   }, [visibleChain, oiData]);
 
+  // Calculate days to expiry
+  const daysToExpiry = useMemo(() => {
+    if (!selectedExpiry) return undefined;
+    const expiryDate = new Date(selectedExpiry);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    expiryDate.setHours(0, 0, 0, 0);
+    const diff = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    return Math.max(0, diff);
+  }, [selectedExpiry]);
+
   // Fetch previous day's closing OI for visible strikes (one-time on load)
   const prevOiFetchedRef = useRef<string>('');
   useEffect(() => {
@@ -634,6 +645,7 @@ const OptionChain: React.FC = () => {
             livePrices={livePrices}
             spotPrice={niftySpot}
             atmStrike={atmStrike}
+            daysToExpiry={daysToExpiry}
           />
         </div>
       )}

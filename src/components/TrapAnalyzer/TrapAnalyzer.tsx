@@ -11,6 +11,7 @@ interface TrapAnalyzerProps {
   livePrices: Map<number, number>;
   spotPrice: number;
   atmStrike: number;
+  daysToExpiry?: number;
 }
 
 type PositionSide = 'buy' | 'sell';
@@ -24,6 +25,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   livePrices,
   spotPrice,
   atmStrike,
+  daysToExpiry,
 }) => {
   const [positionSide, setPositionSide] = useState<PositionSide>('buy');
   const [selectedStrike, setSelectedStrike] = useState<number>(atmStrike);
@@ -44,32 +46,32 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   // Run analysis for single view — both CE and PE
   const analysisCe: TrapAnalysis | null = useMemo(() => {
     if (chain.length === 0 || spotPrice === 0) return null;
-    return analyzeTrap(`${positionSide}-ce`, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices);
-  }, [positionSide, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices]);
+    return analyzeTrap(`${positionSide}-ce`, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry);
+  }, [positionSide, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry]);
 
   const analysisPe: TrapAnalysis | null = useMemo(() => {
     if (chain.length === 0 || spotPrice === 0) return null;
-    return analyzeTrap(`${positionSide}-pe`, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices);
-  }, [positionSide, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices]);
+    return analyzeTrap(`${positionSide}-pe`, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry);
+  }, [positionSide, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry]);
 
   // Run analysis for all strikes (map view) — both CE and PE
   const mapDataCe = useMemo(() => {
     if (chain.length === 0 || spotPrice === 0) return [];
     return chain.map((row) => {
-      const result = analyzeTrap(`${positionSide}-ce`, row.strike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices);
+      const result = analyzeTrap(`${positionSide}-ce`, row.strike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry);
       return { strike: row.strike, ...result };
     });
-  }, [positionSide, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices]);
+  }, [positionSide, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry]);
 
   const mapDataPe = useMemo(() => {
     if (chain.length === 0 || spotPrice === 0) return [];
     return chain.map((row) => {
-      const result = analyzeTrap(`${positionSide}-pe`, row.strike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices);
+      const result = analyzeTrap(`${positionSide}-pe`, row.strike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry);
       return { strike: row.strike, ...result };
     });
-  }, [positionSide, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices]);
+  }, [positionSide, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry]);
 
-  const maxTrapScore = 7; // Fixed scale: max possible trap score
+  const maxTrapScore = 9; // Fixed scale: max possible trap score (7 base + 2 time pressure)
 
   const handleMapBarClick = (strike: number) => {
     setSelectedStrike(strike);
@@ -139,28 +141,28 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
         <div className="trap-map__side-label trap-map__side-label--ce">CE</div>
         <div className="trap-map__body">
           <div className="trap-map__yaxis">
-            {/* Top half: 7 at top down to 0 at center */}
-            {[7, 6, 5, 4, 3, 2, 1, 0].map((value) => (
-              <span key={`top-${value}`} style={{ top: `${((7 - value) / 14) * 100}%` }}>{value}</span>
+            {/* Top half: 9 at top down to 0 at center */}
+            {[9, 8, 7, 6, 5, 4, 3, 2, 1, 0].map((value) => (
+              <span key={`top-${value}`} style={{ top: `${((9 - value) / 18) * 100}%` }}>{value}</span>
             ))}
-            {/* Bottom half: 1 to 7 going down */}
-            {[1, 2, 3, 4, 5, 6, 7].map((value) => (
-              <span key={`bot-${value}`} style={{ top: `${((7 + value) / 14) * 100}%` }}>{value}</span>
+            {/* Bottom half: 1 to 9 going down */}
+            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((value) => (
+              <span key={`bot-${value}`} style={{ top: `${((9 + value) / 18) * 100}%` }}>{value}</span>
             ))}
           </div>
           <div className="trap-map__chart">
             {/* CE bars (grow upward from center) */}
             <div className="trap-map__bars trap-map__bars--top">
               <div className="trap-map__gridlines">
-                {[0, 1, 2, 3, 4, 5, 6, 7].map((value) => (
-                  <div key={value} className="trap-map__gridline" style={{ bottom: `${(value / 7) * 100}%` }} />
+                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((value) => (
+                  <div key={value} className="trap-map__gridline" style={{ bottom: `${(value / 9) * 100}%` }} />
                 ))}
               </div>
-              <div className="trap-map__zone trap-map__zone--safe" style={{ bottom: '0%', height: `${(2 / 7) * 100}%` }} />
-              <div className="trap-map__zone trap-map__zone--caution" style={{ bottom: `${(2 / 7) * 100}%`, height: `${(2 / 7) * 100}%` }} />
-              <div className="trap-map__zone trap-map__zone--trapped" style={{ bottom: `${(4 / 7) * 100}%`, height: `${(3 / 7) * 100}%` }} />
+              <div className="trap-map__zone trap-map__zone--safe" style={{ bottom: '0%', height: `${(2 / 9) * 100}%` }} />
+              <div className="trap-map__zone trap-map__zone--caution" style={{ bottom: `${(2 / 9) * 100}%`, height: `${(2 / 9) * 100}%` }} />
+              <div className="trap-map__zone trap-map__zone--trapped" style={{ bottom: `${(4 / 9) * 100}%`, height: `${(5 / 9) * 100}%` }} />
               {mapDataCe.map((item) => {
-                const height = item.trapScore === 0 ? 8 : (item.trapScore / 7) * 100;
+                const height = item.trapScore === 0 ? 8 : (item.trapScore / 9) * 100;
                 const isAtm = item.strike === atmStrike;
                 const isMaxPain = item.strike === maxPain;
                 const barColor = item.verdict === 'likely-trapped' ? 'var(--trap-red)' :
@@ -182,15 +184,15 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
             {/* PE bars (grow downward from center) */}
             <div className="trap-map__bars trap-map__bars--bottom">
               <div className="trap-map__gridlines">
-                {[0, 1, 2, 3, 4, 5, 6, 7].map((value) => (
-                  <div key={value} className="trap-map__gridline" style={{ top: `${(value / 7) * 100}%` }} />
+                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((value) => (
+                  <div key={value} className="trap-map__gridline" style={{ top: `${(value / 9) * 100}%` }} />
                 ))}
               </div>
-              <div className="trap-map__zone trap-map__zone--safe" style={{ top: '0%', height: `${(2 / 7) * 100}%` }} />
-              <div className="trap-map__zone trap-map__zone--caution" style={{ top: `${(2 / 7) * 100}%`, height: `${(2 / 7) * 100}%` }} />
-              <div className="trap-map__zone trap-map__zone--trapped" style={{ top: `${(4 / 7) * 100}%`, height: `${(3 / 7) * 100}%` }} />
+              <div className="trap-map__zone trap-map__zone--safe" style={{ top: '0%', height: `${(2 / 9) * 100}%` }} />
+              <div className="trap-map__zone trap-map__zone--caution" style={{ top: `${(2 / 9) * 100}%`, height: `${(2 / 9) * 100}%` }} />
+              <div className="trap-map__zone trap-map__zone--trapped" style={{ top: `${(4 / 9) * 100}%`, height: `${(5 / 9) * 100}%` }} />
               {mapDataPe.map((item) => {
-                const height = item.trapScore === 0 ? 8 : (item.trapScore / 7) * 100;
+                const height = item.trapScore === 0 ? 8 : (item.trapScore / 9) * 100;
                 const isAtm = item.strike === atmStrike;
                 const isMaxPain = item.strike === maxPain;
                 const barColor = item.verdict === 'likely-trapped' ? 'var(--trap-red)' :
