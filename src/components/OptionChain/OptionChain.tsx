@@ -522,7 +522,7 @@ const OptionChain: React.FC = () => {
           <div className="trap-card-header">
             <div className="trap-card-header__left">
               <div className="card__icon"><TradesIcon /></div>
-              <h3 className="card__title" style={{ marginBottom: 0 }}>OI Chart</h3>
+              <h3 className="card__title" style={{ marginBottom: 0 }}>OI Chart <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-secondary)' }}>(daily changes)</span></h3>
             </div>
           </div>
           <div className="oc-chart">
