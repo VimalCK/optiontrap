@@ -410,31 +410,37 @@ const OptionChain: React.FC = () => {
 
   return (
     <div>
+      {/* Global Expiry Selector */}
+      {expiries.length > 0 && (
+        <div className="oc-expiry-bar">
+          <span className="oc-expiry-bar__label">Expiry</span>
+          <select
+            className="option-chain-expiry-select"
+            value={selectedExpiry}
+            onChange={(e) => setSelectedExpiry(e.target.value)}
+          >
+            {expiries.map((exp) => (
+              <option key={exp} value={exp}>
+                {new Date(exp).toLocaleDateString('en-IN', {
+                  day: '2-digit',
+                  month: 'short',
+                  year: 'numeric',
+                })}
+              </option>
+            ))}
+          </select>
+          {daysToExpiry !== undefined && (
+            <span className="oc-expiry-bar__days">{daysToExpiry === 0 ? 'Expiry today' : `${daysToExpiry}d to expiry`}</span>
+          )}
+        </div>
+      )}
+
       {/* Option Chain Card */}
       <div className="card option-chain-card">
-        <div className="option-chain-header">
-          <div>
+        <div className="trap-card-header">
+          <div className="trap-card-header__left">
             <div className="card__icon"><TradesIcon /></div>
-            <h3 className="card__title">NIFTY Option Chain</h3>
-          </div>
-          <div className="option-chain-controls">
-            {expiries.length > 0 && (
-              <select
-                className="option-chain-expiry-select"
-                value={selectedExpiry}
-                onChange={(e) => setSelectedExpiry(e.target.value)}
-              >
-                {expiries.map((exp) => (
-                  <option key={exp} value={exp}>
-                    {new Date(exp).toLocaleDateString('en-IN', {
-                      day: '2-digit',
-                      month: 'short',
-                      year: 'numeric',
-                    })}
-                  </option>
-                ))}
-              </select>
-            )}
+            <h3 className="card__title" style={{ marginBottom: 0 }}>NIFTY Option Chain</h3>
           </div>
         </div>
 

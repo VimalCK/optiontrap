@@ -1,3 +1,28 @@
+/* Expiry Bar */
+.oc-expiry-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+  padding: 10px 16px;
+  background: var(--sidebar-hover);
+  border-radius: 8px;
+}
+
+.oc-expiry-bar__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.oc-expiry-bar__days {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-left: auto;
+}
+
 /* Option Chain Card */
 .option-chain-card {
   overflow: hidden;
