@@ -26,7 +26,7 @@ const navItems: NavItem[] = [
   { path: '/dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
   { path: '/portfolio', label: 'Portfolio', icon: <PortfolioIcon /> },
   { path: '/analytics', label: 'Analytics', icon: <AnalyticsIcon /> },
-  { path: '/trades', label: 'Trades', icon: <TradesIcon /> },
+  { path: '/trades', label: 'Trade Journal', icon: <TradesIcon /> },
   { path: '/watchlist', label: 'Watchlist', icon: <WatchlistIcon /> },
 ];
 

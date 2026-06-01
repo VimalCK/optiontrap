@@ -72,6 +72,27 @@
   box-shadow: 0 8px 24px var(--card-shadow);
 }
 
+.card--clickable {
+  cursor: pointer;
+}
+
+.card--clickable:active {
+  transform: translateY(0);
+}
+
+.btn--link {
+  background: none;
+  border: none;
+  color: var(--accent);
+  cursor: pointer;
+  font-family: inherit;
+  text-decoration: none;
+}
+
+.btn--link:hover {
+  text-decoration: underline;
+}
+
 .card__icon {
   width: 40px;
   height: 40px;
