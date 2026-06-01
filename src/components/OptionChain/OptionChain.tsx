@@ -6,6 +6,7 @@ import { notifySessionChange } from '@/hooks/useKiteSession';
 import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
 import BestStrikes from '@/components/TrapAnalyzer/BestStrikes';
 import { calculateExpectedMove } from '@/services/edgeScore';
+import { saveOiSnapshot, getTodaySnapshots, cleanOldSnapshots, calculateVelocity, shouldTakeSnapshot, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
 
 const TrapInfoPanel: React.FC<{ onToggle: (show: boolean) => void; show: boolean }> = ({ onToggle, show }) => {
   return (
@@ -87,8 +88,11 @@ const OptionChain: React.FC = () => {
   const [niftySpot, setNiftySpot] = useState<number>(0);
   const [selectedChartStrike, setSelectedChartStrike] = useState<number | null>(null);
   const [showTrapInfo, setShowTrapInfo] = useState(false);
+  const [oiVelocity, setOiVelocity] = useState<Map<number, OiVelocity>>(new Map());
+  const [snapshots, setSnapshots] = useState<OiSnapshot[]>([]);
   const tickerRef = useRef<KiteTicker | null>(null);
   const subscribedTokensRef = useRef<number[]>([]);
+  const snapshotIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [session, setSession] = useState(getSession);
 
@@ -279,6 +283,57 @@ const OptionChain: React.FC = () => {
     tickerRef.current = ticker;
     subscribedTokensRef.current = tokens;
   }, [visibleChain, session, handleTicks]);
+
+  // OI Snapshots: capture every 15 min during market hours, calculate velocity
+  useEffect(() => {
+    if (!session || !isMarketLive()) return;
+
+    // Load today's snapshots and clean old ones
+    cleanOldSnapshots();
+    getTodaySnapshots().then((snaps) => {
+      setSnapshots(snaps);
+      // Calculate initial velocity
+      if (oiData.size > 0 && snaps.length > 0) {
+        setOiVelocity(calculateVelocity(oiData, snaps));
+      }
+    });
+
+    // Set up interval to capture snapshots
+    const capture = async () => {
+      if (!isMarketLive() || oiData.size === 0) return;
+      const snaps = await getTodaySnapshots();
+      if (shouldTakeSnapshot(snaps)) {
+        await saveOiSnapshot(oiData);
+        const updatedSnaps = await getTodaySnapshots();
+        setSnapshots(updatedSnaps);
+      }
+      // Recalculate velocity
+      const latestSnaps = await getTodaySnapshots();
+      if (latestSnaps.length > 0) {
+        setOiVelocity(calculateVelocity(oiData, latestSnaps));
+      }
+    };
+
+    // Capture immediately if needed
+    capture();
+
+    // Check every 5 minutes if a snapshot is needed
+    snapshotIntervalRef.current = setInterval(capture, 5 * 60 * 1000);
+
+    return () => {
+      if (snapshotIntervalRef.current) {
+        clearInterval(snapshotIntervalRef.current);
+        snapshotIntervalRef.current = null;
+      }
+    };
+  }, [session, oiData.size > 0]);
+
+  // Recalculate velocity when OI data changes significantly
+  useEffect(() => {
+    if (snapshots.length > 0 && oiData.size > 0) {
+      setOiVelocity(calculateVelocity(oiData, snapshots));
+    }
+  }, [oiData, snapshots]);
 
   // Market closed: fetch quotes when chain is ready.
   // Two-phase approach: first fetch NIFTY spot to determine correct ATM,
@@ -603,6 +658,8 @@ const OptionChain: React.FC = () => {
                 const cePrevMarker = ceDecreased ? (cePrevOi / maxOi) * 100 : 0;
                 const pePrevMarker = peDecreased ? (pePrevOi / maxOi) * 100 : 0;
                 const isAtm = row.strike === atmStrike;
+                const ceVelocity = row.ce ? oiVelocity.get(row.ce.instrumentToken) : undefined;
+                const peVelocity = row.pe ? oiVelocity.get(row.pe.instrumentToken) : undefined;
                 return (
                   <div key={row.strike} className={`oc-chart__col ${isAtm ? 'oc-chart__col--atm' : ''} ${selectedChartStrike === row.strike ? 'oc-chart__col--selected' : ''}`} onClick={() => setSelectedChartStrike(selectedChartStrike === row.strike ? null : row.strike)}>
                     {selectedChartStrike === row.strike && (
@@ -616,6 +673,10 @@ const OptionChain: React.FC = () => {
                           <span className="oc-chart__tooltip-ce">CE Chg:</span>
                           <span className={ceOi >= cePrevOi ? 'positive' : 'negative'}>{ceOi >= cePrevOi ? '+' : ''}{(((ceOi - cePrevOi) / cePrevOi) * 100).toFixed(2)}%</span>
                         </div>}
+                        {ceVelocity && <div className="oc-chart__tooltip-row">
+                          <span className="oc-chart__tooltip-ce">CE Vel:</span>
+                          <span className={ceVelocity.changePct >= 0 ? 'positive' : 'negative'}>{ceVelocity.changePct >= 0 ? '+' : ''}{ceVelocity.changePct.toFixed(2)}% / {ceVelocity.intervalMinutes}m</span>
+                        </div>}
                         <div className="oc-chart__tooltip-row">
                           <span className="oc-chart__tooltip-pe">PE OI:</span>
                           <span>{peOi.toLocaleString('en-IN')}</span>
@@ -624,11 +685,26 @@ const OptionChain: React.FC = () => {
                           <span className="oc-chart__tooltip-pe">PE Chg:</span>
                           <span className={peOi >= pePrevOi ? 'positive' : 'negative'}>{peOi >= pePrevOi ? '+' : ''}{(((peOi - pePrevOi) / pePrevOi) * 100).toFixed(2)}%</span>
                         </div>}
+                        {peVelocity && <div className="oc-chart__tooltip-row">
+                          <span className="oc-chart__tooltip-pe">PE Vel:</span>
+                          <span className={peVelocity.changePct >= 0 ? 'positive' : 'negative'}>{peVelocity.changePct >= 0 ? '+' : ''}{peVelocity.changePct.toFixed(2)}% / {peVelocity.intervalMinutes}m</span>
+                        </div>}
                         <div className="oc-chart__tooltip-row">
                           <span>PCR:</span>
                           <span>{ceOi > 0 ? (peOi / ceOi).toFixed(2) : '-'}</span>
                         </div>
                       </div>
+                    )}
+                    {/* Velocity indicators */}
+                    {ceVelocity?.isHigh && (
+                      <span className={`oc-chart__velocity oc-chart__velocity--ce ${ceVelocity.changePct > 0 ? 'oc-chart__velocity--up' : 'oc-chart__velocity--down'}`}>
+                        {ceVelocity.changePct > 0 ? '▲' : '▼'}
+                      </span>
+                    )}
+                    {peVelocity?.isHigh && (
+                      <span className={`oc-chart__velocity oc-chart__velocity--pe ${peVelocity.changePct > 0 ? 'oc-chart__velocity--up' : 'oc-chart__velocity--down'}`}>
+                        {peVelocity.changePct > 0 ? '▲' : '▼'}
+                      </span>
                     )}
                     <div className="oc-chart__bar-group">
                       <div className="oc-chart__bar-wrapper">

@@ -476,6 +476,31 @@
 }
 }
 
+/* Velocity indicators */
+.oc-chart__velocity {
+  font-size: 8px;
+  line-height: 1;
+  position: absolute;
+  top: 4px;
+  z-index: 2;
+}
+
+.oc-chart__velocity--ce {
+  left: 4px;
+}
+
+.oc-chart__velocity--pe {
+  right: 4px;
+}
+
+.oc-chart__velocity--up {
+  color: #22c55e;
+}
+
+.oc-chart__velocity--down {
+  color: #ef4444;
+}
+
 .oc-chart__legend {
   display: flex;
   justify-content: center;

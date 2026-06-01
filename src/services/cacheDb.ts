@@ -4,7 +4,7 @@
  */
 
 const DB_NAME = 'optiontrap_cache';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const STORE_NAME = 'app_data';
 
 let dbPromise: Promise<IDBDatabase> | null = null;
@@ -18,6 +18,9 @@ function openDB(): Promise<IDBDatabase> {
       const db = request.result;
       if (!db.objectStoreNames.contains(STORE_NAME)) {
         db.createObjectStore(STORE_NAME);
+      }
+      if (!db.objectStoreNames.contains('oi_snapshots')) {
+        db.createObjectStore('oi_snapshots', { keyPath: 'timestamp' });
       }
     };
     request.onsuccess = () => resolve(request.result);
