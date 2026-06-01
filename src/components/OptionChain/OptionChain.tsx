@@ -10,14 +10,11 @@ const TrapInfoPanel: React.FC = () => {
 
   return (
     <div className="trap-info-panel">
-      <p className="card__description">
-        Check if your position is likely to get trapped
-        <button className="trap-info-btn" onClick={() => setShowInfo(!showInfo)} title="How does this work?">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
-          </svg>
-        </button>
-      </p>
+      <button className="trap-info-btn" onClick={() => setShowInfo(!showInfo)} title="How does this work?">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+        </svg>
+      </button>
       {showInfo && (
         <div className="trap-info-detail">
           <h4>How Position Analyzer Works</h4>
@@ -634,9 +631,13 @@ const OptionChain: React.FC = () => {
       {/* Trap Analyzer */}
       {!loading && !error && visibleChain.length > 0 && (
         <div className="card" style={{ marginTop: 24 }}>
-          <div className="card__icon"><TradesIcon /></div>
-          <h3 className="card__title">Position Analyzer</h3>
-          <TrapInfoPanel />
+          <div className="trap-card-header">
+            <div className="trap-card-header__left">
+              <div className="card__icon"><TradesIcon /></div>
+              <h3 className="card__title" style={{ marginBottom: 0 }}>Position Analyzer</h3>
+            </div>
+            <TrapInfoPanel />
+          </div>
           <TrapAnalyzer
             chain={chain}
             oiData={oiData}

@@ -76,6 +76,11 @@
   border-color: var(--accent);
 }
 
+.trap-input__select option {
+  background: var(--sidebar-bg);
+  color: var(--text-primary);
+}
+
 /* Verdict */
 .trap-verdict {
   border-radius: 12px;
@@ -197,8 +202,21 @@
 }
 
 /* Info Panel */
-.trap-info-panel {
+.trap-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 8px;
+}
+
+.trap-card-header__left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.trap-info-panel {
+  /* no extra margin — button sits in the header row */
 }
 
 .trap-info-btn {
@@ -207,12 +225,11 @@
   color: var(--text-secondary);
   cursor: pointer;
   padding: 2px;
-  margin-left: 6px;
-  vertical-align: middle;
-  display: inline-flex;
-  align-items: center;
   border-radius: 50%;
   transition: color 0.15s, background 0.15s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .trap-info-btn:hover {
