@@ -186,6 +186,7 @@ export type TrapVerdict = 'safe' | 'caution' | 'likely-trapped';
 export interface TrapAnalysis {
   verdict: TrapVerdict;
   verdictLabel: string;
+  trapScore: number;
   reasons: string[];
   maxPain: number;
   pcr: number;
@@ -348,6 +349,7 @@ export function analyzeTrap(
   return {
     verdict,
     verdictLabel,
+    trapScore,
     reasons,
     maxPain,
     pcr,

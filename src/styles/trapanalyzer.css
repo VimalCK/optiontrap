@@ -274,3 +274,219 @@
 .trap-info-detail li strong {
   color: var(--text-primary);
 }
+
+/* View Toggle */
+.trap-view-toggle {
+  display: flex;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.trap-view-toggle__btn {
+  padding: 8px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text-secondary);
+  background: var(--card-bg);
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.trap-view-toggle__btn:not(:last-child) {
+  border-right: 1px solid var(--card-border);
+}
+
+.trap-view-toggle__btn.active {
+  color: var(--accent);
+  background: var(--sidebar-active);
+}
+
+.trap-view-toggle__btn:hover:not(.active) {
+  background: var(--sidebar-hover);
+}
+
+/* Map View - Trap Score Bar Chart */
+.trap-map {
+  --trap-green: #22c55e;
+  --trap-yellow: #eab308;
+  --trap-red: #ef4444;
+}
+
+.trap-map__body {
+  display: flex;
+  height: 240px;
+  margin-top: 12px;
+}
+
+.trap-map__yaxis {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-right: 8px;
+  width: 24px;
+  flex-shrink: 0;
+}
+
+.trap-map__yaxis span {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-align: right;
+  line-height: 1;
+}
+
+.trap-map__bars {
+  flex: 1;
+  display: flex;
+  align-items: flex-end;
+  position: relative;
+  border-left: 1px solid var(--card-border);
+  border-bottom: 1px solid var(--card-border);
+  overflow-x: auto;
+  overflow-y: hidden;
+  gap: 1px;
+}
+
+/* Custom scrollbar for map */
+.trap-map__bars::-webkit-scrollbar {
+  height: 4px;
+}
+
+.trap-map__bars::-webkit-scrollbar-track {
+  background: var(--sidebar-hover);
+  border-radius: 2px;
+}
+
+.trap-map__bars::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 2px;
+}
+
+.trap-map__bars::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+.trap-map__gridlines {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.trap-map__gridline {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--card-border);
+}
+
+/* Threshold zones */
+.trap-map__zone {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  opacity: 0.04;
+}
+
+.trap-map__zone--trapped {
+  top: 0;
+  background: var(--trap-red);
+}
+
+.trap-map__zone--caution {
+  background: var(--trap-yellow);
+}
+
+.trap-map__col {
+  flex: 1;
+  min-width: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  cursor: pointer;
+  position: relative;
+  transition: opacity 0.1s;
+}
+
+.trap-map__col:hover {
+  opacity: 0.8;
+}
+
+.trap-map__col--atm {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+.trap-map__col--atm::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  border-left: 1px dashed var(--accent);
+  opacity: 0.5;
+}
+
+.trap-map__bar {
+  width: 70%;
+  min-width: 6px;
+  max-width: 20px;
+  border-radius: 3px 3px 0 0;
+  transition: height 0.3s ease;
+}
+
+.trap-map__strike-label {
+  position: absolute;
+  bottom: -18px;
+  font-size: 9px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  transform: rotate(-45deg);
+  transform-origin: top left;
+}
+
+.trap-map__legend {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 28px;
+  padding-top: 8px;
+}
+
+.trap-map__legend-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.trap-map__legend-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+}
+
+.trap-map__legend-dot--safe {
+  background: var(--trap-green);
+}
+
+.trap-map__legend-dot--caution {
+  background: var(--trap-yellow);
+}
+
+.trap-map__legend-dot--trapped {
+  background: var(--trap-red);
+}
+
+.trap-map__legend-hint {
+  margin-left: auto;
+  font-size: 10px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
