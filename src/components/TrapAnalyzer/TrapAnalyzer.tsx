@@ -162,14 +162,15 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
               {mapDataCe.map((item) => {
                 const height = item.trapScore === 0 ? 8 : (item.trapScore / 7) * 100;
                 const isAtm = item.strike === atmStrike;
+                const isMaxPain = item.strike === maxPain;
                 const barColor = item.verdict === 'likely-trapped' ? 'var(--trap-red)' :
                   item.verdict === 'caution' ? 'var(--trap-yellow)' : 'var(--trap-green)';
                 return (
                   <div
                     key={item.strike}
-                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''}`}
+                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''} ${isMaxPain ? 'trap-map__col--maxpain' : ''}`}
                     onClick={() => handleMapBarClick(item.strike)}
-                    title={`${item.strike} CE: ${item.verdictLabel} (score: ${item.trapScore})`}
+                    title={`${item.strike} CE: ${item.verdictLabel} (score: ${item.trapScore})${isMaxPain ? ' — MAX PAIN' : ''}`}
                   >
                     <div className="trap-map__bar" style={{ height: `${height}%`, background: barColor }} />
                   </div>
@@ -191,14 +192,15 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
               {mapDataPe.map((item) => {
                 const height = item.trapScore === 0 ? 8 : (item.trapScore / 7) * 100;
                 const isAtm = item.strike === atmStrike;
+                const isMaxPain = item.strike === maxPain;
                 const barColor = item.verdict === 'likely-trapped' ? 'var(--trap-red)' :
                   item.verdict === 'caution' ? 'var(--trap-yellow)' : 'var(--trap-green)';
                 return (
                   <div
                     key={item.strike}
-                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''}`}
+                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''} ${isMaxPain ? 'trap-map__col--maxpain' : ''}`}
                     onClick={() => handleMapBarClick(item.strike)}
-                    title={`${item.strike} PE: ${item.verdictLabel} (score: ${item.trapScore})`}
+                    title={`${item.strike} PE: ${item.verdictLabel} (score: ${item.trapScore})${isMaxPain ? ' — MAX PAIN' : ''}`}
                   >
                     <div className="trap-map__bar" style={{ height: `${height}%`, background: barColor }} />
                   </div>
@@ -305,6 +307,8 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
             <span className="trap-map__legend-item"><span className="trap-map__legend-dot trap-map__legend-dot--safe"></span>Safe</span>
             <span className="trap-map__legend-item"><span className="trap-map__legend-dot trap-map__legend-dot--caution"></span>Caution</span>
             <span className="trap-map__legend-item"><span className="trap-map__legend-dot trap-map__legend-dot--trapped"></span>Likely Trapped</span>
+            <span className="trap-map__legend-item"><span className="trap-map__legend-line trap-map__legend-line--atm"></span>ATM</span>
+            <span className="trap-map__legend-item"><span className="trap-map__legend-line trap-map__legend-line--maxpain"></span>Max Pain</span>
             <span className="trap-map__legend-hint">Click bar for details</span>
           </div>
         </div>

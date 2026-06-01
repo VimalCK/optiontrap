@@ -489,6 +489,21 @@
   opacity: 0.5;
 }
 
+.trap-map__col--maxpain {
+  background: rgba(234, 179, 8, 0.06);
+}
+
+.trap-map__col--maxpain::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  border-left: 1px dashed var(--trap-yellow);
+  opacity: 0.7;
+}
+
 .trap-map__bar {
   width: 40%;
   min-width: 4px;
@@ -601,6 +616,20 @@
   font-size: 10px;
   color: var(--text-secondary);
   font-style: italic;
+}
+
+.trap-map__legend-line {
+  width: 16px;
+  height: 0;
+  border-top: 1px dashed;
+}
+
+.trap-map__legend-line--atm {
+  border-color: var(--accent);
+}
+
+.trap-map__legend-line--maxpain {
+  border-color: var(--trap-yellow);
 }
 
 
