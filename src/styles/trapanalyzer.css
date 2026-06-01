@@ -214,6 +214,10 @@
   gap: 8px;
 }
 
+.trap-card-header__left .card__icon {
+  margin-bottom: 0;
+}
+
 .trap-info-btn {
   background: none;
   border: none;
