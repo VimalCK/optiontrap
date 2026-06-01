@@ -83,7 +83,6 @@ const OptionChain: React.FC = () => {
   const [oiData, setOiData] = useState<Map<number, number>>(new Map());
   const [prevDayOi, setPrevDayOi] = useState<Map<number, number>>(new Map());
   const [niftySpot, setNiftySpot] = useState<number>(0);
-  const [chainView, setChainView] = useState<'table' | 'chart'>('table');
   const [selectedChartStrike, setSelectedChartStrike] = useState<number | null>(null);
   const [showTrapInfo, setShowTrapInfo] = useState(false);
   const tickerRef = useRef<KiteTicker | null>(null);
@@ -407,26 +406,6 @@ const OptionChain: React.FC = () => {
             <h3 className="card__title">NIFTY Option Chain</h3>
           </div>
           <div className="option-chain-controls">
-            <div className="oc-view-toggle">
-              <button
-                className={`oc-view-toggle__btn ${chainView === 'table' ? 'active' : ''}`}
-                onClick={() => setChainView('table')}
-                title="Table view"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M9 3v18"/>
-                </svg>
-              </button>
-              <button
-                className={`oc-view-toggle__btn ${chainView === 'chart' ? 'active' : ''}`}
-                onClick={() => setChainView('chart')}
-                title="Bar chart view"
-              >
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M3 3v18h18"/><path d="M7 16V8"/><path d="M11 16V4"/><path d="M15 16v-5"/><path d="M19 16v-2"/>
-                </svg>
-              </button>
-            </div>
             {expiries.length > 0 && (
               <select
                 className="option-chain-expiry-select"
@@ -463,7 +442,7 @@ const OptionChain: React.FC = () => {
           </div>
         )}
 
-        {!loading && !error && visibleChain.length > 0 && chainView === 'table' && (
+        {!loading && !error && visibleChain.length > 0 && (
           <div className="option-chain-table-wrapper">
             <table className="option-chain-table">
               <thead>
@@ -530,7 +509,22 @@ const OptionChain: React.FC = () => {
           </div>
         )}
 
-        {!loading && !error && visibleChain.length > 0 && chainView === 'chart' && (
+        {!loading && !error && options.length === 0 && (
+          <p className="card__description" style={{ marginTop: 16 }}>
+            No option data available.
+          </p>
+        )}
+      </div>
+
+      {/* OI Bar Chart Card */}
+      {!loading && !error && visibleChain.length > 0 && (
+        <div className="card" style={{ marginTop: 24 }}>
+          <div className="trap-card-header">
+            <div className="trap-card-header__left">
+              <div className="card__icon"><TradesIcon /></div>
+              <h3 className="card__title" style={{ marginBottom: 0 }}>OI Chart</h3>
+            </div>
+          </div>
           <div className="oc-chart">
             <div className="oc-chart__body">
               <div className="oc-chart__yaxis">
@@ -560,7 +554,6 @@ const OptionChain: React.FC = () => {
                 const peHeight = maxOi > 0 ? (peOi / maxOi) * 100 : 0;
                 const cePrevHeight = maxOi > 0 ? (Math.min(cePrevOi, ceOi) / maxOi) * 100 : 0;
                 const pePrevHeight = maxOi > 0 ? (Math.min(pePrevOi, peOi) / maxOi) * 100 : 0;
-                // For decreased OI: show a marker at previous level
                 const ceDecreased = cePrevOi > ceOi && maxOi > 0;
                 const peDecreased = pePrevOi > peOi && maxOi > 0;
                 const cePrevMarker = ceDecreased ? (cePrevOi / maxOi) * 100 : 0;
@@ -618,14 +611,8 @@ const OptionChain: React.FC = () => {
               <span className="oc-chart__legend-item oc-chart__legend-item--pe"><span className="oc-chart__legend-dot oc-chart__legend-dot--pe"></span>PE OI</span>
             </div>
           </div>
-        )}
-
-        {!loading && !error && options.length === 0 && (
-          <p className="card__description" style={{ marginTop: 16 }}>
-            No option data available.
-          </p>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Trap Analyzer */}
       {!loading && !error && visibleChain.length > 0 && (
