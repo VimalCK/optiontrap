@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { TradesIcon } from '@/components/icons/Icons';
 import { getSession, clearSession } from '@/services/kiteAuth';
 import { notifySessionChange } from '@/hooks/useKiteSession';
+import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
 import { fetchQuotes, fetchPreviousDayOI } from '@/services/kiteApi';
 import { cacheGet, cacheSet } from '@/services/cacheDb';
 import {
@@ -571,6 +572,24 @@ const OptionChain: React.FC = () => {
           </p>
         )}
       </div>
+
+      {/* Trap Analyzer */}
+      {!loading && !error && visibleChain.length > 0 && (
+        <div className="card" style={{ marginTop: 24 }}>
+          <div className="card__icon"><TradesIcon /></div>
+          <h3 className="card__title">Position Analyzer</h3>
+          <p className="card__description">Check if your position is likely to get trapped</p>
+          <TrapAnalyzer
+            chain={chain}
+            oiData={oiData}
+            prevDayOi={prevDayOi}
+            closePrices={closePrices}
+            livePrices={livePrices}
+            spotPrice={niftySpot}
+            atmStrike={atmStrike}
+          />
+        </div>
+      )}
     </div>
   );
 };
