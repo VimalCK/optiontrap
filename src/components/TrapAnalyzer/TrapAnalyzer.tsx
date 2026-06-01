@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { OptionChainRow } from '@/services/optionChain';
 import { analyzeTrap, TrapAnalysis, calculateMaxPain, calculatePCR } from '@/services/trapAnalysis';
+import { calculateExpectedMove } from '@/services/edgeScore';
 import '@/styles/trapanalyzer.css';
 
 interface TrapAnalyzerProps {
@@ -29,7 +30,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
 }) => {
   const [positionSide, setPositionSide] = useState<PositionSide>('buy');
   const [selectedStrike, setSelectedStrike] = useState<number>(atmStrike);
-  const [view, setView] = useState<AnalyzerView>('single');
+  const [view, setView] = useState<AnalyzerView>('map');
 
   // Update selected strike when ATM changes
   React.useEffect(() => {
@@ -42,6 +43,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   // Summary metrics
   const maxPain = useMemo(() => calculateMaxPain(chain, oiData), [chain, oiData]);
   const pcr = useMemo(() => calculatePCR(chain, oiData), [chain, oiData]);
+  const expectedMove = useMemo(() => calculateExpectedMove(chain, atmStrike, livePrices), [chain, atmStrike, livePrices]);
 
   // Run analysis for single view — both CE and PE
   const analysisCe: TrapAnalysis | null = useMemo(() => {
@@ -165,14 +167,15 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
                 const height = item.trapScore === 0 ? 8 : (item.trapScore / 9) * 100;
                 const isAtm = item.strike === atmStrike;
                 const isMaxPain = item.strike === maxPain;
+                const inExpectedRange = expectedMove > 0 && item.strike >= (spotPrice - expectedMove) && item.strike <= (spotPrice + expectedMove);
                 const barColor = item.verdict === 'likely-trapped' ? 'var(--trap-red)' :
                   item.verdict === 'caution' ? 'var(--trap-yellow)' : 'var(--trap-green)';
                 return (
                   <div
                     key={item.strike}
-                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''} ${isMaxPain ? 'trap-map__col--maxpain' : ''}`}
+                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''} ${isMaxPain ? 'trap-map__col--maxpain' : ''} ${inExpectedRange ? 'trap-map__col--in-range' : ''}`}
                     onClick={() => handleMapBarClick(item.strike)}
-                    title={`${item.strike} CE: ${item.verdictLabel} (score: ${item.trapScore})${isMaxPain ? ' — MAX PAIN' : ''}`}
+                    title={`${item.strike} CE: ${item.verdictLabel} (score: ${item.trapScore})${isMaxPain ? ' — MAX PAIN' : ''}${inExpectedRange ? ' — Within expected range' : ''}`}
                   >
                     <div className="trap-map__bar" style={{ height: `${height}%`, background: barColor }} />
                   </div>
@@ -195,14 +198,15 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
                 const height = item.trapScore === 0 ? 8 : (item.trapScore / 9) * 100;
                 const isAtm = item.strike === atmStrike;
                 const isMaxPain = item.strike === maxPain;
+                const inExpectedRange = expectedMove > 0 && item.strike >= (spotPrice - expectedMove) && item.strike <= (spotPrice + expectedMove);
                 const barColor = item.verdict === 'likely-trapped' ? 'var(--trap-red)' :
                   item.verdict === 'caution' ? 'var(--trap-yellow)' : 'var(--trap-green)';
                 return (
                   <div
                     key={item.strike}
-                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''} ${isMaxPain ? 'trap-map__col--maxpain' : ''}`}
+                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''} ${isMaxPain ? 'trap-map__col--maxpain' : ''} ${inExpectedRange ? 'trap-map__col--in-range' : ''}`}
                     onClick={() => handleMapBarClick(item.strike)}
-                    title={`${item.strike} PE: ${item.verdictLabel} (score: ${item.trapScore})${isMaxPain ? ' — MAX PAIN' : ''}`}
+                    title={`${item.strike} PE: ${item.verdictLabel} (score: ${item.trapScore})${isMaxPain ? ' — MAX PAIN' : ''}${inExpectedRange ? ' — Within expected range' : ''}`}
                   >
                     <div className="trap-map__bar" style={{ height: `${height}%`, background: barColor }} />
                   </div>
@@ -243,6 +247,10 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
           <span className="trap-summary__label">Spot</span>
           <span className="trap-summary__value">{spotPrice > 0 ? spotPrice.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '-'}</span>
         </div>
+        <div className="trap-summary__item">
+          <span className="trap-summary__label">Expected Move</span>
+          <span className="trap-summary__value">{expectedMove > 0 ? `±${expectedMove.toFixed(0)}` : '-'}</span>
+        </div>
       </div>
 
       {/* View Toggle + Position Selector */}
@@ -277,16 +285,16 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
             <label className="trap-input__label">View</label>
             <div className="trap-view-toggle">
               <button
-                className={`trap-view-toggle__btn ${view === 'single' ? 'active' : ''}`}
-                onClick={() => setView('single')}
-              >
-                Single
-              </button>
-              <button
                 className={`trap-view-toggle__btn ${view === 'map' ? 'active' : ''}`}
                 onClick={() => setView('map')}
               >
                 Map
+              </button>
+              <button
+                className={`trap-view-toggle__btn ${view === 'single' ? 'active' : ''}`}
+                onClick={() => setView('single')}
+              >
+                Single
               </button>
             </div>
           </div>
@@ -311,6 +319,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
             <span className="trap-map__legend-item"><span className="trap-map__legend-dot trap-map__legend-dot--trapped"></span>Likely Trapped</span>
             <span className="trap-map__legend-item"><span className="trap-map__legend-line trap-map__legend-line--atm"></span>ATM</span>
             <span className="trap-map__legend-item"><span className="trap-map__legend-line trap-map__legend-line--maxpain"></span>Max Pain</span>
+            <span className="trap-map__legend-item"><span className="trap-map__legend-dot trap-map__legend-dot--range"></span>Expected Range</span>
             <span className="trap-map__legend-hint">Click bar for details</span>
           </div>
         </div>
