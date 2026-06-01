@@ -4,6 +4,7 @@ import { TradesIcon } from '@/components/icons/Icons';
 import { getSession, clearSession } from '@/services/kiteAuth';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
+import BestStrikes from '@/components/TrapAnalyzer/BestStrikes';
 
 const TrapInfoPanel: React.FC<{ onToggle: (show: boolean) => void; show: boolean }> = ({ onToggle, show }) => {
   return (
@@ -630,6 +631,25 @@ const OptionChain: React.FC = () => {
             oiData={oiData}
             prevDayOi={prevDayOi}
             closePrices={closePrices}
+            livePrices={livePrices}
+            spotPrice={niftySpot}
+            atmStrike={atmStrike}
+          />
+        </div>
+      )}
+
+      {/* Best Strikes - Edge Score Recommendations */}
+      {!loading && !error && visibleChain.length > 0 && (
+        <div className="card" style={{ marginTop: 24 }}>
+          <div className="trap-card-header">
+            <div className="trap-card-header__left">
+              <div className="card__icon"><TradesIcon /></div>
+              <h3 className="card__title" style={{ marginBottom: 0 }}>Best Strikes</h3>
+            </div>
+          </div>
+          <BestStrikes
+            chain={visibleChain}
+            oiData={oiData}
             livePrices={livePrices}
             spotPrice={niftySpot}
             atmStrike={atmStrike}
