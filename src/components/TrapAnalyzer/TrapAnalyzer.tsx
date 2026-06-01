@@ -56,11 +56,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
     });
   }, [positionType, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices]);
 
-  const maxTrapScore = useMemo(() => {
-    if (mapData.length === 0) return 7;
-    const max = Math.max(...mapData.map((d) => d.trapScore));
-    return Math.max(max, 7); // minimum 7 for y-axis scale
-  }, [mapData]);
+  const maxTrapScore = 7; // Fixed scale: max possible trap score
 
   const verdictClass = analysis ? `trap-verdict--${analysis.verdict}` : '';
 
@@ -198,21 +194,21 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
         <div className="trap-map">
           <div className="trap-map__body">
             <div className="trap-map__yaxis">
-              {[...Array(5)].map((_, i) => {
-                const value = Math.round(maxTrapScore * (4 - i) / 4);
-                return <span key={i} style={{ top: `${(i / 4) * 100}%` }}>{value}</span>;
-              })}
+              {[0, 1, 2, 3, 4, 5, 6, 7].reverse().map((value) => (
+                <span key={value} style={{ top: `${((7 - value) / 7) * 100}%` }}>{value}</span>
+              ))}
             </div>
             <div className="trap-map__chart">
               <div className="trap-map__bars">
                 <div className="trap-map__gridlines">
-                  {[...Array(5)].map((_, i) => (
-                    <div key={i} className="trap-map__gridline" style={{ top: `${(i / 4) * 100}%` }} />
+                  {[0, 1, 2, 3, 4, 5, 6, 7].map((value) => (
+                    <div key={value} className="trap-map__gridline" style={{ bottom: `${(value / 7) * 100}%` }} />
                   ))}
                 </div>
-                {/* Threshold zones */}
-                <div className="trap-map__zone trap-map__zone--trapped" style={{ height: `${((maxTrapScore - 4) / maxTrapScore) * 100}%` }} />
-                <div className="trap-map__zone trap-map__zone--caution" style={{ top: `${((maxTrapScore - 4) / maxTrapScore) * 100}%`, height: `${(2 / maxTrapScore) * 100}%` }} />
+                {/* Threshold zones - Safe: 0-2, Caution: 2-4, Trapped: 4+ */}
+                <div className="trap-map__zone trap-map__zone--safe" style={{ bottom: '0%', height: `${(2 / maxTrapScore) * 100}%` }} />
+                <div className="trap-map__zone trap-map__zone--caution" style={{ bottom: `${(2 / maxTrapScore) * 100}%`, height: `${(2 / maxTrapScore) * 100}%` }} />
+                <div className="trap-map__zone trap-map__zone--trapped" style={{ bottom: `${(4 / maxTrapScore) * 100}%`, height: `${((maxTrapScore - 4) / maxTrapScore) * 100}%` }} />
                 {mapData.map((item) => {
                   const height = maxTrapScore > 0 ? (item.trapScore / maxTrapScore) * 100 : 0;
                   const displayHeight = item.trapScore === 0 ? 8 : height; // minimum height for safe bars
@@ -244,9 +240,9 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
             </div>
           </div>
           <div className="trap-map__legend">
-            <span className="trap-map__legend-item"><span className="trap-map__legend-dot trap-map__legend-dot--safe"></span>Safe</span>
-            <span className="trap-map__legend-item"><span className="trap-map__legend-dot trap-map__legend-dot--caution"></span>Caution</span>
-            <span className="trap-map__legend-item"><span className="trap-map__legend-dot trap-map__legend-dot--trapped"></span>Likely Trapped</span>
+            <span className="trap-map__legend-item"><span className="trap-map__legend-dot trap-map__legend-dot--safe"></span>Safe (0-1)</span>
+            <span className="trap-map__legend-item"><span className="trap-map__legend-dot trap-map__legend-dot--caution"></span>Caution (2-3)</span>
+            <span className="trap-map__legend-item"><span className="trap-map__legend-dot trap-map__legend-dot--trapped"></span>Likely Trapped (4+)</span>
             <span className="trap-map__legend-hint">Click bar for details</span>
           </div>
         </div>

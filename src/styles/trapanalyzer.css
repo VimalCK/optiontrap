@@ -327,7 +327,7 @@
   padding-right: 8px;
   width: 24px;
   flex-shrink: 0;
-  height: 240px;
+  height: 320px;
 }
 
 .trap-map__yaxis span {
@@ -348,7 +348,7 @@
   border-bottom: 1px solid var(--card-border);
   overflow: hidden;
   gap: 1px;
-  height: 240px;
+  height: 320px;
 }
 
 /* Custom scrollbar for map */
@@ -390,7 +390,7 @@
   left: 0;
   right: 0;
   pointer-events: none;
-  opacity: 0.04;
+  opacity: 0.06;
 }
 
 .trap-map__zone--trapped {
@@ -400,6 +400,10 @@
 
 .trap-map__zone--caution {
   background: var(--trap-yellow);
+}
+
+.trap-map__zone--safe {
+  background: var(--trap-green);
 }
 
 .trap-map__col {
