@@ -722,12 +722,18 @@
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+  align-items: stretch;
 }
 
 @media (max-width: 768px) {
   .best-strikes__grid {
     grid-template-columns: 1fr;
   }
+}
+
+.best-strikes__column {
+  display: flex;
+  flex-direction: column;
 }
 
 .best-strikes__column-title {
@@ -754,6 +760,9 @@
   border-radius: 8px;
   margin-bottom: 8px;
   border: 1px solid var(--card-border);
+  flex: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .best-strike-card__header {
@@ -837,6 +846,7 @@
   color: var(--text-secondary);
   padding-top: 6px;
   border-top: 1px solid var(--card-border);
+  margin-top: auto;
 }
 
 .best-strike-card__score strong {
