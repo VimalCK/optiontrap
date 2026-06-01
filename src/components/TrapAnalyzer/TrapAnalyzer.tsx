@@ -134,55 +134,89 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
 
   const renderMapChart = () => (
     <div className="trap-map__section">
-      <div className="trap-map__body">
-        <div className="trap-map__yaxis">
-          {[0, 1, 2, 3, 4, 5, 6, 7].reverse().map((value) => (
-            <span key={value} style={{ top: `${((7 - value) / 7) * 100}%` }}>{value}</span>
-          ))}
-        </div>
-        <div className="trap-map__chart">
-          <div className="trap-map__bars">
-            <div className="trap-map__gridlines">
-              {[0, 1, 2, 3, 4, 5, 6, 7].map((value) => (
-                <div key={value} className="trap-map__gridline" style={{ bottom: `${(value / 7) * 100}%` }} />
-              ))}
-            </div>
-            {/* Threshold zones */}
-            <div className="trap-map__zone trap-map__zone--safe" style={{ bottom: '0%', height: `${(2 / maxTrapScore) * 100}%` }} />
-            <div className="trap-map__zone trap-map__zone--caution" style={{ bottom: `${(2 / maxTrapScore) * 100}%`, height: `${(2 / maxTrapScore) * 100}%` }} />
-            <div className="trap-map__zone trap-map__zone--trapped" style={{ bottom: `${(4 / maxTrapScore) * 100}%`, height: `${((maxTrapScore - 4) / maxTrapScore) * 100}%` }} />
-            {mapDataCe.map((ceItem, idx) => {
-              const peItem = mapDataPe[idx];
-              const ceHeight = ceItem.trapScore === 0 ? 8 : (ceItem.trapScore / maxTrapScore) * 100;
-              const peHeight = peItem.trapScore === 0 ? 8 : (peItem.trapScore / maxTrapScore) * 100;
-              const isAtm = ceItem.strike === atmStrike;
-              const ceColor = ceItem.verdict === 'likely-trapped' ? 'var(--trap-red)' :
-                ceItem.verdict === 'caution' ? 'var(--trap-yellow)' : 'var(--trap-green)';
-              const peColor = peItem.verdict === 'likely-trapped' ? 'var(--trap-red)' :
-                peItem.verdict === 'caution' ? 'var(--trap-yellow)' : 'var(--trap-green)';
-              return (
-                <div
-                  key={ceItem.strike}
-                  className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''}`}
-                  onClick={() => handleMapBarClick(ceItem.strike)}
-                  title={`${ceItem.strike} — CE: ${ceItem.verdictLabel} (${ceItem.trapScore}) | PE: ${peItem.verdictLabel} (${peItem.trapScore})`}
-                >
-                  <div className="trap-map__bar-pair">
-                    <div className="trap-map__bar trap-map__bar--ce" style={{ height: `${ceHeight}%`, background: ceColor }} />
-                    <div className="trap-map__bar trap-map__bar--pe" style={{ height: `${peHeight}%`, background: peColor }} />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="trap-map__xaxis">
-            {mapDataCe.map((item) => (
-              <span key={item.strike} className="trap-map__strike-label">
-                {item.strike % 100 === 0 ? item.strike : ''}
-              </span>
+      <div className="trap-map__butterfly">
+        {/* CE label */}
+        <div className="trap-map__side-label trap-map__side-label--ce">CE</div>
+        <div className="trap-map__body">
+          <div className="trap-map__yaxis">
+            {/* Top half: 7 at top down to 0 at center */}
+            {[7, 6, 5, 4, 3, 2, 1, 0].map((value) => (
+              <span key={`top-${value}`} style={{ top: `${((7 - value) / 14) * 100}%` }}>{value}</span>
+            ))}
+            {/* Bottom half: 1 to 7 going down */}
+            {[1, 2, 3, 4, 5, 6, 7].map((value) => (
+              <span key={`bot-${value}`} style={{ top: `${((7 + value) / 14) * 100}%` }}>{value}</span>
             ))}
           </div>
+          <div className="trap-map__chart">
+            {/* CE bars (grow upward from center) */}
+            <div className="trap-map__bars trap-map__bars--top">
+              <div className="trap-map__gridlines">
+                {[0, 1, 2, 3, 4, 5, 6, 7].map((value) => (
+                  <div key={value} className="trap-map__gridline" style={{ bottom: `${(value / 7) * 100}%` }} />
+                ))}
+              </div>
+              <div className="trap-map__zone trap-map__zone--safe" style={{ bottom: '0%', height: `${(2 / 7) * 100}%` }} />
+              <div className="trap-map__zone trap-map__zone--caution" style={{ bottom: `${(2 / 7) * 100}%`, height: `${(2 / 7) * 100}%` }} />
+              <div className="trap-map__zone trap-map__zone--trapped" style={{ bottom: `${(4 / 7) * 100}%`, height: `${(3 / 7) * 100}%` }} />
+              {mapDataCe.map((item) => {
+                const height = item.trapScore === 0 ? 8 : (item.trapScore / 7) * 100;
+                const isAtm = item.strike === atmStrike;
+                const barColor = item.verdict === 'likely-trapped' ? 'var(--trap-red)' :
+                  item.verdict === 'caution' ? 'var(--trap-yellow)' : 'var(--trap-green)';
+                return (
+                  <div
+                    key={item.strike}
+                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''}`}
+                    onClick={() => handleMapBarClick(item.strike)}
+                    title={`${item.strike} CE: ${item.verdictLabel} (score: ${item.trapScore})`}
+                  >
+                    <div className="trap-map__bar" style={{ height: `${height}%`, background: barColor }} />
+                  </div>
+                );
+              })}
+            </div>
+            {/* Center axis line */}
+            <div className="trap-map__center-axis" />
+            {/* PE bars (grow downward from center) */}
+            <div className="trap-map__bars trap-map__bars--bottom">
+              <div className="trap-map__gridlines">
+                {[0, 1, 2, 3, 4, 5, 6, 7].map((value) => (
+                  <div key={value} className="trap-map__gridline" style={{ top: `${(value / 7) * 100}%` }} />
+                ))}
+              </div>
+              <div className="trap-map__zone trap-map__zone--safe" style={{ top: '0%', height: `${(2 / 7) * 100}%` }} />
+              <div className="trap-map__zone trap-map__zone--caution" style={{ top: `${(2 / 7) * 100}%`, height: `${(2 / 7) * 100}%` }} />
+              <div className="trap-map__zone trap-map__zone--trapped" style={{ top: `${(4 / 7) * 100}%`, height: `${(3 / 7) * 100}%` }} />
+              {mapDataPe.map((item) => {
+                const height = item.trapScore === 0 ? 8 : (item.trapScore / 7) * 100;
+                const isAtm = item.strike === atmStrike;
+                const barColor = item.verdict === 'likely-trapped' ? 'var(--trap-red)' :
+                  item.verdict === 'caution' ? 'var(--trap-yellow)' : 'var(--trap-green)';
+                return (
+                  <div
+                    key={item.strike}
+                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''}`}
+                    onClick={() => handleMapBarClick(item.strike)}
+                    title={`${item.strike} PE: ${item.verdictLabel} (score: ${item.trapScore})`}
+                  >
+                    <div className="trap-map__bar" style={{ height: `${height}%`, background: barColor }} />
+                  </div>
+                );
+              })}
+            </div>
+            {/* X-axis labels */}
+            <div className="trap-map__xaxis">
+              {mapDataCe.map((item) => (
+                <span key={item.strike} className="trap-map__strike-label">
+                  {item.strike % 100 === 0 ? item.strike : ''}
+                </span>
+              ))}
+            </div>
+          </div>
         </div>
+        {/* PE label */}
+        <div className="trap-map__side-label trap-map__side-label--pe">PE</div>
       </div>
     </div>
   );
@@ -271,10 +305,6 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
             <span className="trap-map__legend-item"><span className="trap-map__legend-dot trap-map__legend-dot--safe"></span>Safe</span>
             <span className="trap-map__legend-item"><span className="trap-map__legend-dot trap-map__legend-dot--caution"></span>Caution</span>
             <span className="trap-map__legend-item"><span className="trap-map__legend-dot trap-map__legend-dot--trapped"></span>Likely Trapped</span>
-          </div>
-          <div className="trap-map__legend">
-            <span className="trap-map__legend-item"><span className="trap-map__legend-dot trap-map__legend-dot--ce"></span>CE</span>
-            <span className="trap-map__legend-item"><span className="trap-map__legend-dot trap-map__legend-dot--pe"></span>PE</span>
             <span className="trap-map__legend-hint">Click bar for details</span>
           </div>
         </div>
