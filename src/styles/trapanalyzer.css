@@ -512,9 +512,12 @@
   background: rgba(99, 102, 241, 0.04);
 }
 
-.trap-map__col--in-range:first-child,
-.trap-map__col--in-range:not(.trap-map__col--in-range + .trap-map__col--in-range) {
-  border-left: 1px dashed rgba(99, 102, 241, 0.3);
+.trap-map__col--range-start {
+  border-left: 1px dashed rgba(99, 102, 241, 0.4);
+}
+
+.trap-map__col--range-end {
+  border-right: 1px dashed rgba(99, 102, 241, 0.4);
 }
 
 .trap-map__bar {

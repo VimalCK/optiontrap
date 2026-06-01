@@ -163,17 +163,21 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
               <div className="trap-map__zone trap-map__zone--safe" style={{ bottom: '0%', height: `${(2 / 9) * 100}%` }} />
               <div className="trap-map__zone trap-map__zone--caution" style={{ bottom: `${(2 / 9) * 100}%`, height: `${(2 / 9) * 100}%` }} />
               <div className="trap-map__zone trap-map__zone--trapped" style={{ bottom: `${(4 / 9) * 100}%`, height: `${(5 / 9) * 100}%` }} />
-              {mapDataCe.map((item) => {
+              {mapDataCe.map((item, idx) => {
                 const height = item.trapScore === 0 ? 8 : (item.trapScore / 9) * 100;
                 const isAtm = item.strike === atmStrike;
                 const isMaxPain = item.strike === maxPain;
                 const inExpectedRange = expectedMove > 0 && item.strike >= (spotPrice - expectedMove) && item.strike <= (spotPrice + expectedMove);
+                const nextItem = mapDataCe[idx + 1];
+                const prevItem = mapDataCe[idx - 1];
+                const isRangeStart = inExpectedRange && (!prevItem || prevItem.strike < (spotPrice - expectedMove));
+                const isRangeEnd = inExpectedRange && (!nextItem || nextItem.strike > (spotPrice + expectedMove));
                 const barColor = item.verdict === 'likely-trapped' ? 'var(--trap-red)' :
                   item.verdict === 'caution' ? 'var(--trap-yellow)' : 'var(--trap-green)';
                 return (
                   <div
                     key={item.strike}
-                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''} ${isMaxPain ? 'trap-map__col--maxpain' : ''} ${inExpectedRange ? 'trap-map__col--in-range' : ''}`}
+                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''} ${isMaxPain ? 'trap-map__col--maxpain' : ''} ${inExpectedRange ? 'trap-map__col--in-range' : ''} ${isRangeStart ? 'trap-map__col--range-start' : ''} ${isRangeEnd ? 'trap-map__col--range-end' : ''}`}
                     onClick={() => handleMapBarClick(item.strike)}
                     title={`${item.strike} CE: ${item.verdictLabel} (score: ${item.trapScore})${isMaxPain ? ' — MAX PAIN' : ''}${inExpectedRange ? ' — Within expected range' : ''}`}
                   >
@@ -194,17 +198,21 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
               <div className="trap-map__zone trap-map__zone--safe" style={{ top: '0%', height: `${(2 / 9) * 100}%` }} />
               <div className="trap-map__zone trap-map__zone--caution" style={{ top: `${(2 / 9) * 100}%`, height: `${(2 / 9) * 100}%` }} />
               <div className="trap-map__zone trap-map__zone--trapped" style={{ top: `${(4 / 9) * 100}%`, height: `${(5 / 9) * 100}%` }} />
-              {mapDataPe.map((item) => {
+              {mapDataPe.map((item, idx) => {
                 const height = item.trapScore === 0 ? 8 : (item.trapScore / 9) * 100;
                 const isAtm = item.strike === atmStrike;
                 const isMaxPain = item.strike === maxPain;
                 const inExpectedRange = expectedMove > 0 && item.strike >= (spotPrice - expectedMove) && item.strike <= (spotPrice + expectedMove);
+                const nextItem = mapDataPe[idx + 1];
+                const prevItem = mapDataPe[idx - 1];
+                const isRangeStart = inExpectedRange && (!prevItem || prevItem.strike < (spotPrice - expectedMove));
+                const isRangeEnd = inExpectedRange && (!nextItem || nextItem.strike > (spotPrice + expectedMove));
                 const barColor = item.verdict === 'likely-trapped' ? 'var(--trap-red)' :
                   item.verdict === 'caution' ? 'var(--trap-yellow)' : 'var(--trap-green)';
                 return (
                   <div
                     key={item.strike}
-                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''} ${isMaxPain ? 'trap-map__col--maxpain' : ''} ${inExpectedRange ? 'trap-map__col--in-range' : ''}`}
+                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''} ${isMaxPain ? 'trap-map__col--maxpain' : ''} ${inExpectedRange ? 'trap-map__col--in-range' : ''} ${isRangeStart ? 'trap-map__col--range-start' : ''} ${isRangeEnd ? 'trap-map__col--range-end' : ''}`}
                     onClick={() => handleMapBarClick(item.strike)}
                     title={`${item.strike} PE: ${item.verdictLabel} (score: ${item.trapScore})${isMaxPain ? ' — MAX PAIN' : ''}${inExpectedRange ? ' — Within expected range' : ''}`}
                   >
