@@ -84,6 +84,7 @@ const OptionChain: React.FC = () => {
   const [livePrices, setLivePrices] = useState<Map<number, number>>(new Map());
   const [closePrices, setClosePrices] = useState<Map<number, number>>(new Map());
   const [oiData, setOiData] = useState<Map<number, number>>(new Map());
+  const [volumeData, setVolumeData] = useState<Map<number, number>>(new Map());
   const [prevDayOi, setPrevDayOi] = useState<Map<number, number>>(new Map());
   const [niftySpot, setNiftySpot] = useState<number>(0);
   const [selectedChartStrike, setSelectedChartStrike] = useState<number | null>(null);
@@ -122,6 +123,15 @@ const OptionChain: React.FC = () => {
       ticks.forEach((t) => {
         if (t.oi !== undefined && t.instrumentToken !== NIFTY_INDEX_TOKEN) {
           next.set(t.instrumentToken, t.oi);
+        }
+      });
+      return next;
+    });
+    setVolumeData((prev) => {
+      const next = new Map(prev);
+      ticks.forEach((t) => {
+        if (t.volume !== undefined && t.instrumentToken !== NIFTY_INDEX_TOKEN) {
+          next.set(t.instrumentToken, t.volume);
         }
       });
       return next;
@@ -211,6 +221,18 @@ const OptionChain: React.FC = () => {
     });
     return max;
   }, [visibleChain, oiData]);
+
+  // Compute average volume for volume-confirmation threshold
+  const avgVolume = useMemo(() => {
+    if (volumeData.size === 0) return 0;
+    let total = 0;
+    let count = 0;
+    visibleChain.forEach((row) => {
+      if (row.ce) { const v = volumeData.get(row.ce.instrumentToken); if (v) { total += v; count++; } }
+      if (row.pe) { const v = volumeData.get(row.pe.instrumentToken); if (v) { total += v; count++; } }
+    });
+    return count > 0 ? total / count : 0;
+  }, [visibleChain, volumeData]);
 
   // Calculate days to expiry
   const daysToExpiry = useMemo(() => {
@@ -660,6 +682,12 @@ const OptionChain: React.FC = () => {
                 const isAtm = row.strike === atmStrike;
                 const ceVelocity = row.ce ? oiVelocity.get(row.ce.instrumentToken) : undefined;
                 const peVelocity = row.pe ? oiVelocity.get(row.pe.instrumentToken) : undefined;
+                const ceVolume = row.ce ? volumeData.get(row.ce.instrumentToken) || 0 : 0;
+                const peVolume = row.pe ? volumeData.get(row.pe.instrumentToken) || 0 : 0;
+                const ceOiChanged = cePrevOi > 0 && Math.abs(ceOi - cePrevOi) / cePrevOi > 0.03;
+                const peOiChanged = pePrevOi > 0 && Math.abs(peOi - pePrevOi) / pePrevOi > 0.03;
+                const ceConfirmed = ceOiChanged && ceVolume > avgVolume * 1.5;
+                const peConfirmed = peOiChanged && peVolume > avgVolume * 1.5;
                 return (
                   <div key={row.strike} className={`oc-chart__col ${isAtm ? 'oc-chart__col--atm' : ''} ${selectedChartStrike === row.strike ? 'oc-chart__col--selected' : ''}`} onClick={() => setSelectedChartStrike(selectedChartStrike === row.strike ? null : row.strike)}>
                     {selectedChartStrike === row.strike && (
@@ -709,13 +737,13 @@ const OptionChain: React.FC = () => {
                     <div className="oc-chart__bar-group">
                       <div className="oc-chart__bar-wrapper">
                         {ceDecreased && <div className="oc-chart__bar-prev oc-chart__bar-prev--ce" style={{ height: `${cePrevMarker}%` }} />}
-                        <div className="oc-chart__bar oc-chart__bar--ce" style={{ height: `${ceHeight}%` }}>
+                        <div className={`oc-chart__bar oc-chart__bar--ce ${ceConfirmed ? 'oc-chart__bar--confirmed' : ''}`} style={{ height: `${ceHeight}%` }}>
                           {ceOi > cePrevOi && cePrevOi > 0 && <div className="oc-chart__bar-added oc-chart__bar-added--ce" style={{ height: `${((ceHeight - cePrevHeight) / ceHeight) * 100}%` }} />}
                         </div>
                       </div>
                       <div className="oc-chart__bar-wrapper">
                         {peDecreased && <div className="oc-chart__bar-prev oc-chart__bar-prev--pe" style={{ height: `${pePrevMarker}%` }} />}
-                        <div className="oc-chart__bar oc-chart__bar--pe" style={{ height: `${peHeight}%` }}>
+                        <div className={`oc-chart__bar oc-chart__bar--pe ${peConfirmed ? 'oc-chart__bar--confirmed' : ''}`} style={{ height: `${peHeight}%` }}>
                           {peOi > pePrevOi && pePrevOi > 0 && <div className="oc-chart__bar-added oc-chart__bar-added--pe" style={{ height: `${((peHeight - pePrevHeight) / peHeight) * 100}%` }} />}
                         </div>
                       </div>

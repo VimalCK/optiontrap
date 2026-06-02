@@ -412,6 +412,15 @@
   background: rgba(239, 68, 68, 0.7);
 }
 
+/* Volume-confirmed glow */
+.oc-chart__bar--confirmed.oc-chart__bar--ce {
+  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6), 0 0 12px rgba(34, 197, 94, 0.3);
+}
+
+.oc-chart__bar--confirmed.oc-chart__bar--pe {
+  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6), 0 0 12px rgba(239, 68, 68, 0.3);
+}
+
 /* Crosshatch pattern for newly added OI */
 .oc-chart__bar-added {
   position: absolute;
