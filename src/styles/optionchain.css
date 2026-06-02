@@ -549,7 +549,6 @@
 
 .oc-chart__tooltip {
   position: absolute;
-  bottom: calc(100% + 8px);
   left: 50%;
   transform: translateX(-50%);
   background: var(--sidebar-bg);
@@ -560,7 +559,6 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   font-size: 11px;
   z-index: 20;
-  cursor: default;
 }
 
 /* Keep tooltip from overflowing right edge */

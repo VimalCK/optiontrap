@@ -641,7 +641,7 @@ const OptionChain: React.FC = () => {
                   return <span key={i}>{label}</span>;
                 })}
               </div>
-              <div className="oc-chart__bars">
+              <div className="oc-chart__bars" onClick={() => setSelectedChartStrike(null)}>
                 <div className="oc-chart__gridlines">
                   {[...Array(9)].map((_, i) => (
                     <div key={i} className="oc-chart__gridline" style={{ top: `${(i / 8) * 100}%` }} />
@@ -689,9 +689,9 @@ const OptionChain: React.FC = () => {
                 const ceConfirmed = ceOiChanged && ceVolume > avgVolume * 1.5;
                 const peConfirmed = peOiChanged && peVolume > avgVolume * 1.5;
                 return (
-                  <div key={row.strike} className={`oc-chart__col ${isAtm ? 'oc-chart__col--atm' : ''} ${selectedChartStrike === row.strike ? 'oc-chart__col--selected' : ''}`} onClick={() => setSelectedChartStrike(selectedChartStrike === row.strike ? null : row.strike)}>
+                  <div key={row.strike} className={`oc-chart__col ${isAtm ? 'oc-chart__col--atm' : ''} ${selectedChartStrike === row.strike ? 'oc-chart__col--selected' : ''}`} onClick={(e) => { e.stopPropagation(); setSelectedChartStrike(selectedChartStrike === row.strike ? null : row.strike); }}>
                     {selectedChartStrike === row.strike && (
-                      <div className="oc-chart__tooltip">
+                      <div className="oc-chart__tooltip" style={{ bottom: `calc(${Math.max(ceHeight, peHeight)}% + 12px)` }}>
                         <div className="oc-chart__tooltip-title">{row.strike}</div>
                         <div className="oc-chart__tooltip-row">
                           <span className="oc-chart__tooltip-ce">CE OI:</span>
