@@ -328,8 +328,8 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
             <span className="trap-map__legend-item"><span className="trap-map__legend-line trap-map__legend-line--atm"></span>ATM</span>
             <span className="trap-map__legend-item"><span className="trap-map__legend-line trap-map__legend-line--maxpain"></span>Max Pain</span>
             <span className="trap-map__legend-item"><span className="trap-map__legend-dot trap-map__legend-dot--range"></span>Expected Range</span>
-            <span className="trap-map__legend-hint">Click bar for details</span>
           </div>
+          <div className="trap-map__legend-hint">Click bar for details</div>
         </div>
       )}
     </div>

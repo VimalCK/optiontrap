@@ -586,6 +586,7 @@
 .trap-map__legend {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 16px;
   margin-top: 16px;
   padding-top: 8px;
@@ -633,10 +634,11 @@
 }
 
 .trap-map__legend-hint {
-  margin-left: auto;
   font-size: 10px;
   color: var(--text-secondary);
   font-style: italic;
+  text-align: center;
+  margin-top: 6px;
 }
 
 .trap-map__legend-line {
