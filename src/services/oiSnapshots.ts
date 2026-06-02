@@ -8,7 +8,7 @@ const DB_NAME = 'optiontrap_cache';
 const DB_VERSION = 2;
 const SNAPSHOT_STORE = 'oi_snapshots';
 const APP_STORE = 'app_data';
-const SNAPSHOT_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
+const SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
 export interface OiSnapshot {
   timestamp: number; // Unix ms
