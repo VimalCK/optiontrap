@@ -478,6 +478,12 @@
   opacity: 0.8;
 }
 
+.trap-map__col--hovered {
+  background: rgba(255, 255, 255, 0.03);
+  outline: 1px dashed rgba(255, 255, 255, 0.15);
+  outline-offset: -1px;
+}
+
 .trap-map__col--atm {
   background: rgba(99, 102, 241, 0.08);
 }

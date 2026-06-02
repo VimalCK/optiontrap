@@ -31,6 +31,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   const [positionSide, setPositionSide] = useState<PositionSide>('buy');
   const [selectedStrike, setSelectedStrike] = useState<number>(atmStrike);
   const [view, setView] = useState<AnalyzerView>('map');
+  const [hoveredStrike, setHoveredStrike] = useState<number | null>(null);
 
   // Update selected strike when ATM changes
   React.useEffect(() => {
@@ -177,8 +178,10 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
                 return (
                   <div
                     key={item.strike}
-                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''} ${isMaxPain ? 'trap-map__col--maxpain' : ''} ${inExpectedRange ? 'trap-map__col--in-range' : ''} ${isRangeStart ? 'trap-map__col--range-start' : ''} ${isRangeEnd ? 'trap-map__col--range-end' : ''}`}
+                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''} ${isMaxPain ? 'trap-map__col--maxpain' : ''} ${inExpectedRange ? 'trap-map__col--in-range' : ''} ${isRangeStart ? 'trap-map__col--range-start' : ''} ${isRangeEnd ? 'trap-map__col--range-end' : ''} ${hoveredStrike === item.strike ? 'trap-map__col--hovered' : ''}`}
                     onClick={() => handleMapBarClick(item.strike)}
+                    onMouseEnter={() => setHoveredStrike(item.strike)}
+                    onMouseLeave={() => setHoveredStrike(null)}
                     title={`${item.strike} CE: ${item.verdictLabel} (score: ${item.trapScore})${isMaxPain ? ' — MAX PAIN' : ''}${inExpectedRange ? ' — Within expected range' : ''}`}
                   >
                     <div className="trap-map__bar" style={{ height: `${height}%`, background: barColor }} />
@@ -212,8 +215,10 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
                 return (
                   <div
                     key={item.strike}
-                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''} ${isMaxPain ? 'trap-map__col--maxpain' : ''} ${inExpectedRange ? 'trap-map__col--in-range' : ''} ${isRangeStart ? 'trap-map__col--range-start' : ''} ${isRangeEnd ? 'trap-map__col--range-end' : ''}`}
+                    className={`trap-map__col ${isAtm ? 'trap-map__col--atm' : ''} ${isMaxPain ? 'trap-map__col--maxpain' : ''} ${inExpectedRange ? 'trap-map__col--in-range' : ''} ${isRangeStart ? 'trap-map__col--range-start' : ''} ${isRangeEnd ? 'trap-map__col--range-end' : ''} ${hoveredStrike === item.strike ? 'trap-map__col--hovered' : ''}`}
                     onClick={() => handleMapBarClick(item.strike)}
+                    onMouseEnter={() => setHoveredStrike(item.strike)}
+                    onMouseLeave={() => setHoveredStrike(null)}
                     title={`${item.strike} PE: ${item.verdictLabel} (score: ${item.trapScore})${isMaxPain ? ' — MAX PAIN' : ''}${inExpectedRange ? ' — Within expected range' : ''}`}
                   >
                     <div className="trap-map__bar" style={{ height: `${height}%`, background: barColor }} />
