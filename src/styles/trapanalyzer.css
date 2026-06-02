@@ -331,14 +331,33 @@
   font-weight: 600;
   letter-spacing: 0.5px;
   color: var(--text-secondary);
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  border: 1px solid var(--card-border);
 }
 
 .trap-map__side-label--ce {
-  margin-bottom: 4px;
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.06);
 }
 
 .trap-map__side-label--pe {
-  margin-top: 4px;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.06);
+  border-top: none;
+}
+
+.trap-map__side-labels {
+  display: flex;
+  flex-direction: column;
+  width: 28px;
+  flex-shrink: 0;
+  height: 362px;
+  margin-left: 1px;
 }
 
 .trap-map__body {

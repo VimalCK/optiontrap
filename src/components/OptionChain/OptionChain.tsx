@@ -51,11 +51,20 @@ const TrapInfoDetail: React.FC = () => (
     </ul>
 
     <h5>Verdict Scoring</h5>
-    <p>Each factor contributes to a trap score. The final verdict is:</p>
+    <p>Each factor contributes to a trap score (0–9 scale). The final verdict is:</p>
     <ul>
-      <li><strong>Safe</strong> — No significant signals against your position</li>
-      <li><strong>Caution</strong> — Some factors suggest risk, but not conclusive</li>
-      <li><strong>Likely Trapped</strong> — Multiple strong signals indicate your position may face headwinds</li>
+      <li><strong>Safe (0–1)</strong> — No significant signals against your position</li>
+      <li><strong>Caution (2–3)</strong> — Some factors suggest risk, but not conclusive</li>
+      <li><strong>Likely Trapped (4+)</strong> — Multiple strong signals indicate your position may face headwinds</li>
+    </ul>
+
+    <h5>Score Breakdown (max 9)</h5>
+    <ul>
+      <li><strong>Max Pain</strong> — Strike on wrong side of max pain: +2</li>
+      <li><strong>OI Wall</strong> — Heavy OI wall blocking your direction: +2</li>
+      <li><strong>PCR</strong> — Put-Call Ratio skewed against you: +1</li>
+      <li><strong>OI Signal</strong> — Bearish/bullish activity against your position: +2</li>
+      <li><strong>Time Pressure</strong> — Within 3 days of expiry: +1, Expiry day: +2</li>
     </ul>
   </div>
 );

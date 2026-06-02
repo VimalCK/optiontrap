@@ -140,16 +140,14 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   const renderMapChart = () => (
     <div className="trap-map__section">
       <div className="trap-map__butterfly">
-        {/* CE label */}
-        <div className="trap-map__side-label trap-map__side-label--ce">CE</div>
         <div className="trap-map__body">
           <div className="trap-map__yaxis">
-            {/* Top half: 9 at top down to 0 at center */}
-            {[9, 8, 7, 6, 5, 4, 3, 2, 1, 0].map((value) => (
+            {/* Top half: key levels from center to top */}
+            {[9, 4, 2, 0].map((value) => (
               <span key={`top-${value}`} style={{ top: `${((9 - value) / 18) * 100}%` }}>{value}</span>
             ))}
-            {/* Bottom half: 1 to 9 going down */}
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((value) => (
+            {/* Bottom half: key levels from center to bottom */}
+            {[2, 4, 9].map((value) => (
               <span key={`bot-${value}`} style={{ top: `${((9 + value) / 18) * 100}%` }}>{value}</span>
             ))}
           </div>
@@ -235,9 +233,12 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
               ))}
             </div>
           </div>
+          {/* CE/PE labels on right side */}
+          <div className="trap-map__side-labels">
+            <span className="trap-map__side-label trap-map__side-label--ce">CE</span>
+            <span className="trap-map__side-label trap-map__side-label--pe">PE</span>
+          </div>
         </div>
-        {/* PE label */}
-        <div className="trap-map__side-label trap-map__side-label--pe">PE</div>
       </div>
     </div>
   );
