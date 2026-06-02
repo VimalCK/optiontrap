@@ -690,8 +690,20 @@ const OptionChain: React.FC = () => {
                 const peConfirmed = peOiChanged && peVolume > avgVolume * 1.5;
                 return (
                   <div key={row.strike} className={`oc-chart__col ${isAtm ? 'oc-chart__col--atm' : ''} ${selectedChartStrike === row.strike ? 'oc-chart__col--selected' : ''}`} onClick={(e) => { e.stopPropagation(); setSelectedChartStrike(selectedChartStrike === row.strike ? null : row.strike); }}>
-                    {selectedChartStrike === row.strike && (
-                      <div className="oc-chart__tooltip" style={{ bottom: `calc(${Math.max(ceHeight, peHeight)}% + 12px)` }}>
+                    {selectedChartStrike === row.strike && (() => {
+                      // Find the tallest bar % in the chart for consistent tooltip position
+                      let maxBarPct = 0;
+                      visibleChain.forEach((r) => {
+                        const ce = r.ce ? oiData.get(r.ce.instrumentToken) || 0 : 0;
+                        const pe = r.pe ? oiData.get(r.pe.instrumentToken) || 0 : 0;
+                        const pct = maxOi > 0 ? (Math.max(ce, pe) / maxOi) * 100 : 0;
+                        if (pct > maxBarPct) maxBarPct = pct;
+                      });
+                      // Position tooltip above the tallest bar (bar-group is 180px, column is 320px)
+                      // bottom offset = (maxBarPct% of 180px) + 12px gap, relative to column bottom
+                      const bottomPx = (maxBarPct / 100) * 180 + 16;
+                      return (
+                      <div className="oc-chart__tooltip" style={{ bottom: `${bottomPx}px` }}>
                         <div className="oc-chart__tooltip-title">{row.strike}</div>
                         <div className="oc-chart__tooltip-row">
                           <span className="oc-chart__tooltip-ce">CE OI:</span>
@@ -722,7 +734,8 @@ const OptionChain: React.FC = () => {
                           <span>{ceOi > 0 ? (peOi / ceOi).toFixed(2) : '-'}</span>
                         </div>
                       </div>
-                    )}
+                      );
+                    })()}
                     {/* Velocity indicators */}
                     {ceVelocity?.isHigh && (
                       <span className={`oc-chart__velocity oc-chart__velocity--ce ${ceVelocity.changePct > 0 ? 'oc-chart__velocity--up' : 'oc-chart__velocity--down'}`}>

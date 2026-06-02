@@ -338,6 +338,18 @@
   min-width: 28px;
   position: relative;
   align-self: stretch;
+  cursor: pointer;
+}
+
+.oc-chart__col:hover::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 0;
+  border-left: 1px dashed rgba(255, 255, 255, 0.2);
+  pointer-events: none;
 }
 
 .oc-chart__col--atm {
