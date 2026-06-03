@@ -7,6 +7,7 @@ import {
   AnalyticsIcon,
   TradesIcon,
   WatchlistIcon,
+  PaperTradingIcon,
   UserIcon,
   SettingsIcon,
   ChevronLeftIcon,
@@ -23,11 +24,11 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: '/holdings', label: 'Holdings', icon: <HoldingsIcon /> },
-  { path: '/positions', label: 'Paper Trading', icon: <TradesIcon /> },
+  { path: '/positions', label: 'Positions', icon: <TradesIcon /> },
+  { path: '/paper-trading', label: 'Paper Trading', icon: <PaperTradingIcon /> },
   { path: '/dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
   { path: '/portfolio', label: 'Portfolio', icon: <PortfolioIcon /> },
   { path: '/analytics', label: 'Analytics', icon: <AnalyticsIcon /> },
-  { path: '/trades', label: 'Trade Journal', icon: <TradesIcon /> },
   { path: '/watchlist', label: 'Watchlist', icon: <WatchlistIcon /> },
 ];
 

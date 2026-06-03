@@ -6,7 +6,6 @@ import Positions from './pages/Positions';
 import Dashboard from './pages/Dashboard';
 import Portfolio from './pages/Portfolio';
 import Analytics from './pages/Analytics';
-import Trades from './components/OptionChain/OptionChain';
 import Watchlist from './pages/Watchlist';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
@@ -39,10 +38,10 @@ const App: React.FC = () => {
             <Route path="/" element={<Navigate to="/holdings" replace />} />
             <Route path="/holdings" element={<Holdings />} />
             <Route path="/positions" element={<Positions />} />
+            <Route path="/paper-trading" element={<Positions />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/portfolio" element={<Portfolio />} />
             <Route path="/analytics" element={<Analytics />} />
-            <Route path="/trades" element={<Trades />} />
             <Route path="/watchlist" element={<Watchlist />} />
             <Route path="/profile" element={<Profile />} />
             <Route path="/settings" element={<Settings />} />
