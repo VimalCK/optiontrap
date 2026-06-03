@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
-import { UserIcon, ConnectionIcon, IdCardIcon, ShieldIcon } from '@/components/icons/Icons';
-import { getCredentials, getSession, getLoginUrl, logout, getAuthHeader, KiteSession } from '@/services/kiteAuth';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ConnectionIcon, IdCardIcon, ShieldIcon } from '@/components/icons/Icons';
+import { getSession, logout, getAuthHeader, clearSession, KiteSession } from '@/services/kiteAuth';
 import { fetchMargins, Margins } from '@/services/kiteApi';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import '@/styles/settings.css';
@@ -26,14 +27,19 @@ interface UserProfile {
 }
 
 const Profile: React.FC = () => {
+  const navigate = useNavigate();
+
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
-  const [saved, setSaved] = useState(false);
   const [showSecret, setShowSecret] = useState(false);
   const [session, setSession] = useState<KiteSession | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [margins, setMargins] = useState<Margins | null>(null);
+
+  // Track the saved values to detect dirty state
+  const savedKeyRef = useRef('');
+  const savedSecretRef = useRef('');
 
   useEffect(() => {
     const stored = localStorage.getItem(KITE_STORAGE_KEY);
@@ -41,6 +47,8 @@ const Profile: React.FC = () => {
       const credentials: KiteCredentials = JSON.parse(stored);
       setApiKey(credentials.apiKey);
       setApiSecret(credentials.apiSecret);
+      savedKeyRef.current = credentials.apiKey;
+      savedSecretRef.current = credentials.apiSecret;
     }
     const currentSession = getSession();
     setSession(currentSession);
@@ -98,15 +106,12 @@ const Profile: React.FC = () => {
   const handleSave = () => {
     const credentials: KiteCredentials = { apiKey: apiKey.trim(), apiSecret: apiSecret.trim() };
     localStorage.setItem(KITE_STORAGE_KEY, JSON.stringify(credentials));
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
-  };
-
-  const handleLogin = () => {
-    const url = getLoginUrl();
-    if (url) {
-      window.location.href = url;
-    }
+    savedKeyRef.current = credentials.apiKey;
+    savedSecretRef.current = credentials.apiSecret;
+    // Clear session — new credentials require a fresh login
+    clearSession();
+    notifySessionChange();
+    navigate('/login');
   };
 
   const handleLogout = async () => {
@@ -116,16 +121,24 @@ const Profile: React.FC = () => {
     notifySessionChange();
   };
 
+  const isDirty =
+    apiKey.trim() !== savedKeyRef.current ||
+    apiSecret.trim() !== savedSecretRef.current;
   const hasCreds = apiKey.trim().length > 0 && apiSecret.trim().length > 0;
-  const hasStoredCreds = getCredentials() !== null;
+  const canSave = isDirty && hasCreds;
 
   return (
     <div>
-      <div className="page-header">
-        <h1 className="page-header__title">Profile</h1>
-        <p className="page-header__subtitle">
-          Manage your account and personal preferences
-        </p>
+      <div className="page-header" style={{ position: 'relative' }}>
+        <div>
+          <h1 className="page-header__title">Profile</h1>
+          <p className="page-header__subtitle">
+            Manage your account and personal preferences
+          </p>
+        </div>
+        <button className="btn btn--danger profile-logout-btn" onClick={handleLogout}>
+          Logout
+        </button>
       </div>
 
       {/* Top row: Session + Account Details side by side */}
@@ -143,7 +156,7 @@ const Profile: React.FC = () => {
               <ConnectionIcon />
             </div>
           )}
-          {session ? (
+          {session && (
             <>
               <h3 className="card__title">Connected as {session.userName}</h3>
               <p className="card__description" style={{ marginBottom: 4 }}>
@@ -152,9 +165,6 @@ const Profile: React.FC = () => {
               <p className="card__description" style={{ marginBottom: 16 }}>
                 Session started: {session.loginTime}
               </p>
-              <button className="btn btn--danger" onClick={handleLogout}>
-                Logout
-              </button>
               {margins?.equity && (
                 <div className="profile-funds">
                   <h4 className="profile-funds__title">Equity Funds</h4>
@@ -174,22 +184,6 @@ const Profile: React.FC = () => {
                   </div>
                 </div>
               )}
-            </>
-          ) : (
-            <>
-              <h3 className="card__title">Not Connected</h3>
-              <p className="card__description" style={{ marginBottom: 16 }}>
-                {hasStoredCreds
-                  ? 'API credentials configured. Login to start a trading session.'
-                  : 'Set up your API credentials below, then login to Kite.'}
-              </p>
-              <button
-                className="btn btn--primary"
-                onClick={handleLogin}
-                disabled={!hasStoredCreds}
-              >
-                Login with Kite
-              </button>
             </>
           )}
         </div>
@@ -245,8 +239,9 @@ const Profile: React.FC = () => {
         </div>
       </div>
 
-      {/* Security — Kite Connect Credentials (full width below) */}
-      <div className="card" style={{ marginTop: 24, maxWidth: 640 }}>
+      {/* Security — Kite Connect Credentials — same width as cards above */}
+      <div className="card-grid card-grid--two-col" style={{ marginTop: 20 }}>
+      <div className="card">
         <div className="card__icon">
           <ShieldIcon />
         </div>
@@ -308,17 +303,18 @@ const Profile: React.FC = () => {
             <button
               className="btn btn--primary"
               onClick={handleSave}
-              disabled={!hasCreds}
+              disabled={!canSave}
             >
-              {saved ? '✓ Saved' : 'Save Credentials'}
+              Save & Re-login
             </button>
-            {saved && (
-              <span className="form-actions__feedback">
-                Credentials saved successfully
+            {isDirty && hasCreds && (
+              <span className="form-actions__feedback" style={{ color: 'var(--text-secondary)' }}>
+                Saving will log you out for a fresh login
               </span>
             )}
           </div>
         </div>
+      </div>
       </div>
     </div>
   );

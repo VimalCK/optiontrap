@@ -1,4 +1,5 @@
-import { getAuthHeader } from './kiteAuth';
+import { getAuthHeader, clearSession } from './kiteAuth';
+import { notifySessionChange } from '@/hooks/useKiteSession';
 
 const API_BASE = '/api';
 
@@ -34,9 +35,11 @@ async function kiteRequest<T>(endpoint: string, options: RequestOptions = {}): P
     const errorBody = await response.json().catch(() => null);
     const rawMessage = errorBody?.message || `API request failed (${response.status})`;
 
-    // Translate auth errors to user-friendly messages
+    // Expired / invalid session — clear locally so the auth guard redirects to login
     if (response.status === 403 || rawMessage.toLowerCase().includes('api_key') || rawMessage.toLowerCase().includes('access_token')) {
-      throw new Error('Session expired. Please login again from the Profile page.');
+      clearSession();
+      notifySessionChange();
+      throw new Error('Session expired. Please login again.');
     }
 
     throw new Error(rawMessage);

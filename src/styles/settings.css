@@ -1,3 +1,10 @@
+/* Logout button positioned top-right of the page header */
+.profile-logout-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
 .settings-section {
   margin-bottom: 40px;
 }
