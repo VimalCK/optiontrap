@@ -23,7 +23,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: '/holdings', label: 'Holdings', icon: <HoldingsIcon /> },
-  { path: '/positions', label: 'Positions', icon: <TradesIcon /> },
+  { path: '/positions', label: 'Paper Trading', icon: <TradesIcon /> },
   { path: '/dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
   { path: '/portfolio', label: 'Portfolio', icon: <PortfolioIcon /> },
   { path: '/analytics', label: 'Analytics', icon: <AnalyticsIcon /> },

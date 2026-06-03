@@ -101,7 +101,7 @@ const Positions: React.FC = () => {
   return (
     <div>
       <div className="page-header">
-        <h1 className="page-header__title">Positions</h1>
+        <h1 className="page-header__title">Paper Trading</h1>
         <p className="page-header__subtitle">
           Track your open option positions and monitor P&L
         </p>
