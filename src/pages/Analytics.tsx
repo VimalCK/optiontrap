@@ -11,7 +11,7 @@ const Analytics: React.FC = () => {
     return (
       <div>
         <div className="page-header">
-          <h1 className="page-header__title">Strategy Comparison</h1>
+          <h1 className="page-header__title">Option Analyzer</h1>
           <p className="page-header__subtitle">
             <button className="btn btn--link" onClick={() => setView('overview')} style={{ padding: 0, fontSize: 'inherit' }}>
               ← Back to Analytics
@@ -36,9 +36,9 @@ const Analytics: React.FC = () => {
           <div className="card__icon">
             <AnalyticsIcon />
           </div>
-          <h3 className="card__title">Strategy Comparison</h3>
+          <h3 className="card__title">Option Analyzer</h3>
           <p className="card__description">
-            NIFTY Option Chain with OI analysis, charts, and strike comparison.
+            NIFTY Option Chain with OI analysis, trap detection, and best strike recommendations.
           </p>
         </div>
         <div className="card">
