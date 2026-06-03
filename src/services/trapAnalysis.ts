@@ -197,8 +197,41 @@ export interface TrapAnalysis {
 }
 
 /**
+ * Pre-computed shared context for a full option chain analysis pass.
+ * Compute once via buildTrapContext() then pass to every analyzeTrap() call
+ * to avoid O(n³) recomputation when analyzing all strikes in the map view.
+ */
+export interface TrapContext {
+  maxPain: number;
+  pcr: number;
+  nearestResistance: OiWall | null;
+  nearestSupport: OiWall | null;
+}
+
+/**
+ * Build the shared context that is identical for every strike in a chain.
+ * Call once per tick/render cycle, then pass the result to analyzeTrap().
+ */
+export function buildTrapContext(
+  chain: OptionChainRow[],
+  oiData: Map<number, number>,
+  spotPrice: number,
+): TrapContext {
+  const maxPain = calculateMaxPain(chain, oiData);
+  const pcr = calculatePCR(chain, oiData);
+
+  const walls = findOiWalls(chain, oiData);
+  const resistanceWalls = walls.filter((w) => w.type === 'resistance' && w.strike > spotPrice);
+  const supportWalls = walls.filter((w) => w.type === 'support' && w.strike < spotPrice);
+  const nearestResistance = resistanceWalls.sort((a, b) => a.strike - b.strike)[0] ?? null;
+  const nearestSupport = supportWalls.sort((a, b) => b.strike - a.strike)[0] ?? null;
+
+  return { maxPain, pcr, nearestResistance, nearestSupport };
+}
+
+/**
  * Analyze whether a position at a given strike is likely to get trapped.
- * 
+ *
  * @param positionType 'buy-ce' | 'buy-pe' | 'sell-ce' | 'sell-pe'
  * @param strike The strike you're entering
  * @param spotPrice Current NIFTY spot
@@ -208,6 +241,9 @@ export interface TrapAnalysis {
  * @param closePrices Previous close prices (for price change)
  * @param livePrices Current prices
  * @param daysToExpiry Days remaining until expiry (optional)
+ * @param ctx Pre-computed shared context from buildTrapContext() — pass this
+ *            when analyzing all strikes in a loop to avoid O(n³) recomputation.
+ *            If omitted, shared context is computed internally (fine for single-strike use).
  */
 export function analyzeTrap(
   positionType: 'buy-ce' | 'buy-pe' | 'sell-ce' | 'sell-pe',
@@ -219,17 +255,17 @@ export function analyzeTrap(
   closePrices: Map<number, number>,
   livePrices: Map<number, number>,
   daysToExpiry?: number,
+  ctx?: TrapContext,
 ): TrapAnalysis {
   const reasons: string[] = [];
 
-  // 1. Calculate Max Pain
-  const maxPain = calculateMaxPain(chain, oiData);
+  // 1. Max Pain and PCR — use pre-computed context if provided, otherwise compute now
+  const { maxPain, pcr, nearestResistance, nearestSupport } =
+    ctx ?? buildTrapContext(chain, oiData, spotPrice);
+
   const distanceToMaxPain = Math.abs(strike - maxPain);
 
-  // 2. Calculate PCR
-  const pcr = calculatePCR(chain, oiData);
-
-  // 3. Get OI signal for the specific strike
+  // 2. Get OI signal for the specific strike
   const row = chain.find((r) => r.strike === strike);
   let oiSignal: OiSignalResult = { signal: 'neutral', label: 'Neutral', description: 'No data', sentiment: 'neutral' };
 
@@ -248,15 +284,7 @@ export function analyzeTrap(
     }
   }
 
-  // 4. Find OI walls
-  const walls = findOiWalls(chain, oiData);
-  const resistanceWalls = walls.filter((w) => w.type === 'resistance' && w.strike > spotPrice);
-  const supportWalls = walls.filter((w) => w.type === 'support' && w.strike < spotPrice);
-  // Sort by proximity to spot — nearest first
-  const nearestResistance = resistanceWalls.sort((a, b) => a.strike - b.strike)[0] ?? null;
-  const nearestSupport = supportWalls.sort((a, b) => b.strike - a.strike)[0] ?? null;
-
-  // 5. Score the position
+  // 3. Score the position
   let trapScore = 0; // 0 = safe, higher = more trapped
 
   // Max Pain analysis

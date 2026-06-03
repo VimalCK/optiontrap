@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { OptionChainRow } from '@/services/optionChain';
-import { analyzeTrap, TrapAnalysis, calculateMaxPain, calculatePCR } from '@/services/trapAnalysis';
+import { analyzeTrap, buildTrapContext, TrapAnalysis, calculateMaxPain, calculatePCR } from '@/services/trapAnalysis';
 import { calculateExpectedMove } from '@/services/edgeScore';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import '@/styles/trapanalyzer.css';
@@ -47,33 +47,42 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   const pcr = useMemo(() => calculatePCR(chain, oiData), [chain, oiData]);
   const expectedMove = useMemo(() => calculateExpectedMove(chain, atmStrike, livePrices), [chain, atmStrike, livePrices]);
 
+  // Shared context — computed ONCE per tick for the entire chain.
+  // Avoids O(n³): previously each analyzeTrap() call recomputed maxPain (O(n²)),
+  // PCR (O(n)), and OI walls (O(n log n)) independently for every strike.
+  const trapCtx = useMemo(
+    () => (chain.length > 0 && spotPrice > 0 ? buildTrapContext(chain, oiData, spotPrice) : null),
+    [chain, oiData, spotPrice],
+  );
+
   // Run analysis for single view — both CE and PE
   const analysisCe: TrapAnalysis | null = useMemo(() => {
-    if (chain.length === 0 || spotPrice === 0) return null;
-    return analyzeTrap(`${positionSide}-ce`, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry);
-  }, [positionSide, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry]);
+    if (!trapCtx) return null;
+    return analyzeTrap(`${positionSide}-ce`, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
+  }, [positionSide, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx]);
 
   const analysisPe: TrapAnalysis | null = useMemo(() => {
-    if (chain.length === 0 || spotPrice === 0) return null;
-    return analyzeTrap(`${positionSide}-pe`, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry);
-  }, [positionSide, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry]);
+    if (!trapCtx) return null;
+    return analyzeTrap(`${positionSide}-pe`, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
+  }, [positionSide, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx]);
 
-  // Run analysis for all strikes (map view) — both CE and PE
+  // Run analysis for all strikes (map view) — both CE and PE.
+  // Each call reuses the pre-computed trapCtx — only per-strike OI signal is computed per strike.
   const mapDataCe = useMemo(() => {
-    if (chain.length === 0 || spotPrice === 0) return [];
+    if (!trapCtx) return [];
     return chain.map((row) => {
-      const result = analyzeTrap(`${positionSide}-ce`, row.strike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry);
+      const result = analyzeTrap(`${positionSide}-ce`, row.strike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
       return { strike: row.strike, ...result };
     });
-  }, [positionSide, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry]);
+  }, [positionSide, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx]);
 
   const mapDataPe = useMemo(() => {
-    if (chain.length === 0 || spotPrice === 0) return [];
+    if (!trapCtx) return [];
     return chain.map((row) => {
-      const result = analyzeTrap(`${positionSide}-pe`, row.strike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry);
+      const result = analyzeTrap(`${positionSide}-pe`, row.strike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
       return { strike: row.strike, ...result };
     });
-  }, [positionSide, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry]);
+  }, [positionSide, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx]);
 
   const maxTrapScore = 9; // Fixed scale: max possible trap score (7 base + 2 time pressure)
 

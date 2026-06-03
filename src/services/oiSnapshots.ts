@@ -7,6 +7,11 @@ import { dbPutNoKey, dbGetAllCursor, dbDeleteCursor, STORE_OI } from './db';
 
 const SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
+// Module-level counter used to break timestamp ties. Appended as the last
+// digit of the millisecond value so the timestamp stays usable for date
+// comparisons and getTimeLabel() while the key is always unique.
+let _snapshotSeq = 0;
+
 export interface OiSnapshot {
   timestamp: number;
   timeLabel: string;
@@ -30,7 +35,12 @@ function getTimeLabel(timestamp: number): string {
 
 export async function saveOiSnapshot(oiData: Map<number, number>): Promise<void> {
   if (oiData.size === 0) return;
-  const timestamp = Date.now();
+  // Use Date.now() rounded down to the nearest 10 ms, then append a 0-9
+  // sequence digit. This keeps the value within ~10 ms of real time (well
+  // within the same minute for getTimeLabel) while guaranteeing uniqueness
+  // across up to 10 concurrent saves — far more than can realistically occur.
+  const base = Math.floor(Date.now() / 10) * 10;
+  const timestamp = base + (_snapshotSeq++ % 10);
   const data: Record<string, number> = {};
   oiData.forEach((oi, token) => { data[String(token)] = oi; });
   const snapshot: OiSnapshot = { timestamp, timeLabel: getTimeLabel(timestamp), data };

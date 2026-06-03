@@ -119,42 +119,40 @@ const OptionChain: React.FC = () => {
   const [session, setSession] = useState(getSession);
 
   const handleTicks = useCallback((ticks: Tick[]) => {
+    // Update spot price eagerly (not a Map, no clone needed)
+    const spotTick = ticks.find((t) => t.instrumentToken === NIFTY_INDEX_TOKEN);
+    if (spotTick) setNiftySpot(spotTick.lastPrice);
+
+    const priceTicks = ticks.filter((t) => t.instrumentToken !== NIFTY_INDEX_TOKEN);
+
     setLivePrices((prev) => {
+      if (priceTicks.length === 0) return prev;
       const next = new Map(prev);
-      ticks.forEach((t) => {
-        if (t.instrumentToken === NIFTY_INDEX_TOKEN) {
-          setNiftySpot(t.lastPrice);
-        } else {
-          next.set(t.instrumentToken, t.lastPrice);
-        }
-      });
+      priceTicks.forEach((t) => next.set(t.instrumentToken, t.lastPrice));
       return next;
     });
+
     setClosePrices((prev) => {
+      const relevant = priceTicks.filter((t) => t.closePrice !== undefined && t.closePrice > 0);
+      if (relevant.length === 0) return prev;
       const next = new Map(prev);
-      ticks.forEach((t) => {
-        if (t.closePrice !== undefined && t.closePrice > 0 && t.instrumentToken !== NIFTY_INDEX_TOKEN) {
-          next.set(t.instrumentToken, t.closePrice);
-        }
-      });
+      relevant.forEach((t) => next.set(t.instrumentToken, t.closePrice!));
       return next;
     });
+
     setOiData((prev) => {
+      const relevant = priceTicks.filter((t) => t.oi !== undefined);
+      if (relevant.length === 0) return prev;
       const next = new Map(prev);
-      ticks.forEach((t) => {
-        if (t.oi !== undefined && t.instrumentToken !== NIFTY_INDEX_TOKEN) {
-          next.set(t.instrumentToken, t.oi);
-        }
-      });
+      relevant.forEach((t) => next.set(t.instrumentToken, t.oi!));
       return next;
     });
+
     setVolumeData((prev) => {
+      const relevant = priceTicks.filter((t) => t.volume !== undefined);
+      if (relevant.length === 0) return prev;
       const next = new Map(prev);
-      ticks.forEach((t) => {
-        if (t.volume !== undefined && t.instrumentToken !== NIFTY_INDEX_TOKEN) {
-          next.set(t.instrumentToken, t.volume);
-        }
-      });
+      relevant.forEach((t) => next.set(t.instrumentToken, t.volume!));
       return next;
     });
   }, []);
