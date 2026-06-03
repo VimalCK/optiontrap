@@ -670,6 +670,46 @@ const OptionChain: React.FC = () => {
         )}
       </div>
 
+      {/* Order Modal */}
+      {orderForm && (() => {
+        const row = visibleChain.find((r) => r.strike === orderForm.strike);
+        if (!row) return null;
+        const instrument = orderForm.optionType === 'CE' ? row.ce : row.pe;
+        if (!instrument) return null;
+        return (
+          <div className="oc-order-modal-overlay" onClick={() => setOrderForm(null)}>
+            <div className="oc-order-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="oc-order-modal__header">
+                <span className="oc-order-modal__title">{orderForm.strike} {orderForm.optionType}</span>
+                <button className="oc-order-modal__close" onClick={() => setOrderForm(null)}>✕</button>
+              </div>
+              <div className="oc-order-modal__body">
+                <div className="oc-order-modal__fields">
+                  <label className="oc-order-modal__field">
+                    <span>Quantity</span>
+                    <input type="number" value={orderQty} onChange={(e) => setOrderQty(Number(e.target.value))} min={1} step={50} />
+                  </label>
+                  <label className="oc-order-modal__field">
+                    <span>Price</span>
+                    <input type="number" value={orderPrice} onChange={(e) => setOrderPrice(Number(e.target.value))} min={0} step={0.05} />
+                  </label>
+                </div>
+              </div>
+              <div className="oc-order-modal__footer">
+                <button className="oc-order-panel__btn oc-order-panel__btn--buy" onClick={async () => {
+                  await addPosition({ tradingsymbol: instrument.tradingsymbol, instrumentToken: instrument.instrumentToken, strike: orderForm.strike, optionType: orderForm.optionType, side: 'BUY', quantity: orderQty, entryPrice: orderPrice, expiry: selectedExpiry });
+                  setOrderForm(null);
+                }}>Buy</button>
+                <button className="oc-order-panel__btn oc-order-panel__btn--sell" onClick={async () => {
+                  await addPosition({ tradingsymbol: instrument.tradingsymbol, instrumentToken: instrument.instrumentToken, strike: orderForm.strike, optionType: orderForm.optionType, side: 'SELL', quantity: orderQty, entryPrice: orderPrice, expiry: selectedExpiry });
+                  setOrderForm(null);
+                }}>Sell</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* OI Bar Chart Card */}
       {!loading && !error && visibleChain.length > 0 && (
         <div className="card" style={{ marginTop: 24 }}>

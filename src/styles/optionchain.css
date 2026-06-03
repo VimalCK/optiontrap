@@ -613,7 +613,7 @@
 }
 
 
-/* Order Panel */
+/* Order Modal */
 .oc-cell-ltp--clickable {
   cursor: pointer;
   transition: background 0.1s;
@@ -627,68 +627,105 @@
   background: var(--sidebar-hover) !important;
 }
 
-.oc-order-row td {
-  padding: 0 !important;
-  border: none !important;
-}
-
-.oc-order-panel {
+.oc-order-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 10px 16px;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.oc-order-modal {
   background: var(--sidebar-bg);
   border: 1px solid var(--card-border);
-  border-radius: 0 0 8px 8px;
-  margin: 0 8px 8px;
+  border-radius: 12px;
+  width: 320px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
 }
 
-.oc-order-panel__title {
-  font-size: 13px;
+.oc-order-modal__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.oc-order-modal__title {
+  font-size: 16px;
   font-weight: 700;
   color: var(--text-primary);
-  min-width: 80px;
 }
 
-.oc-order-panel__fields {
+.oc-order-modal__close {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+}
+
+.oc-order-modal__close:hover {
+  color: var(--text-primary);
+  background: var(--sidebar-hover);
+}
+
+.oc-order-modal__body {
+  padding: 16px 20px;
+}
+
+.oc-order-modal__fields {
   display: flex;
   gap: 12px;
 }
 
-.oc-order-panel__field {
+.oc-order-modal__field {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
+  flex: 1;
 }
 
-.oc-order-panel__field span {
-  font-size: 9px;
+.oc-order-modal__field span {
+  font-size: 10px;
   font-weight: 500;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
 
-.oc-order-panel__field input {
-  width: 80px;
-  padding: 5px 8px;
-  font-size: 12px;
+.oc-order-modal__field input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 14px;
   font-family: inherit;
   color: var(--text-primary);
   background: var(--card-bg);
   border: 1px solid var(--card-border);
-  border-radius: 4px;
+  border-radius: 6px;
   outline: none;
 }
 
-.oc-order-panel__field input:focus {
+.oc-order-modal__field input:focus {
   border-color: var(--accent);
 }
 
-.oc-order-panel__actions {
+.oc-order-modal__footer {
   display: flex;
-  gap: 8px;
-  margin-left: auto;
+  gap: 10px;
+  padding: 12px 20px 16px;
+  border-top: 1px solid var(--card-border);
+}
+
+.oc-order-modal__footer .oc-order-panel__btn {
+  flex: 1;
+  padding: 10px;
+  font-size: 14px;
+  border-radius: 6px;
 }
 
 .oc-order-panel__btn {
