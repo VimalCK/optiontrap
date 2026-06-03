@@ -98,6 +98,8 @@ const OptionChain: React.FC = () => {
   const [niftySpot, setNiftySpot] = useState<number>(0);
   const [selectedChartStrike, setSelectedChartStrike] = useState<number | null>(null);
   const [showTrapInfo, setShowTrapInfo] = useState(false);
+  const [showOiChartInfo, setShowOiChartInfo] = useState(false);
+  const [showBestStrikesInfo, setShowBestStrikesInfo] = useState(false);
   const [oiVelocity, setOiVelocity] = useState<Map<number, OiVelocity>>(new Map());
   const [snapshots, setSnapshots] = useState<OiSnapshot[]>([]);
   const tickerRef = useRef<KiteTicker | null>(null);
@@ -634,8 +636,48 @@ const OptionChain: React.FC = () => {
             <div className="trap-card-header__left">
               <div className="card__icon"><TradesIcon /></div>
               <h3 className="card__title" style={{ marginBottom: 0 }}>OI Chart <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-secondary)' }}>(daily changes)</span></h3>
+              <button className="trap-info-btn" onClick={() => setShowOiChartInfo(!showOiChartInfo)} title="How to read this chart">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+                </svg>
+              </button>
             </div>
           </div>
+          {showOiChartInfo && (
+            <div className="trap-info-detail">
+              <h4>How to Read the OI Chart</h4>
+              <p>This chart shows Open Interest (OI) for each strike as vertical bars. Higher bars mean more contracts are open at that strike.</p>
+
+              <h5>Bar Colors</h5>
+              <ul>
+                <li><strong>Green bars (left)</strong> — CE (Call) Open Interest</li>
+                <li><strong>Red bars (right)</strong> — PE (Put) Open Interest</li>
+              </ul>
+
+              <h5>OI Change Indicators</h5>
+              <ul>
+                <li><strong>Cross-hatched top section</strong> — OI added since yesterday's close (new positions built today)</li>
+                <li><strong>Dashed marker above a shorter bar</strong> — OI decreased from yesterday (positions unwound)</li>
+              </ul>
+
+              <h5>Glow Effect</h5>
+              <p>Bars with a glowing border are <strong>volume-confirmed</strong> — both OI changed significantly AND high trading volume backs it. These are real institutional moves, not noise.</p>
+
+              <h5>Velocity Arrows (▲/▼)</h5>
+              <p>Appear during live market when OI changes rapidly (5%+ in 10 minutes). Green ▲ = fast buildup. Red ▼ = fast unwinding.</p>
+
+              <h5>Shaded Zone (Expected Range)</h5>
+              <p>The lightly tinted area with dashed borders shows where NIFTY is expected to stay (based on ATM straddle premium). OI walls <strong>outside</strong> this zone are stronger — price is unlikely to reach them.</p>
+
+              <h5>Key Takeaways</h5>
+              <ul>
+                <li><strong>Tallest CE bar</strong> = strongest resistance (call sellers defending that level)</li>
+                <li><strong>Tallest PE bar</strong> = strongest support (put sellers defending that level)</li>
+                <li><strong>ATM dashed line</strong> = current NIFTY spot position</li>
+                <li><strong>Glowing + velocity ▲</strong> = wall being built RIGHT NOW by institutions</li>
+              </ul>
+            </div>
+          )}
           <div className="oc-chart">
             <div className="oc-chart__body">
               <div className="oc-chart__yaxis">
@@ -816,8 +858,48 @@ const OptionChain: React.FC = () => {
             <div className="trap-card-header__left">
               <div className="card__icon"><TradesIcon /></div>
               <h3 className="card__title" style={{ marginBottom: 0 }}>Best Strikes</h3>
+              <button className="trap-info-btn" onClick={() => setShowBestStrikesInfo(!showBestStrikesInfo)} title="How Best Strikes works">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+                </svg>
+              </button>
             </div>
           </div>
+          {showBestStrikesInfo && (
+            <div className="trap-info-detail">
+              <h4>How Best Strikes Works</h4>
+              <p>Recommends the top 3 strikes for selling CE and PE options based on a combined Edge Score.</p>
+
+              <h5>Edge Score Formula</h5>
+              <p>Each strike is scored by combining:</p>
+              <ul>
+                <li><strong>POP (Probability of Profit)</strong> — Based on distance from spot vs expected move. Farther OTM = higher probability that price won't reach your strike.</li>
+                <li><strong>OI Wall Strength</strong> — Strikes with heavy OI (1.5x+ above average) have institutional defense. Sellers at these strikes are protected by the wall.</li>
+                <li><strong>Max Pain Alignment</strong> — Selling CE above max pain or PE below max pain means price gravitates away from your strike.</li>
+                <li><strong>Distance from Spot</strong> — More distance = more safety margin before your strike is threatened.</li>
+                <li><strong>Premium Value</strong> — Higher premium = better reward for the risk taken.</li>
+              </ul>
+
+              <h5>What the Metrics Mean</h5>
+              <ul>
+                <li><strong>POP 70%+</strong> — Strong probability. Price has a 70%+ chance of NOT reaching this strike.</li>
+                <li><strong>OI Wall 1.5x+</strong> — Significant institutional defense at this level.</li>
+                <li><strong>Premium</strong> — The amount you'd collect per lot for selling at this strike.</li>
+                <li><strong>Distance</strong> — Points between spot and your strike.</li>
+              </ul>
+
+              <h5>How to Use</h5>
+              <ul>
+                <li>Pick strikes with high Edge Score — they balance risk and reward.</li>
+                <li>Higher POP = safer but lower premium.</li>
+                <li>OI Wall = bonus protection on top of distance.</li>
+                <li>Avoid strikes inside the Expected Range (market likely to reach them).</li>
+              </ul>
+
+              <h5>Important</h5>
+              <p>These are recommendations based on current OI data, not guaranteed profits. Always manage risk with stop losses and position sizing.</p>
+            </div>
+          )}
           <BestStrikes
             chain={visibleChain}
             oiData={oiData}
