@@ -686,6 +686,44 @@
   padding: 16px;
 }
 
+.oc-order-modal__mode {
+  display: flex;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.oc-order-modal__mode-btn {
+  flex: 1;
+  padding: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-secondary);
+  background: var(--card-bg);
+  border: none;
+  cursor: pointer;
+  transition: all 0.1s;
+}
+
+.oc-order-modal__mode-btn:not(:last-child) {
+  border-right: 1px solid var(--card-border);
+}
+
+.oc-order-modal__mode-btn.active {
+  color: var(--accent);
+  background: var(--sidebar-active);
+}
+
+.oc-order-modal__live-notice {
+  font-size: 11px;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 8px 0;
+  width: 100%;
+}
+
 .oc-order-modal__fields {
   display: flex;
   gap: 10px;

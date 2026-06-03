@@ -104,6 +104,7 @@ const OptionChain: React.FC = () => {
   const [orderForm, setOrderForm] = useState<{ strike: number; optionType: 'CE' | 'PE' } | null>(null);
   const [orderQty, setOrderQty] = useState(50);
   const [orderPrice, setOrderPrice] = useState(0);
+  const [orderMode, setOrderMode] = useState<'paper' | 'live'>('paper');
   const [oiVelocity, setOiVelocity] = useState<Map<number, OiVelocity>>(new Map());
   const [snapshots, setSnapshots] = useState<OiSnapshot[]>([]);
   const tickerRef = useRef<KiteTicker | null>(null);
@@ -648,6 +649,10 @@ const OptionChain: React.FC = () => {
                 <button className="oc-order-modal__close" onClick={() => setOrderForm(null)}>✕</button>
               </div>
               <div className="oc-order-modal__body">
+                <div className="oc-order-modal__mode">
+                  <button className={`oc-order-modal__mode-btn ${orderMode === 'paper' ? 'active' : ''}`} onClick={() => setOrderMode('paper')}>Paper</button>
+                  <button className={`oc-order-modal__mode-btn ${orderMode === 'live' ? 'active' : ''}`} onClick={() => setOrderMode('live')}>Live</button>
+                </div>
                 <div className="oc-order-modal__fields">
                   <div className="oc-order-modal__field">
                     <span>Quantity (Lot: {instrument.lotSize})</span>
@@ -672,14 +677,21 @@ const OptionChain: React.FC = () => {
                 </div>
               </div>
               <div className="oc-order-modal__footer">
-                <button className="oc-order-panel__btn oc-order-panel__btn--buy" onClick={async () => {
-                  await addPosition({ tradingsymbol: instrument.tradingsymbol, instrumentToken: instrument.instrumentToken, strike: orderForm.strike, optionType: orderForm.optionType, side: 'BUY', quantity: orderQty, entryPrice: orderPrice, expiry: selectedExpiry });
-                  setOrderForm(null);
-                }}>Buy</button>
-                <button className="oc-order-panel__btn oc-order-panel__btn--sell" onClick={async () => {
-                  await addPosition({ tradingsymbol: instrument.tradingsymbol, instrumentToken: instrument.instrumentToken, strike: orderForm.strike, optionType: orderForm.optionType, side: 'SELL', quantity: orderQty, entryPrice: orderPrice, expiry: selectedExpiry });
-                  setOrderForm(null);
-                }}>Sell</button>
+                {orderMode === 'live' && (
+                  <p className="oc-order-modal__live-notice">Live trading coming soon. Use Paper mode to track positions.</p>
+                )}
+                {orderMode === 'paper' && (
+                  <>
+                    <button className="oc-order-panel__btn oc-order-panel__btn--buy" onClick={async () => {
+                      await addPosition({ tradingsymbol: instrument.tradingsymbol, instrumentToken: instrument.instrumentToken, strike: orderForm.strike, optionType: orderForm.optionType, side: 'BUY', quantity: orderQty, entryPrice: orderPrice, expiry: selectedExpiry });
+                      setOrderForm(null);
+                    }}>Buy</button>
+                    <button className="oc-order-panel__btn oc-order-panel__btn--sell" onClick={async () => {
+                      await addPosition({ tradingsymbol: instrument.tradingsymbol, instrumentToken: instrument.instrumentToken, strike: orderForm.strike, optionType: orderForm.optionType, side: 'SELL', quantity: orderQty, entryPrice: orderPrice, expiry: selectedExpiry });
+                      setOrderForm(null);
+                    }}>Sell</button>
+                  </>
+                )}
               </div>
             </div>
           </div>
