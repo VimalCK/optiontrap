@@ -133,3 +133,9 @@
   color: var(--text-secondary);
   letter-spacing: 0.3px;
 }
+
+
+.positions-table td:last-child,
+.positions-table th:last-child {
+  text-align: right;
+}
