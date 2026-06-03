@@ -252,8 +252,9 @@ export function analyzeTrap(
   const walls = findOiWalls(chain, oiData);
   const resistanceWalls = walls.filter((w) => w.type === 'resistance' && w.strike > spotPrice);
   const supportWalls = walls.filter((w) => w.type === 'support' && w.strike < spotPrice);
-  const nearestResistance = resistanceWalls.length > 0 ? resistanceWalls[resistanceWalls.length - 1] : null;
-  const nearestSupport = supportWalls.length > 0 ? supportWalls[0] : null;
+  // Sort by proximity to spot — nearest first
+  const nearestResistance = resistanceWalls.sort((a, b) => a.strike - b.strike)[0] ?? null;
+  const nearestSupport = supportWalls.sort((a, b) => b.strike - a.strike)[0] ?? null;
 
   // 5. Score the position
   let trapScore = 0; // 0 = safe, higher = more trapped
