@@ -598,7 +598,7 @@ const OptionChain: React.FC = () => {
                           {ceOiChg && <span className={`oc-cell-chg ${ceOiChg.color}`}>{ceOiChg.pct >= 0 ? '+' : ''}{ceOiChg.pct.toFixed(2)}%</span>}
                         </span>
                       </td>
-                      <td className={`oc-cell-ltp oc-cell-ltp--clickable ${ceItm ? 'oc-cell--itm-ce' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === 'CE' ? null : { strike: row.strike, optionType: 'CE' }); if (cePrice) setOrderPrice(cePrice); }}>
+                      <td className={`oc-cell-ltp oc-cell-ltp--clickable ${ceItm ? 'oc-cell--itm-ce' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === 'CE' ? null : { strike: row.strike, optionType: 'CE' }); if (cePrice) setOrderPrice(cePrice); if (row.ce) setOrderQty(row.ce.lotSize); }}>
                         {cePrice !== null ? cePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                         {ceChg && <span className={`oc-cell-chg ${ceChg.color}`}>{ceChg.pct >= 0 ? '+' : ''}{ceChg.pct.toFixed(2)}%</span>}
                       </td>
@@ -609,7 +609,7 @@ const OptionChain: React.FC = () => {
                         </div>
                         {row.strike}
                       </td>
-                      <td className={`oc-cell-ltp oc-cell-ltp--clickable ${peItm ? 'oc-cell--itm-pe' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === 'PE' ? null : { strike: row.strike, optionType: 'PE' }); if (pePrice) setOrderPrice(pePrice); }}>
+                      <td className={`oc-cell-ltp oc-cell-ltp--clickable ${peItm ? 'oc-cell--itm-pe' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === 'PE' ? null : { strike: row.strike, optionType: 'PE' }); if (pePrice) setOrderPrice(pePrice); if (row.pe) setOrderQty(row.pe.lotSize); }}>
                         {pePrice !== null ? pePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                         {peChg && <span className={`oc-cell-chg ${peChg.color}`}>{peChg.pct >= 0 ? '+' : ''}{peChg.pct.toFixed(2)}%</span>}
                       </td>
@@ -650,8 +650,8 @@ const OptionChain: React.FC = () => {
               <div className="oc-order-modal__body">
                 <div className="oc-order-modal__fields">
                   <label className="oc-order-modal__field">
-                    <span>Quantity</span>
-                    <input type="number" value={orderQty} onChange={(e) => setOrderQty(Number(e.target.value))} min={1} step={50} />
+                    <span>Quantity (Lot: {instrument.lotSize})</span>
+                    <input type="number" value={orderQty} onChange={(e) => setOrderQty(Number(e.target.value))} min={instrument.lotSize} step={instrument.lotSize} />
                   </label>
                   <label className="oc-order-modal__field">
                     <span>Price</span>
