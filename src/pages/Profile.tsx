@@ -150,17 +150,19 @@ const Profile: React.FC = () => {
       <div className="card profile-merged-card">
         {/* Left — avatar + account detail rows */}
         <div className="profile-merged-card__left">
-          {session && profile?.avatarUrl ? (
-            <img
-              src={profile.avatarUrl}
-              alt={session.userName}
-              className="profile-avatar"
-            />
-          ) : (
-            <div className="card__icon">
-              <ConnectionIcon />
-            </div>
-          )}
+          <div className="profile-merged-card__top">
+            {session && profile?.avatarUrl ? (
+              <img
+                src={profile.avatarUrl}
+                alt={session.userName}
+                className="profile-avatar"
+              />
+            ) : (
+              <div className="card__icon">
+                <ConnectionIcon />
+              </div>
+            )}
+          </div>
           {session && profile ? (
             <div className="profile-details">
               <div className="profile-details__row">
@@ -203,11 +205,13 @@ const Profile: React.FC = () => {
 
         <div className="profile-merged-card__divider" />
 
-        {/* Right — session info + equity funds */}
+        {/* Right — funds */}
         <div className="profile-merged-card__right">
           {session && (
             <>
-              <h3 className="card__title" style={{ marginBottom: 16 }}>Funds</h3>
+              <div className="profile-merged-card__top">
+                <h3 className="card__title">Funds</h3>
+              </div>
               {margins?.equity && (
                 <div className="profile-details">
                   <div className="profile-details__row">

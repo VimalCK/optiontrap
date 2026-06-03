@@ -20,6 +20,24 @@
   flex-shrink: 0;
 }
 
+/* Top zone — fixed height so detail rows on left and right start at the same baseline */
+.profile-merged-card__top {
+  min-height: 60px;
+  display: flex;
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+
+.profile-merged-card__top .profile-avatar,
+.profile-merged-card__top .card__icon {
+  margin-bottom: 0;
+}
+
+.profile-merged-card__top .card__title {
+  margin-bottom: 0;
+  line-height: 1;
+}
+
 @media (max-width: 768px) {
   .profile-merged-card {
     flex-direction: column;
