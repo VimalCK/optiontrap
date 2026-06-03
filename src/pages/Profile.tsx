@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ConnectionIcon, IdCardIcon, ShieldIcon } from '@/components/icons/Icons';
+import { ConnectionIcon, IdCardIcon, ShieldIcon, PowerIcon } from '@/components/icons/Icons';
 import { getSession, logout, getAuthHeader, clearSession, KiteSession } from '@/services/kiteAuth';
 import { fetchMargins, Margins } from '@/services/kiteApi';
 import { notifySessionChange } from '@/hooks/useKiteSession';
@@ -136,15 +136,19 @@ const Profile: React.FC = () => {
             Manage your account and personal preferences
           </p>
         </div>
-        <button className="btn btn--danger profile-logout-btn" onClick={handleLogout}>
-          Logout
+        <button
+          className="btn btn--danger profile-logout-btn"
+          onClick={handleLogout}
+          aria-label="Logout"
+          title="Logout"
+        >
+          <PowerIcon size={22} />
         </button>
       </div>
 
-      {/* Top row: Session + Account Details side by side */}
-      <div className="card-grid card-grid--two-col">
-        {/* Session Status Card */}
-        <div className="card">
+      {/* Merged session + account details card */}
+      <div className="card profile-merged-card">
+        <div className="profile-merged-card__left">
           {session && profile?.avatarUrl ? (
             <img
               src={profile.avatarUrl}
@@ -188,8 +192,9 @@ const Profile: React.FC = () => {
           )}
         </div>
 
-        {/* Account Details Card */}
-        <div className="card">
+        <div className="profile-merged-card__divider" />
+
+        <div className="profile-merged-card__right">
           <div className="card__icon">
             <IdCardIcon />
           </div>
@@ -232,16 +237,13 @@ const Profile: React.FC = () => {
           ) : profileLoading ? (
             <p className="card__description">Loading profile...</p>
           ) : (
-            <p className="card__description">
-              Login to Kite Connect to view your account details.
-            </p>
+            <p className="card__description">Loading account details...</p>
           )}
         </div>
       </div>
 
-      {/* Security — Kite Connect Credentials — same width as cards above */}
-      <div className="card-grid card-grid--two-col" style={{ marginTop: 20 }}>
-      <div className="card">
+      {/* Security — Kite Connect Credentials */}
+      <div className="card" style={{ marginTop: 20 }}>
         <div className="card__icon">
           <ShieldIcon />
         </div>
@@ -314,7 +316,6 @@ const Profile: React.FC = () => {
             )}
           </div>
         </div>
-      </div>
       </div>
     </div>
   );

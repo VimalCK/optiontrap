@@ -262,6 +262,24 @@ export const ShieldIcon: React.FC<IconProps> = ({ size = 20, className }) => (
   </svg>
 );
 
+export const PowerIcon: React.FC<IconProps> = ({ size = 20, className }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+    <line x1="12" y1="2" x2="12" y2="12" />
+  </svg>
+);
+
 export const LinkIcon: React.FC<IconProps> = ({ size = 20, className }) => (
   <svg
     width={size}

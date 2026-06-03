@@ -1,8 +1,49 @@
-/* Logout button positioned top-right of the page header */
+/* Merged profile card — two-column layout inside a single card */
+.profile-merged-card {
+  display: flex;
+  flex-direction: row;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.profile-merged-card__left,
+.profile-merged-card__right {
+  flex: 1;
+  padding: 24px;
+}
+
+.profile-merged-card__divider {
+  width: 1px;
+  background: var(--card-border);
+  align-self: stretch;
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .profile-merged-card {
+    flex-direction: column;
+  }
+
+  .profile-merged-card__divider {
+    width: auto;
+    height: 1px;
+  }
+}
+
+/* Logout button — circular icon button, top-right of page header */
 .profile-logout-btn {
   position: absolute;
   top: 0;
   right: 0;
+  width: 44px !important;
+  height: 44px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .settings-section {
