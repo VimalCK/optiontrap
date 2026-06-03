@@ -187,8 +187,12 @@ function parseCsvLine(line: string): string[] {
  * Get unique expiry dates sorted ascending
  */
 export function getExpiries(options: OptionInstrument[]): string[] {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const expiries = [...new Set(options.map((o) => o.expiry))];
-  return expiries.sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+  return expiries
+    .filter((exp) => new Date(exp).getTime() >= today.getTime())
+    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
 }
 
 /**
