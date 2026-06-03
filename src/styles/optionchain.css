@@ -630,43 +630,52 @@
 .oc-order-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.6);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  backdrop-filter: blur(2px);
 }
 
 .oc-order-modal {
   background: var(--sidebar-bg);
   border: 1px solid var(--card-border);
   border-radius: 12px;
-  width: 320px;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
+  width: 300px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: modalFadeIn 0.15s ease;
+}
+
+@keyframes modalFadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 .oc-order-modal__header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px 12px;
+  padding: 16px 20px 14px;
   border-bottom: 1px solid var(--card-border);
 }
 
 .oc-order-modal__title {
-  font-size: 16px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--text-primary);
+  letter-spacing: -0.2px;
 }
 
 .oc-order-modal__close {
   background: none;
   border: none;
   color: var(--text-secondary);
-  font-size: 16px;
+  font-size: 14px;
   cursor: pointer;
-  padding: 4px;
+  padding: 4px 8px;
   border-radius: 4px;
+  transition: all 0.1s;
 }
 
 .oc-order-modal__close:hover {
@@ -675,7 +684,7 @@
 }
 
 .oc-order-modal__body {
-  padding: 16px 20px;
+  padding: 20px;
 }
 
 .oc-order-modal__fields {
@@ -686,28 +695,35 @@
 .oc-order-modal__field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   flex: 1;
 }
 
 .oc-order-modal__field span {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 500;
   color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
 }
 
 .oc-order-modal__field input {
   width: 100%;
-  padding: 8px 10px;
+  padding: 10px 12px;
   font-size: 14px;
   font-family: inherit;
+  font-weight: 500;
   color: var(--text-primary);
   background: var(--card-bg);
   border: 1px solid var(--card-border);
-  border-radius: 6px;
+  border-radius: 8px;
   outline: none;
+  transition: border-color 0.15s;
+  -moz-appearance: textfield;
+}
+
+.oc-order-modal__field input::-webkit-outer-spin-button,
+.oc-order-modal__field input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 
 .oc-order-modal__field input:focus {
@@ -717,15 +733,20 @@
 .oc-order-modal__footer {
   display: flex;
   gap: 10px;
-  padding: 12px 20px 16px;
-  border-top: 1px solid var(--card-border);
+  padding: 16px 20px 20px;
 }
 
 .oc-order-modal__footer .oc-order-panel__btn {
   flex: 1;
-  padding: 10px;
-  font-size: 14px;
-  border-radius: 6px;
+  padding: 11px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 8px;
+  transition: opacity 0.15s, transform 0.1s;
+}
+
+.oc-order-modal__footer .oc-order-panel__btn:active {
+  transform: scale(0.97);
 }
 
 .oc-order-panel__btn {
