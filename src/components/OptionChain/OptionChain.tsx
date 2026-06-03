@@ -641,7 +641,7 @@ const OptionChain: React.FC = () => {
         const instrument = orderForm.optionType === 'CE' ? row.ce : row.pe;
         if (!instrument) return null;
         return (
-          <div className="oc-order-modal-overlay" onClick={() => setOrderForm(null)}>
+          <div className="oc-order-modal-overlay" onClick={() => setOrderForm(null)} onKeyDown={(e) => { if (e.key === 'Escape') setOrderForm(null); }} tabIndex={-1} ref={(el) => el?.focus()}>
             <div className="oc-order-modal" onClick={(e) => e.stopPropagation()}>
               <div className="oc-order-modal__header">
                 <span className="oc-order-modal__title">{orderForm.strike} {orderForm.optionType}</span>
