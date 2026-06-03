@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ConnectionIcon, IdCardIcon, ShieldIcon, PowerIcon } from '@/components/icons/Icons';
+import { ConnectionIcon, ShieldIcon, PowerIcon } from '@/components/icons/Icons';
 import { getSession, logout, getAuthHeader, clearSession, KiteSession } from '@/services/kiteAuth';
 import { fetchMargins, Margins } from '@/services/kiteApi';
 import { notifySessionChange } from '@/hooks/useKiteSession';
@@ -148,6 +148,7 @@ const Profile: React.FC = () => {
 
       {/* Merged session + account details card */}
       <div className="card profile-merged-card">
+        {/* Left — avatar + account detail rows */}
         <div className="profile-merged-card__left">
           {session && profile?.avatarUrl ? (
             <img
@@ -160,45 +161,6 @@ const Profile: React.FC = () => {
               <ConnectionIcon />
             </div>
           )}
-          {session && (
-            <>
-              <h3 className="card__title">Connected as {session.userName}</h3>
-              <p className="card__description" style={{ marginBottom: 4 }}>
-                User ID: {session.userId} &middot; {session.broker}
-              </p>
-              <p className="card__description" style={{ marginBottom: 16 }}>
-                Session started: {session.loginTime}
-              </p>
-              {margins?.equity && (
-                <div className="profile-funds">
-                  <h4 className="profile-funds__title">Equity Funds</h4>
-                  <div className="profile-funds__items">
-                    <div className="profile-funds__row">
-                      <span className="profile-funds__label">Available</span>
-                      <span className="profile-funds__value">{margins.equity.available.live_balance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
-                    </div>
-                    <div className="profile-funds__row">
-                      <span className="profile-funds__label">Used</span>
-                      <span className="profile-funds__value">{margins.equity.utilised.debits.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
-                    </div>
-                    <div className="profile-funds__row">
-                      <span className="profile-funds__label">Collateral</span>
-                      <span className="profile-funds__value">{margins.equity.available.collateral.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        <div className="profile-merged-card__divider" />
-
-        <div className="profile-merged-card__right">
-          <div className="card__icon">
-            <IdCardIcon />
-          </div>
-          <h3 className="card__title">Account Details</h3>
           {session && profile ? (
             <div className="profile-details">
               <div className="profile-details__row">
@@ -236,8 +198,33 @@ const Profile: React.FC = () => {
             </div>
           ) : profileLoading ? (
             <p className="card__description">Loading profile...</p>
-          ) : (
-            <p className="card__description">Loading account details...</p>
+          ) : null}
+        </div>
+
+        <div className="profile-merged-card__divider" />
+
+        {/* Right — session info + equity funds */}
+        <div className="profile-merged-card__right">
+          {session && (
+            <>
+              <h3 className="card__title" style={{ marginBottom: 16 }}>Funds</h3>
+              {margins?.equity && (
+                <div className="profile-details">
+                  <div className="profile-details__row">
+                    <span className="profile-details__label">Opening Balance</span>
+                    <span className="profile-details__value">{margins.equity.available.opening_balance.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="profile-details__row">
+                    <span className="profile-details__label">Used Margin</span>
+                    <span className="profile-details__value">{margins.equity.utilised.debits.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                  </div>
+                  <div className="profile-details__row">
+                    <span className="profile-details__label">Available Margin</span>
+                    <span className="profile-details__value">{(margins.equity.available.live_balance + margins.equity.available.collateral).toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
