@@ -30,10 +30,32 @@ export async function getPositions(): Promise<Position[]> {
 }
 
 /**
- * Add a new position.
+ * Add a new position or average into existing one.
+ * If same instrument + side exists, averages the entry price and adds quantity.
  */
 export async function addPosition(position: Omit<Position, 'id' | 'entryTime'>): Promise<Position> {
   const positions = await getPositions();
+  
+  // Check if same instrument + side already exists
+  const existingIdx = positions.findIndex(
+    (p) => p.instrumentToken === position.instrumentToken && p.side === position.side
+  );
+
+  if (existingIdx >= 0) {
+    // Average the price
+    const existing = positions[existingIdx];
+    const totalQty = existing.quantity + position.quantity;
+    const avgPrice = ((existing.entryPrice * existing.quantity) + (position.entryPrice * position.quantity)) / totalQty;
+    positions[existingIdx] = {
+      ...existing,
+      quantity: totalQty,
+      entryPrice: Number(avgPrice.toFixed(2)),
+    };
+    await cacheSet(POSITIONS_KEY, positions);
+    return positions[existingIdx];
+  }
+
+  // New position
   const newPosition: Position = {
     ...position,
     id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,

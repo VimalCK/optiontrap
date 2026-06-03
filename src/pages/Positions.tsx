@@ -139,7 +139,7 @@ const Positions: React.FC = () => {
                   <th>Instrument</th>
                   <th>Side</th>
                   <th>Qty</th>
-                  <th>Entry</th>
+                  <th>Avg</th>
                   <th>LTP</th>
                   <th>P&L</th>
                   <th></th>
