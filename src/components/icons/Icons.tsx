@@ -75,9 +75,21 @@ export const AnalyticsIcon: React.FC<IconProps> = ({ size = 20, className }) => 
     className={className}
     aria-hidden="true"
   >
-    <path d="M12 20V10" />
-    <path d="M18 20V4" />
-    <path d="M6 20v-4" />
+    {/* Candlesticks */}
+    <line x1="6"  y1="3"  x2="6"  y2="6"  />
+    <rect x="4.5" y="6"  width="3" height="5" rx="0.5" />
+    <line x1="6"  y1="11" x2="6"  y2="14" />
+
+    <line x1="12" y1="5"  x2="12" y2="8"  />
+    <rect x="10.5" y="8" width="3" height="6" rx="0.5" />
+    <line x1="12" y1="14" x2="12" y2="17" />
+
+    <line x1="18" y1="4"  x2="18" y2="7"  />
+    <rect x="16.5" y="7" width="3" height="5" rx="0.5" />
+    <line x1="18" y1="12" x2="18" y2="15" />
+
+    {/* Trend line */}
+    <path d="M4 20 L9 17 L15 18.5 L20 15" strokeDasharray="none" />
   </svg>
 );
 

@@ -313,7 +313,6 @@ const LivePositions: React.FC = () => {
           </button>
         </div>
         <div className="card">
-          <div className="card__icon"><TradesIcon /></div>
           <h3 className="card__title">No {view === 'net' ? 'Net' : 'Day'} Positions</h3>
           <p className="card__description">No open positions for the selected view.</p>
         </div>
