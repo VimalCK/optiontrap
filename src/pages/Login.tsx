@@ -58,12 +58,6 @@ const Login: React.FC = () => {
           <p className="login-card__subtitle">Connect to Kite to start analysing</p>
         </div>
 
-        {expired && (
-          <div className="login-card__banner login-card__banner--expired">
-            Session expired. Please login again.
-          </div>
-        )}
-
         {hasStoredCreds ? (
           <div className="login-card__body">
             <p className="login-card__status">API credentials configured.</p>
