@@ -715,8 +715,8 @@
   background: var(--card-bg);
   border: none;
   outline: none;
-  text-align: center;
   -moz-appearance: textfield;
+  flex: 1;
 }
 
 .oc-order-modal__field input::-webkit-outer-spin-button,
@@ -727,7 +727,7 @@
 
 .oc-order-modal__number {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   border: 1px solid var(--card-border);
   border-radius: 8px;
   overflow: hidden;
@@ -739,20 +739,28 @@
   border-color: var(--accent);
 }
 
+.oc-order-modal__number-btns {
+  display: flex;
+  flex-direction: column;
+  border-left: 1px solid var(--card-border);
+}
+
 .oc-order-modal__number-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 38px;
+  width: 28px;
+  flex: 1;
   background: var(--sidebar-hover);
   border: none;
-  color: var(--text-primary);
-  font-size: 16px;
-  font-weight: 600;
+  color: var(--text-secondary);
+  font-size: 8px;
   cursor: pointer;
-  transition: background 0.1s;
-  flex-shrink: 0;
+  transition: background 0.1s, color 0.1s;
+}
+
+.oc-order-modal__number-btn:first-child {
+  border-bottom: 1px solid var(--card-border);
 }
 
 .oc-order-modal__number-btn:hover {

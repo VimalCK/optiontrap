@@ -652,17 +652,21 @@ const OptionChain: React.FC = () => {
                   <div className="oc-order-modal__field">
                     <span>Quantity (Lot: {instrument.lotSize})</span>
                     <div className="oc-order-modal__number">
-                      <button type="button" className="oc-order-modal__number-btn" onClick={() => setOrderQty(Math.max(instrument.lotSize, orderQty - instrument.lotSize))}>−</button>
                       <input type="number" value={orderQty} onChange={(e) => setOrderQty(Number(e.target.value))} min={instrument.lotSize} step={instrument.lotSize} />
-                      <button type="button" className="oc-order-modal__number-btn" onClick={() => setOrderQty(orderQty + instrument.lotSize)}>+</button>
+                      <div className="oc-order-modal__number-btns">
+                        <button type="button" className="oc-order-modal__number-btn" onClick={() => setOrderQty(orderQty + instrument.lotSize)}>▲</button>
+                        <button type="button" className="oc-order-modal__number-btn" onClick={() => setOrderQty(Math.max(instrument.lotSize, orderQty - instrument.lotSize))}>▼</button>
+                      </div>
                     </div>
                   </div>
                   <div className="oc-order-modal__field">
                     <span>Price</span>
                     <div className="oc-order-modal__number">
-                      <button type="button" className="oc-order-modal__number-btn" onClick={() => setOrderPrice(Math.max(0, +(orderPrice - 0.5).toFixed(2)))}>−</button>
                       <input type="number" value={orderPrice} onChange={(e) => setOrderPrice(Number(e.target.value))} min={0} step={0.05} />
-                      <button type="button" className="oc-order-modal__number-btn" onClick={() => setOrderPrice(+(orderPrice + 0.5).toFixed(2))}>+</button>
+                      <div className="oc-order-modal__number-btns">
+                        <button type="button" className="oc-order-modal__number-btn" onClick={() => setOrderPrice(+(orderPrice + 0.5).toFixed(2))}>▲</button>
+                        <button type="button" className="oc-order-modal__number-btn" onClick={() => setOrderPrice(Math.max(0, +(orderPrice - 0.5).toFixed(2)))}>▼</button>
+                      </div>
                     </div>
                   </div>
                 </div>
