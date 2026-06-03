@@ -1,7 +1,10 @@
 /**
  * Positions Service
  * Manages open option positions stored in IndexedDB.
- * In future, this will be replaced by Kite Positions API.
+ *
+ * All write operations go through a serial queue (mutex) to prevent
+ * the read→modify→write race condition that can cause data loss when
+ * two operations are triggered in rapid succession.
  */
 
 import { cacheGet, cacheSet } from './cacheDb';
@@ -24,80 +27,109 @@ export interface Position {
 
 const POSITIONS_KEY = 'open_positions';
 
-/**
- * Get all open positions.
- */
+// ── Mutex queue ───────────────────────────────────────────────────────────────
+// Ensures all read→modify→write operations run serially, never concurrently.
+let queue: Promise<unknown> = Promise.resolve();
+
+function enqueue<T>(fn: () => Promise<T>): Promise<T> {
+  const next = queue.then(fn, fn); // run even if previous step failed
+  queue = next.then(
+    () => {},
+    () => {}, // swallow to keep queue alive
+  );
+  return next;
+}
+
+// ── Read (no queue needed — reads are safe to run concurrently) ───────────────
+
 export async function getPositions(): Promise<Position[]> {
   const positions = await cacheGet<Position[]>(POSITIONS_KEY);
   return positions || [];
 }
 
+// ── Writes (all serialised through the queue) ─────────────────────────────────
+
 /**
- * Add a new position or average into existing one.
- * If same instrument + side exists, averages the entry price and adds quantity.
+ * Add a new position or average into an existing one.
+ * If the same instrument + side already exists, averages the price and adds qty.
  */
-export async function addPosition(position: Omit<Position, 'id' | 'entryTime'>): Promise<Position> {
-  const positions = await getPositions();
-  
-  // Check if same instrument + side already exists
-  const existingIdx = positions.findIndex(
-    (p) => p.instrumentToken === position.instrumentToken && p.side === position.side
-  );
+export function addPosition(
+  position: Omit<Position, 'id' | 'entryTime'>,
+): Promise<Position> {
+  return enqueue(async () => {
+    const positions = await getPositions();
 
-  if (existingIdx >= 0) {
-    // Average the price
-    const existing = positions[existingIdx];
-    const totalQty = existing.quantity + position.quantity;
-    const avgPrice = ((existing.entryPrice * existing.quantity) + (position.entryPrice * position.quantity)) / totalQty;
-    positions[existingIdx] = {
-      ...existing,
-      quantity: totalQty,
-      entryPrice: Number(avgPrice.toFixed(2)),
+    const existingIdx = positions.findIndex(
+      (p) =>
+        p.instrumentToken === position.instrumentToken &&
+        p.side === position.side &&
+        !p.exited,
+    );
+
+    if (existingIdx >= 0) {
+      const existing = positions[existingIdx];
+      const totalQty = existing.quantity + position.quantity;
+      const avgPrice =
+        (existing.entryPrice * existing.quantity +
+          position.entryPrice * position.quantity) /
+        totalQty;
+      positions[existingIdx] = {
+        ...existing,
+        quantity: totalQty,
+        entryPrice: Number(avgPrice.toFixed(2)),
+      };
+      await cacheSet(POSITIONS_KEY, positions);
+      return positions[existingIdx];
+    }
+
+    const newPosition: Position = {
+      ...position,
+      id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      entryTime: new Date().toISOString(),
     };
+    positions.push(newPosition);
     await cacheSet(POSITIONS_KEY, positions);
-    return positions[existingIdx];
-  }
-
-  // New position
-  const newPosition: Position = {
-    ...position,
-    id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-    entryTime: new Date().toISOString(),
-  };
-  positions.push(newPosition);
-  await cacheSet(POSITIONS_KEY, positions);
-  return newPosition;
+    return newPosition;
+  });
 }
 
 /**
  * Exit a position — marks it as exited with exit price and time.
  */
-export async function exitPosition(id: string, exitPrice: number): Promise<void> {
-  const positions = await getPositions();
-  const idx = positions.findIndex((p) => p.id === id);
-  if (idx >= 0) {
-    positions[idx] = {
-      ...positions[idx],
-      exited: true,
-      exitPrice,
-      exitTime: new Date().toISOString(),
-    };
-    await cacheSet(POSITIONS_KEY, positions);
-  }
+export function exitPosition(id: string, exitPrice: number): Promise<void> {
+  return enqueue(async () => {
+    const positions = await getPositions();
+    const idx = positions.findIndex((p) => p.id === id);
+    if (idx >= 0) {
+      positions[idx] = {
+        ...positions[idx],
+        exited: true,
+        exitPrice,
+        exitTime: new Date().toISOString(),
+      };
+      await cacheSet(POSITIONS_KEY, positions);
+    }
+  });
 }
 
 /**
  * Remove a position by ID (permanently delete).
  */
-export async function removePosition(id: string): Promise<void> {
-  const positions = await getPositions();
-  const filtered = positions.filter((p) => p.id !== id);
-  await cacheSet(POSITIONS_KEY, filtered);
+export function removePosition(id: string): Promise<void> {
+  return enqueue(async () => {
+    const positions = await getPositions();
+    await cacheSet(
+      POSITIONS_KEY,
+      positions.filter((p) => p.id !== id),
+    );
+  });
 }
 
 /**
  * Clear all positions.
  */
-export async function clearPositions(): Promise<void> {
-  await cacheSet(POSITIONS_KEY, []);
+export function clearPositions(): Promise<void> {
+  return enqueue(async () => {
+    await cacheSet(POSITIONS_KEY, []);
+  });
 }
