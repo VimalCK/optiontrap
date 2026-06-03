@@ -1,0 +1,498 @@
+/* ===== Trade Journal ===== */
+
+.tj-container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.tj-loading {
+  color: var(--text-secondary);
+  font-size: 13px;
+  padding: 12px 0;
+}
+
+/* ── Controls Bar ── */
+.tj-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+/* ── Live / Paper mode tabs ── */
+.tj-mode-tabs {
+  display: flex;
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  padding: 3px;
+  gap: 2px;
+}
+
+.tj-mode-tab {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border-radius: 6px;
+  cursor: pointer;
+  background: none;
+  border: none;
+  transition: all 0.15s;
+  letter-spacing: 0.3px;
+}
+
+.tj-mode-tab:hover {
+  color: var(--text-primary);
+  background: var(--sidebar-hover);
+}
+
+.tj-mode-tab--active {
+  background: var(--sidebar-active);
+  color: var(--accent);
+}
+
+.tj-mode-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.tj-mode-dot--paper {
+  background: #a78bfa;
+}
+
+.tj-mode-dot--live {
+  background: #22c55e;
+}
+
+/* ── Segment select ── */
+.tj-segment-select {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  font-weight: 600;
+  padding: 5px 28px 5px 10px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23a1a1aa' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 8px center;
+}
+
+.tj-segment-select:focus {
+  border-color: var(--accent);
+}
+
+.tj-segment-select option {
+  background: #1a1a22;
+}
+
+/* ── Date range ── */
+.tj-date-range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.tj-date-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  white-space: nowrap;
+}
+
+.tj-date-input {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 5px 10px;
+  outline: none;
+  transition: border-color 0.15s;
+  color-scheme: dark;
+}
+
+.tj-date-input:focus {
+  border-color: var(--accent);
+}
+
+/* ── Preset shortcuts ── */
+.tj-presets {
+  display: flex;
+  gap: 4px;
+}
+
+.tj-preset-btn {
+  padding: 5px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  border: 1px solid var(--card-border);
+  border-radius: 5px;
+  cursor: pointer;
+  background: none;
+  transition: all 0.15s;
+  letter-spacing: 0.3px;
+}
+
+.tj-preset-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--sidebar-active);
+}
+
+/* ── Heatmap card ── */
+.tj-heatmap-card {
+  padding: 20px 24px;
+  overflow: hidden;
+}
+
+/* ── Empty state ── */
+.tj-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 32px 0;
+  text-align: center;
+}
+
+.tj-empty__icon {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.tj-empty__text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.tj-empty__hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ── Coming Soon (Live) ── */
+.tj-coming-soon {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 40px 24px;
+  text-align: center;
+}
+
+.tj-coming-soon__icon {
+  font-size: 36px;
+  line-height: 1;
+}
+
+.tj-coming-soon__title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.tj-coming-soon__desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  max-width: 400px;
+  line-height: 1.6;
+}
+
+/* ===== Heatmap Component ===== */
+.heatmap-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Stats */
+.heatmap-stats {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+
+.heatmap-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.heatmap-stat__label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.heatmap-stat__value {
+  font-size: 16px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+/* P&L colors */
+.heatmap-positive { color: #22c55e; }
+.heatmap-negative { color: #ef4444; }
+
+/* ── Full-width chart layout ── */
+.heatmap-chart-outer {
+  display: flex;
+  width: 100%;
+  gap: 0;
+}
+
+/* Fixed day-label column on the left */
+.heatmap-day-col {
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  padding-right: 6px;
+}
+
+.heatmap-month-label-spacer {
+  height: 18px; /* same height as month name row */
+}
+
+.heatmap-day-label {
+  height: 13px;
+  margin-bottom: 3px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-align: right;
+  line-height: 13px;
+  white-space: nowrap;
+}
+
+/* Month groups row — stretches to fill remaining width */
+.heatmap-months-row {
+  display: flex;
+  flex: 1;
+  gap: 6px;         /* gap between months */
+  min-width: 0;
+}
+
+/* Individual month group */
+.heatmap-month-group {
+  display: flex;
+  flex-direction: column;
+  flex: 1;          /* all months share width equally */
+  min-width: 0;
+}
+
+.heatmap-month-name {
+  height: 18px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
+  line-height: 18px;
+  white-space: nowrap;
+  margin-bottom: 2px;
+}
+
+/* Week rows inside a month */
+.heatmap-row {
+  display: flex;
+  gap: 3px;
+  margin-bottom: 3px;
+}
+
+/* Day cells — fluid width to fill month */
+.heatmap-cell {
+  flex: 1;
+  min-width: 0;
+  height: 13px;
+  border-radius: 2px;
+  cursor: default;
+  transition: opacity 0.1s, transform 0.1s;
+}
+
+.heatmap-cell:hover {
+  opacity: 0.8;
+  transform: scale(1.2);
+  cursor: crosshair;
+}
+
+.heatmap-cell--filler {
+  visibility: hidden;  /* placeholder for out-of-month days */
+  pointer-events: none;
+}
+
+.heatmap-cell--empty {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.heatmap-cell--zero {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.heatmap-cell--today {
+  outline: 1.5px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* Profit levels */
+.heatmap-cell--profit-1 { background: rgba(34, 197, 94, 0.25); }
+.heatmap-cell--profit-2 { background: rgba(34, 197, 94, 0.45); }
+.heatmap-cell--profit-3 { background: rgba(34, 197, 94, 0.70); }
+.heatmap-cell--profit-4 { background: rgba(34, 197, 94, 0.95); }
+
+/* Loss levels */
+.heatmap-cell--loss-1 { background: rgba(239, 68, 68, 0.25); }
+.heatmap-cell--loss-2 { background: rgba(239, 68, 68, 0.45); }
+.heatmap-cell--loss-3 { background: rgba(239, 68, 68, 0.70); }
+.heatmap-cell--loss-4 { background: rgba(239, 68, 68, 0.95); }
+
+/* Legend */
+.heatmap-legend {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.heatmap-legend__label {
+  font-size: 10px;
+  color: var(--text-secondary);
+}
+
+.heatmap-legend__cell {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  cursor: default;
+}
+
+.heatmap-legend__cell:hover {
+  transform: none;
+  opacity: 1;
+}
+
+.heatmap-legend__sep {
+  font-size: 10px;
+  color: var(--text-secondary);
+  margin: 0 4px;
+}
+
+/* Tooltip */
+.heatmap-tooltip {
+  position: fixed;
+  z-index: 1000;
+  background: #1e1e24;
+  border: 1px solid var(--card-border);
+  border-radius: 7px;
+  padding: 7px 12px;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  min-width: 130px;
+}
+
+.heatmap-tooltip__date {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.heatmap-tooltip__pnl {
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== Trade Log Table ===== */
+.tj-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.tj-table th {
+  text-align: left;
+  padding: 6px 10px;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.tj-table td {
+  padding: 8px 10px;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--card-border);
+  font-variant-numeric: tabular-nums;
+}
+
+.tj-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.tj-table tbody tr:hover {
+  background: var(--sidebar-hover);
+}
+
+.tj-symbol {
+  font-weight: 600;
+  font-size: 11px;
+}
+
+.tj-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.tj-badge--options {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+}
+
+.tj-badge--stocks {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.tj-side {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+
+.tj-side--buy {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+}
+
+.tj-side--sell {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}

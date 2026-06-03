@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { AnalyticsIcon } from '@/components/icons/Icons';
 import OptionChain from '@/components/OptionChain/OptionChain';
+import TradeJournal from '@/components/TradeJournal/TradeJournal';
 
-type AnalyticsView = 'overview' | 'strategy';
+type AnalyticsView = 'overview' | 'strategy' | 'journal';
 
 const Analytics: React.FC = () => {
   const [view, setView] = useState<AnalyticsView>('overview');
@@ -19,6 +20,22 @@ const Analytics: React.FC = () => {
           </p>
         </div>
         <OptionChain />
+      </div>
+    );
+  }
+
+  if (view === 'journal') {
+    return (
+      <div>
+        <div className="page-header">
+          <h1 className="page-header__title">Trade Journal</h1>
+          <p className="page-header__subtitle">
+            <button className="btn btn--link" onClick={() => setView('overview')} style={{ padding: 0, fontSize: 'inherit' }}>
+              ← Back to Analytics
+            </button>
+          </p>
+        </div>
+        <TradeJournal />
       </div>
     );
   }
@@ -41,13 +58,13 @@ const Analytics: React.FC = () => {
             NIFTY Option Chain with OI analysis, trap detection, and best strike recommendations.
           </p>
         </div>
-        <div className="card">
+        <div className="card card--clickable" onClick={() => setView('journal')}>
           <div className="card__icon">
             <AnalyticsIcon />
           </div>
           <h3 className="card__title">Trade Journal</h3>
           <p className="card__description">
-            Comprehensive log of all trades with entry/exit analysis.
+            P&L heatmap, segment filter, and comprehensive log of all trades with entry/exit analysis.
           </p>
         </div>
         <div className="card">
