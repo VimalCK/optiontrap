@@ -104,7 +104,9 @@ const OptionChain: React.FC = () => {
   const [orderForm, setOrderForm] = useState<{ strike: number; optionType: 'CE' | 'PE' } | null>(null);
   const [orderQty, setOrderQty] = useState(50);
   const [orderPrice, setOrderPrice] = useState(0);
-  const [orderMode, setOrderMode] = useState<'paper' | 'live'>('paper');
+  const [orderMode, setOrderMode] = useState<'paper' | 'live'>(() => {
+    return (localStorage.getItem('optiontrap_order_mode') as 'paper' | 'live') || 'paper';
+  });
   const [oiVelocity, setOiVelocity] = useState<Map<number, OiVelocity>>(new Map());
   const [snapshots, setSnapshots] = useState<OiSnapshot[]>([]);
   const tickerRef = useRef<KiteTicker | null>(null);
@@ -650,8 +652,8 @@ const OptionChain: React.FC = () => {
               </div>
               <div className="oc-order-modal__body">
                 <div className="oc-order-modal__mode">
-                  <button className={`oc-order-modal__mode-btn ${orderMode === 'paper' ? 'active' : ''}`} onClick={() => setOrderMode('paper')}>Paper</button>
-                  <button className={`oc-order-modal__mode-btn ${orderMode === 'live' ? 'active' : ''}`} onClick={() => setOrderMode('live')}>Live</button>
+                  <button className={`oc-order-modal__mode-btn ${orderMode === 'paper' ? 'active' : ''}`} onClick={() => { setOrderMode('paper'); localStorage.setItem('optiontrap_order_mode', 'paper'); }}>Paper</button>
+                  <button className={`oc-order-modal__mode-btn ${orderMode === 'live' ? 'active' : ''}`} onClick={() => { setOrderMode('live'); localStorage.setItem('optiontrap_order_mode', 'live'); }}>Live</button>
                 </div>
                 <div className="oc-order-modal__fields">
                   <div className="oc-order-modal__field">
