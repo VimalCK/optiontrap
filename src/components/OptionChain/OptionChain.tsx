@@ -591,8 +591,7 @@ const OptionChain: React.FC = () => {
                   const peOiChg = getOiChange(row.pe);
                   const isOrderOpen = orderForm?.strike === row.strike;
                   return (
-                    <React.Fragment key={row.strike}>
-                    <tr className={`${isAtm ? 'oc-row--atm' : ''} ${isOrderOpen ? 'oc-row--active' : ''}`} style={{ position: 'relative' }}>
+                    <tr key={row.strike} className={`${isAtm ? 'oc-row--atm' : ''} ${isOrderOpen ? 'oc-row--active' : ''}`} style={{ position: 'relative' }}>
                       <td className={`oc-cell-oi oc-cell-oi--ce ${ceItm ? 'oc-cell--itm-ce' : ''}`}>
                         <span className="oc-oi-content">
                           {ceOi !== undefined ? ceOi.toLocaleString('en-IN') : '-'}
@@ -621,41 +620,6 @@ const OptionChain: React.FC = () => {
                         </span>
                       </td>
                     </tr>
-                    {isOrderOpen && (
-                      <tr className="oc-order-row">
-                        <td colSpan={5}>
-                          <div className="oc-order-panel">
-                            <span className="oc-order-panel__title">{row.strike} {orderForm.optionType}</span>
-                            <div className="oc-order-panel__fields">
-                              <label className="oc-order-panel__field">
-                                <span>Qty</span>
-                                <input type="number" value={orderQty} onChange={(e) => setOrderQty(Number(e.target.value))} min={1} step={50} />
-                              </label>
-                              <label className="oc-order-panel__field">
-                                <span>Price</span>
-                                <input type="number" value={orderPrice} onChange={(e) => setOrderPrice(Number(e.target.value))} min={0} step={0.05} />
-                              </label>
-                            </div>
-                            <div className="oc-order-panel__actions">
-                              <button className="oc-order-panel__btn oc-order-panel__btn--buy" onClick={async () => {
-                                const instrument = orderForm.optionType === 'CE' ? row.ce : row.pe;
-                                if (!instrument) return;
-                                await addPosition({ tradingsymbol: instrument.tradingsymbol, instrumentToken: instrument.instrumentToken, strike: row.strike, optionType: orderForm.optionType, side: 'BUY', quantity: orderQty, entryPrice: orderPrice, expiry: selectedExpiry });
-                                setOrderForm(null);
-                              }}>Buy</button>
-                              <button className="oc-order-panel__btn oc-order-panel__btn--sell" onClick={async () => {
-                                const instrument = orderForm.optionType === 'CE' ? row.ce : row.pe;
-                                if (!instrument) return;
-                                await addPosition({ tradingsymbol: instrument.tradingsymbol, instrumentToken: instrument.instrumentToken, strike: row.strike, optionType: orderForm.optionType, side: 'SELL', quantity: orderQty, entryPrice: orderPrice, expiry: selectedExpiry });
-                                setOrderForm(null);
-                              }}>Sell</button>
-                              <button className="oc-order-panel__btn oc-order-panel__btn--cancel" onClick={() => setOrderForm(null)}>✕</button>
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                    </React.Fragment>
                   );
                 })}
               </tbody>
