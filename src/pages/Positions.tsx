@@ -126,10 +126,6 @@ const Positions: React.FC = () => {
                   {totalPnL >= 0 ? '+' : ''}{totalPnL.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
-              <div className="positions-summary__item">
-                <span className="positions-summary__label">Open Positions</span>
-                <span className="positions-summary__value">{positions.length}</span>
-              </div>
             </div>
           </div>
 
@@ -142,7 +138,7 @@ const Positions: React.FC = () => {
                   <th>Side</th>
                   <th>Qty</th>
                   <th>Avg</th>
-                  <th>LTP</th>
+                  <th>LTP/Exit</th>
                   <th>P&L</th>
                   <th></th>
                 </tr>
@@ -164,7 +160,7 @@ const Positions: React.FC = () => {
                       </td>
                       <td>{pos.quantity}</td>
                       <td>{pos.entryPrice.toFixed(2)}</td>
-                      <td>{ltp !== undefined ? ltp.toFixed(2) : '-'}</td>
+                      <td>{pos.exited ? pos.exitPrice!.toFixed(2) : (ltp !== undefined ? ltp.toFixed(2) : '-')}</td>
                       <td className={pnl.value > 0 ? 'positive' : pnl.value < 0 ? 'negative' : ''}>
                         {pnl.value >= 0 ? '+' : ''}{pnl.value.toFixed(2)}
                         <span className="positions-table__pct"> ({pnl.pct >= 0 ? '+' : ''}{pnl.pct.toFixed(2)}%)</span>
