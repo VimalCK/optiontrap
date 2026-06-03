@@ -49,6 +49,7 @@
   flex-direction: column;
   gap: 4px;
   flex: 1;
+  max-width: 200px;
 }
 
 .trap-input__label {
@@ -60,7 +61,7 @@
 }
 
 .trap-input__select {
-  /* Layout sizing — visual style comes from .app-select in global.css */
+  /* Layout sizing — visual style comes from AppSelect component */
   width: 100%;
 }
 

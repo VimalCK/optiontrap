@@ -17,7 +17,7 @@
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
   white-space: nowrap;
   min-width: 0;
-  width: 100%;
+  /* No width: 100% — let parent/className control the width */
 }
 
 .app-select-trigger:hover {

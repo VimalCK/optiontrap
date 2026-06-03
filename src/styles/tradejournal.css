@@ -71,11 +71,9 @@
   background: #22c55e;
 }
 
-/* ── Segment select — sizing only, visual style from .app-select ── */
+/* ── Segment select — sizing only ── */
 .tj-segment-select {
   width: 150px;
-  min-width: 150px;
-  flex-shrink: 0;
 }
 
 /* ── Date range ── */
