@@ -79,3 +79,74 @@ ul,
 ol {
   list-style: none;
 }
+
+/* ── Shared form controls ── */
+
+/* Select / combobox — used app-wide */
+.app-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: rgba(255, 255, 255, 0.04);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23a1a1aa' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  padding: 7px 32px 7px 11px;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s, background-color 0.15s;
+  /* Styled scrollbar for the dropdown list */
+  scrollbar-width: thin;
+  scrollbar-color: var(--card-border) transparent;
+}
+
+.app-select:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  background-color: rgba(255, 255, 255, 0.06);
+}
+
+.app-select:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.app-select option {
+  background: #1a1a22;
+  color: var(--text-primary);
+  font-size: 13px;
+  padding: 6px 10px;
+}
+
+/* webkit scrollbar inside select dropdown */
+.app-select::-webkit-scrollbar {
+  width: 6px;
+}
+
+.app-select::-webkit-scrollbar-track {
+  background: #1a1a22;
+  border-radius: 3px;
+}
+
+.app-select::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+}
+
+.app-select::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Light theme overrides */
+[data-theme='light'] .app-select {
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2371717a' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+[data-theme='light'] .app-select option {
+  background: #ffffff;
+}

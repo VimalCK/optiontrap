@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { OptionChainRow } from '@/services/optionChain';
 import { analyzeTrap, TrapAnalysis, calculateMaxPain, calculatePCR } from '@/services/trapAnalysis';
 import { calculateExpectedMove } from '@/services/edgeScore';
+import AppSelect from '@/components/AppSelect/AppSelect';
 import '@/styles/trapanalyzer.css';
 
 interface TrapAnalyzerProps {
@@ -272,27 +273,20 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
         <div className="trap-input__row">
           <div className="trap-input__group">
             <label className="trap-input__label">Position</label>
-            <select
-              className="trap-input__select"
+            <AppSelect
               value={positionSide}
-              onChange={(e) => setPositionSide(e.target.value as PositionSide)}
-            >
-              <option value="buy">Buy</option>
-              <option value="sell">Sell</option>
-            </select>
+              options={[{ value: 'buy', label: 'Buy' }, { value: 'sell', label: 'Sell' }]}
+              onChange={(v) => setPositionSide(v as PositionSide)}
+            />
           </div>
           {view === 'single' && (
             <div className="trap-input__group">
               <label className="trap-input__label">Strike</label>
-              <select
-                className="trap-input__select"
+              <AppSelect
                 value={selectedStrike}
-                onChange={(e) => setSelectedStrike(Number(e.target.value))}
-              >
-                {strikes.map((s) => (
-                  <option key={s} value={s}>{s}{s === atmStrike ? ' (ATM)' : ''}</option>
-                ))}
-              </select>
+                options={strikes.map((s) => ({ value: s, label: s === atmStrike ? `${s} (ATM)` : String(s) }))}
+                onChange={(v) => setSelectedStrike(Number(v))}
+              />
             </div>
           )}
           <div className="trap-input__group">

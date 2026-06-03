@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import PnLHeatmap from './PnLHeatmap';
+import AppSelect from '@/components/AppSelect/AppSelect';
 import {
   getPaperTradeEntries,
   getLiveTradeEntries,
@@ -97,15 +98,16 @@ const TradeJournal: React.FC = () => {
 
         {/* Segment filter — only relevant for paper mode */}
         {mode === 'paper' && (
-          <select
+          <AppSelect
             className="tj-segment-select"
             value={segment}
-            onChange={(e) => setSegment(e.target.value as SegmentFilter)}
-          >
-            <option value="all">All Segments</option>
-            <option value="options">Options</option>
-            <option value="stocks">Stocks</option>
-          </select>
+            options={[
+              { value: 'all', label: 'All Segments' },
+              { value: 'options', label: 'Options' },
+              { value: 'stocks', label: 'Stocks' },
+            ]}
+            onChange={(v) => setSegment(v as SegmentFilter)}
+          />
         )}
 
         {/* Date range */}

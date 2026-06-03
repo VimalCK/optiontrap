@@ -5,6 +5,7 @@ import { getSession, clearSession } from '@/services/kiteAuth';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
 import BestStrikes from '@/components/TrapAnalyzer/BestStrikes';
+import AppSelect from '@/components/AppSelect/AppSelect';
 import { calculateExpectedMove } from '@/services/edgeScore';
 import { saveOiSnapshot, getTodaySnapshots, cleanOldSnapshots, calculateVelocity, shouldTakeSnapshot, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
 import { addPosition } from '@/services/positions';
@@ -516,21 +517,15 @@ const OptionChain: React.FC = () => {
       {expiries.length > 0 && (
         <div className="oc-expiry-bar">
           <span className="oc-expiry-bar__label">Expiry</span>
-          <select
-            className="option-chain-expiry-select"
+          <AppSelect
             value={selectedExpiry}
-            onChange={(e) => setSelectedExpiry(e.target.value)}
-          >
-            {expiries.map((exp) => (
-              <option key={exp} value={exp}>
-                {new Date(exp).toLocaleDateString('en-IN', {
-                  day: '2-digit',
-                  month: 'short',
-                  year: 'numeric',
-                })}
-              </option>
-            ))}
-          </select>
+            options={expiries.map((exp) => ({
+              value: exp,
+              label: new Date(exp).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+            }))}
+            onChange={(v) => setSelectedExpiry(String(v))}
+            className="oc-expiry-select"
+          />
           {daysToExpiry !== undefined && (
             <span className="oc-expiry-bar__days">{daysToExpiry === 0 ? 'Expiry today' : `${daysToExpiry}d to expiry`}</span>
           )}

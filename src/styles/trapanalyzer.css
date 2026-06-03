@@ -60,25 +60,8 @@
 }
 
 .trap-input__select {
-  padding: 8px 12px;
-  font-size: 13px;
-  font-family: inherit;
-  font-weight: 500;
-  color: var(--text-primary);
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 8px;
-  outline: none;
-  cursor: pointer;
-}
-
-.trap-input__select:focus {
-  border-color: var(--accent);
-}
-
-.trap-input__select option {
-  background: var(--sidebar-bg);
-  color: var(--text-primary);
+  /* Layout sizing — visual style comes from .app-select in global.css */
+  width: 100%;
 }
 
 /* Verdict */

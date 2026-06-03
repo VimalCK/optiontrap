@@ -1,0 +1,133 @@
+/* ── AppSelect trigger button ── */
+.app-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 11px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+  min-width: 0;
+  width: 100%;
+}
+
+.app-select-trigger:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.app-select-trigger--open,
+.app-select-trigger:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.app-select-trigger__label {
+  flex: 1;
+  text-align: left;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-select-trigger__chevron {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  transition: transform 0.18s ease;
+}
+
+.app-select-trigger__chevron--open {
+  transform: rotate(180deg);
+}
+
+/* ── Dropdown panel ── */
+.app-select-dropdown {
+  background: #1c1c22;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  overflow: hidden;
+  animation: appSelectFadeIn 0.12s ease;
+}
+
+@keyframes appSelectFadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.app-select-dropdown__inner {
+  overflow-y: auto;
+  max-height: 280px;
+  padding: 4px;
+
+  /* Styled scrollbar */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+.app-select-dropdown__inner::-webkit-scrollbar {
+  width: 5px;
+}
+
+.app-select-dropdown__inner::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-select-dropdown__inner::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
+
+.app-select-dropdown__inner::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* ── Option row ── */
+.app-select-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px 7px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: background 0.1s;
+  user-select: none;
+}
+
+.app-select-option:hover {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.app-select-option--selected {
+  color: var(--accent);
+  font-weight: 600;
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.app-select-option--selected:hover {
+  background: rgba(99, 102, 241, 0.15);
+}
+
+.app-select-option__check {
+  flex-shrink: 0;
+  color: var(--accent);
+  width: 12px;
+}
+
+/* When not selected, reserve same space so text aligns */
+.app-select-option:not(.app-select-option--selected) {
+  padding-left: 30px; /* 10px base + 12px check width + 8px gap */
+}

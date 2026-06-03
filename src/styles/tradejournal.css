@@ -71,31 +71,11 @@
   background: #22c55e;
 }
 
-/* ── Segment select ── */
+/* ── Segment select — sizing only, visual style from .app-select ── */
 .tj-segment-select {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 6px;
-  color: var(--text-primary);
-  font-size: 12px;
-  font-family: inherit;
-  font-weight: 600;
-  padding: 5px 28px 5px 10px;
-  outline: none;
-  cursor: pointer;
-  transition: border-color 0.15s;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%23a1a1aa' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 8px center;
-}
-
-.tj-segment-select:focus {
-  border-color: var(--accent);
-}
-
-.tj-segment-select option {
-  background: #1a1a22;
+  width: 150px;
+  min-width: 150px;
+  flex-shrink: 0;
 }
 
 /* ── Date range ── */

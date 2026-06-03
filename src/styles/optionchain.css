@@ -23,6 +23,13 @@
   margin-left: auto;
 }
 
+/* AppSelect inside expiry bar — fixed width */
+.oc-expiry-select {
+  width: 160px;
+  min-width: 160px;
+  flex-shrink: 0;
+}
+
 /* Option Chain Card */
 .option-chain-card {
   overflow: hidden;
