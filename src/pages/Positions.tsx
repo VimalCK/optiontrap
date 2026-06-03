@@ -15,7 +15,16 @@ const Positions: React.FC = () => {
 
   const loadPositions = useCallback(async () => {
     const pos = await getPositions();
-    setPositions(pos);
+    // Filter out positions exited before today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const filtered = pos.filter((p) => {
+      if (!p.exited || !p.exitTime) return true;
+      const exitDate = new Date(p.exitTime);
+      exitDate.setHours(0, 0, 0, 0);
+      return exitDate.getTime() >= today.getTime();
+    });
+    setPositions(filtered);
     setLoading(false);
   }, []);
 
