@@ -170,35 +170,43 @@ const LivePositions: React.FC = () => (
   </div>
 );
 
-const Positions: React.FC = () => {
+const Positions: React.FC<{ hideHeader?: boolean }> = ({ hideHeader = false }) => {
   const [mode, setMode] = useState<PositionsMode>('paper');
 
   return (
     <div>
-      <div className="page-header">
-        <div className="positions-header-row">
-          <div>
-            <h1 className="page-header__title">Positions</h1>
-            <p className="page-header__subtitle">
-              {mode === 'paper' ? 'Simulated paper trading positions' : 'Live market positions from Kite'}
-            </p>
-          </div>
-
-          {/* Live / Paper toggle */}
-          <div className="positions-mode-tabs">
-            {(['paper', 'live'] as PositionsMode[]).map((m) => (
-              <button
-                key={m}
-                className={`positions-mode-tab ${mode === m ? 'positions-mode-tab--active' : ''}`}
-                onClick={() => setMode(m)}
-              >
-                <span className={`positions-mode-dot positions-mode-dot--${m}`} />
-                {m.charAt(0).toUpperCase() + m.slice(1)}
-              </button>
-            ))}
+      {!hideHeader && (
+        <div className="page-header">
+          <div className="positions-header-row">
+            <div>
+              <h1 className="page-header__title">Positions</h1>
+              <p className="page-header__subtitle">
+                {mode === 'paper' ? 'Simulated paper trading positions' : 'Live market positions from Kite'}
+              </p>
+            </div>
+            <div className="positions-mode-tabs">
+              {(['paper', 'live'] as PositionsMode[]).map((m) => (
+                <button key={m} className={`positions-mode-tab ${mode === m ? 'positions-mode-tab--active' : ''}`} onClick={() => setMode(m)}>
+                  <span className={`positions-mode-dot positions-mode-dot--${m}`} />
+                  {m.charAt(0).toUpperCase() + m.slice(1)}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* When hideHeader, show the mode toggle inline */}
+      {hideHeader && (
+        <div className="positions-mode-tabs" style={{ marginBottom: 20 }}>
+          {(['paper', 'live'] as PositionsMode[]).map((m) => (
+            <button key={m} className={`positions-mode-tab ${mode === m ? 'positions-mode-tab--active' : ''}`} onClick={() => setMode(m)}>
+              <span className={`positions-mode-dot positions-mode-dot--${m}`} />
+              {m.charAt(0).toUpperCase() + m.slice(1)}
+            </button>
+          ))}
+        </div>
+      )}
 
       {mode === 'paper' ? <PaperPositions /> : <LivePositions />}
     </div>

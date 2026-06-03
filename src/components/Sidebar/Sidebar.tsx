@@ -1,7 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
-  HoldingsIcon,
   DashboardIcon,
   PortfolioIcon,
   AnalyticsIcon,
@@ -22,10 +21,9 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { path: '/holdings', label: 'Holdings', icon: <HoldingsIcon /> },
-  { path: '/positions', label: 'Positions', icon: <TradesIcon /> },
+  { path: '/holdings', label: 'Portfolio', icon: <TradesIcon /> },
   { path: '/dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
-  { path: '/portfolio', label: 'Portfolio', icon: <PortfolioIcon /> },
+  { path: '/portfolio', label: 'Portfolio Mgr', icon: <PortfolioIcon /> },
   { path: '/analytics', label: 'Analytics', icon: <AnalyticsIcon /> },
   { path: '/watchlist', label: 'Watchlist', icon: <WatchlistIcon /> },
 ];

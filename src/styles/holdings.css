@@ -500,3 +500,22 @@
   user-select: none;
   transition: filter 0.2s ease;
 }
+
+/* Holdings subheader row (status + privacy toggle) */
+.holdings-subheader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 20px;
+}
+
+.holdings-status-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.holdings-count {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
