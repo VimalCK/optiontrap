@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar/Sidebar';
 import Holdings from './pages/Holdings';
 import Positions from './pages/Positions';
+import RealPositions from './pages/RealPositions';
 import Dashboard from './pages/Dashboard';
 import Portfolio from './pages/Portfolio';
 import Analytics from './pages/Analytics';
@@ -37,7 +38,7 @@ const App: React.FC = () => {
           <Routes>
             <Route path="/" element={<Navigate to="/holdings" replace />} />
             <Route path="/holdings" element={<Holdings />} />
-            <Route path="/positions" element={<Positions />} />
+            <Route path="/positions" element={<RealPositions />} />
             <Route path="/paper-trading" element={<Positions />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/portfolio" element={<Portfolio />} />
