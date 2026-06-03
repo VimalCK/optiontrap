@@ -151,9 +151,11 @@ const Positions: React.FC = () => {
                   const ltp = livePrices.get(pos.instrumentToken);
                   return (
                     <tr key={pos.id}>
-                      <td className="positions-table__instrument">
-                        <span className="positions-table__strike">{pos.strike}</span>
-                        <span className={`positions-table__type positions-table__type--${pos.optionType.toLowerCase()}`}>{pos.optionType}</span>
+                      <td>
+                        <span className="positions-table__instrument">
+                          <span className="positions-table__strike">{pos.strike}</span>
+                          <span className={`positions-table__type positions-table__type--${pos.optionType.toLowerCase()}`}>{pos.optionType}</span>
+                        </span>
                       </td>
                       <td>
                         <span className={`positions-table__side positions-table__side--${pos.side.toLowerCase()}`}>{pos.side}</span>
