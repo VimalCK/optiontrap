@@ -2,10 +2,11 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar/Sidebar';
 import Holdings from './pages/Holdings';
+import Positions from './pages/Positions';
 import Dashboard from './pages/Dashboard';
 import Portfolio from './pages/Portfolio';
 import Analytics from './pages/Analytics';
-import Trades from './pages/Trades';
+import Trades from './components/OptionChain/OptionChain';
 import Watchlist from './pages/Watchlist';
 import Profile from './pages/Profile';
 import Settings from './pages/Settings';
@@ -37,6 +38,7 @@ const App: React.FC = () => {
           <Routes>
             <Route path="/" element={<Navigate to="/holdings" replace />} />
             <Route path="/holdings" element={<Holdings />} />
+            <Route path="/positions" element={<Positions />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/portfolio" element={<Portfolio />} />
             <Route path="/analytics" element={<Analytics />} />
