@@ -1,0 +1,42 @@
+/* ── Analytics tab bar ── */
+.analytics-tabs {
+  display: flex;
+  gap: 2px;
+  border-bottom: 1px solid var(--card-border);
+  margin-bottom: 24px;
+}
+
+.analytics-tab {
+  padding: 10px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;   /* overlap the container border */
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+
+.analytics-tab:hover {
+  color: var(--text-primary);
+}
+
+.analytics-tab--active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+/* ── Tab content ── */
+.analytics-content {
+  /* no extra wrapper styles needed — child components handle their own layout */
+}
+
+/* ── Coming soon card inside analytics ── */
+.analytics-coming-soon {
+  max-width: 400px;
+}
