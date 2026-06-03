@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { TradesIcon } from '@/components/icons/Icons';
-import { getPositions, removePosition, Position } from '@/services/positions';
+import { getPositions, exitPosition, Position } from '@/services/positions';
 import { getSession } from '@/services/kiteAuth';
 import { fetchQuotes } from '@/services/kiteApi';
 import { KiteTicker, Tick } from '@/services/kiteTicker';
@@ -62,22 +62,24 @@ const Positions: React.FC = () => {
     }
   }, [positions]);
 
-  const handleExit = async (id: string) => {
-    await removePosition(id);
+  const handleExit = async (id: string, instrumentToken: number) => {
+    const ltp = livePrices.get(instrumentToken);
+    const exitPrice = ltp || 0;
+    await exitPosition(id, exitPrice);
     await loadPositions();
   };
 
   const getPnL = (pos: Position): { value: number; pct: number } => {
-    const ltp = livePrices.get(pos.instrumentToken);
-    if (ltp === undefined) return { value: 0, pct: 0 };
+    const currentPrice = pos.exited ? pos.exitPrice! : livePrices.get(pos.instrumentToken);
+    if (currentPrice === undefined) return { value: 0, pct: 0 };
 
     let pnl: number;
     if (pos.side === 'BUY') {
-      pnl = (ltp - pos.entryPrice) * pos.quantity;
+      pnl = (currentPrice - pos.entryPrice) * pos.quantity;
     } else {
-      pnl = (pos.entryPrice - ltp) * pos.quantity;
+      pnl = (pos.entryPrice - currentPrice) * pos.quantity;
     }
-    const pct = pos.entryPrice > 0 ? ((pos.side === 'BUY' ? ltp - pos.entryPrice : pos.entryPrice - ltp) / pos.entryPrice) * 100 : 0;
+    const pct = pos.entryPrice > 0 ? ((pos.side === 'BUY' ? currentPrice - pos.entryPrice : pos.entryPrice - currentPrice) / pos.entryPrice) * 100 : 0;
     return { value: pnl, pct };
   };
 
@@ -148,9 +150,9 @@ const Positions: React.FC = () => {
               <tbody>
                 {positions.map((pos) => {
                   const pnl = getPnL(pos);
-                  const ltp = livePrices.get(pos.instrumentToken);
+                  const ltp = pos.exited ? pos.exitPrice : livePrices.get(pos.instrumentToken);
                   return (
-                    <tr key={pos.id}>
+                    <tr key={pos.id} className={pos.exited ? 'positions-table__row--exited' : ''}>
                       <td>
                         <span className="positions-table__instrument">
                           <span className="positions-table__strike">{pos.strike}</span>
@@ -168,11 +170,12 @@ const Positions: React.FC = () => {
                         <span className="positions-table__pct"> ({pnl.pct >= 0 ? '+' : ''}{pnl.pct.toFixed(2)}%)</span>
                       </td>
                       <td>
-                        <button className="positions-table__exit" onClick={() => handleExit(pos.id)} title="Exit position">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <rect x="3" y="3" width="18" height="18" rx="2"/>
-                          </svg>
-                        </button>
+                        {!pos.exited && (
+                          <button className="positions-table__exit" onClick={() => handleExit(pos.id, pos.instrumentToken)} title="Exit position">
+                            EXIT
+                          </button>
+                        )}
+                        {pos.exited && <span className="positions-table__exited-badge">EXITED</span>}
                       </td>
                     </tr>
                   );

@@ -106,17 +106,30 @@
 
 .positions-table__exit {
   background: none;
-  border: none;
+  border: 1px solid var(--card-border);
   color: var(--text-secondary);
-  padding: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 4px 8px;
   border-radius: 4px;
   cursor: pointer;
   transition: all 0.1s;
-  display: flex;
-  align-items: center;
+  letter-spacing: 0.3px;
 }
 
 .positions-table__exit:hover {
   color: #ef4444;
+  border-color: #ef4444;
   background: rgba(239, 68, 68, 0.1);
+}
+
+.positions-table__row--exited {
+  opacity: 0.5;
+}
+
+.positions-table__exited-badge {
+  font-size: 9px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  letter-spacing: 0.3px;
 }

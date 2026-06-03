@@ -17,6 +17,9 @@ export interface Position {
   entryPrice: number;
   entryTime: string; // ISO timestamp
   expiry: string;
+  exited?: boolean;
+  exitPrice?: number;
+  exitTime?: string;
 }
 
 const POSITIONS_KEY = 'open_positions';
@@ -67,7 +70,24 @@ export async function addPosition(position: Omit<Position, 'id' | 'entryTime'>):
 }
 
 /**
- * Remove a position by ID (close/exit).
+ * Exit a position — marks it as exited with exit price and time.
+ */
+export async function exitPosition(id: string, exitPrice: number): Promise<void> {
+  const positions = await getPositions();
+  const idx = positions.findIndex((p) => p.id === id);
+  if (idx >= 0) {
+    positions[idx] = {
+      ...positions[idx],
+      exited: true,
+      exitPrice,
+      exitTime: new Date().toISOString(),
+    };
+    await cacheSet(POSITIONS_KEY, positions);
+  }
+}
+
+/**
+ * Remove a position by ID (permanently delete).
  */
 export async function removePosition(id: string): Promise<void> {
   const positions = await getPositions();
