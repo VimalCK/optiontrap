@@ -121,7 +121,7 @@ const Positions: React.FC = () => {
               <div className="positions-summary__item">
                 <span className="positions-summary__label">Total P&L</span>
                 <span className={`positions-summary__value ${totalPnL > 0 ? 'positive' : totalPnL < 0 ? 'negative' : ''}`}>
-                  {totalPnL >= 0 ? '+' : ''}₹{totalPnL.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  {totalPnL >= 0 ? '+' : ''}{totalPnL.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
               <div className="positions-summary__item">
@@ -159,10 +159,10 @@ const Positions: React.FC = () => {
                         <span className={`positions-table__side positions-table__side--${pos.side.toLowerCase()}`}>{pos.side}</span>
                       </td>
                       <td>{pos.quantity}</td>
-                      <td>₹{pos.entryPrice.toFixed(2)}</td>
-                      <td>{ltp !== undefined ? `₹${ltp.toFixed(2)}` : '-'}</td>
+                      <td>{pos.entryPrice.toFixed(2)}</td>
+                      <td>{ltp !== undefined ? ltp.toFixed(2) : '-'}</td>
                       <td className={pnl.value > 0 ? 'positive' : pnl.value < 0 ? 'negative' : ''}>
-                        {pnl.value >= 0 ? '+' : ''}₹{pnl.value.toFixed(2)}
+                        {pnl.value >= 0 ? '+' : ''}{pnl.value.toFixed(2)}
                         <span className="positions-table__pct"> ({pnl.pct >= 0 ? '+' : ''}{pnl.pct.toFixed(2)}%)</span>
                       </td>
                       <td>
