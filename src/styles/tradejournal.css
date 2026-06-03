@@ -251,9 +251,14 @@
   color: var(--text-primary);
 }
 
-/* P&L colors */
-.heatmap-positive { color: #22c55e; }
-.heatmap-negative { color: #ef4444; }
+/* P&L colors — used in table cells too, needs enough specificity */
+.heatmap-positive,
+.tj-table td.heatmap-positive,
+.tj-table .heatmap-positive { color: #22c55e !important; }
+
+.heatmap-negative,
+.tj-table td.heatmap-negative,
+.tj-table .heatmap-negative { color: #ef4444 !important; }
 
 /* ── Full-width chart layout ── */
 .heatmap-chart-outer {
@@ -347,6 +352,10 @@
   background: rgba(255, 255, 255, 0.14);
 }
 
+.heatmap-cell--hoverable {
+  cursor: crosshair;
+}
+
 .heatmap-cell--today {
   outline: 1.5px solid var(--accent);
   outline-offset: 1px;
@@ -369,6 +378,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  margin-top: 4px;
 }
 
 .heatmap-legend__label {
@@ -377,8 +387,12 @@
 }
 
 .heatmap-legend__cell {
-  width: 13px;
+  width: 13px !important;
+  min-width: 13px !important;
+  max-width: 13px !important;
+  flex: none !important;
   height: 13px;
+  border-radius: 2px;
   flex-shrink: 0;
   cursor: default;
 }
@@ -396,8 +410,6 @@
 
 /* Tooltip */
 .heatmap-tooltip {
-  position: fixed;
-  z-index: 1000;
   background: #1e1e24;
   border: 1px solid var(--card-border);
   border-radius: 7px;
@@ -416,10 +428,10 @@
   font-variant-numeric: tabular-nums;
 }
 
-.heatmap-tooltip__pnl {
-  font-size: 14px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
+.heatmap-tooltip__no-trade {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-style: italic;
 }
 
 /* ===== Trade Log Table ===== */
@@ -427,7 +439,16 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+  table-layout: fixed;
 }
+
+.tj-table th:nth-child(1) { width: 28%; } /* Symbol */
+.tj-table th:nth-child(2) { width: 12%; } /* Segment */
+.tj-table th:nth-child(3) { width: 8%;  } /* Side */
+.tj-table th:nth-child(4) { width: 8%;  } /* Qty */
+.tj-table th:nth-child(5) { width: 12%; } /* Entry */
+.tj-table th:nth-child(6) { width: 12%; } /* Exit */
+.tj-table th:nth-child(7) { width: 20%; } /* P&L */
 
 .tj-table th {
   text-align: left;
@@ -441,6 +462,7 @@
 }
 
 .tj-table td {
+  text-align: left;
   padding: 8px 10px;
   color: var(--text-primary);
   border-bottom: 1px solid var(--card-border);
@@ -453,6 +475,68 @@
 
 .tj-table tbody tr:hover {
   background: var(--sidebar-hover);
+}
+
+/* Date group header row */
+.tj-group-row {
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  user-select: none;
+}
+
+.tj-group-row:hover {
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.tj-group-date {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 10px 10px 10px !important;
+  border-bottom: none !important;
+  display: table-cell;
+}
+
+.tj-group-chevron {
+  margin-right: 6px;
+  font-size: 10px;
+  color: var(--text-secondary);
+  display: inline-block;
+  width: 10px;
+}
+
+.tj-group-count {
+  margin-left: 8px;
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-secondary);
+  opacity: 0.6;
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.tj-group-pnl {
+  font-size: 12px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  padding: 10px 10px !important;
+  border-bottom: none !important;
+}
+
+.tj-group-empty {
+  border-bottom: none !important;
+  padding: 0 !important;
+}
+
+/* Individual trade rows — only indent the symbol cell for visual grouping */
+.tj-trade-row td {
+  padding-left: 10px;
+}
+
+.tj-trade-row td:first-child {
+  padding-left: 24px;
 }
 
 .tj-symbol {

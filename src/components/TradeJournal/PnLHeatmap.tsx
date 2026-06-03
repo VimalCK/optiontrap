@@ -6,6 +6,7 @@
  */
 
 import React, { useMemo } from 'react';
+import { createPortal } from 'react-dom';
 
 interface PnLHeatmapProps {
   dailyPnL: Map<string, number>;
@@ -63,13 +64,16 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, endDate, months = 12 
   const { monthGroups, totalPnL, winDays, lossDays, totalDays } = useMemo(() => {
     const todayStr = toDateStr(today);
 
-    // Build month groups — one per calendar month in range
+    // Always start from January of the current year, show all 12 months
+    const startYear = today.getFullYear();
+
+    // Build month groups — Jan through Dec of current year
     const groups: MonthGroup[] = [];
 
-    for (let mOffset = -(months - 1); mOffset <= 0; mOffset++) {
-      const monthStart = new Date(today.getFullYear(), today.getMonth() + mOffset, 1);
-      const monthEnd = new Date(today.getFullYear(), today.getMonth() + mOffset + 1, 0); // last day of month
-      const label = MONTH_NAMES[monthStart.getMonth()];
+    for (let m = 0; m < 12; m++) {
+      const monthStart = new Date(startYear, m, 1);
+      const monthEnd = new Date(startYear, m + 1, 0); // last day of month
+      const label = MONTH_NAMES[m];
 
       // Find the Monday on or before the 1st of this month
       let cursor = new Date(monthStart);
@@ -126,7 +130,7 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, endDate, months = 12 
   }, [dailyPnL]);
 
   const [tooltip, setTooltip] = React.useState<{
-    date: string; pnl: number; x: number; y: number;
+    date: string; pnl: number | null; x: number; y: number;
   } | null>(null);
 
   const renderCell = (cell: DayCell | null, key: string) => {
@@ -145,15 +149,19 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, endDate, months = 12 
       cls += ' heatmap-cell--zero';
     }
     if (cell.isToday) cls += ' heatmap-cell--today';
+    if (cell.inRange) cls += ' heatmap-cell--hoverable';
 
     return (
       <div
         key={key}
         className={cls}
         onMouseEnter={(e) => {
-          if (!cell.inRange || cell.pnl === null) return;
-          const rect = (e.target as HTMLElement).getBoundingClientRect();
-          setTooltip({ date: cell.date, pnl: cell.pnl, x: rect.left, y: rect.top });
+          if (!cell.inRange) return;
+          setTooltip({ date: cell.date, pnl: cell.pnl, x: e.clientX, y: e.clientY });
+        }}
+        onMouseMove={(e) => {
+          if (!cell.inRange) return;
+          setTooltip((prev) => prev ? { ...prev, x: e.clientX, y: e.clientY } : { date: cell.date, pnl: cell.pnl, x: e.clientX, y: e.clientY });
         }}
         onMouseLeave={() => setTooltip(null)}
       />
@@ -236,15 +244,29 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, endDate, months = 12 
         <span className="heatmap-legend__label">More</span>
       </div>
 
-      {/* Tooltip */}
-      {tooltip && (
-        <div className="heatmap-tooltip" style={{ top: tooltip.y - 56, left: tooltip.x + 8 }}>
+      {/* Tooltip — rendered in a portal to escape overflow:hidden parents */}
+      {tooltip && createPortal(
+        <div
+          className="heatmap-tooltip"
+          style={{
+            position: 'fixed',
+            top: tooltip.y - 64,
+            left: tooltip.x + 16,
+            pointerEvents: 'none',
+            zIndex: 9999,
+          }}
+        >
           <span className="heatmap-tooltip__date">{tooltip.date}</span>
-          <span className={`heatmap-tooltip__pnl ${tooltip.pnl > 0 ? 'heatmap-positive' : 'heatmap-negative'}`}>
-            {tooltip.pnl >= 0 ? '+' : ''}
-            {tooltip.pnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </span>
-        </div>
+          {tooltip.pnl !== null ? (
+            <span className={`heatmap-tooltip__pnl ${tooltip.pnl > 0 ? 'heatmap-positive' : tooltip.pnl < 0 ? 'heatmap-negative' : ''}`}>
+              {tooltip.pnl >= 0 ? '+' : ''}
+              {tooltip.pnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          ) : (
+            <span className="heatmap-tooltip__no-trade">No trades</span>
+          )}
+        </div>,
+        document.body
       )}
     </div>
   );

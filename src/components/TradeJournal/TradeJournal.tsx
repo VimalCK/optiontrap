@@ -37,6 +37,16 @@ const TradeJournal: React.FC = () => {
   );
   const [rangeEnd, setRangeEnd] = useState<string>(() => toDateStr(new Date()));
   const [loading, setLoading] = useState(true);
+  const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+
+  const toggleDate = (date: string) => {
+    setExpandedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+  };
 
   const load = useCallback(async (m: TradingMode) => {
     setLoading(true);
@@ -177,53 +187,78 @@ const TradeJournal: React.FC = () => {
             )}
           </div>
 
-          {/* Trades Table */}
-          {!loading && recentTrades.length > 0 && (
-            <div className="card">
-              <h4 className="tj-section-title" style={{ marginBottom: 16 }}>
-                Trade Log
-              </h4>
-              <table className="tj-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Segment</th>
-                    <th>Symbol</th>
-                    <th>Side</th>
-                    <th>Qty</th>
-                    <th>Entry</th>
-                    <th>Exit</th>
-                    <th>P&L</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentTrades.map((t) => (
-                    <tr key={t.id}>
-                      <td>{t.date}</td>
-                      <td>
-                        <span className={`tj-badge tj-badge--${t.segment}`}>
-                          {t.segment}
-                        </span>
-                      </td>
-                      <td className="tj-symbol">{t.symbol}</td>
-                      <td>
-                        <span className={`tj-side tj-side--${t.side.toLowerCase()}`}>
-                          {t.side}
-                        </span>
-                      </td>
-                      <td>{t.quantity}</td>
-                      <td>{t.entryPrice.toFixed(2)}</td>
-                      <td>{t.exitPrice.toFixed(2)}</td>
-                      <td className={t.pnl > 0 ? 'heatmap-positive' : t.pnl < 0 ? 'heatmap-negative' : ''}>
-                        {t.pnl >= 0 ? '+' : ''}
-                        {t.pnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                      </td>
+          {/* Trades Table — grouped by date, collapsible */}
+          {!loading && recentTrades.length > 0 && (() => {
+            // Group trades by date
+            const groups = recentTrades.reduce<Record<string, TradeEntry[]>>((acc, t) => {
+              (acc[t.date] = acc[t.date] || []).push(t);
+              return acc;
+            }, {});
+
+            return (
+              <div className="card">
+                <h4 className="tj-section-title" style={{ marginBottom: 16 }}>Trade Log</h4>
+                <table className="tj-table">
+                  <thead>
+                    <tr>
+                      <th>Symbol</th>
+                      <th>Segment</th>
+                      <th>Side</th>
+                      <th>Qty</th>
+                      <th>Entry</th>
+                      <th>Exit</th>
+                      <th>P&L</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                  </thead>
+                  <tbody>
+                    {Object.entries(groups).map(([date, trades]) => {
+                      const dayTotal = trades.reduce((s, t) => s + t.pnl, 0);
+                      const isExpanded = expandedDates.has(date);
+                      return (
+                        <React.Fragment key={date}>
+                          {/* Date group header — clickable */}
+                          <tr
+                            className="tj-group-row"
+                            onClick={() => toggleDate(date)}
+                          >
+                            <td className="tj-group-date">
+                              <span className="tj-group-chevron">{isExpanded ? '▾' : '▸'}</span>
+                              {date}
+                              <span className="tj-group-count">{trades.length} trade{trades.length !== 1 ? 's' : ''}</span>
+                            </td>
+                            <td className="tj-group-empty" />
+                            <td className="tj-group-empty" />
+                            <td className="tj-group-empty" />
+                            <td className="tj-group-empty" />
+                            <td className="tj-group-empty" />
+                            <td className={`tj-group-pnl ${dayTotal > 0 ? 'heatmap-positive' : dayTotal < 0 ? 'heatmap-negative' : ''}`}>
+                              {dayTotal >= 0 ? '+' : ''}
+                              {dayTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            </td>
+                          </tr>
+                          {/* Individual trades — only shown when expanded */}
+                          {isExpanded && trades.map((t) => (
+                            <tr key={t.id} className="tj-trade-row">
+                              <td className="tj-symbol">{t.symbol}</td>
+                              <td><span className={`tj-badge tj-badge--${t.segment}`}>{t.segment}</span></td>
+                              <td><span className={`tj-side tj-side--${t.side.toLowerCase()}`}>{t.side}</span></td>
+                              <td>{t.quantity}</td>
+                              <td>{t.entryPrice.toFixed(2)}</td>
+                              <td>{t.exitPrice.toFixed(2)}</td>
+                              <td className={t.pnl > 0 ? 'heatmap-positive' : t.pnl < 0 ? 'heatmap-negative' : ''}>
+                                {t.pnl >= 0 ? '+' : ''}
+                                {t.pnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </td>
+                            </tr>
+                          ))}
+                        </React.Fragment>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
         </>
       )}
     </div>
