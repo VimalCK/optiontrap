@@ -7,6 +7,7 @@ import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
 import BestStrikes from '@/components/TrapAnalyzer/BestStrikes';
 import { calculateExpectedMove } from '@/services/edgeScore';
 import { saveOiSnapshot, getTodaySnapshots, cleanOldSnapshots, calculateVelocity, shouldTakeSnapshot, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
+import { addPosition } from '@/services/positions';
 
 const TrapInfoPanel: React.FC<{ onToggle: (show: boolean) => void; show: boolean }> = ({ onToggle, show }) => {
   return (
@@ -100,6 +101,9 @@ const OptionChain: React.FC = () => {
   const [showTrapInfo, setShowTrapInfo] = useState(false);
   const [showOiChartInfo, setShowOiChartInfo] = useState(false);
   const [showBestStrikesInfo, setShowBestStrikesInfo] = useState(false);
+  const [orderForm, setOrderForm] = useState<{ strike: number; optionType: 'CE' | 'PE' } | null>(null);
+  const [orderQty, setOrderQty] = useState(50);
+  const [orderPrice, setOrderPrice] = useState(0);
   const [oiVelocity, setOiVelocity] = useState<Map<number, OiVelocity>>(new Map());
   const [snapshots, setSnapshots] = useState<OiSnapshot[]>([]);
   const tickerRef = useRef<KiteTicker | null>(null);
@@ -585,15 +589,17 @@ const OptionChain: React.FC = () => {
                   const peChg = getPriceChange(row.pe);
                   const ceOiChg = getOiChange(row.ce);
                   const peOiChg = getOiChange(row.pe);
+                  const isOrderOpen = orderForm?.strike === row.strike;
                   return (
-                    <tr key={row.strike} className={isAtm ? 'oc-row--atm' : ''} style={{ position: 'relative' }}>
+                    <React.Fragment key={row.strike}>
+                    <tr className={`${isAtm ? 'oc-row--atm' : ''} ${isOrderOpen ? 'oc-row--active' : ''}`} style={{ position: 'relative' }}>
                       <td className={`oc-cell-oi oc-cell-oi--ce ${ceItm ? 'oc-cell--itm-ce' : ''}`}>
                         <span className="oc-oi-content">
                           {ceOi !== undefined ? ceOi.toLocaleString('en-IN') : '-'}
                           {ceOiChg && <span className={`oc-cell-chg ${ceOiChg.color}`}>{ceOiChg.pct >= 0 ? '+' : ''}{ceOiChg.pct.toFixed(2)}%</span>}
                         </span>
                       </td>
-                      <td className={`oc-cell-ltp ${ceItm ? 'oc-cell--itm-ce' : ''}`}>
+                      <td className={`oc-cell-ltp oc-cell-ltp--clickable ${ceItm ? 'oc-cell--itm-ce' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === 'CE' ? null : { strike: row.strike, optionType: 'CE' }); if (cePrice) setOrderPrice(cePrice); }}>
                         {cePrice !== null ? cePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                         {ceChg && <span className={`oc-cell-chg ${ceChg.color}`}>{ceChg.pct >= 0 ? '+' : ''}{ceChg.pct.toFixed(2)}%</span>}
                       </td>
@@ -604,7 +610,7 @@ const OptionChain: React.FC = () => {
                         </div>
                         {row.strike}
                       </td>
-                      <td className={`oc-cell-ltp ${peItm ? 'oc-cell--itm-pe' : ''}`}>
+                      <td className={`oc-cell-ltp oc-cell-ltp--clickable ${peItm ? 'oc-cell--itm-pe' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === 'PE' ? null : { strike: row.strike, optionType: 'PE' }); if (pePrice) setOrderPrice(pePrice); }}>
                         {pePrice !== null ? pePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                         {peChg && <span className={`oc-cell-chg ${peChg.color}`}>{peChg.pct >= 0 ? '+' : ''}{peChg.pct.toFixed(2)}%</span>}
                       </td>
@@ -615,6 +621,41 @@ const OptionChain: React.FC = () => {
                         </span>
                       </td>
                     </tr>
+                    {isOrderOpen && (
+                      <tr className="oc-order-row">
+                        <td colSpan={5}>
+                          <div className="oc-order-panel">
+                            <span className="oc-order-panel__title">{row.strike} {orderForm.optionType}</span>
+                            <div className="oc-order-panel__fields">
+                              <label className="oc-order-panel__field">
+                                <span>Qty</span>
+                                <input type="number" value={orderQty} onChange={(e) => setOrderQty(Number(e.target.value))} min={1} step={50} />
+                              </label>
+                              <label className="oc-order-panel__field">
+                                <span>Price</span>
+                                <input type="number" value={orderPrice} onChange={(e) => setOrderPrice(Number(e.target.value))} min={0} step={0.05} />
+                              </label>
+                            </div>
+                            <div className="oc-order-panel__actions">
+                              <button className="oc-order-panel__btn oc-order-panel__btn--buy" onClick={async () => {
+                                const instrument = orderForm.optionType === 'CE' ? row.ce : row.pe;
+                                if (!instrument) return;
+                                await addPosition({ tradingsymbol: instrument.tradingsymbol, instrumentToken: instrument.instrumentToken, strike: row.strike, optionType: orderForm.optionType, side: 'BUY', quantity: orderQty, entryPrice: orderPrice, expiry: selectedExpiry });
+                                setOrderForm(null);
+                              }}>Buy</button>
+                              <button className="oc-order-panel__btn oc-order-panel__btn--sell" onClick={async () => {
+                                const instrument = orderForm.optionType === 'CE' ? row.ce : row.pe;
+                                if (!instrument) return;
+                                await addPosition({ tradingsymbol: instrument.tradingsymbol, instrumentToken: instrument.instrumentToken, strike: row.strike, optionType: orderForm.optionType, side: 'SELL', quantity: orderQty, entryPrice: orderPrice, expiry: selectedExpiry });
+                                setOrderForm(null);
+                              }}>Sell</button>
+                              <button className="oc-order-panel__btn oc-order-panel__btn--cancel" onClick={() => setOrderForm(null)}>✕</button>
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    </React.Fragment>
                   );
                 })}
               </tbody>

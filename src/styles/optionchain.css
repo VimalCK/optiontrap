@@ -611,3 +611,113 @@
   color: #ef4444;
   font-weight: 500;
 }
+
+
+/* Order Panel */
+.oc-cell-ltp--clickable {
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.oc-cell-ltp--clickable:hover {
+  background: var(--sidebar-hover);
+}
+
+.oc-row--active {
+  background: var(--sidebar-hover) !important;
+}
+
+.oc-order-row td {
+  padding: 0 !important;
+  border: none !important;
+}
+
+.oc-order-panel {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  background: var(--sidebar-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 0 0 8px 8px;
+  margin: 0 8px 8px;
+}
+
+.oc-order-panel__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 80px;
+}
+
+.oc-order-panel__fields {
+  display: flex;
+  gap: 12px;
+}
+
+.oc-order-panel__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.oc-order-panel__field span {
+  font-size: 9px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.oc-order-panel__field input {
+  width: 80px;
+  padding: 5px 8px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  outline: none;
+}
+
+.oc-order-panel__field input:focus {
+  border-color: var(--accent);
+}
+
+.oc-order-panel__actions {
+  display: flex;
+  gap: 8px;
+  margin-left: auto;
+}
+
+.oc-order-panel__btn {
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.oc-order-panel__btn:hover {
+  opacity: 0.85;
+}
+
+.oc-order-panel__btn--buy {
+  background: #22c55e;
+  color: #fff;
+}
+
+.oc-order-panel__btn--sell {
+  background: #ef4444;
+  color: #fff;
+}
+
+.oc-order-panel__btn--cancel {
+  background: var(--sidebar-hover);
+  color: var(--text-secondary);
+  padding: 6px 10px;
+}
