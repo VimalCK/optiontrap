@@ -713,10 +713,9 @@
   font-weight: 500;
   color: var(--text-primary);
   background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 8px;
+  border: none;
   outline: none;
-  transition: border-color 0.15s;
+  text-align: center;
   -moz-appearance: textfield;
 }
 
@@ -726,8 +725,44 @@
   margin: 0;
 }
 
-.oc-order-modal__field input:focus {
+.oc-order-modal__number {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  overflow: hidden;
+  background: var(--card-bg);
+  transition: border-color 0.15s;
+}
+
+.oc-order-modal__number:focus-within {
   border-color: var(--accent);
+}
+
+.oc-order-modal__number-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 38px;
+  background: var(--sidebar-hover);
+  border: none;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.1s;
+  flex-shrink: 0;
+}
+
+.oc-order-modal__number-btn:hover {
+  background: var(--sidebar-active);
+  color: var(--accent);
+}
+
+.oc-order-modal__number-btn:active {
+  background: var(--accent);
+  color: #fff;
 }
 
 .oc-order-modal__footer {
