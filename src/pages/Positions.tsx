@@ -1,9 +1,10 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { getPositions, exitPosition, Position } from '@/services/positions';
 import { getSession, clearSession } from '@/services/kiteAuth';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import { fetchQuotes, fetchPositions, KitePosition, KitePositions } from '@/services/kiteApi';
-import { KiteTicker, Tick } from '@/services/kiteTicker';
+import { Tick } from '@/services/kiteTicker';
+import { tickerSubscribe } from '@/services/tickerSingleton';
 import { isMarketLive } from '@/utils/marketStatus';
 import '@/styles/positions.css';
 
@@ -13,7 +14,6 @@ const PaperPositions: React.FC = () => {
   const [positions, setPositions] = useState<Position[]>([]);
   const [livePrices, setLivePrices] = useState<Map<number, number>>(new Map());
   const [loading, setLoading] = useState(true);
-  const tickerRef = useRef<KiteTicker | null>(null);
 
   const loadPositions = useCallback(async () => {
     const pos = await getPositions();
@@ -38,16 +38,13 @@ const PaperPositions: React.FC = () => {
     const tokens = positions.map((p) => p.instrumentToken);
 
     if (isMarketLive()) {
-      const ticker = new KiteTicker();
-      ticker.connect(tokens, (ticks: Tick[]) => {
+      return tickerSubscribe('paper-positions', tokens, (ticks: Tick[]) => {
         setLivePrices((prev) => {
           const next = new Map(prev);
           ticks.forEach((t) => { next.set(t.instrumentToken, t.lastPrice); });
           return next;
         });
       });
-      tickerRef.current = ticker;
-      return () => { ticker.disconnect(); tickerRef.current = null; };
     } else {
       const instruments = positions.map((p) => `NFO:${p.tradingsymbol}`);
       fetchQuotes(instruments).then((quotes) => {
@@ -108,6 +105,7 @@ const PaperPositions: React.FC = () => {
 
       {/* Positions Table */}
       <div className="card">
+        <div className="positions-table-scroll">
         <table className="positions-table">
           <thead>
             <tr>
@@ -153,6 +151,7 @@ const PaperPositions: React.FC = () => {
             })}
           </tbody>
         </table>
+        </div>
       </div>
     </>
   );
@@ -166,7 +165,6 @@ const LivePositions: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<LiveView>('net');
-  const tickerRef = useRef<KiteTicker | null>(null);
   const [, setSession] = useState(getSession);
 
   const load = useCallback(async () => {
@@ -194,24 +192,19 @@ const LivePositions: React.FC = () => {
   // Subscribe live prices via WebSocket for open positions
   useEffect(() => {
     const session = getSession();
-    if (!session || !positions) return;
+    if (!session || !positions || !isMarketLive()) return;
 
     const allPos = [...positions.net, ...positions.day];
     const tokens = [...new Set(allPos.map((p) => p.instrument_token))];
     if (tokens.length === 0) return;
 
-    if (isMarketLive()) {
-      const ticker = new KiteTicker();
-      ticker.connect(tokens, (ticks: Tick[]) => {
-        setLivePrices((prev) => {
-          const next = new Map(prev);
-          ticks.forEach((t) => next.set(t.instrumentToken, t.lastPrice));
-          return next;
-        });
+    return tickerSubscribe('live-positions', tokens, (ticks: Tick[]) => {
+      setLivePrices((prev) => {
+        const next = new Map(prev);
+        ticks.forEach((t) => next.set(t.instrumentToken, t.lastPrice));
+        return next;
       });
-      tickerRef.current = ticker;
-      return () => { ticker.disconnect(); tickerRef.current = null; };
-    }
+    });
   }, [positions]);
 
   if (loading) return <div className="card"><p className="card__description">Loading live positions...</p></div>;
@@ -254,6 +247,7 @@ const LivePositions: React.FC = () => {
     return (
       <div className="card" style={{ marginBottom: 16 }}>
         {title && <h4 className="live-positions__section-title">{title}</h4>}
+        <div className="positions-table-scroll">
         <table className="positions-table live-positions-table">
           <thead>
             <tr>
@@ -299,6 +293,7 @@ const LivePositions: React.FC = () => {
             })}
           </tbody>
         </table>
+        </div>
       </div>
     );
   };
@@ -377,7 +372,9 @@ const LivePositions: React.FC = () => {
 };
 
 const Positions: React.FC<{ hideHeader?: boolean }> = ({ hideHeader = false }) => {
-  const [mode, setMode] = useState<PositionsMode>('paper');
+  const [mode, setMode] = useState<PositionsMode>(() =>
+    (localStorage.getItem('optiontrap_order_mode') as PositionsMode) || 'paper'
+  );
 
   return (
     <div>

@@ -34,6 +34,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Positions Table scroll container */
+.positions-table-scroll {
+  max-height: 420px;
+  overflow-y: auto;
+}
+
 /* Positions Table */
 .positions-table {
   width: 100%;
@@ -42,6 +48,10 @@
 }
 
 .positions-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--card-bg);
   text-align: left;
   padding: 8px 12px;
   font-size: 10px;
