@@ -80,7 +80,8 @@ import {
   OptionInstrument,
   OptionChainRow,
 } from '@/services/optionChain';
-import { KiteTicker, Tick } from '@/services/kiteTicker';
+import { Tick } from '@/services/kiteTicker';
+import { tickerSubscribe, tickerUpdateTokens } from '@/services/tickerSingleton';
 import { isMarketLive } from '@/utils/marketStatus';
 import '@/styles/optionchain.css';
 
@@ -112,11 +113,18 @@ const OptionChain: React.FC = () => {
   });
   const [oiVelocity, setOiVelocity] = useState<Map<number, OiVelocity>>(new Map());
   const [snapshots, setSnapshots] = useState<OiSnapshot[]>([]);
-  const tickerRef = useRef<KiteTicker | null>(null);
+  const [toast, setToast] = useState<{ text: string; color: 'green' | 'red' } | null>(null);
   const subscribedTokensRef = useRef<number[]>([]);
   const snapshotIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [session, setSession] = useState(getSession);
+
+  const showToast = useCallback((text: string, color: 'green' | 'red') => {
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    setToast({ text, color });
+    toastTimerRef.current = setTimeout(() => setToast(null), 2000);
+  }, []);
 
   const handleTicks = useCallback((ticks: Tick[]) => {
     // Update spot price eagerly (not a Map, no clone needed)
@@ -161,12 +169,6 @@ const OptionChain: React.FC = () => {
     if (session) {
       loadOptions();
     }
-    return () => {
-      if (tickerRef.current) {
-        tickerRef.current.disconnect();
-        tickerRef.current = null;
-      }
-    };
   }, []);
 
   const handleRefresh = useCallback(async () => {
@@ -295,17 +297,32 @@ const OptionChain: React.FC = () => {
     if (prevOiFetchedRef.current === fetchKey) return;
     prevOiFetchedRef.current = fetchKey;
 
-    fetchPreviousDayOI(tokens).then((prevOi) => {
-      if (prevOi.size > 0) {
+    const abortController = new AbortController();
+
+    fetchPreviousDayOI(
+      tokens,
+      // Update state after each batch so OI% appears as data arrives
+      (partial) => { setPrevDayOi(partial); },
+      abortController.signal,
+    ).then((prevOi) => {
+      if (!abortController.signal.aborted && prevOi.size > 0) {
         setPrevDayOi(prevOi);
-        console.log(`[Trades] Loaded previous day OI for ${prevOi.size} instruments`);
+        console.log(`[OptionChain] Loaded previous day OI for ${prevOi.size} instruments`);
       }
     }).catch((err) => {
-      console.warn('[Trades] Failed to fetch previous day OI:', err);
+      if (!abortController.signal.aborted) {
+        console.warn('[OptionChain] Failed to fetch previous day OI:', err);
+      }
     });
+
+    return () => {
+      // Cancel in-flight fetch if visibleChain changes before it completes
+      abortController.abort();
+      prevOiFetchedRef.current = '';
+    };
   }, [visibleChain, session]);
 
-  // Connect/reconnect WebSocket when visible chain changes (only during market hours)
+  // Subscribe to singleton ticker when visible chain changes (only during market hours)
   useEffect(() => {
     if (!session || visibleChain.length === 0 || !isMarketLive()) return;
 
@@ -315,24 +332,19 @@ const OptionChain: React.FC = () => {
       if (row.pe) tokens.push(row.pe.instrumentToken);
     });
 
-    // If tokens haven't changed, skip
+    // If tokens haven't changed, just update the callback ref (no reconnect needed)
     const prevTokens = subscribedTokensRef.current;
     const tokensChanged = tokens.length !== prevTokens.length ||
       tokens.some((t, i) => t !== prevTokens[i]);
 
-    if (!tokensChanged && tickerRef.current) return;
-
-    // Disconnect existing connection
-    if (tickerRef.current) {
-      tickerRef.current.disconnect();
-      tickerRef.current = null;
+    if (tokensChanged) {
+      tickerUpdateTokens('option-chain', tokens);
+      subscribedTokensRef.current = tokens;
     }
 
-    // Connect with new tokens
-    const ticker = new KiteTicker();
-    ticker.connect(tokens, handleTicks);
-    tickerRef.current = ticker;
+    const unsub = tickerSubscribe('option-chain', tokens, handleTicks);
     subscribedTokensRef.current = tokens;
+    return unsub;
   }, [visibleChain, session, handleTicks]);
 
   // OI Snapshots: capture every 15 min during market hours, calculate velocity
@@ -523,6 +535,9 @@ const OptionChain: React.FC = () => {
 
   return (
     <div>
+      {toast && (
+        <div className={`oc-toast oc-toast--${toast.color}`}>{toast.text}</div>
+      )}
       {/* Global Expiry Selector */}
       {expiries.length > 0 && (
         <div className="oc-expiry-bar">
@@ -619,9 +634,13 @@ const OptionChain: React.FC = () => {
                           {ceOiChg && <span className={`oc-cell-chg ${ceOiChg.color}`}>{ceOiChg.pct >= 0 ? '+' : ''}{ceOiChg.pct.toFixed(2)}%</span>}
                         </span>
                       </td>
-                      <td className={`oc-cell-ltp oc-cell-ltp--clickable ${ceItm ? 'oc-cell--itm-ce' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === 'CE' ? null : { strike: row.strike, optionType: 'CE' }); if (cePrice) setOrderPrice(cePrice); if (row.ce) setOrderQty(row.ce.lotSize); }}>
-                        {cePrice !== null ? cePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
-                        {ceChg && <span className={`oc-cell-chg ${ceChg.color}`}>{ceChg.pct >= 0 ? '+' : ''}{ceChg.pct.toFixed(2)}%</span>}
+                      <td className={`oc-cell-ltp oc-cell-ltp--clickable oc-cell-ltp--hover-btns ${ceItm ? 'oc-cell--itm-ce' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === 'CE' ? null : { strike: row.strike, optionType: 'CE' }); if (cePrice) setOrderPrice(cePrice); if (row.ce) setOrderQty(row.ce.lotSize); }}>
+                        <button className="oc-ltp-action-btn oc-ltp-action-btn--buy" onClick={async (e) => { e.stopPropagation(); if (!row.ce || cePrice === null || orderMode !== 'paper') return; try { await addPosition({ tradingsymbol: row.ce.tradingsymbol, instrumentToken: row.ce.instrumentToken, strike: row.strike, optionType: 'CE', side: 'BUY', quantity: row.ce.lotSize, entryPrice: cePrice, expiry: selectedExpiry }); showToast(`BUY ${row.strike}CE @ ${cePrice.toFixed(2)}`, 'green'); } catch { showToast('Failed to add position', 'red'); } }}>B</button>
+                        <span className="oc-ltp-price">
+                          {cePrice !== null ? cePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
+                          {ceChg && <span className={`oc-cell-chg ${ceChg.color}`}>{ceChg.pct >= 0 ? '+' : ''}{ceChg.pct.toFixed(2)}%</span>}
+                        </span>
+                        <button className="oc-ltp-action-btn oc-ltp-action-btn--sell" onClick={async (e) => { e.stopPropagation(); if (!row.ce || cePrice === null || orderMode !== 'paper') return; try { await addPosition({ tradingsymbol: row.ce.tradingsymbol, instrumentToken: row.ce.instrumentToken, strike: row.strike, optionType: 'CE', side: 'SELL', quantity: row.ce.lotSize, entryPrice: cePrice, expiry: selectedExpiry }); showToast(`SELL ${row.strike}CE @ ${cePrice.toFixed(2)}`, 'green'); } catch { showToast('Failed to add position', 'red'); } }}>S</button>
                       </td>
                       <td className="oc-cell-strike">
                         <div className="oc-strike-bars">
@@ -630,9 +649,13 @@ const OptionChain: React.FC = () => {
                         </div>
                         {row.strike}
                       </td>
-                      <td className={`oc-cell-ltp oc-cell-ltp--clickable ${peItm ? 'oc-cell--itm-pe' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === 'PE' ? null : { strike: row.strike, optionType: 'PE' }); if (pePrice) setOrderPrice(pePrice); if (row.pe) setOrderQty(row.pe.lotSize); }}>
-                        {pePrice !== null ? pePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
-                        {peChg && <span className={`oc-cell-chg ${peChg.color}`}>{peChg.pct >= 0 ? '+' : ''}{peChg.pct.toFixed(2)}%</span>}
+                      <td className={`oc-cell-ltp oc-cell-ltp--clickable oc-cell-ltp--hover-btns ${peItm ? 'oc-cell--itm-pe' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === 'PE' ? null : { strike: row.strike, optionType: 'PE' }); if (pePrice) setOrderPrice(pePrice); if (row.pe) setOrderQty(row.pe.lotSize); }}>
+                        <button className="oc-ltp-action-btn oc-ltp-action-btn--buy" onClick={async (e) => { e.stopPropagation(); if (!row.pe || pePrice === null || orderMode !== 'paper') return; try { await addPosition({ tradingsymbol: row.pe.tradingsymbol, instrumentToken: row.pe.instrumentToken, strike: row.strike, optionType: 'PE', side: 'BUY', quantity: row.pe.lotSize, entryPrice: pePrice, expiry: selectedExpiry }); showToast(`BUY ${row.strike}PE @ ${pePrice.toFixed(2)}`, 'green'); } catch { showToast('Failed to add position', 'red'); } }}>B</button>
+                        <span className="oc-ltp-price">
+                          {pePrice !== null ? pePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
+                          {peChg && <span className={`oc-cell-chg ${peChg.color}`}>{peChg.pct >= 0 ? '+' : ''}{peChg.pct.toFixed(2)}%</span>}
+                        </span>
+                        <button className="oc-ltp-action-btn oc-ltp-action-btn--sell" onClick={async (e) => { e.stopPropagation(); if (!row.pe || pePrice === null || orderMode !== 'paper') return; try { await addPosition({ tradingsymbol: row.pe.tradingsymbol, instrumentToken: row.pe.instrumentToken, strike: row.strike, optionType: 'PE', side: 'SELL', quantity: row.pe.lotSize, entryPrice: pePrice, expiry: selectedExpiry }); showToast(`SELL ${row.strike}PE @ ${pePrice.toFixed(2)}`, 'green'); } catch { showToast('Failed to add position', 'red'); } }}>S</button>
                       </td>
                       <td className={`oc-cell-oi oc-cell-oi--pe ${peItm ? 'oc-cell--itm-pe' : ''}`}>
                         <span className="oc-oi-content">
@@ -703,11 +726,11 @@ const OptionChain: React.FC = () => {
                 {orderMode === 'paper' && (
                   <>
                     <button className="oc-order-panel__btn oc-order-panel__btn--buy" onClick={async () => {
-                      await addPosition({ tradingsymbol: instrument.tradingsymbol, instrumentToken: instrument.instrumentToken, strike: orderForm.strike, optionType: orderForm.optionType, side: 'BUY', quantity: orderQty, entryPrice: orderPrice, expiry: selectedExpiry });
+                      try { await addPosition({ tradingsymbol: instrument.tradingsymbol, instrumentToken: instrument.instrumentToken, strike: orderForm.strike, optionType: orderForm.optionType, side: 'BUY', quantity: orderQty, entryPrice: orderPrice, expiry: selectedExpiry }); showToast(`BUY ${orderForm.strike}${orderForm.optionType} @ ${orderPrice.toFixed(2)}`, 'green'); } catch { showToast('Failed to add position', 'red'); }
                       setOrderForm(null);
                     }}>Buy</button>
                     <button className="oc-order-panel__btn oc-order-panel__btn--sell" onClick={async () => {
-                      await addPosition({ tradingsymbol: instrument.tradingsymbol, instrumentToken: instrument.instrumentToken, strike: orderForm.strike, optionType: orderForm.optionType, side: 'SELL', quantity: orderQty, entryPrice: orderPrice, expiry: selectedExpiry });
+                      try { await addPosition({ tradingsymbol: instrument.tradingsymbol, instrumentToken: instrument.instrumentToken, strike: orderForm.strike, optionType: orderForm.optionType, side: 'SELL', quantity: orderQty, entryPrice: orderPrice, expiry: selectedExpiry }); showToast(`SELL ${orderForm.strike}${orderForm.optionType} @ ${orderPrice.toFixed(2)}`, 'green'); } catch { showToast('Failed to add position', 'red'); }
                       setOrderForm(null);
                     }}>Sell</button>
                   </>
