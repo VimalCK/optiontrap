@@ -21,13 +21,6 @@ const Holdings: React.FC = () => {
 
   return (
     <div>
-      <div className="page-header">
-        <h1 className="page-header__title">Holdings & Positions</h1>
-        <p className="page-header__subtitle">
-          Equity holdings and option positions in one place
-        </p>
-      </div>
-
       {/* Tab bar */}
       <div className="analytics-tabs">
         {TABS.map((t) => (

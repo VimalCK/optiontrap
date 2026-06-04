@@ -17,13 +17,6 @@ const Analytics: React.FC = () => {
 
   return (
     <div>
-      <div className="page-header">
-        <h1 className="page-header__title">Analytics</h1>
-        <p className="page-header__subtitle">
-          Deep dive into your trading patterns and performance metrics
-        </p>
-      </div>
-
       {/* Tab bar */}
       <div className="analytics-tabs">
         {TABS.map((t) => (

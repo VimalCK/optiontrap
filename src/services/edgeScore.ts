@@ -102,7 +102,6 @@ export function calculateEdgeScores(
       const pop = calculatePOP(row.strike, spotPrice, expectedMove, 'ce');
 
       // OI wall strength at this strike (CE OI = resistance)
-      const ceOi = oiData.get(row.ce.instrumentToken) || 0;
       const wall = walls.find((w) => w.strike === row.strike && w.type === 'resistance');
       const oiWallStrength = wall ? wall.strength : 0;
 
@@ -148,7 +147,6 @@ export function calculateEdgeScores(
       const pop = calculatePOP(row.strike, spotPrice, expectedMove, 'pe');
 
       // OI wall strength at this strike (PE OI = support)
-      const peOi = oiData.get(row.pe.instrumentToken) || 0;
       const wall = walls.find((w) => w.strike === row.strike && w.type === 'support');
       const oiWallStrength = wall ? wall.strength : 0;
 

@@ -84,8 +84,6 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
     });
   }, [positionSide, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx]);
 
-  const maxTrapScore = 9; // Fixed scale: max possible trap score (7 base + 2 time pressure)
-
   const handleMapBarClick = (strike: number) => {
     setSelectedStrike(strike);
     setView('single');
