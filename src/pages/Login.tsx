@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getCredentials, getLoginUrl } from '@/services/kiteAuth';
-import { ShieldIcon, ArrowRightIcon } from '@/components/icons/Icons';
+import { ShieldIcon } from '@/components/icons/Icons';
 import '@/styles/login.css';
 
 const KITE_STORAGE_KEY = 'optiontrap_kite_credentials';
@@ -59,7 +59,6 @@ const Login: React.FC = () => {
             <p className="login-card__status">API credentials configured.</p>
             <button className="btn btn--primary login-card__login-btn" onClick={handleLogin}>
               Login with Kite
-              <ArrowRightIcon size={18} />
             </button>
             <button
               className="login-card__change-creds"
