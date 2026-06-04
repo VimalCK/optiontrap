@@ -231,9 +231,19 @@ const LivePositions: React.FC = () => {
   const openRows   = rows.filter((p) => p.quantity !== 0);
   const closedRows = rows.filter((p) => p.quantity === 0);
 
-  const totalPnL    = rows.reduce((s, p) => s + p.pnl, 0);
+  // Recompute P&L from live LTP when available; fall back to API value
+  const getLivePnl = (p: KitePosition): { pnl: number; unrealised: number } => {
+    const ltp = livePrices.get(p.instrument_token);
+    if (ltp !== undefined && p.quantity !== 0) {
+      const livePnl = (ltp - p.average_price) * p.quantity;
+      return { pnl: livePnl, unrealised: livePnl - p.realised };
+    }
+    return { pnl: p.pnl, unrealised: p.unrealised };
+  };
+
+  const totalPnL    = rows.reduce((s, p) => s + getLivePnl(p).pnl, 0);
   const totalM2M    = rows.reduce((s, p) => s + p.m2m, 0);
-  const unrealised  = rows.reduce((s, p) => s + p.unrealised, 0);
+  const unrealised  = rows.reduce((s, p) => s + getLivePnl(p).unrealised, 0);
   const realised    = rows.reduce((s, p) => s + p.realised, 0);
 
   const fmt = (n: number) =>
@@ -260,6 +270,7 @@ const LivePositions: React.FC = () => {
           <tbody>
             {list.map((pos) => {
               const ltp = livePrices.get(pos.instrument_token) ?? pos.last_price;
+              const { pnl: livePnl, unrealised: liveUnrealised } = getLivePnl(pos);
               return (
                 <tr key={`${pos.exchange}:${pos.tradingsymbol}`}>
                   <td>
@@ -274,11 +285,11 @@ const LivePositions: React.FC = () => {
                   </td>
                   <td>{pos.average_price > 0 ? pos.average_price.toFixed(2) : '-'}</td>
                   <td>{ltp > 0 ? ltp.toFixed(2) : '-'}</td>
-                  <td className={pos.pnl > 0 ? 'positive' : pos.pnl < 0 ? 'negative' : ''}>
-                    {fmt(pos.pnl)}
+                  <td className={livePnl > 0 ? 'positive' : livePnl < 0 ? 'negative' : ''}>
+                    {fmt(livePnl)}
                   </td>
-                  <td className={pos.unrealised > 0 ? 'positive' : pos.unrealised < 0 ? 'negative' : ''}>
-                    {fmt(pos.unrealised)}
+                  <td className={liveUnrealised > 0 ? 'positive' : liveUnrealised < 0 ? 'negative' : ''}>
+                    {fmt(liveUnrealised)}
                   </td>
                   <td className={pos.realised > 0 ? 'positive' : pos.realised < 0 ? 'negative' : ''}>
                     {fmt(pos.realised)}
