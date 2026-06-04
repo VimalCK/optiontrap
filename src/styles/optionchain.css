@@ -655,6 +655,50 @@
   font-weight: 500;
 }
 
+.oc-chart__tooltip-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--card-border);
+}
+
+.oc-chart__tooltip-sell-btn {
+  flex: 1;
+  padding: 5px 4px;
+  border-radius: 5px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.oc-chart__tooltip-sell-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.oc-chart__tooltip-sell-btn--pe {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+}
+
+.oc-chart__tooltip-sell-btn--pe:not(:disabled):hover {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+.oc-chart__tooltip-sell-btn--ce {
+  background: rgba(34, 197, 94, 0.1);
+  border-color: rgba(34, 197, 94, 0.4);
+  color: #22c55e;
+}
+
+.oc-chart__tooltip-sell-btn--ce:not(:disabled):hover {
+  background: rgba(34, 197, 94, 0.22);
+}
+
 
 /* Order Modal */
 .oc-cell-ltp--clickable {

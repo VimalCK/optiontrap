@@ -855,6 +855,8 @@ const OptionChain: React.FC = () => {
                 const peOiChanged = pePrevOi > 0 && Math.abs(peOi - pePrevOi) / pePrevOi > 0.03;
                 const ceConfirmed = ceOiChanged && ceVolume > avgVolume * 1.5;
                 const peConfirmed = peOiChanged && peVolume > avgVolume * 1.5;
+                const ceLtp = row.ce ? (livePrices.get(row.ce.instrumentToken) ?? null) : null;
+                const peLtp = row.pe ? (livePrices.get(row.pe.instrumentToken) ?? null) : null;
                 return (
                   <div key={row.strike} className={`oc-chart__col ${isAtm ? 'oc-chart__col--atm' : ''} ${selectedChartStrike === row.strike ? 'oc-chart__col--selected' : ''}`} onClick={(e) => { e.stopPropagation(); setSelectedChartStrike(selectedChartStrike === row.strike ? null : row.strike); }}>
                     {selectedChartStrike === row.strike && (() => {
@@ -900,6 +902,36 @@ const OptionChain: React.FC = () => {
                           <span>PCR:</span>
                           <span>{ceOi > 0 ? (peOi / ceOi).toFixed(2) : '-'}</span>
                         </div>
+                        {orderMode === 'paper' && (
+                          <div className="oc-chart__tooltip-actions">
+                            <button
+                              className="oc-chart__tooltip-sell-btn oc-chart__tooltip-sell-btn--pe"
+                              disabled={!row.pe || peLtp === null}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (!row.pe || peLtp === null) return;
+                                try {
+                                  await addPosition({ tradingsymbol: row.pe.tradingsymbol, instrumentToken: row.pe.instrumentToken, strike: row.strike, optionType: 'PE', side: 'SELL', quantity: row.pe.lotSize, entryPrice: peLtp, expiry: selectedExpiry });
+                                  showToast(`SELL ${row.strike}PE @ ${peLtp.toFixed(2)}`, 'green');
+                                  setSelectedChartStrike(null);
+                                } catch { showToast('Failed to add position', 'red'); }
+                              }}
+                            >Sell PE {peLtp !== null ? `@ ${peLtp.toFixed(0)}` : ''}</button>
+                            <button
+                              className="oc-chart__tooltip-sell-btn oc-chart__tooltip-sell-btn--ce"
+                              disabled={!row.ce || ceLtp === null}
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                if (!row.ce || ceLtp === null) return;
+                                try {
+                                  await addPosition({ tradingsymbol: row.ce.tradingsymbol, instrumentToken: row.ce.instrumentToken, strike: row.strike, optionType: 'CE', side: 'SELL', quantity: row.ce.lotSize, entryPrice: ceLtp, expiry: selectedExpiry });
+                                  showToast(`SELL ${row.strike}CE @ ${ceLtp.toFixed(2)}`, 'green');
+                                  setSelectedChartStrike(null);
+                                } catch { showToast('Failed to add position', 'red'); }
+                              }}
+                            >Sell CE {ceLtp !== null ? `@ ${ceLtp.toFixed(0)}` : ''}</button>
+                          </div>
+                        )}
                       </div>
                       );
                     })()}
