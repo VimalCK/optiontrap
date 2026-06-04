@@ -1,5 +1,6 @@
 const KITE_STORAGE_KEY = 'optiontrap_kite_credentials';
 const SESSION_STORAGE_KEY = 'optiontrap_kite_session';
+const AVATAR_STORAGE_KEY = 'optiontrap_avatar_url';
 
 export interface KiteCredentials {
   apiKey: string;
@@ -33,6 +34,17 @@ export function getSession(): KiteSession | null {
 
 export function saveSession(session: KiteSession): void {
   localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
+  if (session.avatarUrl) {
+    localStorage.setItem(AVATAR_STORAGE_KEY, session.avatarUrl);
+  }
+}
+
+export function getLastAvatarUrl(): string | null {
+  return localStorage.getItem(AVATAR_STORAGE_KEY);
+}
+
+export function clearLastAvatarUrl(): void {
+  localStorage.removeItem(AVATAR_STORAGE_KEY);
 }
 
 export function clearSession(): void {

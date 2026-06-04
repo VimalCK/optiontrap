@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { TradesIcon } from '@/components/icons/Icons';
 import { getPositions, exitPosition, Position } from '@/services/positions';
 import { getSession, clearSession } from '@/services/kiteAuth';
 import { notifySessionChange } from '@/hooks/useKiteSession';

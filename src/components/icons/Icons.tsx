@@ -262,6 +262,8 @@ export const ShieldIcon: React.FC<IconProps> = ({ size = 20, className }) => (
   </svg>
 );
 
+
+
 export const PowerIcon: React.FC<IconProps> = ({ size = 20, className }) => (
   <svg
     width={size}

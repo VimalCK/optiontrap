@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { getCredentials, getLoginUrl } from '@/services/kiteAuth';
+import { getCredentials, getLoginUrl, getLastAvatarUrl, clearLastAvatarUrl } from '@/services/kiteAuth';
 import { ShieldIcon } from '@/components/icons/Icons';
 import '@/styles/login.css';
 
@@ -115,22 +115,39 @@ const ParticleNetwork: React.FC = () => {
 const Login: React.FC = () => {
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
+  const [savedKey, setSavedKey] = useState('');
+  const [savedSecret, setSavedSecret] = useState('');
   const [showSecret, setShowSecret] = useState(false);
   const [saved, setSaved] = useState(false);
   const [hasStoredCreds, setHasStoredCreds] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const hadCredsOnMount = useRef(false);
 
   useEffect(() => {
     const creds = getCredentials();
     if (creds) {
       setApiKey(creds.apiKey);
       setApiSecret(creds.apiSecret);
+      setSavedKey(creds.apiKey);
+      setSavedSecret(creds.apiSecret);
       setHasStoredCreds(true);
+      hadCredsOnMount.current = true;
+    }
+    const lastAvatar = getLastAvatarUrl();
+    if (lastAvatar) {
+      setAvatarUrl(lastAvatar);
     }
   }, []);
 
   const handleSave = () => {
-    const credentials: Credentials = { apiKey: apiKey.trim(), apiSecret: apiSecret.trim() };
+    const trimmedKey = apiKey.trim();
+    const trimmedSecret = apiSecret.trim();
+    const credentials: Credentials = { apiKey: trimmedKey, apiSecret: trimmedSecret };
     localStorage.setItem(KITE_STORAGE_KEY, JSON.stringify(credentials));
+    setSavedKey(trimmedKey);
+    setSavedSecret(trimmedSecret);
+    clearLastAvatarUrl();
+    setAvatarUrl(null);
     setHasStoredCreds(true);
     setSaved(true);
     setTimeout(() => setSaved(false), 2500);
@@ -143,7 +160,10 @@ const Login: React.FC = () => {
     }
   };
 
-  const hasCreds = apiKey.trim().length > 0 && apiSecret.trim().length > 0;
+  const trimmedKey = apiKey.trim();
+  const trimmedSecret = apiSecret.trim();
+  const hasCreds = trimmedKey.length > 0 && trimmedSecret.length > 0;
+  const isDirty = trimmedKey !== savedKey || trimmedSecret !== savedSecret;
 
   return (
     <div className="login-page">
@@ -151,7 +171,10 @@ const Login: React.FC = () => {
       <div className="login-card">
         <div className="login-card__header">
           <div className="login-card__icon">
-            <ShieldIcon />
+            {avatarUrl
+              ? <img src={avatarUrl} alt="Profile" className="login-card__avatar" />
+              : <ShieldIcon size={30} />
+            }
           </div>
           <h1 className="login-card__title">OptionTrap</h1>
           <p className="login-card__subtitle">Connect to Kite to start analysing</p>
@@ -230,7 +253,7 @@ const Login: React.FC = () => {
                 <button
                   className="btn btn--primary"
                   onClick={handleSave}
-                  disabled={!hasCreds}
+                  disabled={!hasCreds || !isDirty}
                 >
                   {saved ? 'Saved' : 'Save & Continue'}
                 </button>
@@ -240,6 +263,15 @@ const Login: React.FC = () => {
                   </span>
                 )}
               </div>
+              {hadCredsOnMount.current && (
+                <button
+                  className="login-card__change-creds"
+                  type="button"
+                  onClick={() => setHasStoredCreds(true)}
+                >
+                  ← Back
+                </button>
+              )}
             </div>
           </div>
         )}
