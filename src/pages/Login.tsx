@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getCredentials, getLoginUrl } from '@/services/kiteAuth';
-import { ShieldIcon } from '@/components/icons/Icons';
+import { ShieldIcon, ArrowRightIcon } from '@/components/icons/Icons';
 import '@/styles/login.css';
 
 const KITE_STORAGE_KEY = 'optiontrap_kite_credentials';
@@ -43,40 +43,8 @@ const Login: React.FC = () => {
 
   const hasCreds = apiKey.trim().length > 0 && apiSecret.trim().length > 0;
 
-  const BG_EMOJIS = [
-    { emoji: '📈', top: '8%',  left: '6%',  size: 28, rot: -12 },
-    { emoji: '💹', top: '14%', left: '82%', size: 22, rot: 8 },
-    { emoji: '📊', top: '32%', left: '91%', size: 26, rot: 14 },
-    { emoji: '💰', top: '58%', left: '88%', size: 24, rot: -6 },
-    { emoji: '🪙', top: '76%', left: '78%', size: 20, rot: 10 },
-    { emoji: '📉', top: '88%', left: '60%', size: 26, rot: -8 },
-    { emoji: '🏦', top: '85%', left: '12%', size: 22, rot: 6 },
-    { emoji: '💵', top: '68%', left: '5%',  size: 20, rot: -14 },
-    { emoji: '⚡', top: '48%', left: '3%',  size: 18, rot: 4 },
-    { emoji: '🔔', top: '22%', left: '14%', size: 20, rot: -10 },
-    { emoji: '📋', top: '5%',  left: '55%', size: 18, rot: 7 },
-    { emoji: '💎', top: '40%', left: '94%', size: 20, rot: -5 },
-  ];
-
   return (
     <div className="login-page">
-      <div className="login-bg-emojis" aria-hidden="true">
-        {BG_EMOJIS.map((e, i) => (
-          <span
-            key={i}
-            className="login-bg-emoji"
-            style={{
-              top: e.top,
-              left: e.left,
-              fontSize: e.size,
-              transform: `rotate(${e.rot}deg)`,
-              animationDelay: `${(i * 0.7) % 4}s`,
-            }}
-          >
-            {e.emoji}
-          </span>
-        ))}
-      </div>
       <div className="login-card">
         <div className="login-card__header">
           <div className="login-card__icon">
@@ -91,6 +59,7 @@ const Login: React.FC = () => {
             <p className="login-card__status">API credentials configured.</p>
             <button className="btn btn--primary login-card__login-btn" onClick={handleLogin}>
               Login with Kite
+              <ArrowRightIcon size={18} />
             </button>
             <button
               className="login-card__change-creds"
