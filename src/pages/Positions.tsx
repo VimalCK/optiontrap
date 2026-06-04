@@ -87,7 +87,6 @@ const PaperPositions: React.FC = () => {
   if (positions.length === 0) {
     return (
       <div className="card">
-        <div className="card__icon"><TradesIcon /></div>
         <h3 className="card__title">No Open Positions</h3>
         <p className="card__description">Click on any LTP cell in the Option Chain to add a position.</p>
       </div>

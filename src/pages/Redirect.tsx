@@ -25,7 +25,7 @@ const Redirect: React.FC = () => {
     exchangeToken(requestToken)
       .then(() => {
         notifySessionChange();
-        navigate('/holdings', { replace: true });
+        navigate('/portfolio', { replace: true });
       })
       .catch((err) => {
         setError(err.message || 'Failed to complete authentication.');

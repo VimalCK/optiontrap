@@ -2,7 +2,6 @@ import React from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   DashboardIcon,
-  PortfolioIcon,
   AnalyticsIcon,
   TradesIcon,
   WatchlistIcon,
@@ -21,9 +20,8 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
-  { path: '/holdings', label: 'Portfolio', icon: <TradesIcon /> },
+  { path: '/portfolio', label: 'Portfolio', icon: <TradesIcon /> },
   { path: '/dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
-  { path: '/portfolio', label: 'Portfolio Mgr', icon: <PortfolioIcon /> },
   { path: '/analytics', label: 'Analytics', icon: <AnalyticsIcon /> },
   { path: '/watchlist', label: 'Watchlist', icon: <WatchlistIcon /> },
 ];

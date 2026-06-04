@@ -5,7 +5,6 @@ import { getCredentials } from '@/services/kiteAuth';
 import Sidebar from './components/Sidebar/Sidebar';
 import Holdings from './pages/Holdings';
 import Dashboard from './pages/Dashboard';
-import Portfolio from './pages/Portfolio';
 import Analytics from './pages/Analytics';
 import Watchlist from './pages/Watchlist';
 import Profile from './pages/Profile';
@@ -39,7 +38,7 @@ const App: React.FC = () => {
   return (
     <Routes>
       {/* Public routes — no sidebar, no auth required */}
-      <Route path="/login" element={isAuthenticated ? <Navigate to="/holdings" replace /> : <Login />} />
+      <Route path="/login" element={isAuthenticated ? <Navigate to="/portfolio" replace /> : <Login />} />
       <Route path="/redirect" element={<Redirect />} />
 
       {/* Protected routes — require credentials + session */}
@@ -52,15 +51,14 @@ const App: React.FC = () => {
               <main className={`content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
                 <div className="content__inner">
                   <Routes>
-                    <Route path="/" element={<Navigate to="/holdings" replace />} />
-                    <Route path="/holdings" element={<Holdings />} />
+                    <Route path="/" element={<Navigate to="/portfolio" replace />} />
+                    <Route path="/portfolio" element={<Holdings />} />
                     <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/portfolio" element={<Portfolio />} />
                     <Route path="/analytics" element={<Analytics />} />
                     <Route path="/watchlist" element={<Watchlist />} />
                     <Route path="/profile" element={<Profile />} />
                     <Route path="/settings" element={<Settings />} />
-                    <Route path="*" element={<Navigate to="/holdings" replace />} />
+                    <Route path="*" element={<Navigate to="/portfolio" replace />} />
                   </Routes>
                 </div>
               </main>
