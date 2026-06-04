@@ -1,88 +1,161 @@
+/* ─── Login page ──────────────────────────────────────────────────── */
+
 .login-page {
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: var(--content-bg);
   padding: 24px;
+  background: var(--content-bg);
+  /* Ambient glow centred on the card */
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% 40%, rgba(99, 102, 241, 0.08) 0%, transparent 70%);
+  overflow: auto;
 }
+
+/* ─── Card ──────────────────────────────────────────────────────────── */
 
 .login-card {
   width: 100%;
-  max-width: 420px;
+  max-width: 440px;
   background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: var(--radius);
-  padding: 40px 36px;
+  border: 1px solid rgba(99, 102, 241, 0.18);
+  border-radius: 20px;
+  padding: 48px 40px 40px;
+  box-shadow:
+    0 0 0 1px rgba(99, 102, 241, 0.06),
+    0 8px 32px rgba(0, 0, 0, 0.32),
+    0 0 80px rgba(99, 102, 241, 0.07);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  position: relative;
+  overflow: hidden;
 }
+
+/* Subtle top-edge highlight */
+.login-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(99, 102, 241, 0.5) 40%,
+    rgba(168, 85, 247, 0.4) 60%,
+    transparent
+  );
+}
+
+/* ─── Header ────────────────────────────────────────────────────────── */
 
 .login-card__header {
   text-align: center;
-  margin-bottom: 28px;
+  margin-bottom: 36px;
 }
 
+/* Icon ring with glow */
 .login-card__icon {
-  width: 48px;
-  height: 48px;
+  width: 68px;
+  height: 68px;
   border-radius: 50%;
-  background: rgba(99, 102, 241, 0.12);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(168, 85, 247, 0.15) 100%);
+  border: 1px solid rgba(99, 102, 241, 0.3);
   color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 16px;
+  margin: 0 auto 20px;
+  box-shadow:
+    0 0 0 8px rgba(99, 102, 241, 0.06),
+    0 0 32px rgba(99, 102, 241, 0.2);
+  animation: login-icon-pulse 3s ease-in-out infinite;
+}
+
+@keyframes login-icon-pulse {
+  0%, 100% { box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.06), 0 0 32px rgba(99, 102, 241, 0.18); }
+  50%       { box-shadow: 0 0 0 12px rgba(99, 102, 241, 0.04), 0 0 48px rgba(99, 102, 241, 0.28); }
 }
 
 .login-card__icon svg {
-  width: 24px;
-  height: 24px;
+  width: 30px;
+  height: 30px;
 }
 
+/* Gradient title */
 .login-card__title {
-  font-size: 22px;
-  font-weight: 700;
-  margin-bottom: 4px;
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin-bottom: 6px;
+  background: linear-gradient(135deg, var(--text-primary) 30%, var(--accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .login-card__subtitle {
   font-size: 14px;
   color: var(--text-secondary);
+  line-height: 1.5;
 }
 
-.login-card__banner {
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  margin-bottom: 20px;
-  text-align: center;
-}
-
-.login-card__banner--expired {
-  background: rgba(239, 68, 68, 0.12);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.25);
-}
+/* ─── Body ──────────────────────────────────────────────────────────── */
 
 .login-card__body {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: stretch;
 }
 
+/* Status line above the button / form */
 .login-card__status {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--text-secondary);
   margin-bottom: 20px;
   text-align: center;
+  line-height: 1.5;
 }
+
+/* ─── Primary login button ──────────────────────────────────────────── */
 
 .login-card__login-btn {
   width: 100%;
-  text-align: center;
-  padding: 12px 20px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   font-size: 15px;
+  font-weight: 600;
+  border-radius: 12px;
+  letter-spacing: 0.1px;
+  /* Override default btn--primary with a richer gradient */
+  background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%) !important;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35), 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+  transition: filter 0.18s, box-shadow 0.18s, transform 0.12s !important;
 }
+
+.login-card__login-btn:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 6px 24px rgba(99, 102, 241, 0.45), 0 1px 3px rgba(0, 0, 0, 0.2) !important;
+  transform: translateY(-1px);
+}
+
+.login-card__login-btn:active {
+  transform: translateY(0);
+  filter: brightness(0.97);
+}
+
+.login-card__login-btn svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+/* ─── Change credentials link ───────────────────────────────────────── */
 
 .login-card__change-creds {
   margin-top: 16px;
@@ -91,17 +164,78 @@
   background: none;
   border: none;
   cursor: pointer;
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
   transition: color 0.15s;
+  align-self: center;
 }
 
 .login-card__change-creds:hover {
   color: var(--accent);
 }
 
-/* Override settings-form width inside the login card */
+/* ─── Credential form overrides ─────────────────────────────────────── */
+
 .login-card .settings-form {
   max-width: 100%;
   width: 100%;
+}
+
+/* Slightly larger inputs */
+.login-card .form-field__input {
+  height: 44px;
+  font-size: 14px;
+}
+
+/* Save button full-width */
+.login-card .form-actions {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.login-card .form-actions .btn {
+  width: 100%;
+  height: 48px;
+  font-size: 15px;
+  font-weight: 600;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #6366f1 0%, #818cf8 100%) !important;
+  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.35) !important;
+  transition: filter 0.18s, box-shadow 0.18s, transform 0.12s !important;
+}
+
+.login-card .form-actions .btn:not(:disabled):hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.login-card .form-actions .btn:disabled {
+  opacity: 0.4;
+  filter: none;
+  transform: none;
+  box-shadow: none !important;
+}
+
+/* ─── Light theme adjustments ───────────────────────────────────────── */
+
+[data-theme='light'] .login-page {
+  background-image:
+    radial-gradient(ellipse 80% 60% at 50% 40%, rgba(99, 102, 241, 0.06) 0%, transparent 70%);
+}
+
+[data-theme='light'] .login-card {
+  border-color: rgba(99, 102, 241, 0.15);
+  box-shadow:
+    0 0 0 1px rgba(99, 102, 241, 0.06),
+    0 4px 24px rgba(0, 0, 0, 0.1),
+    0 0 60px rgba(99, 102, 241, 0.06);
+}
+
+[data-theme='light'] .login-card__title {
+  background: linear-gradient(135deg, var(--text-primary) 20%, #6366f1 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }

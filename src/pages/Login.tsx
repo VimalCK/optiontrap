@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
 import { getCredentials, getLoginUrl } from '@/services/kiteAuth';
-import { ShieldIcon } from '@/components/icons/Icons';
+import { ShieldIcon, ArrowRightIcon } from '@/components/icons/Icons';
 import '@/styles/login.css';
 
 const KITE_STORAGE_KEY = 'optiontrap_kite_credentials';
@@ -12,9 +11,6 @@ interface Credentials {
 }
 
 const Login: React.FC = () => {
-  const [searchParams] = useSearchParams();
-  const expired = searchParams.get('expired') === '1';
-
   const [apiKey, setApiKey] = useState('');
   const [apiSecret, setApiSecret] = useState('');
   const [showSecret, setShowSecret] = useState(false);
@@ -63,6 +59,7 @@ const Login: React.FC = () => {
             <p className="login-card__status">API credentials configured.</p>
             <button className="btn btn--primary login-card__login-btn" onClick={handleLogin}>
               Login with Kite
+              <ArrowRightIcon size={18} />
             </button>
             <button
               className="login-card__change-creds"
