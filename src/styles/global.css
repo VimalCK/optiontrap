@@ -12,6 +12,7 @@
   --accent: #6366f1;
   --accent-glow: rgba(99, 102, 241, 0.4);
   --card-bg: rgba(255, 255, 255, 0.03);
+  --card-bg-solid: #191920;
   --card-hover-bg: rgba(255, 255, 255, 0.05);
   --card-border: rgba(255, 255, 255, 0.06);
   --card-hover-border: rgba(99, 102, 241, 0.3);
@@ -31,6 +32,7 @@
   --accent: #6366f1;
   --accent-glow: rgba(99, 102, 241, 0.25);
   --card-bg: #ffffff;
+  --card-bg-solid: #ffffff;
   --card-hover-bg: #ffffff;
   --card-border: rgba(0, 0, 0, 0.08);
   --card-hover-border: rgba(99, 102, 241, 0.4);

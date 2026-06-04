@@ -82,7 +82,7 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  background: var(--content-bg);
+  background: var(--card-bg-solid);
   text-align: left;
   padding: 8px 12px;
   font-size: 10px;
