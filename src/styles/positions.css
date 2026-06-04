@@ -36,8 +36,39 @@
 
 /* Positions Table scroll container */
 .positions-table-scroll {
-  max-height: 420px;
+  max-height: 60vh;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+.positions-table-scroll::-webkit-scrollbar {
+  width: 5px;
+}
+
+.positions-table-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.positions-table-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
+
+.positions-table-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+[data-theme="light"] .positions-table-scroll {
+  scrollbar-color: rgba(0, 0, 0, 0.15) transparent;
+}
+
+[data-theme="light"] .positions-table-scroll::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.15);
+}
+
+[data-theme="light"] .positions-table-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.25);
 }
 
 /* Positions Table */
