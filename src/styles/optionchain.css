@@ -963,17 +963,25 @@
 }
 
 /* Quick-order toast confirmation */
-.oc-toast {
+.oc-toast-stack {
   position: fixed;
   top: 20px;
   left: 50%;
   transform: translateX(-50%);
   z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.oc-toast {
   padding: 8px 20px;
   border-radius: 20px;
   font-size: 13px;
   font-weight: 600;
-  pointer-events: none;
+  white-space: nowrap;
   animation: oc-toast-in 0.15s ease;
 }
 

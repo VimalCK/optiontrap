@@ -113,17 +113,17 @@ const OptionChain: React.FC = () => {
   });
   const [oiVelocity, setOiVelocity] = useState<Map<number, OiVelocity>>(new Map());
   const [snapshots, setSnapshots] = useState<OiSnapshot[]>([]);
-  const [toast, setToast] = useState<{ text: string; color: 'green' | 'red' } | null>(null);
+  const [toasts, setToasts] = useState<{ id: number; text: string; color: 'green' | 'red' }[]>([]);
   const subscribedTokensRef = useRef<number[]>([]);
   const snapshotIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const toastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const toastIdRef = useRef(0);
 
   const [session, setSession] = useState(getSession);
 
   const showToast = useCallback((text: string, color: 'green' | 'red') => {
-    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-    setToast({ text, color });
-    toastTimerRef.current = setTimeout(() => setToast(null), 2000);
+    const id = ++toastIdRef.current;
+    setToasts((prev) => [...prev, { id, text, color }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 2000);
   }, []);
 
   const handleTicks = useCallback((ticks: Tick[]) => {
@@ -535,8 +535,12 @@ const OptionChain: React.FC = () => {
 
   return (
     <div>
-      {toast && (
-        <div className={`oc-toast oc-toast--${toast.color}`}>{toast.text}</div>
+      {toasts.length > 0 && (
+        <div className="oc-toast-stack">
+          {toasts.map((t) => (
+            <div key={t.id} className={`oc-toast oc-toast--${t.color}`}>{t.text}</div>
+          ))}
+        </div>
       )}
       {/* Global Expiry Selector */}
       {expiries.length > 0 && (
