@@ -1054,6 +1054,9 @@ const OptionChain: React.FC = () => {
             livePrices={livePrices}
             spotPrice={niftySpot}
             atmStrike={atmStrike}
+            orderMode={orderMode}
+            expiry={selectedExpiry}
+            onToast={showToast}
           />
         </div>
       )}
