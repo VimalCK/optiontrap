@@ -60,7 +60,7 @@ const BestStrikes: React.FC<BestStrikesProps> = ({
         </div>
         <div className="best-strike-card__metric">
           <span className="best-strike-card__metric-label">Distance</span>
-          <span className="best-strike-card__metric-value">{item.distanceFromSpot} pts</span>
+          <span className="best-strike-card__metric-value">{Math.round(item.distanceFromSpot)} pts</span>
         </div>
         <div className="best-strike-card__metric">
           <span className="best-strike-card__metric-label">OI Wall</span>

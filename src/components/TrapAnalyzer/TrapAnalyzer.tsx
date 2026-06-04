@@ -267,7 +267,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
         </div>
         <div className="trap-summary__item">
           <span className="trap-summary__label">Spot</span>
-          <span className="trap-summary__value">{spotPrice > 0 ? spotPrice.toLocaleString('en-IN', { maximumFractionDigits: 2 }) : '-'}</span>
+          <span className="trap-summary__value">{spotPrice > 0 ? spotPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '-'}</span>
         </div>
         <div className="trap-summary__item">
           <span className="trap-summary__label">Expected Move</span>
