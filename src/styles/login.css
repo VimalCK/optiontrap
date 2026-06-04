@@ -13,6 +13,33 @@
   overflow: auto;
 }
 
+/* ─── Scattered background emojis ──────────────────────────────────── */
+
+.login-bg-emojis {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.login-bg-emoji {
+  position: absolute;
+  opacity: 0.12;
+  user-select: none;
+  line-height: 1;
+  animation: emoji-float 6s ease-in-out infinite;
+}
+
+@keyframes emoji-float {
+  0%, 100% { transform: translateY(0px) rotate(var(--rot, 0deg)); }
+  50%       { transform: translateY(-8px) rotate(var(--rot, 0deg)); }
+}
+
+[data-theme='light'] .login-bg-emoji {
+  opacity: 0.09;
+}
+
 /* ─── Card ──────────────────────────────────────────────────────────── */
 
 .login-card {
@@ -29,6 +56,7 @@
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   position: relative;
+  z-index: 1;
   overflow: hidden;
 }
 
