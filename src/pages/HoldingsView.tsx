@@ -207,7 +207,6 @@ const HoldingsView: React.FC = () => {
           <div className="card" style={{ marginTop: 24 }}>
             <div className="allocation-header">
               <div>
-                <div className="card__icon"><HoldingsIcon /></div>
                 <h3 className="card__title">Allocation</h3>
                 <p className="card__description">Portfolio weight by current market value</p>
                 <div className="allocation-summary">
