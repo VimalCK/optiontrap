@@ -569,9 +569,8 @@ const OptionChain: React.FC = () => {
 
       {/* Option Chain Card */}
       <div className="card option-chain-card">
-        <div className="trap-card-header">
+          <div className="trap-card-header">
           <div className="trap-card-header__left">
-            <div className="card__icon"><TradesIcon /></div>
             <h3 className="card__title" style={{ marginBottom: 0 }}>NIFTY Option Chain</h3>
           </div>
           <button
@@ -756,7 +755,6 @@ const OptionChain: React.FC = () => {
         <div className="card" style={{ marginTop: 24 }}>
           <div className="trap-card-header">
             <div className="trap-card-header__left">
-              <div className="card__icon"><TradesIcon /></div>
               <h3 className="card__title" style={{ marginBottom: 0 }}>OI Chart <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-secondary)' }}>(daily changes)</span></h3>
               <button className="trap-info-btn" onClick={() => setShowOiChartInfo(!showOiChartInfo)} title="How to read this chart">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1055,7 +1053,6 @@ const OptionChain: React.FC = () => {
         <div className="card" style={{ marginTop: 24 }}>
           <div className="trap-card-header">
             <div className="trap-card-header__left">
-              <div className="card__icon"><TradesIcon /></div>
               <h3 className="card__title" style={{ marginBottom: 0 }}>Position Analyzer</h3>
               <TrapInfoPanel show={showTrapInfo} onToggle={setShowTrapInfo} />
             </div>
@@ -1079,7 +1076,6 @@ const OptionChain: React.FC = () => {
         <div className="card" style={{ marginTop: 24 }}>
           <div className="trap-card-header">
             <div className="trap-card-header__left">
-              <div className="card__icon"><TradesIcon /></div>
               <h3 className="card__title" style={{ marginBottom: 0 }}>Best Strikes</h3>
               <button className="trap-info-btn" onClick={() => setShowBestStrikesInfo(!showBestStrikesInfo)} title="How Best Strikes works">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
