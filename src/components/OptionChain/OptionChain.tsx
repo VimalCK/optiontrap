@@ -791,12 +791,37 @@ const OptionChain: React.FC = () => {
               <h5>Shaded Zone (Expected Range)</h5>
               <p>The lightly tinted area with dashed borders shows where NIFTY is expected to stay (based on ATM straddle premium). OI walls <strong>outside</strong> this zone are stronger — price is unlikely to reach them.</p>
 
+              <h5>Bar Tooltip (click any bar)</h5>
+              <p>Clicking a strike's bar group opens a tooltip with detailed data for that strike:</p>
+              <ul>
+                <li><strong>CE/PE OI</strong> — Current open interest</li>
+                <li><strong>CE/PE Chg</strong> — OI change vs yesterday's close (%)</li>
+                <li><strong>CE/PE Vel</strong> — Intraday OI velocity: how fast OI changed in the last interval (% / minutes)</li>
+                <li><strong>Velocity Pattern</strong> — Trend analysis across all intraday snapshots (taken every 10 min):
+                  <ul>
+                    <li>A mini sparkline shows the OI curve since market open</li>
+                    <li><strong style={{ color: '#4ade80' }}>Accelerating Buildup</strong> — OI growing and speeding up (strong institutional accumulation)</li>
+                    <li><strong style={{ color: '#4ade80' }}>Steady Buildup</strong> — OI growing at a consistent pace</li>
+                    <li><strong style={{ color: '#4ade80' }}>Slowing Buildup</strong> — OI still growing but momentum is fading</li>
+                    <li><strong style={{ color: '#f87171' }}>Accelerating Unwind</strong> — OI falling and speeding up (institutions exiting fast)</li>
+                    <li><strong style={{ color: '#f87171' }}>Steady Unwind</strong> — OI falling at a consistent pace</li>
+                    <li><strong style={{ color: '#f87171' }}>Slowing Unwind</strong> — OI falling but momentum is fading (possible reversal)</li>
+                    <li><strong style={{ color: '#94a3b8' }}>Volatile</strong> — OI alternating up/down with no clear trend</li>
+                    <li><strong style={{ color: '#94a3b8' }}>Stable</strong> — OI barely moved all day</li>
+                  </ul>
+                </li>
+                <li><strong>PCR</strong> — Put/Call ratio for that specific strike</li>
+                <li><strong>Sell PE / Sell CE buttons</strong> — Quick paper position entry at current LTP</li>
+              </ul>
+
               <h5>Key Takeaways</h5>
               <ul>
                 <li><strong>Tallest CE bar</strong> = strongest resistance (call sellers defending that level)</li>
                 <li><strong>Tallest PE bar</strong> = strongest support (put sellers defending that level)</li>
                 <li><strong>ATM dashed line</strong> = current NIFTY spot position</li>
                 <li><strong>Glowing + velocity ▲</strong> = wall being built RIGHT NOW by institutions</li>
+                <li><strong>Accelerating Buildup pattern</strong> = institutional conviction — wall is strengthening fast</li>
+                <li><strong>Slowing Unwind pattern</strong> = sellers stopping — wall may hold despite earlier exits</li>
               </ul>
             </div>
           )}
