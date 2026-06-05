@@ -7,7 +7,7 @@ import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
 import BestStrikes from '@/components/TrapAnalyzer/BestStrikes';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { calculateExpectedMove } from '@/services/edgeScore';
-import { saveOiSnapshot, getTodaySnapshots, cleanOldSnapshots, calculateVelocity, shouldTakeSnapshot, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
+import { saveOiSnapshot, getTodaySnapshots, cleanOldSnapshots, calculateVelocity, shouldTakeSnapshot, analyzeVelocityPattern, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
 import { addPosition } from '@/services/positions';
 
 const TrapInfoPanel: React.FC<{ onToggle: (show: boolean) => void; show: boolean }> = ({ onToggle, show }) => {
@@ -888,10 +888,32 @@ const OptionChain: React.FC = () => {
                           <span className="oc-chart__tooltip-ce">CE Chg:</span>
                           <span className={ceOi >= cePrevOi ? 'positive' : 'negative'}>{ceOi >= cePrevOi ? '+' : ''}{(((ceOi - cePrevOi) / cePrevOi) * 100).toFixed(2)}%</span>
                         </div>}
-                        {ceVelocity && <div className="oc-chart__tooltip-row">
-                          <span className="oc-chart__tooltip-ce">CE Vel:</span>
-                          <span className={ceVelocity.changePct >= 0 ? 'positive' : 'negative'}>{ceVelocity.changePct >= 0 ? '+' : ''}{ceVelocity.changePct.toFixed(2)}% / {ceVelocity.intervalMinutes}m</span>
-                        </div>}
+                        {ceVelocity && (() => {
+                           const cePattern = row.ce ? analyzeVelocityPattern(row.ce.instrumentToken, ceVelocity.currentOi, snapshots) : null;
+                           return (
+                             <>
+                               <div className="oc-chart__tooltip-row">
+                                 <span className="oc-chart__tooltip-ce">CE Vel:</span>
+                                 <span className={ceVelocity.changePct >= 0 ? 'positive' : 'negative'}>{ceVelocity.changePct >= 0 ? '+' : ''}{ceVelocity.changePct.toFixed(2)}% / {ceVelocity.intervalMinutes}m</span>
+                               </div>
+                               {cePattern && (
+                                 <div className="oc-chart__tooltip-pattern oc-chart__tooltip-pattern--ce">
+                                   <svg className="oc-chart__sparkline" viewBox={`0 0 60 20`} preserveAspectRatio="none">
+                                     <polyline
+                                       points={cePattern.series.map((v, i) => `${(i / (cePattern.series.length - 1)) * 60},${(1 - v) * 20}`).join(' ')}
+                                       fill="none"
+                                       stroke={cePattern.direction === 'up' ? '#4ade80' : cePattern.direction === 'down' ? '#f87171' : '#94a3b8'}
+                                       strokeWidth="1.5"
+                                       strokeLinejoin="round"
+                                       strokeLinecap="round"
+                                     />
+                                   </svg>
+                                   <span className={`oc-chart__pattern-label oc-chart__pattern-label--${cePattern.direction}`}>{cePattern.label}</span>
+                                 </div>
+                               )}
+                             </>
+                           );
+                         })()}
                         <div className="oc-chart__tooltip-row">
                           <span className="oc-chart__tooltip-pe">PE OI:</span>
                           <span>{peOi.toLocaleString('en-IN')}</span>
@@ -900,10 +922,32 @@ const OptionChain: React.FC = () => {
                           <span className="oc-chart__tooltip-pe">PE Chg:</span>
                           <span className={peOi >= pePrevOi ? 'positive' : 'negative'}>{peOi >= pePrevOi ? '+' : ''}{(((peOi - pePrevOi) / pePrevOi) * 100).toFixed(2)}%</span>
                         </div>}
-                        {peVelocity && <div className="oc-chart__tooltip-row">
-                          <span className="oc-chart__tooltip-pe">PE Vel:</span>
-                          <span className={peVelocity.changePct >= 0 ? 'positive' : 'negative'}>{peVelocity.changePct >= 0 ? '+' : ''}{peVelocity.changePct.toFixed(2)}% / {peVelocity.intervalMinutes}m</span>
-                        </div>}
+                        {peVelocity && (() => {
+                           const pePattern = row.pe ? analyzeVelocityPattern(row.pe.instrumentToken, peVelocity.currentOi, snapshots) : null;
+                           return (
+                             <>
+                               <div className="oc-chart__tooltip-row">
+                                 <span className="oc-chart__tooltip-pe">PE Vel:</span>
+                                 <span className={peVelocity.changePct >= 0 ? 'positive' : 'negative'}>{peVelocity.changePct >= 0 ? '+' : ''}{peVelocity.changePct.toFixed(2)}% / {peVelocity.intervalMinutes}m</span>
+                               </div>
+                               {pePattern && (
+                                 <div className="oc-chart__tooltip-pattern oc-chart__tooltip-pattern--pe">
+                                   <svg className="oc-chart__sparkline" viewBox={`0 0 60 20`} preserveAspectRatio="none">
+                                     <polyline
+                                       points={pePattern.series.map((v, i) => `${(i / (pePattern.series.length - 1)) * 60},${(1 - v) * 20}`).join(' ')}
+                                       fill="none"
+                                       stroke={pePattern.direction === 'up' ? '#4ade80' : pePattern.direction === 'down' ? '#f87171' : '#94a3b8'}
+                                       strokeWidth="1.5"
+                                       strokeLinejoin="round"
+                                       strokeLinecap="round"
+                                     />
+                                   </svg>
+                                   <span className={`oc-chart__pattern-label oc-chart__pattern-label--${pePattern.direction}`}>{pePattern.label}</span>
+                                 </div>
+                               )}
+                             </>
+                           );
+                         })()}
                         <div className="oc-chart__tooltip-row">
                           <span>PCR:</span>
                           <span>{ceOi > 0 ? (peOi / ceOi).toFixed(2) : '-'}</span>

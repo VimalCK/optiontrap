@@ -700,6 +700,51 @@
 }
 
 
+/* Velocity pattern sparkline + label inside tooltip */
+.oc-chart__tooltip-pattern {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+  margin-bottom: 4px;
+  padding: 4px 6px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.oc-chart__tooltip-pattern--ce {
+  border-left: 2px solid rgba(74, 222, 128, 0.5);
+}
+
+.oc-chart__tooltip-pattern--pe {
+  border-left: 2px solid rgba(248, 113, 113, 0.5);
+}
+
+.oc-chart__sparkline {
+  width: 60px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.oc-chart__pattern-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.2px;
+  white-space: nowrap;
+}
+
+.oc-chart__pattern-label--up {
+  color: #4ade80;
+}
+
+.oc-chart__pattern-label--down {
+  color: #f87171;
+}
+
+.oc-chart__pattern-label--neutral {
+  color: var(--text-secondary);
+}
+
 /* Order Modal */
 .oc-cell-ltp--clickable {
   cursor: pointer;
