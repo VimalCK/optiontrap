@@ -232,13 +232,19 @@ const OptionChain: React.FC = () => {
     return chain[mid].strike;
   }, [chain, niftySpot]);
 
-  // Show strikes around ATM (±15 strikes)
+  // Show exactly 31 strikes centred on ATM (±15). When ATM is near an edge,
+  // the window shifts rather than shrinks — count stays fixed so the table
+  // height never jumps as ATM changes.
   const visibleChain = useMemo(() => {
     if (chain.length === 0) return [];
+    const HALF = 15;
+    const TOTAL = HALF * 2 + 1; // 31
     const atmIndex = chain.findIndex((r) => r.strike === atmStrike);
-    const start = Math.max(0, atmIndex - 15);
-    const end = Math.min(chain.length, atmIndex + 16);
-    return chain.slice(start, end);
+    let start = atmIndex - HALF;
+    let end = atmIndex + HALF + 1;
+    if (start < 0) { end = Math.min(chain.length, end - start); start = 0; }
+    if (end > chain.length) { start = Math.max(0, start - (end - chain.length)); end = chain.length; }
+    return chain.slice(start, Math.min(end, start + TOTAL));
   }, [chain, atmStrike]);
 
   // Compute max OI across visible chain for bar width scaling
