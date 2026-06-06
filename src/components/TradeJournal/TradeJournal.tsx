@@ -30,7 +30,9 @@ function subtractMonths(d: Date, n: number): Date {
 }
 
 const TradeJournal: React.FC = () => {
-  const [mode, setMode] = useState<TradingMode>('paper');
+  const [mode, setMode] = useState<TradingMode>(() =>
+    (localStorage.getItem('optiontrap_order_mode') as TradingMode) || 'paper'
+  );
   const [entries, setEntries] = useState<TradeEntry[]>([]);
   const [segment, setSegment] = useState<SegmentFilter>('all');
   const [rangeStart, setRangeStart] = useState<string>(() =>

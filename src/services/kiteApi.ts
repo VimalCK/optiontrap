@@ -182,7 +182,11 @@ export function fetchMargins(): Promise<Margins> {
  * which represents the previous trading day's close OI.
  * (The last candle is today/most recent day — same as what /quote shows as current.)
  */
-export async function fetchPreviousDayOI(instrumentTokens: number[]): Promise<Map<number, number>> {
+export async function fetchPreviousDayOI(
+  instrumentTokens: number[],
+  onBatch?: (partial: Map<number, number>) => void,
+  signal?: AbortSignal,
+): Promise<Map<number, number>> {
   const authHeader = getAuthHeader();
   if (!authHeader) throw new Error('Not authenticated');
 
@@ -205,6 +209,8 @@ export async function fetchPreviousDayOI(instrumentTokens: number[]): Promise<Ma
   // Fetch in parallel batches of 5 with delays to avoid rate limiting
   const batchSize = 5;
   for (let i = 0; i < instrumentTokens.length; i += batchSize) {
+    if (signal?.aborted) break;
+
     const batch = instrumentTokens.slice(i, i + batchSize);
     const promises = batch.map(async (token) => {
       try {
@@ -214,6 +220,7 @@ export async function fetchPreviousDayOI(instrumentTokens: number[]): Promise<Ma
             'X-Kite-Version': '3',
             'Authorization': authHeader,
           },
+          signal,
         });
         if (!response.ok) return;
 
@@ -228,11 +235,16 @@ export async function fetchPreviousDayOI(instrumentTokens: number[]): Promise<Ma
           }
         }
       } catch {
-        // Skip failed fetches silently
+        // Skip failed fetches silently (includes AbortError)
       }
     });
 
     await Promise.all(promises);
+
+    // Notify caller of partial results after each batch so UI can update incrementally
+    if (!signal?.aborted && onBatch && results.size > 0) {
+      onBatch(new Map(results));
+    }
 
     // Small delay between batches to avoid hitting rate limits
     if (i + batchSize < instrumentTokens.length) {

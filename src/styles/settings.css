@@ -80,6 +80,77 @@
   margin-bottom: 20px;
 }
 
+/* Trading Mode Toggle */
+.settings-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.settings-mode-toggle {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.settings-mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 20px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.settings-mode-btn__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.4;
+  transition: opacity 0.15s;
+}
+
+.settings-mode-btn--active {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.settings-mode-btn--active .settings-mode-btn__dot {
+  opacity: 1;
+}
+
+.settings-mode-btn--paper.settings-mode-btn--active {
+  background: rgba(99, 102, 241, 0.12);
+  color: #818cf8;
+}
+
+.settings-mode-btn--paper.settings-mode-btn--active .settings-mode-btn__dot {
+  background: #818cf8;
+}
+
+.settings-mode-btn--live.settings-mode-btn--active {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.settings-mode-btn--live.settings-mode-btn--active .settings-mode-btn__dot {
+  background: #ef4444;
+}
+
+.settings-mode-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
 /* Theme Switcher */
 .theme-switcher {
   display: flex;

@@ -1,18 +1,44 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useTheme } from '@/context/ThemeContext';
 import { SettingsIcon } from '@/components/icons/Icons';
 import '@/styles/settings.css';
 
+const TRADING_MODE_KEY = 'optiontrap_order_mode';
+
 const Settings: React.FC = () => {
   const { theme, setTheme } = useTheme();
+  const [tradingMode, setTradingMode] = useState<'paper' | 'live'>(() =>
+    (localStorage.getItem(TRADING_MODE_KEY) as 'paper' | 'live') || 'paper'
+  );
+
+  const handleTradingModeChange = (mode: 'paper' | 'live') => {
+    setTradingMode(mode);
+    localStorage.setItem(TRADING_MODE_KEY, mode);
+  };
 
   return (
     <div>
-      <div className="page-header">
-        <h1 className="page-header__title">Settings</h1>
-        <p className="page-header__subtitle">
-          Configure application preferences and notifications
+      <div className="settings-section">
+        <h2 className="settings-section__title">Trading Mode</h2>
+        <p className="settings-section__description">
+          Choose whether orders are placed as paper trades or sent live to Kite
         </p>
+        <div className="settings-mode-toggle">
+          <button
+            className={`settings-mode-btn ${tradingMode === 'paper' ? 'settings-mode-btn--active settings-mode-btn--paper' : ''}`}
+            onClick={() => handleTradingModeChange('paper')}
+          >
+            <span className="settings-mode-btn__dot" />
+            Paper
+          </button>
+          <button
+            className={`settings-mode-btn ${tradingMode === 'live' ? 'settings-mode-btn--active settings-mode-btn--live' : ''}`}
+            onClick={() => handleTradingModeChange('live')}
+          >
+            <span className="settings-mode-btn__dot" />
+            Live
+          </button>
+        </div>
       </div>
 
       <div className="settings-section">

@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useKiteSession } from '@/hooks/useKiteSession';
 import { getCredentials } from '@/services/kiteAuth';
+import { tickerConnect, tickerDisconnect } from '@/services/tickerSingleton';
 import Sidebar from './components/Sidebar/Sidebar';
 import Holdings from './pages/Holdings';
 import Dashboard from './pages/Dashboard';
@@ -21,6 +22,15 @@ const App: React.FC = () => {
   const session = useKiteSession();
   const creds = getCredentials();
   const isAuthenticated = creds !== null && session !== null;
+
+  // Connect/disconnect the singleton ticker when session changes
+  useEffect(() => {
+    if (isAuthenticated) {
+      tickerConnect();
+    } else {
+      tickerDisconnect();
+    }
+  }, [isAuthenticated]);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);

@@ -3,13 +3,14 @@
  * Rendered inside the Holdings & Positions tabbed page.
  */
 
-import React, { useEffect, useState, useRef, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { HoldingsIcon } from '@/components/icons/Icons';
 import { fetchHoldings, Holding } from '@/services/kiteApi';
 import { getSession, clearSession } from '@/services/kiteAuth';
 import { notifySessionChange } from '@/hooks/useKiteSession';
-import { KiteTicker, Tick } from '@/services/kiteTicker';
+import { Tick } from '@/services/kiteTicker';
+import { tickerSubscribe } from '@/services/tickerSingleton';
 import { getMarketStatus, MarketStatus } from '@/utils/marketStatus';
 import '@/styles/holdings.css';
 
@@ -37,7 +38,6 @@ const HoldingsView: React.FC = () => {
   const [privacyMode, setPrivacyMode] = useState(() =>
     localStorage.getItem('optiontrap_privacy_mode') === 'true'
   );
-  const tickerRef = useRef<KiteTicker | null>(null);
   const [session, setSession] = useState(getSession);
 
   const handleTicks = useCallback((ticks: Tick[]) => {
@@ -61,24 +61,13 @@ const HoldingsView: React.FC = () => {
   useEffect(() => {
     if (session) loadHoldings();
     const statusInterval = setInterval(() => setMarketStatus(getMarketStatus()), 30000);
-    return () => {
-      clearInterval(statusInterval);
-      if (tickerRef.current) { tickerRef.current.disconnect(); tickerRef.current = null; }
-    };
+    return () => { clearInterval(statusInterval); };
   }, []);
 
   useEffect(() => {
-    if (holdings.length > 0 && session && marketStatus === 'live') {
-      if (!tickerRef.current) {
-        const tokens = holdings.map((h) => h.instrument_token);
-        const ticker = new KiteTicker();
-        ticker.connect(tokens, handleTicks);
-        tickerRef.current = ticker;
-      }
-    } else if (marketStatus !== 'live' && tickerRef.current) {
-      tickerRef.current.disconnect();
-      tickerRef.current = null;
-    }
+    if (holdings.length === 0 || !session || marketStatus !== 'live') return;
+    const tokens = holdings.map((h) => h.instrument_token);
+    return tickerSubscribe('holdings', tokens, handleTicks);
   }, [holdings, session, marketStatus, handleTicks]);
 
   const loadHoldings = async () => {
