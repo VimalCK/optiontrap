@@ -126,6 +126,32 @@ app.use(cors({
 
 app.use(sessionMiddleware);
 
+// ---------- Request Logger ----------
+
+const GREY = '\x1b[90m';
+const GREEN = '\x1b[32m';
+const YELLOW = '\x1b[33m';
+const RED = '\x1b[31m';
+const CYAN = '\x1b[36m';
+const RESET = '\x1b[0m';
+
+app.use((req, res, next) => {
+  const start = Date.now();
+  const { method, originalUrl } = req;
+
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    const status = res.statusCode;
+    const color = status >= 500 ? RED : status >= 400 ? YELLOW : status >= 300 ? CYAN : GREEN;
+    const user = req.session?.kiteSession?.userId || '-';
+    console.log(
+      `${GREY}${new Date().toLocaleTimeString()}${RESET} ${color}${status}${RESET} ${method} ${originalUrl} ${GREY}${duration}ms${RESET} ${GREY}[${user}]${RESET}`
+    );
+  });
+
+  next();
+});
+
 // ---------- Auth Routes ----------
 
 // Combined status check: are credentials configured + is session valid?
@@ -340,9 +366,13 @@ server.on('upgrade', (request, socket, head) => {
 
 wss.on('connection', (clientWs) => {
   if (!hasCredentials()) {
+    console.log(`${GREY}${new Date().toLocaleTimeString()}${RESET} ${RED}WS${RESET} rejected — no credentials`);
     clientWs.close(4003, 'Server credentials not configured');
     return;
   }
+
+  const userId = clientWs._kiteSession?.userId || '-';
+  console.log(`${GREY}${new Date().toLocaleTimeString()}${RESET} ${GREEN}WS${RESET} connected ${GREY}[${userId}]${RESET}`);
 
   const { accessToken } = clientWs._kiteSession;
   const kiteWsUrl = `wss://ws.kite.trade?api_key=${KITE_API_KEY}&access_token=${accessToken}`;
@@ -351,7 +381,7 @@ wss.on('connection', (clientWs) => {
   kiteWs.binaryType = 'arraybuffer';
 
   kiteWs.on('open', () => {
-    console.log('[WS Proxy] Connected to Kite');
+    console.log(`${GREY}${new Date().toLocaleTimeString()}${RESET} ${GREEN}WS${RESET} upstream Kite connected ${GREY}[${userId}]${RESET}`);
   });
 
   kiteWs.on('message', (data, isBinary) => {
@@ -367,19 +397,21 @@ wss.on('connection', (clientWs) => {
   });
 
   kiteWs.on('close', () => {
+    console.log(`${GREY}${new Date().toLocaleTimeString()}${RESET} ${YELLOW}WS${RESET} upstream Kite disconnected ${GREY}[${userId}]${RESET}`);
     if (clientWs.readyState === WebSocket.OPEN) {
       clientWs.close(1000, 'Kite disconnected');
     }
   });
 
   kiteWs.on('error', (err) => {
-    console.error('[WS Proxy] Kite error:', err.message);
+    console.log(`${GREY}${new Date().toLocaleTimeString()}${RESET} ${RED}WS${RESET} upstream error: ${err.message} ${GREY}[${userId}]${RESET}`);
     if (clientWs.readyState === WebSocket.OPEN) {
       clientWs.close(1011, 'Upstream error');
     }
   });
 
   clientWs.on('close', () => {
+    console.log(`${GREY}${new Date().toLocaleTimeString()}${RESET} ${YELLOW}WS${RESET} client disconnected ${GREY}[${userId}]${RESET}`);
     if (kiteWs.readyState === WebSocket.OPEN) {
       kiteWs.close();
     }
