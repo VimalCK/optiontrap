@@ -39,8 +39,8 @@ const Redirect: React.FC = () => {
           <div className="redirect-icon">✕</div>
           <h2>Authentication Failed</h2>
           <p>{error}</p>
-          <button className="btn btn--primary" onClick={() => navigate('/profile')}>
-            Go to Profile
+          <button className="btn btn--primary" onClick={() => navigate('/login')}>
+            Try Again
           </button>
         </div>
       </div>

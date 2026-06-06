@@ -130,6 +130,23 @@
   align-items: stretch;
 }
 
+/* Banner messages */
+.login-card__banner {
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 16px;
+  text-align: center;
+}
+
+.login-card__banner--expired,
+.login-card__banner--error {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
 /* Status line above the button / form */
 .login-card__status {
   font-size: 13px;

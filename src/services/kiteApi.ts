@@ -1,4 +1,4 @@
-import { getAuthHeader, clearSession } from './kiteAuth';
+import { clearSession } from './kiteAuth';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 
 const API_BASE = '/api';
@@ -9,19 +9,12 @@ interface RequestOptions {
 }
 
 async function kiteRequest<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const authHeader = getAuthHeader();
-  if (!authHeader) {
-    throw new Error('Not authenticated. Please login first.');
-  }
-
-  const headers: Record<string, string> = {
-    'X-Kite-Version': '3',
-    'Authorization': authHeader,
-  };
+  const headers: Record<string, string> = {};
 
   const fetchOptions: RequestInit = {
     method: options.method || 'GET',
     headers,
+    credentials: 'include', // Send session cookie
   };
 
   if (options.body) {
@@ -36,7 +29,7 @@ async function kiteRequest<T>(endpoint: string, options: RequestOptions = {}): P
     const rawMessage = errorBody?.message || `API request failed (${response.status})`;
 
     // Expired / invalid session — clear locally so the auth guard redirects to login
-    if (response.status === 403 || rawMessage.toLowerCase().includes('api_key') || rawMessage.toLowerCase().includes('access_token')) {
+    if (response.status === 401 || response.status === 403) {
       clearSession();
       notifySessionChange();
       throw new Error('Session expired. Please login again.');
@@ -63,9 +56,6 @@ export interface QuoteData {
 }
 
 export async function fetchQuotes(instruments: string[]): Promise<Map<string, QuoteData>> {
-  const authHeader = getAuthHeader();
-  if (!authHeader) throw new Error('Not authenticated');
-
   const results = new Map<string, QuoteData>();
 
   // Kite /quote API accepts max 500 instruments, but URL length is the real
@@ -80,10 +70,7 @@ export async function fetchQuotes(instruments: string[]): Promise<Map<string, Qu
 
     try {
       const response = await fetch(`/api/quote?${params}`, {
-        headers: {
-          'X-Kite-Version': '3',
-          'Authorization': authHeader,
-        },
+        credentials: 'include',
       });
 
       if (!response.ok) {
@@ -187,9 +174,6 @@ export async function fetchPreviousDayOI(
   onBatch?: (partial: Map<number, number>) => void,
   signal?: AbortSignal,
 ): Promise<Map<number, number>> {
-  const authHeader = getAuthHeader();
-  if (!authHeader) throw new Error('Not authenticated');
-
   const results = new Map<number, number>();
 
   const now = new Date();
@@ -216,10 +200,7 @@ export async function fetchPreviousDayOI(
       try {
         const url = `/api/instruments/historical/${token}/day?from=${fromStr}&to=${toStr}&oi=1`;
         const response = await fetch(url, {
-          headers: {
-            'X-Kite-Version': '3',
-            'Authorization': authHeader,
-          },
+          credentials: 'include',
           signal,
         });
         if (!response.ok) return;

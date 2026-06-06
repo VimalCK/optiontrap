@@ -1,14 +1,20 @@
-const KITE_STORAGE_KEY = 'optiontrap_kite_credentials';
-const SESSION_STORAGE_KEY = 'optiontrap_kite_session';
+/**
+ * Kite Authentication — Client-side module
+ *
+ * In this architecture, the backend server holds the apiSecret and accessToken.
+ * The client never sees sensitive credentials. Session state is managed via
+ * httpOnly cookies set by the server.
+ *
+ * The client only needs to:
+ *  - Check session status via GET /auth/me
+ *  - Get login URL via GET /auth/login-url
+ *  - Exchange request_token via POST /auth/token (server does SHA-256 + exchange)
+ *  - Logout via POST /auth/logout
+ */
+
 const AVATAR_STORAGE_KEY = 'optiontrap_avatar_url';
 
-export interface KiteCredentials {
-  apiKey: string;
-  apiSecret: string;
-}
-
 export interface KiteSession {
-  accessToken: string;
   userId: string;
   userName: string;
   userShortname: string;
@@ -18,140 +24,110 @@ export interface KiteSession {
   avatarUrl: string | null;
 }
 
-export function getCredentials(): KiteCredentials | null {
-  const stored = localStorage.getItem(KITE_STORAGE_KEY);
-  if (!stored) return null;
-  const parsed = JSON.parse(stored);
-  if (!parsed.apiKey || !parsed.apiSecret) return null;
-  return parsed;
-}
+// In-memory cache of session (avoids /auth/me on every render)
+let cachedSession: KiteSession | null = null;
 
-export function getSession(): KiteSession | null {
-  const stored = localStorage.getItem(SESSION_STORAGE_KEY);
-  if (!stored) return null;
-  return JSON.parse(stored);
-}
-
-export function saveSession(session: KiteSession): void {
-  localStorage.setItem(SESSION_STORAGE_KEY, JSON.stringify(session));
-  if (session.avatarUrl) {
-    localStorage.setItem(AVATAR_STORAGE_KEY, session.avatarUrl);
+/**
+ * Check if we have a valid session (calls server)
+ */
+export async function fetchSession(): Promise<KiteSession | null> {
+  try {
+    const res = await fetch('/auth/me', { credentials: 'include' });
+    if (!res.ok) {
+      cachedSession = null;
+      return null;
+    }
+    const { data } = await res.json();
+    cachedSession = data;
+    if (data.avatarUrl) {
+      localStorage.setItem(AVATAR_STORAGE_KEY, data.avatarUrl);
+    }
+    return data;
+  } catch {
+    cachedSession = null;
+    return null;
   }
 }
 
+/**
+ * Get cached session (synchronous — may be null if not yet fetched)
+ */
+export function getSession(): KiteSession | null {
+  return cachedSession;
+}
+
+/**
+ * Set cached session locally (called after token exchange)
+ */
+export function setCachedSession(session: KiteSession | null): void {
+  cachedSession = session;
+}
+
+/**
+ * Clear cached session (called on 401/logout)
+ */
+export function clearSession(): void {
+  cachedSession = null;
+}
+
+/**
+ * Get Kite OAuth login URL from server
+ */
+export async function getLoginUrl(): Promise<string> {
+  const res = await fetch('/auth/login-url', { credentials: 'include' });
+  const { url } = await res.json();
+  return url;
+}
+
+/**
+ * Exchange request_token for session (server does the heavy lifting)
+ */
+export async function exchangeToken(requestToken: string): Promise<KiteSession> {
+  const res = await fetch('/auth/token', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ request_token: requestToken }),
+  });
+
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ message: 'Token exchange failed' }));
+    throw new Error(error.message || `Token exchange failed (${res.status})`);
+  }
+
+  const { data } = await res.json();
+  cachedSession = data;
+  if (data.avatarUrl) {
+    localStorage.setItem(AVATAR_STORAGE_KEY, data.avatarUrl);
+  }
+  return data;
+}
+
+/**
+ * Logout — server invalidates session + clears cookie
+ */
+export async function logout(): Promise<void> {
+  try {
+    await fetch('/auth/logout', {
+      method: 'POST',
+      credentials: 'include',
+    });
+  } catch {
+    // Ignore network errors on logout
+  }
+  cachedSession = null;
+}
+
+/**
+ * Get last known avatar URL (persisted across sessions for login page)
+ */
 export function getLastAvatarUrl(): string | null {
   return localStorage.getItem(AVATAR_STORAGE_KEY);
 }
 
+/**
+ * Clear stored avatar URL
+ */
 export function clearLastAvatarUrl(): void {
   localStorage.removeItem(AVATAR_STORAGE_KEY);
-}
-
-export function clearSession(): void {
-  localStorage.removeItem(SESSION_STORAGE_KEY);
-}
-
-export function getLoginUrl(): string | null {
-  const creds = getCredentials();
-  if (!creds) return null;
-  return `https://kite.zerodha.com/connect/login?v=3&api_key=${creds.apiKey}`;
-}
-
-/**
- * Compute SHA-256 checksum of api_key + request_token + api_secret
- */
-async function computeChecksum(apiKey: string, requestToken: string, apiSecret: string): Promise<string> {
-  const data = apiKey + requestToken + apiSecret;
-  const encoder = new TextEncoder();
-  const buffer = await crypto.subtle.digest('SHA-256', encoder.encode(data));
-  const hashArray = Array.from(new Uint8Array(buffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-/**
- * Exchange request_token for access_token
- */
-export async function exchangeToken(requestToken: string): Promise<KiteSession> {
-  const creds = getCredentials();
-  if (!creds) {
-    throw new Error('Kite API credentials not configured. Go to Profile to set them up.');
-  }
-
-  const checksum = await computeChecksum(creds.apiKey, requestToken, creds.apiSecret);
-
-  const response = await fetch('/api/session/token', {
-    method: 'POST',
-    headers: {
-      'X-Kite-Version': '3',
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
-    body: new URLSearchParams({
-      api_key: creds.apiKey,
-      request_token: requestToken,
-      checksum,
-    }),
-  });
-
-  if (!response.ok) {
-    const rawText = await response.text();
-    let errorBody = null;
-    try {
-      errorBody = JSON.parse(rawText);
-    } catch {
-      // Not JSON
-    }
-    console.error('[KiteAuth] Token exchange error:', response.status, rawText);
-    const message = errorBody?.message || errorBody?.error_type || `Token exchange failed (${response.status}): ${rawText}`;
-    throw new Error(message);
-  }
-
-  const result = await response.json();
-  const data = result.data;
-
-  const session: KiteSession = {
-    accessToken: data.access_token,
-    userId: data.user_id,
-    userName: data.user_name,
-    userShortname: data.user_shortname,
-    email: data.email,
-    broker: data.broker,
-    loginTime: data.login_time,
-    avatarUrl: data.avatar_url || null,
-  };
-
-  saveSession(session);
-  return session;
-}
-
-/**
- * Logout — invalidate the session
- */
-export async function logout(): Promise<void> {
-  const creds = getCredentials();
-  const session = getSession();
-
-  if (creds && session) {
-    await fetch(
-      `/api/session/token?api_key=${creds.apiKey}&access_token=${session.accessToken}`,
-      {
-        method: 'DELETE',
-        headers: { 'X-Kite-Version': '3' },
-      },
-    ).catch(() => {
-      // Ignore network errors on logout
-    });
-  }
-
-  clearSession();
-}
-
-/**
- * Get authorization header value for API requests.
- * Use with fetch('/api/...', { headers: { Authorization: getAuthHeader() } })
- */
-export function getAuthHeader(): string | null {
-  const creds = getCredentials();
-  const session = getSession();
-  if (!creds || !session) return null;
-  return `token ${creds.apiKey}:${session.accessToken}`;
 }

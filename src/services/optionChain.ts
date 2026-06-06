@@ -1,4 +1,3 @@
-import { getAuthHeader } from './kiteAuth';
 import { dbGet, dbSet, STORE_NFO } from './db';
 
 async function getCachedCSV(): Promise<{ csv: string; date: string } | null> {
@@ -50,15 +49,9 @@ export async function fetchNiftyOptions(): Promise<OptionInstrument[]> {
   }
 
   // Fetch fresh data
-  const authHeader = getAuthHeader();
-  if (!authHeader) throw new Error('Not authenticated');
-
   console.log('[OptionChain] Fetching fresh instruments data...');
   const response = await fetch('/api/instruments/NFO', {
-    headers: {
-      'X-Kite-Version': '3',
-      'Authorization': authHeader,
-    },
+    credentials: 'include',
   });
 
   if (!response.ok) {

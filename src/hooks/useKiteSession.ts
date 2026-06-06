@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getSession, KiteSession } from '@/services/kiteAuth';
+import { getSession, fetchSession, KiteSession } from '@/services/kiteAuth';
 
 const SESSION_EVENT = 'optiontrap_session_change';
 
@@ -11,23 +11,33 @@ export function notifySessionChange(): void {
 }
 
 /**
- * Hook that reactively tracks the Kite session state
+ * Hook that reactively tracks the Kite session state.
+ * On mount, fetches session from server (validates cookie).
+ * Listens for session change events to re-fetch.
  */
-export function useKiteSession(): KiteSession | null {
+export function useKiteSession(): { session: KiteSession | null; loading: boolean } {
   const [session, setSession] = useState<KiteSession | null>(getSession);
+  const [loading, setLoading] = useState(true);
 
-  const refresh = useCallback(() => {
-    setSession(getSession());
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const s = await fetchSession();
+    setSession(s);
+    setLoading(false);
   }, []);
 
   useEffect(() => {
-    window.addEventListener(SESSION_EVENT, refresh);
-    window.addEventListener('storage', refresh);
+    // Initial fetch on mount
+    refresh();
+
+    const handleChange = () => { refresh(); };
+    window.addEventListener(SESSION_EVENT, handleChange);
+    window.addEventListener('storage', handleChange);
     return () => {
-      window.removeEventListener(SESSION_EVENT, refresh);
-      window.removeEventListener('storage', refresh);
+      window.removeEventListener(SESSION_EVENT, handleChange);
+      window.removeEventListener('storage', handleChange);
     };
   }, [refresh]);
 
-  return session;
+  return { session, loading };
 }

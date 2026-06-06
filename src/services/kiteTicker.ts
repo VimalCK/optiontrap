@@ -1,4 +1,10 @@
-import { getCredentials, getSession } from './kiteAuth';
+/**
+ * Kite WebSocket Ticker — connects to our backend's /ws proxy.
+ *
+ * The server handles authentication (injects api_key + access_token)
+ * and proxies the binary stream from wss://ws.kite.trade.
+ * The client never sees credentials in the WebSocket URL.
+ */
 
 export interface Tick {
   instrumentToken: number;
@@ -25,23 +31,18 @@ export class KiteTicker {
   private shouldReconnect = true;
 
   connect(instrumentTokens: number[], onTick: TickCallback): void {
-    const creds = getCredentials();
-    const session = getSession();
-    if (!creds || !session) {
-      console.error('[KiteTicker] Not authenticated');
-      return;
-    }
-
     this.instrumentTokens = instrumentTokens;
     this.onTickCallback = onTick;
     this.shouldReconnect = true;
 
-    const url = `wss://ws.kite.trade?api_key=${creds.apiKey}&access_token=${session.accessToken}`;
+    // Connect to our own server's WebSocket proxy — no credentials in the URL
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const url = `${protocol}//${window.location.host}/ws`;
     this.ws = new WebSocket(url);
     this.ws.binaryType = 'arraybuffer';
 
     this.ws.onopen = () => {
-      console.log('[KiteTicker] Connected');
+      console.log('[KiteTicker] Connected via proxy');
       this.subscribe(instrumentTokens);
       this.setMode('full', instrumentTokens);
     };

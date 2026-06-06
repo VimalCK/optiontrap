@@ -1,17 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ConnectionIcon, ShieldIcon, PowerIcon } from '@/components/icons/Icons';
-import { getSession, logout, getAuthHeader, clearSession, KiteSession } from '@/services/kiteAuth';
+import { ConnectionIcon, PowerIcon } from '@/components/icons/Icons';
+import { getSession, logout, KiteSession } from '@/services/kiteAuth';
 import { fetchMargins, Margins } from '@/services/kiteApi';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import '@/styles/settings.css';
-
-const KITE_STORAGE_KEY = 'optiontrap_kite_credentials';
-
-interface KiteCredentials {
-  apiKey: string;
-  apiSecret: string;
-}
 
 interface UserProfile {
   userId: string;
@@ -29,27 +22,12 @@ interface UserProfile {
 const Profile: React.FC = () => {
   const navigate = useNavigate();
 
-  const [apiKey, setApiKey] = useState('');
-  const [apiSecret, setApiSecret] = useState('');
-  const [showSecret, setShowSecret] = useState(false);
   const [session, setSession] = useState<KiteSession | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [margins, setMargins] = useState<Margins | null>(null);
 
-  // Track the saved values to detect dirty state
-  const savedKeyRef = useRef('');
-  const savedSecretRef = useRef('');
-
   useEffect(() => {
-    const stored = localStorage.getItem(KITE_STORAGE_KEY);
-    if (stored) {
-      const credentials: KiteCredentials = JSON.parse(stored);
-      setApiKey(credentials.apiKey);
-      setApiSecret(credentials.apiSecret);
-      savedKeyRef.current = credentials.apiKey;
-      savedSecretRef.current = credentials.apiSecret;
-    }
     const currentSession = getSession();
     setSession(currentSession);
 
@@ -60,16 +38,10 @@ const Profile: React.FC = () => {
   }, []);
 
   const fetchProfile = async () => {
-    const authHeader = getAuthHeader();
-    if (!authHeader) return;
-
     setProfileLoading(true);
     try {
       const response = await fetch('/api/user/profile', {
-        headers: {
-          'X-Kite-Version': '3',
-          'Authorization': authHeader,
-        },
+        credentials: 'include',
       });
       if (response.ok) {
         const result = await response.json();
@@ -103,29 +75,13 @@ const Profile: React.FC = () => {
     }
   };
 
-  const handleSave = () => {
-    const credentials: KiteCredentials = { apiKey: apiKey.trim(), apiSecret: apiSecret.trim() };
-    localStorage.setItem(KITE_STORAGE_KEY, JSON.stringify(credentials));
-    savedKeyRef.current = credentials.apiKey;
-    savedSecretRef.current = credentials.apiSecret;
-    // Clear session — new credentials require a fresh login
-    clearSession();
-    notifySessionChange();
-    navigate('/login');
-  };
-
   const handleLogout = async () => {
     await logout();
     setSession(null);
     setProfile(null);
     notifySessionChange();
+    navigate('/login');
   };
-
-  const isDirty =
-    apiKey.trim() !== savedKeyRef.current ||
-    apiSecret.trim() !== savedSecretRef.current;
-  const hasCreds = apiKey.trim().length > 0 && apiSecret.trim().length > 0;
-  const canSave = isDirty && hasCreds;
 
   return (
     <div>
@@ -133,7 +89,7 @@ const Profile: React.FC = () => {
         <div>
           <h1 className="page-header__title">Profile</h1>
           <p className="page-header__subtitle">
-            Manage your account and personal preferences
+            Your account and session information
           </p>
         </div>
         <button
@@ -230,82 +186,6 @@ const Profile: React.FC = () => {
               )}
             </>
           )}
-        </div>
-      </div>
-
-      {/* Security — Kite Connect Credentials */}
-      <div className="card" style={{ marginTop: 20 }}>
-        <div className="card__icon">
-          <ShieldIcon />
-        </div>
-        <h3 className="card__title">Security — Kite Connect</h3>
-        <p className="card__description" style={{ marginBottom: 20 }}>
-          Manage your Kite Connect API credentials. Get your keys from{' '}
-          <a
-            href="https://developers.kite.trade"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="settings-link"
-          >
-            developers.kite.trade
-          </a>
-        </p>
-
-        <div className="settings-form">
-          <div className="form-field">
-            <label className="form-field__label" htmlFor="kite-api-key">
-              API Key
-            </label>
-            <input
-              id="kite-api-key"
-              type="text"
-              className="form-field__input"
-              placeholder="Enter your Kite API key"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              autoComplete="off"
-            />
-          </div>
-
-          <div className="form-field">
-            <label className="form-field__label" htmlFor="kite-api-secret">
-              API Secret
-            </label>
-            <div className="form-field__input-wrapper">
-              <input
-                id="kite-api-secret"
-                type={showSecret ? 'text' : 'password'}
-                className="form-field__input"
-                placeholder="Enter your Kite API secret"
-                value={apiSecret}
-                onChange={(e) => setApiSecret(e.target.value)}
-                autoComplete="off"
-              />
-              <button
-                type="button"
-                className="form-field__toggle-visibility"
-                onClick={() => setShowSecret((prev) => !prev)}
-                aria-label={showSecret ? 'Hide secret' : 'Show secret'}
-              >
-                {showSecret ? 'Hide' : 'Show'}
-              </button>
-            </div>
-          </div>
-
-          <div className="form-actions">
-            <button
-              className="btn btn--primary"
-              onClick={handleSave}
-              disabled={!canSave}
-            >
-              Save & Re-login
-            </button>
-            {isDirty && hasCreds && (
-              <span className="form-actions__feedback" style={{ color: 'var(--text-secondary)' }}>
-                Saving will log you out for a fresh login
-              </span>
-            )}
-          </div>
         </div>
       </div>
     </div>

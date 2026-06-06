@@ -32,7 +32,7 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
-  const session = useKiteSession();
+  const { session } = useKiteSession();
   const isSignedIn = session !== null;
 
   return (
@@ -88,7 +88,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
           )}
           <span className="sidebar__nav-label">
             {isSignedIn
-              ? session.userName.split(' ').map((w) => w[0]).join('')
+              ? session.userName.split(' ').map((w: string) => w[0]).join('')
               : 'Not signed in'}
           </span>
         </NavLink>

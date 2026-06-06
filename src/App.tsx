@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useKiteSession } from '@/hooks/useKiteSession';
-import { getCredentials } from '@/services/kiteAuth';
 import { tickerConnect, tickerDisconnect } from '@/services/tickerSingleton';
 import Sidebar from './components/Sidebar/Sidebar';
 import Holdings from './pages/Holdings';
@@ -19,9 +18,8 @@ import './styles/login.css';
 const SIDEBAR_STORAGE_KEY = 'optiontrap_sidebar_collapsed';
 
 const App: React.FC = () => {
-  const session = useKiteSession();
-  const creds = getCredentials();
-  const isAuthenticated = creds !== null && session !== null;
+  const { session, loading } = useKiteSession();
+  const isAuthenticated = session !== null;
 
   // Connect/disconnect the singleton ticker when session changes
   useEffect(() => {
@@ -45,13 +43,18 @@ const App: React.FC = () => {
     setSidebarCollapsed((prev) => !prev);
   }, []);
 
+  // Show nothing while checking session status
+  if (loading) {
+    return null;
+  }
+
   return (
     <Routes>
       {/* Public routes — no sidebar, no auth required */}
       <Route path="/login" element={isAuthenticated ? <Navigate to="/portfolio" replace /> : <Login />} />
       <Route path="/redirect" element={<Redirect />} />
 
-      {/* Protected routes — require credentials + session */}
+      {/* Protected routes — require valid session cookie */}
       <Route
         path="*"
         element={
@@ -74,7 +77,7 @@ const App: React.FC = () => {
               </main>
             </div>
           ) : (
-            <Navigate to={creds && !session ? '/login?expired=1' : '/login'} replace />
+            <Navigate to="/login" replace />
           )
         }
       />

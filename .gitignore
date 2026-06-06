@@ -1,3 +1,5 @@
 node_modules
 dist
 .vite
+server/.env
+server/node_modules
