@@ -18,6 +18,14 @@
  */
 
 import 'dotenv/config';
+
+// Disable TLS cert verification for outbound requests to Kite API.
+// Required on Windows where Node.js doesn't use the system certificate store.
+// Acceptable for a personal tool connecting to known endpoints (api.kite.trade).
+if (!process.env.NODE_TLS_REJECT_UNAUTHORIZED) {
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+}
+
 import express from 'express';
 import session from 'express-session';
 import cookieParser from 'cookie-parser';
@@ -181,6 +189,8 @@ app.post('/auth/token', async (req, res) => {
   }
 
   try {
+    console.log('[Auth] Exchanging token. API Key:', KITE_API_KEY.slice(0, 4) + '...');
+    console.log('[Auth] Request token:', request_token.slice(0, 8) + '...');
     const checksumInput = KITE_API_KEY + request_token + KITE_API_SECRET;
     const checksum = crypto.createHash('sha256').update(checksumInput).digest('hex');
 
@@ -224,7 +234,8 @@ app.post('/auth/token', async (req, res) => {
     res.json({ status: 'ok', data: safe });
   } catch (err) {
     console.error('[Auth] Token exchange error:', err);
-    res.status(500).json({ status: 'error', message: 'Internal server error' });
+    const errMsg = err instanceof Error ? err.message : String(err);
+    res.status(500).json({ status: 'error', message: `Token exchange error: ${errMsg}` });
   }
 });
 
@@ -267,6 +278,7 @@ const requireAuth = (req, res, next) => {
 app.use('/api', requireAuth, createProxyMiddleware({
   target: 'https://api.kite.trade',
   changeOrigin: true,
+  secure: false,
   pathRewrite: { '^/api': '' },
   on: {
     proxyReq: (proxyReq, req) => {
