@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { getSession, fetchSession, KiteSession } from '@/services/kiteAuth';
+import { getSession, fetchAuthStatus, KiteSession, AuthStatus } from '@/services/kiteAuth';
 
 const SESSION_EVENT = 'optiontrap_session_change';
 
@@ -12,22 +12,23 @@ export function notifySessionChange(): void {
 
 /**
  * Hook that reactively tracks the Kite session state.
- * On mount, fetches session from server (validates cookie).
+ * On mount, calls /auth/status to check credentials + session.
  * Listens for session change events to re-fetch.
  */
-export function useKiteSession(): { session: KiteSession | null; loading: boolean } {
+export function useKiteSession(): { session: KiteSession | null; loading: boolean; credentialsConfigured: boolean } {
   const [session, setSession] = useState<KiteSession | null>(getSession);
   const [loading, setLoading] = useState(true);
+  const [credentialsConfigured, setCredentialsConfigured] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const s = await fetchSession();
-    setSession(s);
+    const status: AuthStatus = await fetchAuthStatus();
+    setSession(status.session);
+    setCredentialsConfigured(status.credentialsConfigured);
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    // Initial fetch on mount
     refresh();
 
     const handleChange = () => { refresh(); };
@@ -39,5 +40,5 @@ export function useKiteSession(): { session: KiteSession | null; loading: boolea
     };
   }, [refresh]);
 
-  return { session, loading };
+  return { session, loading, credentialsConfigured };
 }

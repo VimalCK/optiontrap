@@ -6,7 +6,8 @@
  * httpOnly cookies set by the server.
  *
  * The client only needs to:
- *  - Check session status via GET /auth/me
+ *  - Check auth status via GET /auth/status (credentials configured + session)
+ *  - Save credentials via POST /auth/credentials (sent to server, stored server-side)
  *  - Get login URL via GET /auth/login-url
  *  - Exchange request_token via POST /auth/token (server does SHA-256 + exchange)
  *  - Logout via POST /auth/logout
@@ -24,8 +25,72 @@ export interface KiteSession {
   avatarUrl: string | null;
 }
 
+export interface AuthStatus {
+  credentialsConfigured: boolean;
+  authenticated: boolean;
+  session: KiteSession | null;
+}
+
 // In-memory cache of session (avoids /auth/me on every render)
 let cachedSession: KiteSession | null = null;
+let cachedCredentialsConfigured: boolean = false;
+
+/**
+ * Check full auth status: credentials configured + session valid
+ */
+export async function fetchAuthStatus(): Promise<AuthStatus> {
+  try {
+    const res = await fetch('/auth/status', { credentials: 'include' });
+    if (!res.ok) {
+      cachedSession = null;
+      cachedCredentialsConfigured = false;
+      return { credentialsConfigured: false, authenticated: false, session: null };
+    }
+    const json = await res.json();
+    cachedCredentialsConfigured = json.credentialsConfigured;
+    if (json.authenticated && json.data) {
+      cachedSession = json.data;
+      if (json.data.avatarUrl) {
+        localStorage.setItem(AVATAR_STORAGE_KEY, json.data.avatarUrl);
+      }
+    } else {
+      cachedSession = null;
+    }
+    return {
+      credentialsConfigured: json.credentialsConfigured,
+      authenticated: json.authenticated,
+      session: cachedSession,
+    };
+  } catch {
+    cachedSession = null;
+    cachedCredentialsConfigured = false;
+    return { credentialsConfigured: false, authenticated: false, session: null };
+  }
+}
+
+/**
+ * Save API credentials to the server
+ */
+export async function saveCredentials(apiKey: string, apiSecret: string): Promise<void> {
+  const res = await fetch('/auth/credentials', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ apiKey, apiSecret }),
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ message: 'Failed to save credentials' }));
+    throw new Error(error.message);
+  }
+  cachedCredentialsConfigured = true;
+}
+
+/**
+ * Check if credentials are configured (cached, synchronous)
+ */
+export function hasCredentials(): boolean {
+  return cachedCredentialsConfigured;
+}
 
 /**
  * Check if we have a valid session (calls server)

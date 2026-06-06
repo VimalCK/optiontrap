@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { getLoginUrl, getLastAvatarUrl } from '@/services/kiteAuth';
+import { getLoginUrl, getLastAvatarUrl, saveCredentials, hasCredentials, fetchAuthStatus } from '@/services/kiteAuth';
 import { ShieldIcon } from '@/components/icons/Icons';
 import '@/styles/login.css';
 
@@ -106,14 +106,40 @@ const ParticleNetwork: React.FC = () => {
 const Login: React.FC = () => {
   const [searchParams] = useSearchParams();
   const expired = searchParams.get('expired') === '1';
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+
+  const [apiKey, setApiKey] = useState('');
+  const [apiSecret, setApiSecret] = useState('');
+  const [showSecret, setShowSecret] = useState(false);
+  const [credsSaved, setCredsSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const lastAvatar = getLastAvatarUrl();
     if (lastAvatar) setAvatarUrl(lastAvatar);
+
+    // Check if server already has credentials configured
+    fetchAuthStatus().then((status) => {
+      if (status.credentialsConfigured) {
+        setCredsSaved(true);
+      }
+    });
   }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      await saveCredentials(apiKey.trim(), apiSecret.trim());
+      setCredsSaved(true);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to save credentials');
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const handleLogin = async () => {
     setLoginLoading(true);
@@ -126,6 +152,8 @@ const Login: React.FC = () => {
       setLoginLoading(false);
     }
   };
+
+  const hasCreds = apiKey.trim().length > 0 && apiSecret.trim().length > 0;
 
   return (
     <div className="login-page">
@@ -155,13 +183,97 @@ const Login: React.FC = () => {
             </div>
           )}
 
-          <button
-            className="btn btn--primary login-card__login-btn"
-            onClick={handleLogin}
-            disabled={loginLoading}
-          >
-            {loginLoading ? 'Redirecting...' : 'Login with Kite'}
-          </button>
+          {credsSaved ? (
+            <>
+              <button
+                className="btn btn--primary login-card__login-btn"
+                onClick={handleLogin}
+                disabled={loginLoading}
+              >
+                {loginLoading ? 'Redirecting...' : 'Login with Kite'}
+              </button>
+              <button
+                className="login-card__change-creds"
+                type="button"
+                onClick={() => setCredsSaved(false)}
+              >
+                Change credentials
+              </button>
+            </>
+          ) : (
+            <div className="settings-form">
+              <p className="login-card__status">
+                Enter your Kite Connect API credentials.{' '}
+                <a
+                  href="https://developers.kite.trade"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="settings-link"
+                >
+                  Get keys
+                </a>
+              </p>
+
+              <div className="form-field">
+                <label className="form-field__label" htmlFor="login-api-key">
+                  API Key
+                </label>
+                <input
+                  id="login-api-key"
+                  type="text"
+                  className="form-field__input"
+                  placeholder="Enter your Kite API key"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+
+              <div className="form-field">
+                <label className="form-field__label" htmlFor="login-api-secret">
+                  API Secret
+                </label>
+                <div className="form-field__input-wrapper">
+                  <input
+                    id="login-api-secret"
+                    type={showSecret ? 'text' : 'password'}
+                    className="form-field__input"
+                    placeholder="Enter your Kite API secret"
+                    value={apiSecret}
+                    onChange={(e) => setApiSecret(e.target.value)}
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    className="form-field__toggle-visibility"
+                    onClick={() => setShowSecret((prev) => !prev)}
+                    aria-label={showSecret ? 'Hide secret' : 'Show secret'}
+                  >
+                    {showSecret ? 'Hide' : 'Show'}
+                  </button>
+                </div>
+              </div>
+
+              <div className="form-actions">
+                <button
+                  className="btn btn--primary"
+                  onClick={handleSave}
+                  disabled={!hasCreds || saving}
+                >
+                  {saving ? 'Saving...' : 'Save & Continue'}
+                </button>
+              </div>
+              {hasCredentials() && (
+                <button
+                  className="login-card__change-creds"
+                  type="button"
+                  onClick={() => setCredsSaved(true)}
+                >
+                  ← Back
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
