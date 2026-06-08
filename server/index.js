@@ -380,8 +380,18 @@ wss.on('connection', (clientWs) => {
   const kiteWs = new WebSocket(kiteWsUrl);
   kiteWs.binaryType = 'arraybuffer';
 
+  // Buffer client messages that arrive before upstream Kite connection is ready
+  const pendingMessages = [];
+  let kiteReady = false;
+
   kiteWs.on('open', () => {
     console.log(`${GREY}${new Date().toLocaleTimeString()}${RESET} ${GREEN}WS${RESET} upstream Kite connected ${GREY}[${userId}]${RESET}`);
+    kiteReady = true;
+    // Flush any buffered subscribe/mode commands
+    for (const { data, isBinary } of pendingMessages) {
+      kiteWs.send(data, { binary: isBinary });
+    }
+    pendingMessages.length = 0;
   });
 
   kiteWs.on('message', (data, isBinary) => {
@@ -391,8 +401,11 @@ wss.on('connection', (clientWs) => {
   });
 
   clientWs.on('message', (data, isBinary) => {
-    if (kiteWs.readyState === WebSocket.OPEN) {
+    if (kiteReady && kiteWs.readyState === WebSocket.OPEN) {
       kiteWs.send(data, { binary: isBinary });
+    } else {
+      // Kite not connected yet — buffer for later
+      pendingMessages.push({ data, isBinary });
     }
   });
 
