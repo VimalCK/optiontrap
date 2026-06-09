@@ -7,6 +7,7 @@
  *
  * Currently handles:
  *   - user_credentials: per-user Kite API key + AES-256-GCM encrypted secret
+ *   - sessions: express-session data persisted across server restarts
  *
  * The encryption key is derived from SESSION_SECRET via scrypt. Without the
  * secret, the database file alone is useless — defense-in-depth against
@@ -102,6 +103,17 @@ export async function initDb() {
       updated_at     TEXT DEFAULT (datetime('now'))
     )
   `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS sessions (
+      sid     TEXT PRIMARY KEY,
+      data    TEXT NOT NULL,
+      expires INTEGER NOT NULL
+    )
+  `);
+
+  // Clean expired sessions on startup
+  db.run('DELETE FROM sessions WHERE expires < ?', [Date.now()]);
 
   persist();
   console.log('[DB] SQLite initialised at', DB_PATH);
@@ -212,6 +224,89 @@ export function deleteCredentials(apiKey) {
   if (!db) throw new Error('Database not initialised');
   db.run('DELETE FROM user_credentials WHERE api_key = ?', [apiKey]);
   persist();
+}
+
+// ---------------------------------------------------------------------------
+// Session CRUD (for express-session store)
+// ---------------------------------------------------------------------------
+
+/**
+ * Retrieve a session by ID. Returns parsed session object or null.
+ */
+export function getSessionById(sid) {
+  if (!db) throw new Error('Database not initialised');
+
+  const stmt = db.prepare('SELECT data, expires FROM sessions WHERE sid = ?');
+  stmt.bind([sid]);
+
+  if (!stmt.step()) {
+    stmt.free();
+    return null;
+  }
+
+  const row = stmt.getAsObject();
+  stmt.free();
+
+  // Expired — clean it up
+  if (row.expires < Date.now()) {
+    db.run('DELETE FROM sessions WHERE sid = ?', [sid]);
+    persist();
+    return null;
+  }
+
+  try {
+    return JSON.parse(row.data);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Save or update a session. Computes expiry from cookie.maxAge or defaults
+ * to 24 hours.
+ */
+export function setSessionData(sid, sessionData, maxAge) {
+  if (!db) throw new Error('Database not initialised');
+
+  const expires = Date.now() + (maxAge || 86400000);
+  const data = JSON.stringify(sessionData);
+
+  db.run(
+    `INSERT INTO sessions (sid, data, expires) VALUES (?, ?, ?)
+     ON CONFLICT(sid) DO UPDATE SET data = excluded.data, expires = excluded.expires`,
+    [sid, data, expires],
+  );
+
+  persist();
+}
+
+/**
+ * Delete a session by ID.
+ */
+export function deleteSession(sid) {
+  if (!db) throw new Error('Database not initialised');
+  db.run('DELETE FROM sessions WHERE sid = ?', [sid]);
+  persist();
+}
+
+/**
+ * Update a session's expiry without changing its data (keep-alive).
+ */
+export function touchSession(sid, maxAge) {
+  if (!db) throw new Error('Database not initialised');
+  const expires = Date.now() + (maxAge || 86400000);
+  db.run('UPDATE sessions SET expires = ? WHERE sid = ?', [expires, sid]);
+  persist();
+}
+
+/**
+ * Remove all expired sessions. Called periodically by the session store.
+ */
+export function cleanExpiredSessions() {
+  if (!db) throw new Error('Database not initialised');
+  const result = db.run('DELETE FROM sessions WHERE expires < ?', [Date.now()]);
+  persist();
+  return result;
 }
 
 // ---------------------------------------------------------------------------

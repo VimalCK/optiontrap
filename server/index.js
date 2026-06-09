@@ -47,6 +47,7 @@ import {
   getCredentialsByApiKey,
   migrateFromJson,
 } from './db.js';
+import { SqliteSessionStore } from './sessionStore.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -111,7 +112,7 @@ function resolveCredentials(req) {
 const app = express();
 const server = createServer(app);
 
-const sessionStore = new session.MemoryStore();
+const sessionStore = new SqliteSessionStore();
 
 const sessionMiddleware = session({
   store: sessionStore,
@@ -532,11 +533,13 @@ async function start() {
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log(`\n${ts()} ${YELLOW}Server${RESET} shutting down...`);
+  sessionStore.close();
   closeDb();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
+  sessionStore.close();
   closeDb();
   process.exit(0);
 });
