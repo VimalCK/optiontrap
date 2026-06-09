@@ -48,6 +48,7 @@ import {
   migrateFromJson,
 } from './db.js';
 import { SqliteSessionStore } from './sessionStore.js';
+import { createRateLimiter } from './rateLimit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -140,6 +141,33 @@ app.use(cors({
 }));
 
 app.use(sessionMiddleware);
+
+// ---------- Rate Limiting ----------
+// Three tiers: auth (strict), API proxy (per-user), general (catch-all)
+
+// Auth endpoints: 10 requests/minute per IP — brute-force protection
+const authLimiter = createRateLimiter({
+  windowMs: 60_000,
+  max: 10,
+  message: 'Too many authentication attempts, please try again in a minute',
+});
+
+// API proxy: 120 requests/minute per user — stay below Kite's 3/sec limit
+const apiLimiter = createRateLimiter({
+  windowMs: 60_000,
+  max: 120,
+  keyFn: (req) => req.session?.kiteSession?.userId || req.ip || 'unknown',
+  message: 'API rate limit exceeded, please slow down',
+});
+
+// General: 200 requests/minute per IP — DDoS baseline
+const generalLimiter = createRateLimiter({
+  windowMs: 60_000,
+  max: 200,
+});
+
+app.use(generalLimiter);
+app.use('/auth', authLimiter);
 
 // Request logger
 app.use((req, res, next) => {
@@ -368,7 +396,7 @@ const requireAuth = (req, res, next) => {
   next();
 };
 
-app.use('/api', requireAuth, createProxyMiddleware({
+app.use('/api', requireAuth, apiLimiter, createProxyMiddleware({
   target: 'https://api.kite.trade',
   changeOrigin: true,
   secure: false,
@@ -531,16 +559,22 @@ async function start() {
 }
 
 // Graceful shutdown
-process.on('SIGINT', () => {
-  console.log(`\n${ts()} ${YELLOW}Server${RESET} shutting down...`);
+function shutdown() {
+  authLimiter.close();
+  apiLimiter.close();
+  generalLimiter.close();
   sessionStore.close();
   closeDb();
+}
+
+process.on('SIGINT', () => {
+  console.log(`\n${ts()} ${YELLOW}Server${RESET} shutting down...`);
+  shutdown();
   process.exit(0);
 });
 
 process.on('SIGTERM', () => {
-  sessionStore.close();
-  closeDb();
+  shutdown();
   process.exit(0);
 });
 
