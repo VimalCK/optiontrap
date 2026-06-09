@@ -4,3 +4,4 @@ dist
 server/.env
 server/node_modules
 server/credentials.json
+server/data/

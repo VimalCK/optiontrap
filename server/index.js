@@ -1,27 +1,30 @@
 /**
  * OptionTrap Backend Server
  *
- * Holds Kite API credentials securely and proxies all API/WebSocket
- * requests. The browser never sees apiSecret or accessToken.
+ * Multi-user server that securely manages per-user Kite API credentials.
+ * Each user's api_secret is AES-256-GCM encrypted in SQLite. The browser
+ * never sees apiSecret or accessToken — all sensitive operations happen
+ * server-side.
  *
- * Credentials are configured via the login UI and persisted to
- * server/credentials.json (gitignored). No manual .env editing required.
+ * A signed persistent cookie (optiontrap_remember) remembers returning
+ * users so they only need to click "Login with Kite" each day instead of
+ * re-entering credentials.
  *
  * Endpoints:
- *   GET  /auth/status      — check if credentials are configured + session valid
- *   GET  /auth/login-url   — get Kite OAuth login URL
- *   POST /auth/credentials — save API key + secret (from login UI)
- *   POST /auth/token       — exchange request_token for session (sets httpOnly cookie)
- *   POST /auth/logout      — invalidate session + clear cookie
- *   ALL  /api/*            — proxy to api.kite.trade with auth injected
- *   WS   /ws               — proxy to wss://ws.kite.trade with auth injected
+ *   GET  /auth/status      — credentials configured (via cookie) + session
+ *   GET  /auth/login-url   — Kite OAuth URL using per-user api_key
+ *   POST /auth/credentials — save api_key + secret (session temp → SQLite after OAuth)
+ *   POST /auth/token       — exchange request_token, persist credentials, set cookie
+ *   POST /auth/logout      — invalidate session, keep remember cookie
+ *   GET  /auth/me          — current session info
+ *   ALL  /api/*            — proxy to api.kite.trade with per-user auth
+ *   WS   /ws               — proxy to wss://ws.kite.trade with per-user auth
  */
 
 import 'dotenv/config';
 
 // Disable TLS cert verification for outbound requests to Kite API.
 // Required on Windows where Node.js doesn't use the system certificate store.
-// Acceptable for a personal tool connecting to known endpoints (api.kite.trade).
 if (!process.env.NODE_TLS_REJECT_UNAUTHORIZED) {
   process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
 }
@@ -31,12 +34,19 @@ import session from 'express-session';
 import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import crypto from 'crypto';
-import fs from 'fs';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import path from 'path';
 import { fileURLToPath } from 'url';
+
+import {
+  initDb,
+  closeDb,
+  saveCredentials,
+  getCredentialsByApiKey,
+  migrateFromJson,
+} from './db.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -44,53 +54,57 @@ const PORT = parseInt(process.env.PORT || '3001', 10);
 const SESSION_SECRET = process.env.SESSION_SECRET || 'insecure-dev-secret';
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
 const IS_PROD = process.env.NODE_ENV === 'production';
-const CREDENTIALS_PATH = path.join(__dirname, 'credentials.json');
+const CREDENTIALS_JSON_PATH = path.join(__dirname, 'credentials.json');
 
-// ---------- Credential Management ----------
+const REMEMBER_COOKIE = 'optiontrap_remember';
+const REMEMBER_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
 
-let KITE_API_KEY = '';
-let KITE_API_SECRET = '';
+// ---------- Log colours ----------
 
-function loadCredentials() {
-  // Try credentials.json first (set via UI)
-  if (fs.existsSync(CREDENTIALS_PATH)) {
-    try {
-      const data = JSON.parse(fs.readFileSync(CREDENTIALS_PATH, 'utf-8'));
-      if (data.apiKey && data.apiSecret) {
-        KITE_API_KEY = data.apiKey;
-        KITE_API_SECRET = data.apiSecret;
-        console.log('[Server] Credentials loaded from credentials.json');
-        return;
-      }
-    } catch {
-      console.warn('[Server] Failed to parse credentials.json');
-    }
+const GREY = '\x1b[90m';
+const GREEN = '\x1b[32m';
+const YELLOW = '\x1b[33m';
+const RED = '\x1b[31m';
+const CYAN = '\x1b[36m';
+const RESET = '\x1b[0m';
+
+function ts() {
+  return `${GREY}${new Date().toLocaleTimeString()}${RESET}`;
+}
+
+// ---------- Resolve per-user credentials ----------
+
+/**
+ * Look up credentials for the current request. Checks (in order):
+ *   1. Active session (kiteSession.apiKey)
+ *   2. Pending credentials in session (just saved, pre-OAuth)
+ *   3. Persistent remember cookie → SQLite lookup
+ *
+ * Returns { apiKey, apiSecret } or null.
+ */
+function resolveCredentials(req) {
+  // 1. Active session
+  const apiKey = req.session?.kiteSession?.apiKey;
+  if (apiKey) {
+    const creds = getCredentialsByApiKey(apiKey);
+    if (creds) return creds;
   }
 
-  // Fallback to .env (for backward compat)
-  if (process.env.KITE_API_KEY && process.env.KITE_API_SECRET) {
-    KITE_API_KEY = process.env.KITE_API_KEY;
-    KITE_API_SECRET = process.env.KITE_API_SECRET;
-    console.log('[Server] Credentials loaded from .env');
-    return;
+  // 2. Pending (just entered, not yet OAuth'd)
+  const pending = req.session?.pendingCredentials;
+  if (pending?.apiKey && pending?.apiSecret) {
+    return { apiKey: pending.apiKey, apiSecret: pending.apiSecret };
   }
 
-  console.log('[Server] No credentials configured — waiting for UI setup');
-}
+  // 3. Remember cookie
+  const rememberedKey = req.signedCookies?.[REMEMBER_COOKIE];
+  if (rememberedKey) {
+    const creds = getCredentialsByApiKey(rememberedKey);
+    if (creds) return creds;
+  }
 
-function saveCredentials(apiKey, apiSecret) {
-  KITE_API_KEY = apiKey;
-  KITE_API_SECRET = apiSecret;
-  fs.writeFileSync(CREDENTIALS_PATH, JSON.stringify({ apiKey, apiSecret }, null, 2), 'utf-8');
-  console.log('[Server] Credentials saved to credentials.json');
+  return null;
 }
-
-function hasCredentials() {
-  return KITE_API_KEY.length > 0 && KITE_API_SECRET.length > 0;
-}
-
-// Load on startup
-loadCredentials();
 
 // ---------- Express App ----------
 
@@ -109,7 +123,7 @@ const sessionMiddleware = session({
     httpOnly: true,
     secure: IS_PROD,
     sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
+    maxAge: 24 * 60 * 60 * 1000,
   },
 });
 
@@ -126,15 +140,7 @@ app.use(cors({
 
 app.use(sessionMiddleware);
 
-// ---------- Request Logger ----------
-
-const GREY = '\x1b[90m';
-const GREEN = '\x1b[32m';
-const YELLOW = '\x1b[33m';
-const RED = '\x1b[31m';
-const CYAN = '\x1b[36m';
-const RESET = '\x1b[0m';
-
+// Request logger
 app.use((req, res, next) => {
   const start = Date.now();
   const { method, originalUrl } = req;
@@ -145,7 +151,7 @@ app.use((req, res, next) => {
     const color = status >= 500 ? RED : status >= 400 ? YELLOW : status >= 300 ? CYAN : GREEN;
     const user = req.session?.kiteSession?.userId || '-';
     console.log(
-      `${GREY}${new Date().toLocaleTimeString()}${RESET} ${color}${status}${RESET} ${method} ${originalUrl} ${GREY}${duration}ms${RESET} ${GREY}[${user}]${RESET}`
+      `${ts()} ${color}${status}${RESET} ${method} ${originalUrl} ${GREY}${duration}ms [${user}]${RESET}`,
     );
   });
 
@@ -154,49 +160,84 @@ app.use((req, res, next) => {
 
 // ---------- Auth Routes ----------
 
-// Combined status check: are credentials configured + is session valid?
+// Combined status: are credentials available + is session active?
 app.get('/auth/status', (req, res) => {
-  const credentialsConfigured = hasCredentials();
-  const session = req.session.kiteSession;
+  const activeSession = req.session?.kiteSession || null;
+  const creds = resolveCredentials(req);
 
-  if (session) {
-    const { accessToken, ...safe } = session;
-    res.json({ status: 'ok', credentialsConfigured, authenticated: true, data: safe });
+  if (activeSession) {
+    const { accessToken, apiKey, ...safe } = activeSession;
+    res.json({
+      status: 'ok',
+      credentialsConfigured: true,
+      authenticated: true,
+      data: safe,
+    });
   } else {
-    res.json({ status: 'ok', credentialsConfigured, authenticated: false, data: null });
+    res.json({
+      status: 'ok',
+      credentialsConfigured: creds !== null,
+      authenticated: false,
+      data: null,
+    });
   }
 });
 
-// Save credentials (called from login UI)
+// Save credentials — stored in session until OAuth completes
 app.post('/auth/credentials', (req, res) => {
   const { apiKey, apiSecret } = req.body;
+
   if (!apiKey || !apiSecret) {
-    return res.status(400).json({ status: 'error', message: 'apiKey and apiSecret are required' });
+    return res.status(400).json({
+      status: 'error',
+      message: 'apiKey and apiSecret are required',
+    });
   }
 
-  saveCredentials(apiKey.trim(), apiSecret.trim());
+  const trimmedKey = apiKey.trim();
+  const trimmedSecret = apiSecret.trim();
 
-  // Destroy any existing session since credentials changed
+  // Store temporarily in session (persisted to SQLite after successful OAuth)
+  req.session.pendingCredentials = {
+    apiKey: trimmedKey,
+    apiSecret: trimmedSecret,
+  };
+
+  // Destroy any active Kite session — new credentials mean fresh login
   if (req.session.kiteSession) {
-    req.session.destroy(() => {});
+    delete req.session.kiteSession;
   }
 
   res.json({ status: 'ok', message: 'Credentials saved' });
 });
 
 // Get Kite OAuth login URL
-app.get('/auth/login-url', (_req, res) => {
-  if (!hasCredentials()) {
-    return res.status(400).json({ status: 'error', message: 'Credentials not configured' });
+app.get('/auth/login-url', (req, res) => {
+  const creds = resolveCredentials(req);
+
+  if (!creds) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'No credentials available. Please save credentials first.',
+    });
   }
-  const url = `https://kite.zerodha.com/connect/login?v=3&api_key=${KITE_API_KEY}`;
+
+  // Ensure credentials are in session for the upcoming token exchange
+  if (!req.session.pendingCredentials) {
+    req.session.pendingCredentials = {
+      apiKey: creds.apiKey,
+      apiSecret: creds.apiSecret,
+    };
+  }
+
+  const url = `https://kite.zerodha.com/connect/login?v=3&api_key=${creds.apiKey}`;
   res.json({ url });
 });
 
 // Check session (backward compat with useKiteSession)
 app.get('/auth/me', (req, res) => {
-  if (req.session.kiteSession) {
-    const { accessToken, ...safe } = req.session.kiteSession;
+  if (req.session?.kiteSession) {
+    const { accessToken, apiKey, ...safe } = req.session.kiteSession;
     res.json({ status: 'ok', data: safe });
   } else {
     res.status(401).json({ status: 'error', message: 'Not authenticated' });
@@ -205,19 +246,31 @@ app.get('/auth/me', (req, res) => {
 
 // Exchange request_token for access_token
 app.post('/auth/token', async (req, res) => {
-  if (!hasCredentials()) {
-    return res.status(400).json({ status: 'error', message: 'Credentials not configured' });
+  const { request_token } = req.body;
+
+  if (!request_token) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'request_token is required',
+    });
   }
 
-  const { request_token } = req.body;
-  if (!request_token) {
-    return res.status(400).json({ status: 'error', message: 'request_token is required' });
+  // Resolve credentials: session pending → remember cookie → fail
+  const creds = resolveCredentials(req);
+
+  if (!creds) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'No credentials found. Please save your API key and secret first.',
+    });
   }
+
+  const { apiKey, apiSecret } = creds;
 
   try {
-    console.log('[Auth] Exchanging token. API Key:', KITE_API_KEY.slice(0, 4) + '...');
-    console.log('[Auth] Request token:', request_token.slice(0, 8) + '...');
-    const checksumInput = KITE_API_KEY + request_token + KITE_API_SECRET;
+    console.log(`${ts()} ${CYAN}AUTH${RESET} token exchange for ${apiKey.slice(0, 4)}...`);
+
+    const checksumInput = apiKey + request_token + apiSecret;
     const checksum = crypto.createHash('sha256').update(checksumInput).digest('hex');
 
     const response = await fetch('https://api.kite.trade/session/token', {
@@ -226,16 +279,12 @@ app.post('/auth/token', async (req, res) => {
         'X-Kite-Version': '3',
         'Content-Type': 'application/x-www-form-urlencoded',
       },
-      body: new URLSearchParams({
-        api_key: KITE_API_KEY,
-        request_token,
-        checksum,
-      }),
+      body: new URLSearchParams({ api_key: apiKey, request_token, checksum }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('[Auth] Token exchange failed:', response.status, errorText);
+      console.error(`${ts()} ${RED}AUTH${RESET} exchange failed: ${response.status} ${errorText}`);
       return res.status(response.status).json({
         status: 'error',
         message: `Kite token exchange failed (${response.status})`,
@@ -245,7 +294,12 @@ app.post('/auth/token', async (req, res) => {
     const result = await response.json();
     const data = result.data;
 
+    // 1. Persist credentials to SQLite (encrypted) with user identity
+    saveCredentials(apiKey, apiSecret, data.user_id, data.user_name);
+
+    // 2. Set active session with per-user api_key
     req.session.kiteSession = {
+      apiKey,
       accessToken: data.access_token,
       userId: data.user_id,
       userName: data.user_name,
@@ -256,26 +310,39 @@ app.post('/auth/token', async (req, res) => {
       avatarUrl: data.avatar_url || null,
     };
 
-    const { accessToken, ...safe } = req.session.kiteSession;
+    // 3. Clear pending credentials (now persisted in SQLite)
+    delete req.session.pendingCredentials;
+
+    // 4. Set persistent remember cookie (survives session expiry)
+    res.cookie(REMEMBER_COOKIE, apiKey, {
+      httpOnly: true,
+      secure: IS_PROD,
+      sameSite: 'lax',
+      maxAge: REMEMBER_MAX_AGE,
+      signed: true,
+    });
+
+    const { accessToken: _tok, apiKey: _key, ...safe } = req.session.kiteSession;
+    console.log(`${ts()} ${GREEN}AUTH${RESET} logged in: ${data.user_id} (${data.user_name})`);
     res.json({ status: 'ok', data: safe });
   } catch (err) {
-    console.error('[Auth] Token exchange error:', err);
+    console.error(`${ts()} ${RED}AUTH${RESET} exchange error:`, err);
     const errMsg = err instanceof Error ? err.message : String(err);
     res.status(500).json({ status: 'error', message: `Token exchange error: ${errMsg}` });
   }
 });
 
-// Logout
+// Logout — destroy session but keep remember cookie for easy re-login
 app.post('/auth/logout', async (req, res) => {
-  const kiteSession = req.session.kiteSession;
+  const kiteSession = req.session?.kiteSession;
 
-  if (kiteSession && hasCredentials()) {
+  if (kiteSession?.apiKey && kiteSession?.accessToken) {
     try {
       await fetch('https://api.kite.trade/session/token', {
         method: 'DELETE',
         headers: {
           'X-Kite-Version': '3',
-          'Authorization': `token ${KITE_API_KEY}:${kiteSession.accessToken}`,
+          'Authorization': `token ${kiteSession.apiKey}:${kiteSession.accessToken}`,
         },
       });
     } catch {
@@ -285,6 +352,8 @@ app.post('/auth/logout', async (req, res) => {
 
   req.session.destroy(() => {
     res.clearCookie('optiontrap_sid');
+    // Intentionally NOT clearing optiontrap_remember — user can re-login
+    // without re-entering credentials next time
     res.json({ status: 'ok' });
   });
 });
@@ -292,11 +361,8 @@ app.post('/auth/logout', async (req, res) => {
 // ---------- API Proxy ----------
 
 const requireAuth = (req, res, next) => {
-  if (!req.session?.kiteSession) {
+  if (!req.session?.kiteSession?.apiKey) {
     return res.status(401).json({ status: 'error', message: 'Not authenticated' });
-  }
-  if (!hasCredentials()) {
-    return res.status(503).json({ status: 'error', message: 'Server credentials not configured' });
   }
   next();
 };
@@ -308,8 +374,8 @@ app.use('/api', requireAuth, createProxyMiddleware({
   pathRewrite: { '^/api': '' },
   on: {
     proxyReq: (proxyReq, req) => {
-      const token = req.session.kiteSession.accessToken;
-      proxyReq.setHeader('Authorization', `token ${KITE_API_KEY}:${token}`);
+      const { apiKey, accessToken } = req.session.kiteSession;
+      proxyReq.setHeader('Authorization', `token ${apiKey}:${accessToken}`);
       proxyReq.setHeader('X-Kite-Version', '3');
     },
     proxyRes: (proxyRes, req) => {
@@ -330,6 +396,7 @@ server.on('upgrade', (request, socket, head) => {
     return;
   }
 
+  // Parse cookies from upgrade request
   const cookies = {};
   (request.headers.cookie || '').split(';').forEach((c) => {
     const [name, ...rest] = c.trim().split('=');
@@ -351,7 +418,7 @@ server.on('upgrade', (request, socket, head) => {
   }
 
   sessionStore.get(sid, (err, sessionData) => {
-    if (err || !sessionData || !sessionData.kiteSession) {
+    if (err || !sessionData?.kiteSession?.apiKey) {
       socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
       socket.destroy();
       return;
@@ -365,29 +432,27 @@ server.on('upgrade', (request, socket, head) => {
 });
 
 wss.on('connection', (clientWs) => {
-  if (!hasCredentials()) {
-    console.log(`${GREY}${new Date().toLocaleTimeString()}${RESET} ${RED}WS${RESET} rejected — no credentials`);
-    clientWs.close(4003, 'Server credentials not configured');
+  const { apiKey, accessToken, userId } = clientWs._kiteSession;
+
+  if (!apiKey || !accessToken) {
+    console.log(`${ts()} ${RED}WS${RESET} rejected — missing credentials`);
+    clientWs.close(4003, 'Missing credentials');
     return;
   }
 
-  const userId = clientWs._kiteSession?.userId || '-';
-  console.log(`${GREY}${new Date().toLocaleTimeString()}${RESET} ${GREEN}WS${RESET} connected ${GREY}[${userId}]${RESET}`);
+  console.log(`${ts()} ${GREEN}WS${RESET} connected ${GREY}[${userId}]${RESET}`);
 
-  const { accessToken } = clientWs._kiteSession;
-  const kiteWsUrl = `wss://ws.kite.trade?api_key=${KITE_API_KEY}&access_token=${accessToken}`;
-
+  const kiteWsUrl = `wss://ws.kite.trade?api_key=${apiKey}&access_token=${accessToken}`;
   const kiteWs = new WebSocket(kiteWsUrl);
   kiteWs.binaryType = 'arraybuffer';
 
-  // Buffer client messages that arrive before upstream Kite connection is ready
+  // Buffer client messages until upstream Kite connection is ready
   const pendingMessages = [];
   let kiteReady = false;
 
   kiteWs.on('open', () => {
-    console.log(`${GREY}${new Date().toLocaleTimeString()}${RESET} ${GREEN}WS${RESET} upstream Kite connected ${GREY}[${userId}]${RESET}`);
+    console.log(`${ts()} ${GREEN}WS${RESET} upstream Kite connected ${GREY}[${userId}]${RESET}`);
     kiteReady = true;
-    // Flush any buffered subscribe/mode commands
     for (const { data, isBinary } of pendingMessages) {
       kiteWs.send(data, { binary: isBinary });
     }
@@ -404,27 +469,26 @@ wss.on('connection', (clientWs) => {
     if (kiteReady && kiteWs.readyState === WebSocket.OPEN) {
       kiteWs.send(data, { binary: isBinary });
     } else {
-      // Kite not connected yet — buffer for later
       pendingMessages.push({ data, isBinary });
     }
   });
 
   kiteWs.on('close', () => {
-    console.log(`${GREY}${new Date().toLocaleTimeString()}${RESET} ${YELLOW}WS${RESET} upstream Kite disconnected ${GREY}[${userId}]${RESET}`);
+    console.log(`${ts()} ${YELLOW}WS${RESET} upstream disconnected ${GREY}[${userId}]${RESET}`);
     if (clientWs.readyState === WebSocket.OPEN) {
       clientWs.close(1000, 'Kite disconnected');
     }
   });
 
   kiteWs.on('error', (err) => {
-    console.log(`${GREY}${new Date().toLocaleTimeString()}${RESET} ${RED}WS${RESET} upstream error: ${err.message} ${GREY}[${userId}]${RESET}`);
+    console.log(`${ts()} ${RED}WS${RESET} upstream error: ${err.message} ${GREY}[${userId}]${RESET}`);
     if (clientWs.readyState === WebSocket.OPEN) {
       clientWs.close(1011, 'Upstream error');
     }
   });
 
   clientWs.on('close', () => {
-    console.log(`${GREY}${new Date().toLocaleTimeString()}${RESET} ${YELLOW}WS${RESET} client disconnected ${GREY}[${userId}]${RESET}`);
+    console.log(`${ts()} ${YELLOW}WS${RESET} client disconnected ${GREY}[${userId}]${RESET}`);
     if (kiteWs.readyState === WebSocket.OPEN) {
       kiteWs.close();
     }
@@ -451,12 +515,33 @@ if (IS_PROD) {
 
 // ---------- Start ----------
 
-server.listen(PORT, () => {
-  console.log(`[Server] OptionTrap backend running on port ${PORT}`);
-  console.log(`[Server] Mode: ${IS_PROD ? 'production' : 'development'}`);
-  if (hasCredentials()) {
-    console.log(`[Server] API Key: ${KITE_API_KEY.slice(0, 4)}...${KITE_API_KEY.slice(-4)}`);
-  } else {
-    console.log('[Server] Credentials not yet configured — visit the app to set up');
-  }
+async function start() {
+  // Initialise SQLite
+  await initDb();
+
+  // One-time migration from legacy single-user credentials.json
+  migrateFromJson(CREDENTIALS_JSON_PATH);
+
+  server.listen(PORT, () => {
+    console.log(`${ts()} ${GREEN}Server${RESET} OptionTrap running on port ${PORT}`);
+    console.log(`${ts()} ${GREEN}Server${RESET} Mode: ${IS_PROD ? 'production' : 'development'}`);
+    console.log(`${ts()} ${GREEN}Server${RESET} Multi-user: credentials stored in SQLite (encrypted)`);
+  });
+}
+
+// Graceful shutdown
+process.on('SIGINT', () => {
+  console.log(`\n${ts()} ${YELLOW}Server${RESET} shutting down...`);
+  closeDb();
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  closeDb();
+  process.exit(0);
+});
+
+start().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });
