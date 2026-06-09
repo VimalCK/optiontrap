@@ -45,6 +45,7 @@ import {
   closeDb,
   saveCredentials,
   getCredentialsByApiKey,
+  deleteCredentials,
   migrateFromJson,
 } from './db.js';
 import { SqliteSessionStore } from './sessionStore.js';
@@ -383,6 +384,38 @@ app.post('/auth/logout', async (req, res) => {
     res.clearCookie('optiontrap_sid');
     // Intentionally NOT clearing optiontrap_remember — user can re-login
     // without re-entering credentials next time
+    res.json({ status: 'ok' });
+  });
+});
+
+// Delete account — permanently remove credentials from SQLite, destroy session, clear cookies
+app.delete('/auth/account', (req, res) => {
+  const kiteSession = req.session?.kiteSession;
+  const apiKey = kiteSession?.apiKey || req.signedCookies?.[REMEMBER_COOKIE];
+
+  if (!apiKey) {
+    return res.status(400).json({ status: 'error', message: 'No account found to delete' });
+  }
+
+  // Invalidate Kite token if we have one
+  if (kiteSession?.accessToken) {
+    fetch('https://api.kite.trade/session/token', {
+      method: 'DELETE',
+      headers: {
+        'X-Kite-Version': '3',
+        'Authorization': `token ${kiteSession.apiKey}:${kiteSession.accessToken}`,
+      },
+    }).catch(() => {});
+  }
+
+  // Delete credentials from SQLite
+  deleteCredentials(apiKey);
+
+  // Destroy session + clear all cookies
+  req.session.destroy(() => {
+    res.clearCookie('optiontrap_sid');
+    res.clearCookie(REMEMBER_COOKIE);
+    console.log(`${ts()} ${RED}AUTH${RESET} account deleted: ${kiteSession?.userId || apiKey}`);
     res.json({ status: 'ok' });
   });
 });

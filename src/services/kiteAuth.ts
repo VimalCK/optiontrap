@@ -184,6 +184,20 @@ export async function logout(): Promise<void> {
 }
 
 /**
+ * Delete account — permanently removes credentials from server,
+ * destroys session, and clears all cookies.
+ */
+export async function deleteAccount(): Promise<void> {
+  await fetch('/auth/account', {
+    method: 'DELETE',
+    credentials: 'include',
+  });
+  cachedSession = null;
+  cachedCredentialsConfigured = false;
+  localStorage.removeItem(AVATAR_STORAGE_KEY);
+}
+
+/**
  * Get last known avatar URL (persisted across sessions for login page)
  */
 export function getLastAvatarUrl(): string | null {

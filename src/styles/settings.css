@@ -457,3 +457,68 @@
   font-weight: 600;
   color: var(--text-primary);
 }
+
+/* Danger Zone */
+.profile-danger-zone {
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.profile-danger-zone__content {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.profile-danger-zone__title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #ef4444;
+  margin-bottom: 4px;
+}
+
+.profile-danger-zone__desc {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  max-width: 420px;
+}
+
+.profile-danger-zone__confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.profile-danger-zone__warning {
+  font-size: 13px;
+  color: #ef4444;
+  font-weight: 500;
+  text-align: right;
+}
+
+.profile-danger-zone__actions {
+  display: flex;
+  gap: 8px;
+}
+
+@media (max-width: 600px) {
+  .profile-danger-zone__content {
+    flex-direction: column;
+  }
+
+  .profile-danger-zone__confirm {
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .profile-danger-zone__warning {
+    text-align: left;
+  }
+
+  .profile-danger-zone__actions {
+    justify-content: flex-end;
+  }
+}

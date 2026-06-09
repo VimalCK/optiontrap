@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ConnectionIcon, PowerIcon } from '@/components/icons/Icons';
-import { getSession, logout, KiteSession } from '@/services/kiteAuth';
+import { getSession, logout, deleteAccount, KiteSession } from '@/services/kiteAuth';
 import { fetchMargins, Margins } from '@/services/kiteApi';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import '@/styles/settings.css';
@@ -26,6 +26,8 @@ const Profile: React.FC = () => {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [margins, setMargins] = useState<Margins | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     const currentSession = getSession();
@@ -81,6 +83,18 @@ const Profile: React.FC = () => {
     setProfile(null);
     notifySessionChange();
     navigate('/login');
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true);
+    try {
+      await deleteAccount();
+      notifySessionChange();
+      navigate('/login');
+    } catch {
+      setDeleting(false);
+      setShowDeleteConfirm(false);
+    }
   };
 
   return (
@@ -185,6 +199,49 @@ const Profile: React.FC = () => {
                 </div>
               )}
             </>
+          )}
+        </div>
+      </div>
+
+      {/* Danger Zone */}
+      <div className="card profile-danger-zone" style={{ marginTop: 24 }}>
+        <div className="profile-danger-zone__content">
+          <div>
+            <h3 className="profile-danger-zone__title">Delete Account</h3>
+            <p className="profile-danger-zone__desc">
+              Permanently remove your API credentials from our server.
+              You can always re-register later with the same or different credentials.
+            </p>
+          </div>
+          {!showDeleteConfirm ? (
+            <button
+              className="btn btn--danger"
+              onClick={() => setShowDeleteConfirm(true)}
+            >
+              Delete Account
+            </button>
+          ) : (
+            <div className="profile-danger-zone__confirm">
+              <p className="profile-danger-zone__warning">
+                This will delete your stored credentials and log you out. Are you sure?
+              </p>
+              <div className="profile-danger-zone__actions">
+                <button
+                  className="btn btn--danger"
+                  onClick={handleDeleteAccount}
+                  disabled={deleting}
+                >
+                  {deleting ? 'Deleting...' : 'Yes, Delete'}
+                </button>
+                <button
+                  className="btn"
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={deleting}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
           )}
         </div>
       </div>
