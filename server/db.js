@@ -112,6 +112,29 @@ export async function initDb() {
     )
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS watchlists (
+      id         TEXT PRIMARY KEY,
+      user_id    TEXT NOT NULL,
+      name       TEXT NOT NULL,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS watchlist_items (
+      id               TEXT PRIMARY KEY,
+      watchlist_id     TEXT NOT NULL,
+      instrument_token INTEGER NOT NULL,
+      tradingsymbol    TEXT NOT NULL,
+      exchange         TEXT NOT NULL DEFAULT 'NSE',
+      sort_order       INTEGER NOT NULL DEFAULT 0,
+      added_at         TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (watchlist_id) REFERENCES watchlists(id) ON DELETE CASCADE
+    )
+  `);
+
   // Clean expired sessions on startup
   db.run('DELETE FROM sessions WHERE expires < ?', [Date.now()]);
 
@@ -307,6 +330,190 @@ export function cleanExpiredSessions() {
   const result = db.run('DELETE FROM sessions WHERE expires < ?', [Date.now()]);
   persist();
   return result;
+}
+
+// ---------------------------------------------------------------------------
+// Watchlist CRUD
+// ---------------------------------------------------------------------------
+
+/**
+ * Create a new watchlist for a user. Returns the created watchlist object.
+ */
+export function createWatchlist(userId, name) {
+  if (!db) throw new Error('Database not initialised');
+
+  const id = crypto.randomUUID();
+
+  // Next sort_order = max existing + 1
+  const maxResult = db.exec(
+    'SELECT COALESCE(MAX(sort_order), -1) FROM watchlists WHERE user_id = ?',
+    [userId],
+  );
+  const sortOrder = (maxResult[0]?.values[0]?.[0] ?? -1) + 1;
+
+  db.run(
+    'INSERT INTO watchlists (id, user_id, name, sort_order) VALUES (?, ?, ?, ?)',
+    [id, userId, name.trim(), sortOrder],
+  );
+
+  persist();
+  return { id, name: name.trim(), sortOrder, items: [] };
+}
+
+/**
+ * Get all watchlists (with items) for a user, ordered by sort_order.
+ */
+export function getWatchlists(userId) {
+  if (!db) throw new Error('Database not initialised');
+
+  const listStmt = db.prepare(
+    'SELECT id, name, sort_order FROM watchlists WHERE user_id = ? ORDER BY sort_order',
+  );
+  listStmt.bind([userId]);
+
+  const lists = [];
+  while (listStmt.step()) {
+    const row = listStmt.getAsObject();
+    lists.push({ id: row.id, name: row.name, sortOrder: row.sort_order, items: [] });
+  }
+  listStmt.free();
+
+  if (lists.length === 0) return lists;
+
+  // Batch-fetch all items for this user's watchlists
+  const listIds = lists.map((l) => l.id);
+  const placeholders = listIds.map(() => '?').join(',');
+  const itemStmt = db.prepare(
+    `SELECT id, watchlist_id, instrument_token, tradingsymbol, exchange, sort_order
+     FROM watchlist_items
+     WHERE watchlist_id IN (${placeholders})
+     ORDER BY sort_order`,
+  );
+  itemStmt.bind(listIds);
+
+  const itemsByList = new Map();
+  while (itemStmt.step()) {
+    const row = itemStmt.getAsObject();
+    const item = {
+      id: row.id,
+      instrumentToken: row.instrument_token,
+      tradingsymbol: row.tradingsymbol,
+      exchange: row.exchange,
+      sortOrder: row.sort_order,
+    };
+    if (!itemsByList.has(row.watchlist_id)) itemsByList.set(row.watchlist_id, []);
+    itemsByList.get(row.watchlist_id).push(item);
+  }
+  itemStmt.free();
+
+  for (const list of lists) {
+    list.items = itemsByList.get(list.id) || [];
+  }
+
+  return lists;
+}
+
+/**
+ * Rename a watchlist. Returns true if updated, false if not found or wrong owner.
+ */
+export function renameWatchlist(id, userId, name) {
+  if (!db) throw new Error('Database not initialised');
+
+  db.run(
+    'UPDATE watchlists SET name = ? WHERE id = ? AND user_id = ?',
+    [name.trim(), id, userId],
+  );
+
+  const changes = db.getRowsModified();
+  if (changes > 0) persist();
+  return changes > 0;
+}
+
+/**
+ * Delete a watchlist and all its items. Returns true if deleted.
+ */
+export function deleteWatchlist(id, userId) {
+  if (!db) throw new Error('Database not initialised');
+
+  // Verify ownership
+  const checkStmt = db.prepare('SELECT id FROM watchlists WHERE id = ? AND user_id = ?');
+  checkStmt.bind([id, userId]);
+  const exists = checkStmt.step();
+  checkStmt.free();
+
+  if (!exists) return false;
+
+  db.run('DELETE FROM watchlist_items WHERE watchlist_id = ?', [id]);
+  db.run('DELETE FROM watchlists WHERE id = ?', [id]);
+  persist();
+  return true;
+}
+
+/**
+ * Add an item to a watchlist. Enforces 100-item limit.
+ * Returns the created item or null if limit reached / duplicate.
+ */
+export function addWatchlistItem(watchlistId, userId, { instrumentToken, tradingsymbol, exchange }) {
+  if (!db) throw new Error('Database not initialised');
+
+  // Verify watchlist ownership
+  const ownerStmt = db.prepare('SELECT id FROM watchlists WHERE id = ? AND user_id = ?');
+  ownerStmt.bind([watchlistId, userId]);
+  const owned = ownerStmt.step();
+  ownerStmt.free();
+  if (!owned) return null;
+
+  // Check item count
+  const countResult = db.exec(
+    'SELECT COUNT(*) FROM watchlist_items WHERE watchlist_id = ?',
+    [watchlistId],
+  );
+  const count = countResult[0]?.values[0]?.[0] ?? 0;
+  if (count >= 100) return null;
+
+  // Check for duplicate instrument in same watchlist
+  const dupStmt = db.prepare(
+    'SELECT id FROM watchlist_items WHERE watchlist_id = ? AND instrument_token = ?',
+  );
+  dupStmt.bind([watchlistId, instrumentToken]);
+  const isDuplicate = dupStmt.step();
+  dupStmt.free();
+  if (isDuplicate) return null;
+
+  const id = crypto.randomUUID();
+  const sortOrder = count; // append at end
+
+  db.run(
+    `INSERT INTO watchlist_items (id, watchlist_id, instrument_token, tradingsymbol, exchange, sort_order)
+     VALUES (?, ?, ?, ?, ?, ?)`,
+    [id, watchlistId, instrumentToken, tradingsymbol, exchange || 'NSE', sortOrder],
+  );
+
+  persist();
+  return { id, instrumentToken, tradingsymbol, exchange: exchange || 'NSE', sortOrder };
+}
+
+/**
+ * Remove an item from a watchlist. Validates ownership via join.
+ */
+export function removeWatchlistItem(itemId, userId) {
+  if (!db) throw new Error('Database not initialised');
+
+  // Verify ownership through watchlist join
+  const checkStmt = db.prepare(
+    `SELECT wi.id FROM watchlist_items wi
+     JOIN watchlists w ON wi.watchlist_id = w.id
+     WHERE wi.id = ? AND w.user_id = ?`,
+  );
+  checkStmt.bind([itemId, userId]);
+  const exists = checkStmt.step();
+  checkStmt.free();
+
+  if (!exists) return false;
+
+  db.run('DELETE FROM watchlist_items WHERE id = ?', [itemId]);
+  persist();
+  return true;
 }
 
 // ---------------------------------------------------------------------------

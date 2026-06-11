@@ -47,6 +47,12 @@ import {
   getCredentialsByApiKey,
   deleteCredentials,
   migrateFromJson,
+  createWatchlist,
+  getWatchlists,
+  renameWatchlist,
+  deleteWatchlist,
+  addWatchlistItem,
+  removeWatchlistItem,
 } from './db.js';
 import { SqliteSessionStore } from './sessionStore.js';
 import { createRateLimiter } from './rateLimit.js';
@@ -420,7 +426,7 @@ app.delete('/auth/account', (req, res) => {
   });
 });
 
-// ---------- API Proxy ----------
+// ---------- Auth guard ----------
 
 const requireAuth = (req, res, next) => {
   if (!req.session?.kiteSession?.apiKey) {
@@ -428,6 +434,93 @@ const requireAuth = (req, res, next) => {
   }
   next();
 };
+
+// ---------- Watchlist Routes ----------
+
+app.get('/watchlist', requireAuth, (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const lists = getWatchlists(userId);
+  res.json({ status: 'ok', data: lists });
+});
+
+app.post('/watchlist', requireAuth, (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const { name } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ status: 'error', message: 'Watchlist name is required' });
+  }
+
+  const list = createWatchlist(userId, name);
+  res.json({ status: 'ok', data: list });
+});
+
+app.put('/watchlist/:id', requireAuth, (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const { name } = req.body;
+
+  if (!name || !name.trim()) {
+    return res.status(400).json({ status: 'error', message: 'Name is required' });
+  }
+
+  const updated = renameWatchlist(req.params.id, userId, name);
+  if (!updated) {
+    return res.status(404).json({ status: 'error', message: 'Watchlist not found' });
+  }
+
+  res.json({ status: 'ok' });
+});
+
+app.delete('/watchlist/:id', requireAuth, (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const deleted = deleteWatchlist(req.params.id, userId);
+
+  if (!deleted) {
+    return res.status(404).json({ status: 'error', message: 'Watchlist not found' });
+  }
+
+  res.json({ status: 'ok' });
+});
+
+app.post('/watchlist/:id/items', requireAuth, (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const { instrumentToken, tradingsymbol, exchange } = req.body;
+
+  if (!instrumentToken || !tradingsymbol) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'instrumentToken and tradingsymbol are required',
+    });
+  }
+
+  const item = addWatchlistItem(req.params.id, userId, {
+    instrumentToken: Number(instrumentToken),
+    tradingsymbol,
+    exchange: exchange || 'NSE',
+  });
+
+  if (!item) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'Limit reached (100), duplicate instrument, or watchlist not found',
+    });
+  }
+
+  res.json({ status: 'ok', data: item });
+});
+
+app.delete('/watchlist/:id/items/:itemId', requireAuth, (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const removed = removeWatchlistItem(req.params.itemId, userId);
+
+  if (!removed) {
+    return res.status(404).json({ status: 'error', message: 'Item not found' });
+  }
+
+  res.json({ status: 'ok' });
+});
+
+// ---------- API Proxy ----------
 
 app.use('/api', requireAuth, apiLimiter, createProxyMiddleware({
   target: 'https://api.kite.trade',
