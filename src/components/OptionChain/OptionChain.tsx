@@ -1,8 +1,4 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { TradesIcon } from '@/components/icons/Icons';
-import { getSession, clearSession } from '@/services/kiteAuth';
-import { notifySessionChange } from '@/hooks/useKiteSession';
 import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
 import BestStrikes from '@/components/TrapAnalyzer/BestStrikes';
 import AppSelect from '@/components/AppSelect/AppSelect';
@@ -88,7 +84,6 @@ import '@/styles/optionchain.css';
 const NIFTY_INDEX_TOKEN = 256265; // NSE:NIFTY 50
 
 const OptionChain: React.FC = () => {
-  const navigate = useNavigate();
   const [options, setOptions] = useState<OptionInstrument[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,8 +112,6 @@ const OptionChain: React.FC = () => {
   const subscribedTokensRef = useRef<number[]>([]);
   const snapshotIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const toastIdRef = useRef(0);
-
-  const [session, setSession] = useState(getSession);
 
   const showToast = useCallback((text: string, color: 'green' | 'red') => {
     const id = ++toastIdRef.current;
@@ -166,9 +159,7 @@ const OptionChain: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (session) {
-      loadOptions();
-    }
+    loadOptions();
   }, []);
 
   const handleRefresh = useCallback(async () => {
@@ -193,13 +184,7 @@ const OptionChain: React.FC = () => {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load option chain';
-      if (msg.toLowerCase().includes('session expired') || msg.toLowerCase().includes('login again')) {
-        clearSession();
-        notifySessionChange();
-        setSession(null);
-      } else {
-        setError(msg);
-      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -291,7 +276,7 @@ const OptionChain: React.FC = () => {
   // Fetch previous day's closing OI for visible strikes (one-time on load)
   const prevOiFetchedRef = useRef<string>('');
   useEffect(() => {
-    if (!session || visibleChain.length === 0) return;
+    if (visibleChain.length === 0) return;
 
     // Build a key to avoid re-fetching for the same set
     const tokens: number[] = [];
@@ -326,11 +311,11 @@ const OptionChain: React.FC = () => {
       abortController.abort();
       prevOiFetchedRef.current = '';
     };
-  }, [visibleChain, session]);
+  }, [visibleChain]);
 
   // Subscribe to singleton ticker when visible chain changes (only during market hours)
   useEffect(() => {
-    if (!session || visibleChain.length === 0 || !isMarketLive()) return;
+    if (visibleChain.length === 0 || !isMarketLive()) return;
 
     const tokens: number[] = [NIFTY_INDEX_TOKEN];
     visibleChain.forEach((row) => {
@@ -351,11 +336,11 @@ const OptionChain: React.FC = () => {
     const unsub = tickerSubscribe('option-chain', tokens, handleTicks);
     subscribedTokensRef.current = tokens;
     return unsub;
-  }, [visibleChain, session, handleTicks]);
+  }, [visibleChain, handleTicks]);
 
   // OI Snapshots: capture every 15 min during market hours, calculate velocity
   useEffect(() => {
-    if (!session || !isMarketLive()) return;
+    if (!isMarketLive()) return;
 
     // Load today's snapshots and clean old ones
     cleanOldSnapshots();
@@ -395,7 +380,7 @@ const OptionChain: React.FC = () => {
         snapshotIntervalRef.current = null;
       }
     };
-  }, [session, oiData.size > 0]);
+  }, [oiData.size > 0]);
 
   // Recalculate velocity when OI data changes significantly
   useEffect(() => {
@@ -409,7 +394,7 @@ const OptionChain: React.FC = () => {
   // then fetch all option strikes around the real ATM.
   const quoteFetchedRef = useRef<string>('');
   useEffect(() => {
-    if (!session || chain.length === 0 || isMarketLive()) return;
+    if (chain.length === 0 || isMarketLive()) return;
 
     // Build a key from the visible strikes to detect when ATM shifts
     const atmIndex = chain.findIndex((r) => r.strike === atmStrike);
@@ -493,7 +478,7 @@ const OptionChain: React.FC = () => {
         }
       });
     });
-  }, [chain, atmStrike, session, selectedExpiry, refreshKey]);
+  }, [chain, atmStrike, selectedExpiry, refreshKey]);
 
   // Helper to get live price or fallback to CSV price
   const getPrice = (instrument: OptionInstrument | null): number | null => {
@@ -525,19 +510,6 @@ const OptionChain: React.FC = () => {
     return { pct, color };
   };
 
-
-  if (!session) {
-    return (
-      <div className="card">
-        <div className="card__icon"><TradesIcon /></div>
-        <h3 className="card__title">Not Connected</h3>
-        <p className="card__description">Login to Kite Connect from the Profile page to view the option chain.</p>
-        <button className="btn btn--primary" onClick={() => navigate('/profile')} style={{ marginTop: 12 }}>
-          Login back
-        </button>
-      </div>
-    );
-  }
 
   return (
     <div>

@@ -4,11 +4,8 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { HoldingsIcon } from '@/components/icons/Icons';
 import { fetchHoldings, Holding } from '@/services/kiteApi';
-import { getSession, clearSession } from '@/services/kiteAuth';
-import { notifySessionChange } from '@/hooks/useKiteSession';
 import { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe } from '@/services/tickerSingleton';
 import { getMarketStatus, MarketStatus } from '@/utils/marketStatus';
@@ -28,7 +25,6 @@ interface AllocationItem {
 }
 
 const HoldingsView: React.FC = () => {
-  const navigate = useNavigate();
   const [holdings, setHoldings] = useState<Holding[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +34,6 @@ const HoldingsView: React.FC = () => {
   const [privacyMode, setPrivacyMode] = useState(() =>
     localStorage.getItem('optiontrap_privacy_mode') === 'true'
   );
-  const [session, setSession] = useState(getSession);
 
   const handleTicks = useCallback((ticks: Tick[]) => {
     setHoldings((prev) => {
@@ -59,16 +54,16 @@ const HoldingsView: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (session) loadHoldings();
+    loadHoldings();
     const statusInterval = setInterval(() => setMarketStatus(getMarketStatus()), 30000);
     return () => { clearInterval(statusInterval); };
   }, []);
 
   useEffect(() => {
-    if (holdings.length === 0 || !session || marketStatus !== 'live') return;
+    if (holdings.length === 0 || marketStatus !== 'live') return;
     const tokens = holdings.map((h) => h.instrument_token);
     return tickerSubscribe('holdings', tokens, handleTicks);
-  }, [holdings, session, marketStatus, handleTicks]);
+  }, [holdings, marketStatus, handleTicks]);
 
   const loadHoldings = async () => {
     setLoading(true);
@@ -78,13 +73,7 @@ const HoldingsView: React.FC = () => {
       setHoldings(data);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load holdings';
-      if (msg.toLowerCase().includes('session expired') || msg.toLowerCase().includes('login again')) {
-        clearSession();
-        notifySessionChange();
-        setSession(null);
-      } else {
-        setError(msg);
-      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -117,17 +106,6 @@ const HoldingsView: React.FC = () => {
       };
     })
     .sort((a, b) => b.currentValue - a.currentValue);
-
-  if (!session) {
-    return (
-      <div className="card">
-        <div className="card__icon"><HoldingsIcon /></div>
-        <h3 className="card__title">Not Connected</h3>
-        <p className="card__description">Login to Kite Connect from the Profile page to view your holdings.</p>
-        <button className="btn btn--primary" onClick={() => navigate('/profile')} style={{ marginTop: 12 }}>Login back</button>
-      </div>
-    );
-  }
 
   return (
     <div>

@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { getPositions, exitPosition, Position } from '@/services/positions';
-import { getSession, clearSession } from '@/services/kiteAuth';
-import { notifySessionChange } from '@/hooks/useKiteSession';
+
 import { fetchQuotes, fetchPositions, KitePosition, KitePositions } from '@/services/kiteApi';
 import { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe } from '@/services/tickerSingleton';
@@ -32,8 +31,7 @@ const PaperPositions: React.FC = () => {
   useEffect(() => { loadPositions(); }, [loadPositions]);
 
   useEffect(() => {
-    const session = getSession();
-    if (!session || positions.length === 0) return;
+    if (positions.length === 0) return;
 
     const tokens = positions.map((p) => p.instrumentToken);
 
@@ -165,7 +163,6 @@ const LivePositions: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<LiveView>('net');
-  const [, setSession] = useState(getSession);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -175,13 +172,7 @@ const LivePositions: React.FC = () => {
       setPositions(data);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load positions';
-      if (msg.toLowerCase().includes('session expired') || msg.toLowerCase().includes('login again')) {
-        clearSession();
-        notifySessionChange();
-        setSession(null);
-      } else {
-        setError(msg);
-      }
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -191,8 +182,7 @@ const LivePositions: React.FC = () => {
 
   // Subscribe live prices via WebSocket for open positions
   useEffect(() => {
-    const session = getSession();
-    if (!session || !positions || !isMarketLive()) return;
+    if (!positions || !isMarketLive()) return;
 
     const allPos = [...positions.net, ...positions.day];
     const tokens = [...new Set(allPos.map((p) => p.instrument_token))];
