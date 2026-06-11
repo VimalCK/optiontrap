@@ -57,6 +57,7 @@ import {
 } from './db.js';
 import { SqliteSessionStore } from './sessionStore.js';
 import { createRateLimiter } from './rateLimit.js';
+import { getOrFetchInstruments } from './instruments.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -530,6 +531,19 @@ app.delete('/watchlist/:id/items/:itemId', requireAuth, (req, res) => {
   }
 
   res.json({ status: 'ok' });
+});
+
+// ---------- Instruments (shared cache) ----------
+
+app.get('/instruments', requireAuth, async (req, res) => {
+  try {
+    const { apiKey, accessToken } = req.session.kiteSession;
+    const instruments = await getOrFetchInstruments(apiKey, accessToken);
+    res.json({ status: 'ok', data: instruments });
+  } catch (err) {
+    console.error('[Instruments] Error:', err.message);
+    res.status(502).json({ status: 'error', message: err.message });
+  }
 });
 
 // ---------- API Proxy ----------

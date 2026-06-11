@@ -135,6 +135,23 @@ export async function initDb() {
     )
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS instruments (
+      instrument_token INTEGER PRIMARY KEY,
+      exchange_token   INTEGER NOT NULL,
+      tradingsymbol    TEXT NOT NULL,
+      name             TEXT NOT NULL,
+      exchange         TEXT NOT NULL DEFAULT 'NSE'
+    )
+  `);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS instruments_meta (
+      key   TEXT PRIMARY KEY,
+      value TEXT NOT NULL
+    )
+  `);
+
   // Clean expired sessions on startup
   db.run('DELETE FROM sessions WHERE expires < ?', [Date.now()]);
 
@@ -541,6 +558,73 @@ export function removeWatchlistItem(itemId, userId) {
   db.run('DELETE FROM watchlist_items WHERE id = ?', [itemId]);
   persist();
   return true;
+}
+
+// ---------------------------------------------------------------------------
+// Instruments (shared across all users)
+// ---------------------------------------------------------------------------
+
+/**
+ * Get the date (IST YYYY-MM-DD) when instruments were last fetched.
+ * Returns null if never fetched.
+ */
+export function getInstrumentsDate() {
+  if (!db) throw new Error('Database not initialised');
+
+  const stmt = db.prepare("SELECT value FROM instruments_meta WHERE key = 'last_fetched_date'");
+  const hasRow = stmt.step();
+  const date = hasRow ? stmt.get()[0] : null;
+  stmt.free();
+  return date;
+}
+
+/**
+ * Get all cached instruments. Returns an empty array if none cached.
+ */
+export function getInstruments() {
+  if (!db) throw new Error('Database not initialised');
+
+  const results = db.exec('SELECT instrument_token, exchange_token, tradingsymbol, name, exchange FROM instruments');
+  if (!results.length) return [];
+
+  return results[0].values.map(([instrumentToken, exchangeToken, tradingsymbol, name, exchange]) => ({
+    instrumentToken,
+    exchangeToken,
+    tradingsymbol,
+    name,
+    exchange,
+  }));
+}
+
+/**
+ * Replace all instruments with a fresh set and update the fetch date.
+ * Runs inside a transaction for atomicity.
+ */
+export function saveInstruments(instruments, dateIST) {
+  if (!db) throw new Error('Database not initialised');
+
+  db.run('BEGIN TRANSACTION');
+  try {
+    db.run('DELETE FROM instruments');
+    db.run("DELETE FROM instruments_meta WHERE key = 'last_fetched_date'");
+
+    const stmt = db.prepare(
+      'INSERT INTO instruments (instrument_token, exchange_token, tradingsymbol, name, exchange) VALUES (?, ?, ?, ?, ?)',
+    );
+
+    for (const inst of instruments) {
+      stmt.run([inst.instrumentToken, inst.exchangeToken, inst.tradingsymbol, inst.name, inst.exchange]);
+    }
+    stmt.free();
+
+    db.run("INSERT INTO instruments_meta (key, value) VALUES ('last_fetched_date', ?)", [dateIST]);
+    db.run('COMMIT');
+  } catch (err) {
+    db.run('ROLLBACK');
+    throw err;
+  }
+
+  persist();
 }
 
 // ---------------------------------------------------------------------------
