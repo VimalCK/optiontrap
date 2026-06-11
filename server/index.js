@@ -547,7 +547,10 @@ app.use('/api', requireAuth, apiLimiter, createProxyMiddleware({
     },
     proxyRes: (proxyRes, req) => {
       if (proxyRes.statusCode === 403) {
-        req.session.destroy(() => {});
+        // Clear expired Kite session but keep the session itself intact
+        // so the remember cookie + pending credentials still work
+        delete req.session.kiteSession;
+        req.session.save(() => {});
       }
     },
   },
