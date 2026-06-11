@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import {
   fetchWatchlists,
+  fetchWatchlistItems,
   createWatchlist,
   renameWatchlist as renameWatchlistApi,
   deleteWatchlist as deleteWatchlistApi,
   addWatchlistItem,
   removeWatchlistItem,
-  Watchlist as WatchlistType,
+  WatchlistMeta,
   WatchlistItem,
 } from '@/services/watchlist';
 import { loadInstruments, searchInstruments, Instrument } from '@/services/instruments';
@@ -23,9 +24,15 @@ interface LivePrice {
 }
 
 const Watchlist: React.FC = () => {
-  const [lists, setLists] = useState<WatchlistType[]>([]);
-  const [activeListId, setActiveListId] = useState<string | null>(null);
+  // Tab metadata (no items)
+  const [tabs, setTabs] = useState<WatchlistMeta[]>([]);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Active tab's items (loaded on demand)
+  const [items, setItems] = useState<WatchlistItem[]>([]);
+  const [itemsLoading, setItemsLoading] = useState(false);
+  const loadedTabRef = useRef<string | null>(null);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -49,22 +56,38 @@ const Watchlist: React.FC = () => {
   // Live prices
   const [livePrices, setLivePrices] = useState<Map<number, LivePrice>>(new Map());
 
-  // ── Active list derived from state ──
-  const activeList = useMemo(
-    () => lists.find((l) => l.id === activeListId) ?? null,
-    [lists, activeListId],
+  // Active tab metadata
+  const activeTab = useMemo(
+    () => tabs.find((t) => t.id === activeTabId) ?? null,
+    [tabs, activeTabId],
   );
 
-  // ── Load watchlists on mount ──
+  // ── Load tab metadata on mount ──
   useEffect(() => {
     fetchWatchlists()
       .then((data) => {
-        setLists(data);
-        if (data.length > 0) setActiveListId(data[0].id);
+        setTabs(data);
+        if (data.length > 0) setActiveTabId(data[0].id);
       })
       .catch((err) => console.error('[Watchlist] Load failed:', err))
       .finally(() => setLoading(false));
   }, []);
+
+  // ── Load items when active tab changes ──
+  useEffect(() => {
+    if (!activeTabId || loadedTabRef.current === activeTabId) return;
+
+    setItemsLoading(true);
+    loadedTabRef.current = activeTabId;
+
+    fetchWatchlistItems(activeTabId)
+      .then((data) => setItems(data.items))
+      .catch((err) => {
+        console.error('[Watchlist] Load items failed:', err);
+        setItems([]);
+      })
+      .finally(() => setItemsLoading(false));
+  }, [activeTabId]);
 
   // ── Load instruments for search ──
   useEffect(() => {
@@ -94,25 +117,24 @@ const Watchlist: React.FC = () => {
     });
   }, []);
 
-  // Subscribe to ticks for all items across all lists
-  const allTokens = useMemo(() => {
-    const tokens = new Set<number>();
-    lists.forEach((l) => l.items.forEach((item) => tokens.add(item.instrumentToken)));
-    return Array.from(tokens);
-  }, [lists]);
+  // Subscribe to ticks for the active tab's items only
+  const activeTokens = useMemo(
+    () => items.map((item) => item.instrumentToken),
+    [items],
+  );
 
   useEffect(() => {
-    if (allTokens.length === 0) return;
-    const unsub = tickerSubscribe('watchlist', allTokens, handleTicks);
+    if (activeTokens.length === 0) return;
+    const unsub = tickerSubscribe('watchlist', activeTokens, handleTicks);
     return unsub;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (allTokens.length > 0) {
-      tickerUpdateTokens('watchlist', allTokens);
+    if (activeTokens.length > 0) {
+      tickerUpdateTokens('watchlist', activeTokens);
     }
-  }, [allTokens]);
+  }, [activeTokens]);
 
   // ── Search logic ──
   useEffect(() => {
@@ -123,14 +145,14 @@ const Watchlist: React.FC = () => {
     }
     const results = searchInstruments(instruments, searchQuery);
 
-    // Filter out instruments already in the active list
-    const existingTokens = new Set(activeList?.items.map((i) => i.instrumentToken) ?? []);
+    // Filter out instruments already in the active tab
+    const existingTokens = new Set(items.map((i) => i.instrumentToken));
     const filtered = results.filter((r) => !existingTokens.has(r.instrumentToken));
 
     setSearchResults(filtered);
     setShowDropdown(filtered.length > 0);
     setHighlightIdx(-1);
-  }, [searchQuery, instruments, activeList]);
+  }, [searchQuery, instruments, items]);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -160,14 +182,23 @@ const Watchlist: React.FC = () => {
 
   // ── Handlers ──
 
+  const handleTabSwitch = (id: string) => {
+    if (id === activeTabId) return;
+    setActiveTabId(id);
+    loadedTabRef.current = null; // force reload
+    setLivePrices(new Map()); // clear stale prices from previous tab
+    setSearchQuery('');
+    setShowDropdown(false);
+  };
+
   const handleCreateList = async () => {
     const name = newListName.trim();
     if (!name) return;
 
     try {
-      const list = await createWatchlist(name);
-      setLists((prev) => [...prev, list]);
-      setActiveListId(list.id);
+      const meta = await createWatchlist(name);
+      setTabs((prev) => [...prev, meta]);
+      handleTabSwitch(meta.id);
       setNewListName('');
       setShowNewInput(false);
     } catch (err) {
@@ -183,8 +214,8 @@ const Watchlist: React.FC = () => {
 
     try {
       await renameWatchlistApi(renamingId, renameValue.trim());
-      setLists((prev) =>
-        prev.map((l) => (l.id === renamingId ? { ...l, name: renameValue.trim() } : l)),
+      setTabs((prev) =>
+        prev.map((t) => (t.id === renamingId ? { ...t, name: renameValue.trim() } : t)),
       );
     } catch (err) {
       console.error('[Watchlist] Rename failed:', err);
@@ -195,10 +226,13 @@ const Watchlist: React.FC = () => {
   const handleDeleteList = async (id: string) => {
     try {
       await deleteWatchlistApi(id);
-      setLists((prev) => {
-        const updated = prev.filter((l) => l.id !== id);
-        if (activeListId === id) {
-          setActiveListId(updated.length > 0 ? updated[0].id : null);
+      setTabs((prev) => {
+        const updated = prev.filter((t) => t.id !== id);
+        if (activeTabId === id) {
+          const nextId = updated.length > 0 ? updated[0].id : null;
+          setActiveTabId(nextId);
+          loadedTabRef.current = null;
+          if (!nextId) setItems([]);
         }
         return updated;
       });
@@ -208,18 +242,20 @@ const Watchlist: React.FC = () => {
   };
 
   const handleAddItem = async (instrument: Instrument) => {
-    if (!activeListId) return;
+    if (!activeTabId) return;
 
     try {
-      const item = await addWatchlistItem(activeListId, {
+      const item = await addWatchlistItem(activeTabId, {
         instrumentToken: instrument.instrumentToken,
         tradingsymbol: instrument.tradingsymbol,
         exchange: instrument.exchange,
       });
 
-      setLists((prev) =>
-        prev.map((l) =>
-          l.id === activeListId ? { ...l, items: [...l.items, item] } : l,
+      setItems((prev) => [...prev, item]);
+      // Update tab's item count
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === activeTabId ? { ...t, itemCount: t.itemCount + 1 } : t,
         ),
       );
       setSearchQuery('');
@@ -230,15 +266,15 @@ const Watchlist: React.FC = () => {
   };
 
   const handleRemoveItem = async (item: WatchlistItem) => {
-    if (!activeListId) return;
+    if (!activeTabId) return;
 
     try {
-      await removeWatchlistItem(activeListId, item.id);
-      setLists((prev) =>
-        prev.map((l) =>
-          l.id === activeListId
-            ? { ...l, items: l.items.filter((i) => i.id !== item.id) }
-            : l,
+      await removeWatchlistItem(activeTabId, item.id);
+      setItems((prev) => prev.filter((i) => i.id !== item.id));
+      // Update tab's item count
+      setTabs((prev) =>
+        prev.map((t) =>
+          t.id === activeTabId ? { ...t, itemCount: Math.max(0, t.itemCount - 1) } : t,
         ),
       );
     } catch (err) {
@@ -289,12 +325,12 @@ const Watchlist: React.FC = () => {
     <div className="wl">
       {/* ── Tab bar ── */}
       <div className="wl-tabs">
-        {lists.map((list) => (
+        {tabs.map((tab) => (
           <div
-            key={list.id}
-            className={`wl-tab ${activeListId === list.id ? 'wl-tab--active' : ''}`}
+            key={tab.id}
+            className={`wl-tab ${activeTabId === tab.id ? 'wl-tab--active' : ''}`}
           >
-            {renamingId === list.id ? (
+            {renamingId === tab.id ? (
               <input
                 ref={renameInputRef}
                 className="wl-tab__rename-input"
@@ -309,21 +345,21 @@ const Watchlist: React.FC = () => {
             ) : (
               <button
                 className="wl-tab__label"
-                onClick={() => setActiveListId(list.id)}
+                onClick={() => handleTabSwitch(tab.id)}
                 onDoubleClick={() => {
-                  setRenamingId(list.id);
-                  setRenameValue(list.name);
+                  setRenamingId(tab.id);
+                  setRenameValue(tab.name);
                 }}
               >
-                {list.name}
-                <span className="wl-tab__count">{list.items.length}</span>
+                {tab.name}
+                <span className="wl-tab__count">{tab.itemCount}</span>
               </button>
             )}
             <button
               className="wl-tab__delete"
               onClick={(e) => {
                 e.stopPropagation();
-                handleDeleteList(list.id);
+                handleDeleteList(tab.id);
               }}
               title="Delete watchlist"
             >
@@ -362,7 +398,7 @@ const Watchlist: React.FC = () => {
       </div>
 
       {/* ── Content ── */}
-      {activeList ? (
+      {activeTab ? (
         <div className="wl-content">
           {/* Search bar */}
           <div className="wl-search" ref={searchRef}>
@@ -378,7 +414,7 @@ const Watchlist: React.FC = () => {
               }}
             />
             <span className="wl-search__count">
-              {activeList.items.length}/100
+              {activeTab.itemCount}/100
             </span>
 
             {showDropdown && (
@@ -399,8 +435,12 @@ const Watchlist: React.FC = () => {
             )}
           </div>
 
-          {/* Instrument table */}
-          {activeList.items.length > 0 ? (
+          {/* Items loading indicator */}
+          {itemsLoading ? (
+            <div className="wl-loading">
+              <div className="wl-loading__spinner" />
+            </div>
+          ) : items.length > 0 ? (
             <div className="wl-table-wrap">
               <table className="wl-table">
                 <thead>
@@ -415,7 +455,7 @@ const Watchlist: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {activeList.items.map((item) => {
+                  {items.map((item) => {
                     const price = livePrices.get(item.instrumentToken);
                     const change = price ? getChange(price) : null;
                     const changeColor = change

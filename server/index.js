@@ -49,6 +49,7 @@ import {
   migrateFromJson,
   createWatchlist,
   getWatchlists,
+  getWatchlistItems,
   renameWatchlist,
   deleteWatchlist,
   addWatchlistItem,
@@ -441,6 +442,17 @@ app.get('/watchlist', requireAuth, (req, res) => {
   const userId = req.session.kiteSession.userId;
   const lists = getWatchlists(userId);
   res.json({ status: 'ok', data: lists });
+});
+
+app.get('/watchlist/:id', requireAuth, (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const list = getWatchlistItems(req.params.id, userId);
+
+  if (!list) {
+    return res.status(404).json({ status: 'error', message: 'Watchlist not found' });
+  }
+
+  res.json({ status: 'ok', data: list });
 });
 
 app.post('/watchlist', requireAuth, (req, res) => {

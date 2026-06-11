@@ -357,60 +357,87 @@ export function createWatchlist(userId, name) {
   );
 
   persist();
-  return { id, name: name.trim(), sortOrder, items: [] };
+  return { id, name: name.trim(), sortOrder, itemCount: 0 };
 }
 
 /**
- * Get all watchlists (with items) for a user, ordered by sort_order.
+ * Get all watchlists for a user (metadata only — no items).
+ * Returns id, name, sortOrder, and itemCount for tab rendering.
  */
 export function getWatchlists(userId) {
   if (!db) throw new Error('Database not initialised');
 
-  const listStmt = db.prepare(
-    'SELECT id, name, sort_order FROM watchlists WHERE user_id = ? ORDER BY sort_order',
+  const stmt = db.prepare(
+    `SELECT w.id, w.name, w.sort_order,
+            (SELECT COUNT(*) FROM watchlist_items wi WHERE wi.watchlist_id = w.id) AS item_count
+     FROM watchlists w
+     WHERE w.user_id = ?
+     ORDER BY w.sort_order`,
   );
-  listStmt.bind([userId]);
+  stmt.bind([userId]);
 
   const lists = [];
-  while (listStmt.step()) {
-    const row = listStmt.getAsObject();
-    lists.push({ id: row.id, name: row.name, sortOrder: row.sort_order, items: [] });
+  while (stmt.step()) {
+    const row = stmt.getAsObject();
+    lists.push({
+      id: row.id,
+      name: row.name,
+      sortOrder: row.sort_order,
+      itemCount: row.item_count,
+    });
   }
+  stmt.free();
+
+  return lists;
+}
+
+/**
+ * Get a single watchlist with all its items. Validates ownership.
+ * Returns null if not found or wrong owner.
+ */
+export function getWatchlistItems(id, userId) {
+  if (!db) throw new Error('Database not initialised');
+
+  // Verify ownership + get metadata
+  const listStmt = db.prepare('SELECT id, name, sort_order FROM watchlists WHERE id = ? AND user_id = ?');
+  listStmt.bind([id, userId]);
+
+  if (!listStmt.step()) {
+    listStmt.free();
+    return null;
+  }
+
+  const listRow = listStmt.getAsObject();
   listStmt.free();
 
-  if (lists.length === 0) return lists;
-
-  // Batch-fetch all items for this user's watchlists
-  const listIds = lists.map((l) => l.id);
-  const placeholders = listIds.map(() => '?').join(',');
+  // Fetch items
   const itemStmt = db.prepare(
-    `SELECT id, watchlist_id, instrument_token, tradingsymbol, exchange, sort_order
+    `SELECT id, instrument_token, tradingsymbol, exchange, sort_order
      FROM watchlist_items
-     WHERE watchlist_id IN (${placeholders})
+     WHERE watchlist_id = ?
      ORDER BY sort_order`,
   );
-  itemStmt.bind(listIds);
+  itemStmt.bind([id]);
 
-  const itemsByList = new Map();
+  const items = [];
   while (itemStmt.step()) {
     const row = itemStmt.getAsObject();
-    const item = {
+    items.push({
       id: row.id,
       instrumentToken: row.instrument_token,
       tradingsymbol: row.tradingsymbol,
       exchange: row.exchange,
       sortOrder: row.sort_order,
-    };
-    if (!itemsByList.has(row.watchlist_id)) itemsByList.set(row.watchlist_id, []);
-    itemsByList.get(row.watchlist_id).push(item);
+    });
   }
   itemStmt.free();
 
-  for (const list of lists) {
-    list.items = itemsByList.get(list.id) || [];
-  }
-
-  return lists;
+  return {
+    id: listRow.id,
+    name: listRow.name,
+    sortOrder: listRow.sort_order,
+    items,
+  };
 }
 
 /**
