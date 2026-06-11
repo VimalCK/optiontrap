@@ -320,7 +320,7 @@
 .wl-cell--down { color: #ef4444; }
 
 .wl-remove-btn {
-  display: none;
+  display: inline-flex;
   width: 22px;
   height: 22px;
   font-size: 16px;
@@ -332,9 +332,10 @@
   cursor: pointer;
   align-items: center;
   justify-content: center;
+  opacity: 0;
 }
 
-.wl-table__row:hover .wl-remove-btn { display: inline-flex; }
+.wl-table__row:hover .wl-remove-btn { opacity: 1; }
 .wl-remove-btn:hover { color: #ef4444; border-color: #ef4444; }
 
 /* ── Empty state ── */

@@ -12,7 +12,7 @@ import {
 } from '@/services/watchlist';
 import { loadInstruments, searchInstruments, Instrument } from '@/services/instruments';
 import { Tick } from '@/services/kiteTicker';
-import { tickerSubscribe, tickerUpdateTokens } from '@/services/tickerSingleton';
+import { tickerSubscribe } from '@/services/tickerSingleton';
 import '@/styles/watchlist.css';
 
 // ── Price data stored per instrument token ──
@@ -127,14 +127,7 @@ const Watchlist: React.FC = () => {
     if (activeTokens.length === 0) return;
     const unsub = tickerSubscribe('watchlist', activeTokens, handleTicks);
     return unsub;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (activeTokens.length > 0) {
-      tickerUpdateTokens('watchlist', activeTokens);
-    }
-  }, [activeTokens]);
+  }, [activeTokens, handleTicks]);
 
   // ── Search logic ──
   useEffect(() => {
@@ -472,7 +465,7 @@ const Watchlist: React.FC = () => {
                           <span className="wl-symbol">{item.tradingsymbol}</span>
                           <span className="wl-exchange">{item.exchange}</span>
                         </td>
-                        <td className="wl-table__td wl-table__td--num">
+                        <td className={`wl-table__td wl-table__td--num ${changeColor}`}>
                           {price ? formatPrice(price.ltp) : '—'}
                         </td>
                         <td className={`wl-table__td wl-table__td--num ${changeColor}`}>
