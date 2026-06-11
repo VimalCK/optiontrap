@@ -1,16 +1,13 @@
 /**
- * Instruments Service — shared NSE equity instrument cache with fetch mutex.
+ * Instruments Service — shared instrument cache with fetch mutex.
  *
- * Ensures only ONE Kite API call happens per day, regardless of how many
+ * Fetches two datasets from Kite:
+ *   1. NSE instruments (filtered to EQ — stocks only)
+ *   2. NFO instruments (filtered to NIFTY CE/PE/FUT only)
+ *
+ * Ensures only ONE fetch cycle happens per day, regardless of how many
  * concurrent users request instruments simultaneously. The first request
  * triggers the fetch; all others await the same in-flight promise.
- *
- * Flow:
- *   1. Check SQLite for today's instruments (IST date match)
- *   2. If cached → return immediately
- *   3. If not cached → acquire mutex (in-flight promise) → fetch from Kite
- *   4. Parse CSV → save to SQLite → release mutex → return
- *   5. Concurrent callers that arrive while fetch is in-flight await step 3's promise
  */
 
 import { getInstrumentsDate, getInstruments, saveInstruments } from './db.js';
@@ -34,22 +31,28 @@ function getTodayIST() {
   return `${y}-${m}-${d}`;
 }
 
+// ---------------------------------------------------------------------------
+// CSV Parsing
+// ---------------------------------------------------------------------------
+
 /**
- * Parse Kite's instruments CSV into equity-only instrument objects.
+ * Parse a Kite instruments CSV and return matching rows based on a filter.
+ *
+ * @param {string} csv - Raw CSV text
+ * @param {(cols: string[], indices: Record<string, number>) => object | null} rowFilter
+ *   Called for each data row. Return an instrument object to include it, or null to skip.
  */
-function parseCSV(csv) {
+function parseCSV(csv, rowFilter) {
   const lines = csv.trim().split('\n');
   if (lines.length < 2) return [];
 
   const headers = lines[0].split(',').map((h) => h.trim());
-  const tokenIdx = headers.indexOf('instrument_token');
-  const exchangeTokenIdx = headers.indexOf('exchange_token');
-  const symbolIdx = headers.indexOf('tradingsymbol');
-  const nameIdx = headers.indexOf('name');
-  const exchangeIdx = headers.indexOf('exchange');
-  const typeIdx = headers.indexOf('instrument_type');
+  const indices = {};
+  for (let i = 0; i < headers.length; i++) {
+    indices[headers[i]] = i;
+  }
 
-  if (tokenIdx < 0 || symbolIdx < 0 || typeIdx < 0) return [];
+  if (!('instrument_token' in indices) || !('tradingsymbol' in indices)) return [];
 
   const instruments = [];
 
@@ -57,50 +60,107 @@ function parseCSV(csv) {
     const cols = lines[i].split(',');
     if (cols.length < headers.length) continue;
 
-    const type = cols[typeIdx]?.trim();
-    if (type !== 'EQ') continue;
-
-    const tradingsymbol = cols[symbolIdx]?.trim();
-    if (!tradingsymbol) continue;
-
-    instruments.push({
-      instrumentToken: parseInt(cols[tokenIdx], 10),
-      exchangeToken: parseInt(cols[exchangeTokenIdx], 10) || 0,
-      tradingsymbol,
-      name: (cols[nameIdx]?.trim()) || tradingsymbol,
-      exchange: (cols[exchangeIdx]?.trim()) || 'NSE',
-    });
+    const result = rowFilter(cols, indices);
+    if (result) instruments.push(result);
   }
 
   return instruments;
 }
 
 /**
- * Fetch instruments from Kite API using the requesting user's credentials.
- * Only called when the mutex is free and cache is stale.
- *
- * @param {string} apiKey - User's API key (from session)
- * @param {string} accessToken - User's access token (from session)
+ * Filter for NSE CSV — only EQ (equity stocks).
  */
-async function fetchFromKite(apiKey, accessToken) {
-  const url = 'https://api.kite.trade/instruments/NSE';
+function nseFilter(cols, idx) {
+  const type = cols[idx.instrument_type]?.trim();
+  if (type !== 'EQ') return null;
+
+  const tradingsymbol = cols[idx.tradingsymbol]?.trim();
+  if (!tradingsymbol) return null;
+
+  return {
+    instrumentToken: parseInt(cols[idx.instrument_token], 10),
+    exchangeToken: parseInt(cols[idx.exchange_token], 10) || 0,
+    tradingsymbol,
+    name: cols[idx.name]?.trim() || tradingsymbol,
+    exchange: 'NSE',
+    instrumentType: 'EQ',
+    strike: null,
+    expiry: null,
+    lotSize: null,
+  };
+}
+
+/**
+ * Filter for NFO CSV — only NIFTY options (CE/PE) and futures (FUT).
+ */
+function nfoFilter(cols, idx) {
+  const name = cols[idx.name]?.trim();
+  if (name !== 'NIFTY') return null;
+
+  const type = cols[idx.instrument_type]?.trim();
+  if (type !== 'CE' && type !== 'PE' && type !== 'FUT') return null;
+
+  const tradingsymbol = cols[idx.tradingsymbol]?.trim();
+  if (!tradingsymbol) return null;
+
+  const strike = parseFloat(cols[idx.strike]) || null;
+  const expiry = cols[idx.expiry]?.trim() || null;
+  const lotSize = parseInt(cols[idx.lot_size], 10) || null;
+
+  return {
+    instrumentToken: parseInt(cols[idx.instrument_token], 10),
+    exchangeToken: parseInt(cols[idx.exchange_token], 10) || 0,
+    tradingsymbol,
+    name: 'NIFTY',
+    exchange: 'NFO',
+    instrumentType: type,
+    strike,
+    expiry,
+    lotSize,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Kite API fetch
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch and parse instruments from a Kite endpoint.
+ */
+async function fetchAndParse(url, filter, apiKey, accessToken) {
   const res = await fetch(url, {
     headers: { Authorization: `token ${apiKey}:${accessToken}` },
   });
 
   if (!res.ok) {
-    throw new Error(`Kite instruments fetch failed: ${res.status} ${res.statusText}`);
+    throw new Error(`Kite fetch failed (${url}): ${res.status} ${res.statusText}`);
   }
 
   const csv = await res.text();
-  const instruments = parseCSV(csv);
+  return parseCSV(csv, filter);
+}
 
-  if (instruments.length === 0) {
-    throw new Error('Parsed 0 instruments from Kite CSV — likely a format change');
+/**
+ * Fetch both NSE + NFO instruments in parallel.
+ */
+async function fetchFromKite(apiKey, accessToken) {
+  const [nse, nfo] = await Promise.all([
+    fetchAndParse('https://api.kite.trade/instruments/NSE', nseFilter, apiKey, accessToken),
+    fetchAndParse('https://api.kite.trade/instruments/NFO', nfoFilter, apiKey, accessToken),
+  ]);
+
+  const combined = [...nse, ...nfo];
+
+  if (combined.length === 0) {
+    throw new Error('Parsed 0 instruments from Kite — likely a format change');
   }
 
-  return instruments;
+  return combined;
 }
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
 
 /**
  * Get instruments — from SQLite cache or Kite API (with mutex).
@@ -134,13 +194,12 @@ export async function getOrFetchInstruments(apiKey, accessToken) {
         if (cached.length > 0) return cached;
       }
 
-      console.log('[Instruments] Fetching fresh NSE instruments from Kite...');
+      console.log('[Instruments] Fetching NSE + NFO instruments from Kite...');
       const instruments = await fetchFromKite(apiKey, accessToken);
       saveInstruments(instruments, today);
-      console.log(`[Instruments] Cached ${instruments.length} instruments for ${today}`);
+      console.log(`[Instruments] Cached ${instruments.length} instruments (NSE EQ + NIFTY F&O) for ${today}`);
       return instruments;
     } finally {
-      // Release mutex — next caller with stale cache will re-fetch
       fetchInFlight = null;
     }
   })();

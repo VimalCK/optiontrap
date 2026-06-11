@@ -141,7 +141,11 @@ export async function initDb() {
       exchange_token   INTEGER NOT NULL,
       tradingsymbol    TEXT NOT NULL,
       name             TEXT NOT NULL,
-      exchange         TEXT NOT NULL DEFAULT 'NSE'
+      exchange         TEXT NOT NULL DEFAULT 'NSE',
+      instrument_type  TEXT NOT NULL DEFAULT 'EQ',
+      strike           REAL,
+      expiry           TEXT,
+      lot_size         INTEGER
     )
   `);
 
@@ -584,15 +588,21 @@ export function getInstrumentsDate() {
 export function getInstruments() {
   if (!db) throw new Error('Database not initialised');
 
-  const results = db.exec('SELECT instrument_token, exchange_token, tradingsymbol, name, exchange FROM instruments');
+  const results = db.exec(
+    'SELECT instrument_token, exchange_token, tradingsymbol, name, exchange, instrument_type, strike, expiry, lot_size FROM instruments',
+  );
   if (!results.length) return [];
 
-  return results[0].values.map(([instrumentToken, exchangeToken, tradingsymbol, name, exchange]) => ({
+  return results[0].values.map(([instrumentToken, exchangeToken, tradingsymbol, name, exchange, instrumentType, strike, expiry, lotSize]) => ({
     instrumentToken,
     exchangeToken,
     tradingsymbol,
     name,
     exchange,
+    instrumentType,
+    strike: strike || null,
+    expiry: expiry || null,
+    lotSize: lotSize || null,
   }));
 }
 
@@ -609,11 +619,21 @@ export function saveInstruments(instruments, dateIST) {
     db.run("DELETE FROM instruments_meta WHERE key = 'last_fetched_date'");
 
     const stmt = db.prepare(
-      'INSERT INTO instruments (instrument_token, exchange_token, tradingsymbol, name, exchange) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO instruments (instrument_token, exchange_token, tradingsymbol, name, exchange, instrument_type, strike, expiry, lot_size) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     );
 
     for (const inst of instruments) {
-      stmt.run([inst.instrumentToken, inst.exchangeToken, inst.tradingsymbol, inst.name, inst.exchange]);
+      stmt.run([
+        inst.instrumentToken,
+        inst.exchangeToken,
+        inst.tradingsymbol,
+        inst.name,
+        inst.exchange,
+        inst.instrumentType || 'EQ',
+        inst.strike || null,
+        inst.expiry || null,
+        inst.lotSize || null,
+      ]);
     }
     stmt.free();
 

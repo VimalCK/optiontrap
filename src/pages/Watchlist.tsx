@@ -10,7 +10,7 @@ import {
   WatchlistMeta,
   WatchlistItem,
 } from '@/services/watchlist';
-import { loadInstruments, searchInstruments, Instrument } from '@/services/instruments';
+import { loadInstruments, searchInstruments, getDisplayLabel, Instrument } from '@/services/instruments';
 import { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe } from '@/services/tickerSingleton';
 import '@/styles/watchlist.css';
@@ -95,6 +95,13 @@ const Watchlist: React.FC = () => {
       .then(setInstruments)
       .catch((err) => console.error('[Watchlist] Instruments load failed:', err));
   }, []);
+
+  // ── Lookup map for display labels ──
+  const instrumentMap = useMemo(() => {
+    const map = new Map<number, Instrument>();
+    for (const inst of instruments) map.set(inst.instrumentToken, inst);
+    return map;
+  }, [instruments]);
 
   // ── Ticker subscription ──
   const handleTicks = useCallback((ticks: Tick[]) => {
@@ -422,8 +429,8 @@ const Watchlist: React.FC = () => {
                     onClick={() => handleAddItem(inst)}
                     onMouseEnter={() => setHighlightIdx(idx)}
                   >
-                    <span className="wl-search__result-symbol">{inst.tradingsymbol}</span>
-                    <span className="wl-search__result-name">{inst.name}</span>
+                    <span className="wl-search__result-symbol">{getDisplayLabel(inst)}</span>
+                    <span className="wl-search__result-name">{inst.instrumentType === 'EQ' ? inst.name : inst.tradingsymbol}</span>
                     <span className="wl-search__result-exchange">{inst.exchange}</span>
                   </button>
                 ))}
@@ -465,7 +472,7 @@ const Watchlist: React.FC = () => {
                     return (
                       <tr key={item.id} className="wl-table__row">
                         <td className="wl-table__td wl-table__td--symbol">
-                          <span className="wl-symbol">{item.tradingsymbol}</span>
+                          <span className="wl-symbol">{instrumentMap.has(item.instrumentToken) ? getDisplayLabel(instrumentMap.get(item.instrumentToken)!) : item.tradingsymbol}</span>
                           <span className="wl-exchange">{item.exchange}</span>
                         </td>
                         <td className={`wl-table__td wl-table__td--num ${changeColor}`}>
