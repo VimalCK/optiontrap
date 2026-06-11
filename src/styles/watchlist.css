@@ -93,30 +93,24 @@
 
 .wl-tab__delete {
   display: flex;
-  position: absolute;
-  top: -6px;
-  right: -6px;
-  width: 16px;
-  height: 16px;
-  font-size: 10px;
+  width: 0;
+  overflow: hidden;
+  height: 20px;
+  font-size: 12px;
   line-height: 1;
   color: var(--text-secondary);
-  background: var(--card-bg-solid);
-  border: 1px solid var(--card-border);
-  border-radius: 50%;
+  background: none;
+  border: none;
+  border-radius: 4px;
   cursor: pointer;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: opacity 0.15s, color 0.15s, border-color 0.15s, background 0.15s;
+  transition: width 0.15s, opacity 0.15s, color 0.15s, background 0.15s;
 }
 
-.wl-tab:hover .wl-tab__delete { opacity: 1; }
-.wl-tab__delete:hover {
-  color: #fff;
-  background: #ef4444;
-  border-color: #ef4444;
-}
+.wl-tab:hover .wl-tab__delete { width: 20px; opacity: 0.7; }
+.wl-tab__delete:hover { opacity: 1; color: #ef4444; background: rgba(239, 68, 68, 0.1); }
 
 .wl-tab__rename-input {
   padding: 8px 12px;
