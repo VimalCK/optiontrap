@@ -36,6 +36,16 @@ function getTodayIST() {
 // ---------------------------------------------------------------------------
 
 /**
+ * Strip surrounding double-quotes from a CSV field value.
+ */
+function unquote(val) {
+  if (val && val.startsWith('"') && val.endsWith('"')) {
+    return val.slice(1, -1);
+  }
+  return val;
+}
+
+/**
  * Parse a Kite instruments CSV and return matching rows based on a filter.
  *
  * @param {string} csv - Raw CSV text
@@ -57,7 +67,7 @@ function parseCSV(csv, rowFilter) {
   const instruments = [];
 
   for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(',');
+    const cols = lines[i].split(',').map(unquote);
     if (cols.length < headers.length) continue;
 
     const result = rowFilter(cols, indices);
@@ -137,6 +147,8 @@ async function fetchAndParse(url, filter, apiKey, accessToken) {
   }
 
   const csv = await res.text();
+  const lines = csv.trim().split('\n');
+  console.log(`[Instruments] ${url} — ${lines.length} rows, headers: ${lines[0]}`);
   return parseCSV(csv, filter);
 }
 
@@ -148,6 +160,8 @@ async function fetchFromKite(apiKey, accessToken) {
     fetchAndParse('https://api.kite.trade/instruments/NSE', nseFilter, apiKey, accessToken),
     fetchAndParse('https://api.kite.trade/instruments/NFO', nfoFilter, apiKey, accessToken),
   ]);
+
+  console.log(`[Instruments] Parsed: ${nse.length} NSE stocks, ${nfo.length} NIFTY F&O`);
 
   const combined = [...nse, ...nfo];
 
