@@ -92,13 +92,13 @@
 }
 
 .wl-tab__delete {
-  display: none;
+  display: flex;
   position: absolute;
-  top: 4px;
-  right: 0;
-  width: 18px;
-  height: 18px;
-  font-size: 14px;
+  top: -6px;
+  right: -6px;
+  width: 16px;
+  height: 16px;
+  font-size: 10px;
   line-height: 1;
   color: var(--text-secondary);
   background: var(--card-bg-solid);
@@ -107,10 +107,16 @@
   cursor: pointer;
   align-items: center;
   justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, border-color 0.15s, background 0.15s;
 }
 
-.wl-tab:hover .wl-tab__delete { display: flex; }
-.wl-tab__delete:hover { color: #ef4444; border-color: #ef4444; }
+.wl-tab:hover .wl-tab__delete { opacity: 1; }
+.wl-tab__delete:hover {
+  color: #fff;
+  background: #ef4444;
+  border-color: #ef4444;
+}
 
 .wl-tab__rename-input {
   padding: 8px 12px;
