@@ -86,7 +86,13 @@ export function tickerSubscribe(
 
   // Update subscriptions incrementally — no disconnect/reconnect needed.
   if (ticker) {
-    ticker.updateSubscriptions(allTokens());
+    const merged = allTokens();
+    if (!ticker.active && merged.length > 0) {
+      // WebSocket was never opened (no subscribers when tickerConnect ran)
+      ticker.connect(merged, handleTicks);
+    } else {
+      ticker.updateSubscriptions(merged);
+    }
   }
 
   return () => {
@@ -109,6 +115,11 @@ export function tickerUpdateTokens(id: string, tokens: number[]): void {
 
   // Update subscriptions incrementally — no disconnect/reconnect needed.
   if (ticker) {
-    ticker.updateSubscriptions(allTokens());
+    const merged = allTokens();
+    if (!ticker.active && merged.length > 0) {
+      ticker.connect(merged, handleTicks);
+    } else {
+      ticker.updateSubscriptions(merged);
+    }
   }
 }

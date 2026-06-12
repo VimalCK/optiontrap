@@ -89,6 +89,11 @@ export class KiteTicker {
     return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
   }
 
+  /** Whether a WebSocket exists (open, connecting, or closing) */
+  get active(): boolean {
+    return this.ws !== null;
+  }
+
   /**
    * Update the subscribed token set without disconnecting.
    * If connected, sends incremental subscribe/unsubscribe/mode messages.
