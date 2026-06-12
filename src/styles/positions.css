@@ -99,6 +99,7 @@
   color: var(--text-primary);
   border-bottom: 1px solid var(--card-border);
   font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 .positions-table tbody tr:hover {
