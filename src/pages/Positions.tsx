@@ -185,7 +185,7 @@ const LivePositions: React.FC = () => {
     if (!positions || !isMarketLive()) return;
 
     const allPos = [...positions.net, ...positions.day];
-    const tokens = [...new Set(allPos.map((p) => p.instrument_token))];
+    const tokens = [...new Set(allPos.filter((p) => p.quantity !== 0).map((p) => p.instrument_token))];
     if (tokens.length === 0) return;
 
     return tickerSubscribe('live-positions', tokens, (ticks: Tick[]) => {
@@ -225,36 +225,33 @@ const LivePositions: React.FC = () => {
   };
 
   const totalPnL    = rows.reduce((s, p) => s + getLivePnl(p).pnl, 0);
-  const totalM2M    = rows.reduce((s, p) => s + p.m2m, 0);
-  const unrealised  = rows.reduce((s, p) => s + getLivePnl(p).unrealised, 0);
-  const realised    = rows.reduce((s, p) => s + p.realised, 0);
 
   const fmt = (n: number) =>
     `${n >= 0 ? '+' : ''}${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-  const renderTable = (list: KitePosition[], title?: string) => {
+  const renderActiveTable = (list: KitePosition[]) => {
     if (list.length === 0) return null;
     return (
       <div className="card" style={{ marginBottom: 16 }}>
-        {title && <h4 className="live-positions__section-title">{title}</h4>}
+        <h4 className="live-positions__section-title">Active</h4>
         <div className="positions-table-scroll">
         <table className="positions-table live-positions-table">
           <thead>
             <tr>
               <th>Instrument</th>
               <th>Product</th>
+              <th>Side</th>
               <th>Qty</th>
               <th>Avg</th>
               <th>LTP</th>
               <th>P&L</th>
-              <th>Unrealised</th>
-              <th>Realised</th>
             </tr>
           </thead>
           <tbody>
             {list.map((pos) => {
               const ltp = livePrices.get(pos.instrument_token) ?? pos.last_price;
-              const { pnl: livePnl, unrealised: liveUnrealised } = getLivePnl(pos);
+              const { pnl: livePnl } = getLivePnl(pos);
+              const side = pos.quantity > 0 ? 'BUY' : 'SELL';
               return (
                 <tr key={`${pos.exchange}:${pos.tradingsymbol}`}>
                   <td>
@@ -264,19 +261,49 @@ const LivePositions: React.FC = () => {
                     </span>
                   </td>
                   <td><span className="live-positions__product">{pos.product}</span></td>
-                  <td className={pos.quantity > 0 ? 'positive' : pos.quantity < 0 ? 'negative' : ''}>
-                    {pos.quantity > 0 ? '+' : ''}{pos.quantity}
-                  </td>
+                  <td><span className={`positions-table__side positions-table__side--${side.toLowerCase()}`}>{side}</span></td>
+                  <td>{Math.abs(pos.quantity)}</td>
                   <td>{pos.average_price > 0 ? pos.average_price.toFixed(2) : '-'}</td>
                   <td>{ltp > 0 ? ltp.toFixed(2) : '-'}</td>
                   <td className={livePnl > 0 ? 'positive' : livePnl < 0 ? 'negative' : ''}>
                     {fmt(livePnl)}
                   </td>
-                  <td className={liveUnrealised > 0 ? 'positive' : liveUnrealised < 0 ? 'negative' : ''}>
-                    {fmt(liveUnrealised)}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        </div>
+      </div>
+    );
+  };
+
+  const renderExitedTable = (list: KitePosition[]) => {
+    if (list.length === 0) return null;
+    return (
+      <div className="card" style={{ marginBottom: 16 }}>
+        <h4 className="live-positions__section-title">Exited</h4>
+        <div className="positions-table-scroll">
+        <table className="positions-table live-positions-table">
+          <thead>
+            <tr>
+              <th>Instrument</th>
+              <th>P&L</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.map((pos) => {
+              const { pnl: livePnl } = getLivePnl(pos);
+              return (
+                <tr key={`${pos.exchange}:${pos.tradingsymbol}`} className="positions-table__row--exited">
+                  <td>
+                    <span className="positions-table__instrument">
+                      <span className="live-positions__symbol">{pos.tradingsymbol}</span>
+                      <span className="live-positions__exchange">{pos.exchange}</span>
+                    </span>
                   </td>
-                  <td className={pos.realised > 0 ? 'positive' : pos.realised < 0 ? 'negative' : ''}>
-                    {fmt(pos.realised)}
+                  <td className={livePnl > 0 ? 'positive' : livePnl < 0 ? 'negative' : ''}>
+                    {fmt(livePnl)}
                   </td>
                 </tr>
               );
@@ -340,23 +367,11 @@ const LivePositions: React.FC = () => {
             <span className="positions-summary__label">Total P&L</span>
             <span className={`positions-summary__value ${totalPnL > 0 ? 'positive' : totalPnL < 0 ? 'negative' : ''}`}>{fmt(totalPnL)}</span>
           </div>
-          <div className="positions-summary__item">
-            <span className="positions-summary__label">M2M</span>
-            <span className={`positions-summary__value ${totalM2M > 0 ? 'positive' : totalM2M < 0 ? 'negative' : ''}`}>{fmt(totalM2M)}</span>
-          </div>
-          <div className="positions-summary__item">
-            <span className="positions-summary__label">Unrealised</span>
-            <span className={`positions-summary__value ${unrealised > 0 ? 'positive' : unrealised < 0 ? 'negative' : ''}`}>{fmt(unrealised)}</span>
-          </div>
-          <div className="positions-summary__item">
-            <span className="positions-summary__label">Realised</span>
-            <span className={`positions-summary__value ${realised > 0 ? 'positive' : realised < 0 ? 'negative' : ''}`}>{fmt(realised)}</span>
-          </div>
         </div>
       </div>
 
-      {renderTable(openRows, openRows.length > 0 && closedRows.length > 0 ? 'Open' : undefined)}
-      {renderTable(closedRows, closedRows.length > 0 && openRows.length > 0 ? 'Closed Today' : undefined)}
+      {renderActiveTable(openRows)}
+      {renderExitedTable(closedRows)}
     </>
   );
 };

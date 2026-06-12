@@ -291,17 +291,8 @@
 }
 
 .live-positions-table {
-  table-layout: fixed;
+  table-layout: auto;
 }
-
-.live-positions-table th:nth-child(1) { width: 22%; }
-.live-positions-table th:nth-child(2) { width: 9%;  }
-.live-positions-table th:nth-child(3) { width: 8%;  }
-.live-positions-table th:nth-child(4) { width: 10%; }
-.live-positions-table th:nth-child(5) { width: 10%; }
-.live-positions-table th:nth-child(6) { width: 13%; }
-.live-positions-table th:nth-child(7) { width: 14%; }
-.live-positions-table th:nth-child(8) { width: 14%; }
 
 .live-positions__symbol {
   font-weight: 600;
