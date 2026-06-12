@@ -16,6 +16,7 @@ export interface OiSnapshot {
   timestamp: number;
   timeLabel: string;
   data: Record<string, number>;
+  prices?: Record<string, number>;  // token -> LTP (optional for backward compat)
 }
 
 export interface OiVelocity {
@@ -33,7 +34,10 @@ function getTimeLabel(timestamp: number): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
-export async function saveOiSnapshot(oiData: Map<number, number>): Promise<void> {
+export async function saveOiSnapshot(
+  oiData: Map<number, number>,
+  priceData?: Map<number, number>,
+): Promise<void> {
   if (oiData.size === 0) return;
   // Use Date.now() rounded down to the nearest 10 ms, then append a 0-9
   // sequence digit. This keeps the value within ~10 ms of real time (well
@@ -43,9 +47,12 @@ export async function saveOiSnapshot(oiData: Map<number, number>): Promise<void>
   const timestamp = base + (_snapshotSeq++ % 10);
   const data: Record<string, number> = {};
   oiData.forEach((oi, token) => { data[String(token)] = oi; });
-  const snapshot: OiSnapshot = { timestamp, timeLabel: getTimeLabel(timestamp), data };
+  const prices: Record<string, number> | undefined = priceData && priceData.size > 0
+    ? (() => { const p: Record<string, number> = {}; priceData.forEach((price, token) => { p[String(token)] = price; }); return p; })()
+    : undefined;
+  const snapshot: OiSnapshot = { timestamp, timeLabel: getTimeLabel(timestamp), data, ...(prices ? { prices } : {}) };
   await dbPutNoKey(STORE_OI, snapshot);
-  console.log(`[OI Snapshots] Saved at ${snapshot.timeLabel} (${Object.keys(data).length} instruments)`);
+  console.log(`[OI Snapshots] Saved at ${snapshot.timeLabel} (${Object.keys(data).length} instruments${prices ? `, ${Object.keys(prices).length} prices` : ''})`);
 }
 
 export async function getTodaySnapshots(): Promise<OiSnapshot[]> {

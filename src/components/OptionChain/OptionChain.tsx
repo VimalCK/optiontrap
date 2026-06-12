@@ -4,6 +4,7 @@ import BestStrikes from '@/components/TrapAnalyzer/BestStrikes';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { calculateExpectedMove } from '@/services/edgeScore';
 import { saveOiSnapshot, getTodaySnapshots, cleanOldSnapshots, calculateVelocity, shouldTakeSnapshot, analyzeVelocityPattern, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
+import { computeStrikeSignals } from '@/services/combinedSignal';
 import { addPosition } from '@/services/positions';
 
 const TrapInfoPanel: React.FC<{ onToggle: (show: boolean) => void; show: boolean }> = ({ onToggle, show }) => {
@@ -244,6 +245,12 @@ const OptionChain: React.FC = () => {
     return max;
   }, [visibleChain, oiData]);
 
+  // Compute combined CE+PE market stance signal per strike
+  const strikeSignals = useMemo(
+    () => computeStrikeSignals(visibleChain, oiData, livePrices, snapshots),
+    [visibleChain, oiData, livePrices, snapshots]
+  );
+
   // Compute average volume for volume-confirmation threshold
   const avgVolume = useMemo(() => {
     if (volumeData.size === 0) return 0;
@@ -357,7 +364,7 @@ const OptionChain: React.FC = () => {
       if (!isMarketLive() || oiData.size === 0) return;
       const snaps = await getTodaySnapshots();
       if (shouldTakeSnapshot(snaps)) {
-        await saveOiSnapshot(oiData);
+        await saveOiSnapshot(oiData, livePrices);
         const updatedSnaps = await getTodaySnapshots();
         setSnapshots(updatedSnaps);
       }
@@ -758,6 +765,17 @@ const OptionChain: React.FC = () => {
               <h5>Velocity Arrows (▲/▼)</h5>
               <p>Appear during live market when OI changes rapidly (5%+ in 10 minutes). Green ▲ = fast buildup. Red ▼ = fast unwinding.</p>
 
+              <h5>Signal Strip (colored bar at bottom)</h5>
+              <p>Combines CE and PE OI+Price signals from 10-minute snapshots to show the combined market stance at each strike. Unlike velocity arrows (OI-only), this accounts for whether OI changes are buyer-driven or seller-driven.</p>
+              <ul>
+                <li><strong style={{ color: '#4ade80' }}>Green</strong> — Bullish (CE buyers + PE sellers, or strong bullish)</li>
+                <li><strong style={{ color: '#f87171' }}>Red</strong> — Bearish (CE sellers + PE buyers, or strong bearish)</li>
+                <li><strong style={{ color: '#f59e0b' }}>Amber</strong> — Pinning/Range (sellers both sides — price trapped)</li>
+                <li><strong style={{ color: '#a78bfa' }}>Purple</strong> — High Volatility or Breakout Setup (buyers both sides, or sellers exiting)</li>
+                <li><strong style={{ color: '#94a3b8' }}>Gray</strong> — De-risking or Transitional (mixed/conflicting signals)</li>
+              </ul>
+              <p>The strip only appears after the first 10-minute snapshot with price data is captured. Signals with &lt;2% OI change or &lt;0.5% price change are filtered as noise.</p>
+
               <h5>Shaded Zone (Expected Range)</h5>
               <p>The lightly tinted area with dashed borders shows where NIFTY is expected to stay (based on ATM straddle premium). OI walls <strong>outside</strong> this zone are stronger — price is unlikely to reach them.</p>
 
@@ -947,6 +965,15 @@ const OptionChain: React.FC = () => {
                           <span>PCR:</span>
                           <span>{ceOi > 0 ? (peOi / ceOi).toFixed(2) : '-'}</span>
                         </div>
+                        {(() => {
+                          const signal = strikeSignals.get(row.strike);
+                          return signal ? (
+                            <div className="oc-chart__tooltip-row oc-chart__tooltip-signal">
+                              <span>Signal:</span>
+                              <span style={{ color: signal.color }}>{signal.label}</span>
+                            </div>
+                          ) : null;
+                        })()}
                         {orderMode === 'paper' && (
                           <div className="oc-chart__tooltip-actions">
                             <button
@@ -1005,6 +1032,15 @@ const OptionChain: React.FC = () => {
                         </div>
                       </div>
                     </div>
+                    {(() => {
+                      const signal = strikeSignals.get(row.strike);
+                      return signal ? (
+                        <div
+                          className={`oc-chart__signal-strip${signal.weak ? ' oc-chart__signal-strip--weak' : ''}`}
+                          style={{ background: signal.color }}
+                        />
+                      ) : null;
+                    })()}
                     <span className="oc-chart__strike-label">{row.strike % 100 === 0 ? row.strike : ''}</span>
                   </div>
                 );

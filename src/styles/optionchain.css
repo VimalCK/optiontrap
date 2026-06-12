@@ -565,6 +565,28 @@
   color: #ef4444;
 }
 
+/* Combined signal strip */
+.oc-chart__signal-strip {
+  position: absolute;
+  bottom: 0;
+  left: 2px;
+  right: 2px;
+  height: 5px;
+  border-radius: 2px;
+  opacity: 0.85;
+  z-index: 1;
+  pointer-events: none;
+}
+
+.oc-chart__signal-strip--weak {
+  opacity: 0.5;
+}
+
+/* Tooltip signal row */
+.oc-chart__tooltip-signal span:last-child {
+  font-weight: 600;
+}
+
 .oc-chart__legend {
   display: flex;
   justify-content: center;
