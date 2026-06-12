@@ -113,7 +113,13 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
+  table-layout: fixed;
 }
+
+/* Fixed column widths — prevents layout recalc on live data updates */
+.option-chain-table col.oc-col-oi    { width: 25%; }
+.option-chain-table col.oc-col-ltp   { width: 22%; }
+.option-chain-table col.oc-col-strike { width: 6%; }
 
 .option-chain-table th {
   text-align: center;
@@ -132,6 +138,9 @@
   padding: 8px 10px;
   border-bottom: 1px solid var(--card-border);
   white-space: nowrap;
+  height: 50px;
+  vertical-align: middle;
+  overflow: hidden;
 }
 
 .oc-header-ce {

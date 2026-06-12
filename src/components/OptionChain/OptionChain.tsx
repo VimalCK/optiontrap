@@ -600,6 +600,13 @@ const OptionChain: React.FC = () => {
         {!loading && !error && visibleChain.length > 0 && (
           <div className="option-chain-table-wrapper">
             <table className="option-chain-table">
+              <colgroup>
+                <col className="oc-col-oi" />
+                <col className="oc-col-ltp" />
+                <col className="oc-col-strike" />
+                <col className="oc-col-ltp" />
+                <col className="oc-col-oi" />
+              </colgroup>
               <thead>
                 <tr>
                   <th className="oc-header-ce" colSpan={2}>CALLS</th>
