@@ -43,8 +43,10 @@ export class KiteTicker {
 
     this.ws.onopen = () => {
       console.log('[KiteTicker] Connected via proxy');
-      this.subscribe(instrumentTokens);
-      this.setMode('full', instrumentTokens);
+      // Use this.instrumentTokens (not the captured parameter) so tokens
+      // updated via updateSubscriptions() during CONNECTING are picked up.
+      this.subscribe(this.instrumentTokens);
+      this.setMode('full', this.instrumentTokens);
     };
 
     this.ws.onmessage = (event) => {
@@ -82,6 +84,33 @@ export class KiteTicker {
     console.log('[KiteTicker] Closed');
   }
 
+  /** Whether the WebSocket is open and ready to send messages */
+  get connected(): boolean {
+    return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
+  }
+
+  /**
+   * Update the subscribed token set without disconnecting.
+   * If connected, sends incremental subscribe/unsubscribe/mode messages.
+   * If still connecting, updates the stored tokens so onopen uses the latest set.
+   */
+  updateSubscriptions(newTokens: number[]): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      const oldSet = new Set(this.instrumentTokens);
+      const newSet = new Set(newTokens);
+      const toRemove = this.instrumentTokens.filter((t) => !newSet.has(t));
+      const toAdd = newTokens.filter((t) => !oldSet.has(t));
+
+      if (toRemove.length > 0) this.unsubscribe(toRemove);
+      if (toAdd.length > 0) {
+        this.subscribe(toAdd);
+        this.setMode('full', toAdd);
+      }
+    }
+    // Always update stored tokens so reconnects/onopen use the latest set
+    this.instrumentTokens = newTokens;
+  }
+
   private reconnect(): void {
     if (this.onTickCallback && this.instrumentTokens.length > 0) {
       console.log('[KiteTicker] Reconnecting...');
@@ -92,6 +121,12 @@ export class KiteTicker {
   private subscribe(tokens: number[]): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ a: 'subscribe', v: tokens }));
+    }
+  }
+
+  private unsubscribe(tokens: number[]): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({ a: 'unsubscribe', v: tokens }));
     }
   }
 

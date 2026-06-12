@@ -84,20 +84,17 @@ export function tickerSubscribe(
 ): () => void {
   subscribers.set(id, { tokens: new Set(tokens), callback });
 
-  // If the ticker is already connected, subscribe the new tokens immediately
-  if (ticker && tokens.length > 0) {
-    // KiteTicker.connect() re-subscribes all tokens; instead we reach into the
-    // underlying subscribe+mode mechanism by reconnecting with the full merged set.
-    // Simplest safe approach: disconnect and reconnect with merged tokens.
-    ticker.disconnect();
-    ticker = new KiteTicker();
-    ticker.connect(allTokens(), handleTicks);
+  // Update subscriptions incrementally — no disconnect/reconnect needed.
+  if (ticker) {
+    ticker.updateSubscriptions(allTokens());
   }
 
   return () => {
     subscribers.delete(id);
-    // No need to reconnect when unsubscribing — extra subscriptions on Kite's
-    // side are harmless (ticks for unclaimed tokens are simply ignored).
+    // Unsubscribe tokens no longer needed by any subscriber
+    if (ticker) {
+      ticker.updateSubscriptions(allTokens());
+    }
   };
 }
 
@@ -110,9 +107,8 @@ export function tickerUpdateTokens(id: string, tokens: number[]): void {
   if (!sub) return;
   sub.tokens = new Set(tokens);
 
+  // Update subscriptions incrementally — no disconnect/reconnect needed.
   if (ticker) {
-    ticker.disconnect();
-    ticker = new KiteTicker();
-    ticker.connect(allTokens(), handleTicks);
+    ticker.updateSubscriptions(allTokens());
   }
 }
