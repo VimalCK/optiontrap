@@ -113,6 +113,8 @@ const OptionChain: React.FC = () => {
   const subscribedTokensRef = useRef<number[]>([]);
   const snapshotIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const toastIdRef = useRef(0);
+  const chainCardRef = useRef<HTMLDivElement>(null);
+  const chainCardLockedHeight = useRef<number | null>(null);
 
   const showToast = useCallback((text: string, color: 'green' | 'red') => {
     const id = ++toastIdRef.current;
@@ -389,6 +391,18 @@ const OptionChain: React.FC = () => {
     };
   }, [oiData.size > 0]);
 
+  // Lock option chain card height after strikes are loaded to prevent jerk
+  useEffect(() => {
+    if (visibleChain.length > 0 && chainCardRef.current && chainCardLockedHeight.current === null) {
+      requestAnimationFrame(() => {
+        if (chainCardRef.current) {
+          chainCardLockedHeight.current = chainCardRef.current.offsetHeight;
+          chainCardRef.current.style.minHeight = `${chainCardLockedHeight.current}px`;
+        }
+      });
+    }
+  }, [visibleChain.length]);
+
   // Recalculate velocity when OI data changes significantly
   useEffect(() => {
     if (snapshots.length > 0 && oiData.size > 0) {
@@ -547,7 +561,7 @@ const OptionChain: React.FC = () => {
       )}
 
       {/* Option Chain Card */}
-      <div className="card option-chain-card">
+      <div className="card option-chain-card" ref={chainCardRef}>
           <div className="trap-card-header">
           <div className="trap-card-header__left">
             <h3 className="card__title" style={{ marginBottom: 0 }}>NIFTY Option Chain</h3>
