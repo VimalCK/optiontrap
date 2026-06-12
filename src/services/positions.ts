@@ -89,6 +89,33 @@ export function addPosition(
       return positions[sameSideIdx];
     }
 
+    // Look for an EXITED position on the same side — reactivate and average in
+    const exitedSameIdx = positions.findIndex(
+      (p) =>
+        p.instrumentToken === position.instrumentToken &&
+        p.side === position.side &&
+        p.exited,
+    );
+
+    if (exitedSameIdx >= 0) {
+      const existing = positions[exitedSameIdx];
+      const totalQty = existing.quantity + position.quantity;
+      const avgPrice =
+        (existing.entryPrice * existing.quantity +
+          position.entryPrice * position.quantity) /
+        totalQty;
+      positions[exitedSameIdx] = {
+        ...existing,
+        quantity: totalQty,
+        entryPrice: Number(avgPrice.toFixed(2)),
+        exited: false,
+        exitPrice: undefined,
+        exitTime: undefined,
+      };
+      await cacheSet(POSITIONS_KEY, positions);
+      return positions[exitedSameIdx];
+    }
+
     // Look for an open position on the OPPOSITE side (net out)
     const oppSide = position.side === 'BUY' ? 'SELL' : 'BUY';
     const oppIdx = positions.findIndex(
