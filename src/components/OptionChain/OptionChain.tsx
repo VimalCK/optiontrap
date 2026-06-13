@@ -99,8 +99,7 @@ const OptionChain: React.FC = () => {
   const [showTrapInfo, setShowTrapInfo] = useState(false);
   const [showOiChartInfo, setShowOiChartInfo] = useState(false);
   const [showBestStrikesInfo, setShowBestStrikesInfo] = useState(false);
-  const [refreshKey, setRefreshKey] = useState(0);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+
   const [orderForm, setOrderForm] = useState<{ strike: number; optionType: 'CE' | 'PE' } | null>(null);
   const [orderQty, setOrderQty] = useState(50);
   const [orderPrice, setOrderPrice] = useState(0);
@@ -165,15 +164,7 @@ const OptionChain: React.FC = () => {
     loadOptions();
   }, []);
 
-  const handleRefresh = useCallback(async () => {
-    if (isRefreshing) return;
-    setIsRefreshing(true);
-    quoteFetchedRef.current = '';          // force quote re-fetch
-    prevOiFetchedRef.current = '';         // force prev OI re-fetch
-    setRefreshKey((k) => k + 1);
-    // Brief delay so the spinner is visible
-    setTimeout(() => setIsRefreshing(false), 1200);
-  }, [isRefreshing]);
+
 
   const loadOptions = async () => {
     setLoading(true);
@@ -499,7 +490,7 @@ const OptionChain: React.FC = () => {
         }
       });
     });
-  }, [chain, atmStrike, selectedExpiry, refreshKey]);
+  }, [chain, atmStrike, selectedExpiry]);
 
   // Helper to get live price or fallback to CSV price
   const getPrice = (instrument: OptionInstrument | null): number | null => {
@@ -566,19 +557,7 @@ const OptionChain: React.FC = () => {
           <div className="trap-card-header__left">
             <h3 className="card__title" style={{ marginBottom: 0 }}>NIFTY Option Chain</h3>
           </div>
-          <button
-            className={`oc-refresh-btn ${isRefreshing ? 'oc-refresh-btn--spinning' : ''}`}
-            onClick={handleRefresh}
-            disabled={isRefreshing || loading}
-            title="Refresh option chain"
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M23 4v6h-6"/>
-              <path d="M1 20v-6h6"/>
-              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-            </svg>
-            {isRefreshing ? 'Refreshing…' : 'Refresh'}
-          </button>
+
         </div>
 
         {loading && (
