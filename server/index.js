@@ -439,13 +439,13 @@ const requireAuth = (req, res, next) => {
 
 // ---------- Watchlist Routes ----------
 
-app.get('/watchlist', requireAuth, (req, res) => {
+app.get('/api/watchlist', requireAuth, (req, res) => {
   const userId = req.session.kiteSession.userId;
   const lists = getWatchlists(userId);
   res.json({ status: 'ok', data: lists });
 });
 
-app.get('/watchlist/:id', requireAuth, (req, res) => {
+app.get('/api/watchlist/:id', requireAuth, (req, res) => {
   const userId = req.session.kiteSession.userId;
   const list = getWatchlistItems(req.params.id, userId);
 
@@ -456,7 +456,7 @@ app.get('/watchlist/:id', requireAuth, (req, res) => {
   res.json({ status: 'ok', data: list });
 });
 
-app.post('/watchlist', requireAuth, (req, res) => {
+app.post('/api/watchlist', requireAuth, (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { name } = req.body;
 
@@ -468,7 +468,7 @@ app.post('/watchlist', requireAuth, (req, res) => {
   res.json({ status: 'ok', data: list });
 });
 
-app.put('/watchlist/:id', requireAuth, (req, res) => {
+app.put('/api/watchlist/:id', requireAuth, (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { name } = req.body;
 
@@ -484,7 +484,7 @@ app.put('/watchlist/:id', requireAuth, (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.delete('/watchlist/:id', requireAuth, (req, res) => {
+app.delete('/api/watchlist/:id', requireAuth, (req, res) => {
   const userId = req.session.kiteSession.userId;
   const deleted = deleteWatchlist(req.params.id, userId);
 
@@ -495,7 +495,7 @@ app.delete('/watchlist/:id', requireAuth, (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.post('/watchlist/:id/items', requireAuth, (req, res) => {
+app.post('/api/watchlist/:id/items', requireAuth, (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { instrumentToken, tradingsymbol, exchange } = req.body;
 
@@ -522,7 +522,7 @@ app.post('/watchlist/:id/items', requireAuth, (req, res) => {
   res.json({ status: 'ok', data: item });
 });
 
-app.delete('/watchlist/:id/items/:itemId', requireAuth, (req, res) => {
+app.delete('/api/watchlist/:id/items/:itemId', requireAuth, (req, res) => {
   const userId = req.session.kiteSession.userId;
   const removed = removeWatchlistItem(req.params.itemId, userId);
 

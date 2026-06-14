@@ -20,10 +20,6 @@ export default defineConfig({
         target: 'http://localhost:3001',
         changeOrigin: true,
       },
-      '/watchlist': {
-        target: 'http://localhost:3001',
-        changeOrigin: true,
-      },
       '/instruments': {
         target: 'http://localhost:3001',
         changeOrigin: true,
