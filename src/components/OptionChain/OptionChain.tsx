@@ -632,8 +632,8 @@ const OptionChain: React.FC = () => {
                       </td>
                       <td className="oc-cell-strike">
                         <div className="oc-strike-bars">
-                          <div className="oc-oi-bar oc-oi-bar--ce" style={{ width: `${maxOi > 0 && ceOi ? (ceOi / maxOi) * 150 : 0}px` }} />
-                          <div className="oc-oi-bar oc-oi-bar--pe" style={{ width: `${maxOi > 0 && peOi ? (peOi / maxOi) * 150 : 0}px` }} />
+                          <div className="oc-oi-bar oc-oi-bar--ce" style={{ width: `${maxOi > 0 && ceOi ? (ceOi / maxOi) * 50 : 0}%` }} />
+                          <div className="oc-oi-bar oc-oi-bar--pe" style={{ width: `${maxOi > 0 && peOi ? (peOi / maxOi) * 50 : 0}%` }} />
                         </div>
                         {row.strike}
                       </td>

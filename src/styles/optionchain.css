@@ -140,6 +140,9 @@
   white-space: nowrap;
   height: 50px;
   vertical-align: middle;
+}
+
+.option-chain-table td:not(.oc-cell-strike) {
   overflow: hidden;
 }
 
@@ -186,6 +189,7 @@
   border-right: 1px solid var(--card-border);
   position: relative;
   overflow: visible;
+  z-index: 2;
 }
 
 .oc-cell-ltp {
@@ -224,12 +228,12 @@
   text-align: left;
 }
 
-/* OI Bar — originates from strike cell center */
+/* OI Bar — originates from strike cell center, spans across adjacent columns */
 .oc-strike-bars {
   position: absolute;
   bottom: 0;
-  left: 0;
-  right: 0;
+  left: -780%;
+  right: -780%;
   height: 3px;
   pointer-events: none;
   overflow: visible;
