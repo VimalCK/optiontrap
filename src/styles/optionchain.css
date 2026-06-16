@@ -578,14 +578,14 @@
   display: flex;
   gap: 2px;
   padding: 0 8px;
-  margin-top: 4px;
+  margin-top: 0;
 }
 
 .oc-chart__heatmap-cell {
   flex: 1;
   min-width: 28px;
   height: 6px;
-  border-radius: 3px;
+  border-radius: 0;
   background: transparent;
 }
 
