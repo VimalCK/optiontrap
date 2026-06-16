@@ -576,7 +576,7 @@
 /* Signal heatmap row */
 .oc-chart__signal-heatmap {
   display: flex;
-  gap: 2px;
+  gap: 0;
   padding: 0 8px;
   margin-top: 0;
 }
@@ -584,7 +584,7 @@
 .oc-chart__heatmap-cell {
   flex: 1;
   min-width: 28px;
-  height: 6px;
+  height: 4px;
   border-radius: 0;
   background: transparent;
 }
