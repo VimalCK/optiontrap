@@ -765,7 +765,7 @@ const OptionChain: React.FC = () => {
               <h5>Velocity Arrows (▲/▼)</h5>
               <p>Appear during live market when OI changes rapidly (5%+ in 10 minutes). Green ▲ = fast buildup. Red ▼ = fast unwinding.</p>
 
-              <h5>Signal Strip (colored bar at bottom)</h5>
+              <h5>Signal Heatmap (colored row below bars)</h5>
               <p>Combines CE and PE OI+Price signals from 10-minute snapshots to show the combined market stance at each strike. Unlike velocity arrows (OI-only), this accounts for whether OI changes are buyer-driven or seller-driven.</p>
               <ul>
                 <li><strong style={{ color: '#4ade80' }}>Green</strong> — Bullish (CE buyers + PE sellers, or strong bullish)</li>
@@ -827,6 +827,7 @@ const OptionChain: React.FC = () => {
                   return <span key={i}>{label}</span>;
                 })}
               </div>
+              <div className="oc-chart__main">
               <div className="oc-chart__bars" onClick={() => setSelectedChartStrike(null)}>
                 <div className="oc-chart__gridlines">
                   {[...Array(9)].map((_, i) => (
@@ -1032,19 +1033,30 @@ const OptionChain: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                    {(() => {
-                      const signal = strikeSignals.get(row.strike);
-                      return signal ? (
-                        <div
-                          className={`oc-chart__signal-strip${signal.weak ? ' oc-chart__signal-strip--weak' : ''}`}
-                          style={{ background: signal.color }}
-                        />
-                      ) : null;
-                    })()}
-                    <span className="oc-chart__strike-label">{row.strike % 100 === 0 ? row.strike : ''}</span>
+
                   </div>
                 );
               })}
+            </div>
+            <div className="oc-chart__signal-heatmap">
+              {visibleChain.map((row) => {
+                const signal = strikeSignals.get(row.strike);
+                return (
+                  <div
+                    key={row.strike}
+                    className={`oc-chart__heatmap-cell${signal?.weak ? ' oc-chart__heatmap-cell--weak' : ''}`}
+                    style={signal ? { background: signal.color } : undefined}
+                  />
+                );
+              })}
+            </div>
+            <div className="oc-chart__strike-labels">
+              {visibleChain.map((row) => (
+                <span key={row.strike} className="oc-chart__strike-labels-item">
+                  {row.strike % 100 === 0 ? row.strike : ''}
+                </span>
+              ))}
+            </div>
             </div>
             </div>
             <div className="oc-chart__legend">
