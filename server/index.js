@@ -54,6 +54,11 @@ import {
   deleteWatchlist,
   addWatchlistItem,
   removeWatchlistItem,
+  getPositions,
+  addPosition,
+  exitPositionById,
+  removePositionById,
+  clearPositions,
 } from './db.js';
 import { SqliteSessionStore } from './sessionStore.js';
 import { createRateLimiter } from './rateLimit.js';
@@ -530,6 +535,72 @@ app.delete('/api/watchlist/:id/items/:itemId', requireAuth, (req, res) => {
     return res.status(404).json({ status: 'error', message: 'Item not found' });
   }
 
+  res.json({ status: 'ok' });
+});
+
+// ---------- Positions ----------
+
+app.get('/api/positions', requireAuth, (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const mode = req.query.mode || null;
+  const positions = getPositions(userId, mode);
+  res.json({ status: 'ok', data: positions });
+});
+
+app.post('/api/positions', requireAuth, (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const { tradingsymbol, instrumentToken, strike, optionType, side, quantity, entryPrice, expiry, mode } = req.body;
+
+  if (!tradingsymbol || !instrumentToken || strike == null || !optionType || !side || !quantity || !entryPrice || !expiry) {
+    return res.status(400).json({ status: 'error', message: 'Missing required fields' });
+  }
+
+  const position = addPosition(userId, {
+    tradingsymbol,
+    instrumentToken: Number(instrumentToken),
+    strike: Number(strike),
+    optionType,
+    side,
+    quantity: Number(quantity),
+    entryPrice: Number(entryPrice),
+    expiry,
+    mode: mode || 'paper',
+  });
+
+  res.json({ status: 'ok', data: position });
+});
+
+app.put('/api/positions/:id/exit', requireAuth, (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const { exitPrice } = req.body;
+
+  if (exitPrice == null) {
+    return res.status(400).json({ status: 'error', message: 'exitPrice is required' });
+  }
+
+  const updated = exitPositionById(req.params.id, userId, Number(exitPrice));
+  if (!updated) {
+    return res.status(404).json({ status: 'error', message: 'Position not found or already exited' });
+  }
+
+  res.json({ status: 'ok' });
+});
+
+app.delete('/api/positions/:id', requireAuth, (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const removed = removePositionById(req.params.id, userId);
+
+  if (!removed) {
+    return res.status(404).json({ status: 'error', message: 'Position not found' });
+  }
+
+  res.json({ status: 'ok' });
+});
+
+app.delete('/api/positions', requireAuth, (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const mode = req.query.mode || null;
+  clearPositions(userId, mode);
   res.json({ status: 'ok' });
 });
 

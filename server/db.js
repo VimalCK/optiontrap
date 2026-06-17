@@ -156,6 +156,26 @@ export async function initDb() {
     )
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS positions (
+      id                TEXT PRIMARY KEY,
+      user_id           TEXT NOT NULL,
+      mode              TEXT NOT NULL DEFAULT 'paper',
+      tradingsymbol     TEXT NOT NULL,
+      instrument_token  INTEGER NOT NULL,
+      strike            REAL NOT NULL,
+      option_type       TEXT NOT NULL,
+      side              TEXT NOT NULL,
+      quantity          INTEGER NOT NULL,
+      entry_price       REAL NOT NULL,
+      entry_time        TEXT NOT NULL,
+      expiry            TEXT NOT NULL,
+      exited            INTEGER NOT NULL DEFAULT 0,
+      exit_price        REAL,
+      exit_time         TEXT
+    )
+  `);
+
   // Clean expired sessions on startup
   db.run('DELETE FROM sessions WHERE expires < ?', [Date.now()]);
 
@@ -645,6 +665,208 @@ export function saveInstruments(instruments, dateIST) {
   }
 
   persist();
+}
+
+// ---------------------------------------------------------------------------
+// Positions CRUD
+// ---------------------------------------------------------------------------
+
+/**
+ * Get all positions for a user, optionally filtered by mode.
+ */
+export function getPositions(userId, mode = null) {
+  if (!db) throw new Error('Database not initialised');
+
+  const sql = mode
+    ? 'SELECT * FROM positions WHERE user_id = ? AND mode = ? ORDER BY entry_time DESC'
+    : 'SELECT * FROM positions WHERE user_id = ? ORDER BY entry_time DESC';
+  const params = mode ? [userId, mode] : [userId];
+
+  const results = db.exec(sql, params);
+  if (!results.length) return [];
+
+  const columns = results[0].columns;
+  return results[0].values.map((row) => {
+    const obj = {};
+    columns.forEach((col, i) => { obj[col] = row[i]; });
+    return mapPositionRow(obj);
+  });
+}
+
+/**
+ * Map a raw DB row to a camelCase position object.
+ */
+function mapPositionRow(row) {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    mode: row.mode,
+    tradingsymbol: row.tradingsymbol,
+    instrumentToken: row.instrument_token,
+    strike: row.strike,
+    optionType: row.option_type,
+    side: row.side,
+    quantity: row.quantity,
+    entryPrice: row.entry_price,
+    entryTime: row.entry_time,
+    expiry: row.expiry,
+    exited: row.exited === 1,
+    exitPrice: row.exit_price,
+    exitTime: row.exit_time,
+  };
+}
+
+/**
+ * Add a position with full netting logic:
+ *   - Same-side existing → average in
+ *   - Opposite-side existing → net out (exact, partial, or over-close)
+ *   - No existing → open fresh
+ */
+export function addPosition(userId, position) {
+  if (!db) throw new Error('Database not initialised');
+
+  const mode = position.mode || 'paper';
+  const now = new Date().toISOString();
+
+  // Look for open same-side position
+  const sameSide = queryPosition(
+    'SELECT * FROM positions WHERE user_id = ? AND mode = ? AND instrument_token = ? AND side = ? AND exited = 0',
+    [userId, mode, position.instrumentToken, position.side],
+  );
+
+  if (sameSide) {
+    const totalQty = sameSide.quantity + position.quantity;
+    const avgPrice = (sameSide.entry_price * sameSide.quantity + position.entryPrice * position.quantity) / totalQty;
+
+    db.run(
+      'UPDATE positions SET quantity = ?, entry_price = ? WHERE id = ?',
+      [totalQty, Number(avgPrice.toFixed(2)), sameSide.id],
+    );
+    persist();
+    return mapPositionRow({ ...sameSide, quantity: totalQty, entry_price: Number(avgPrice.toFixed(2)) });
+  }
+
+  // Look for open opposite-side position
+  const oppSide = position.side === 'BUY' ? 'SELL' : 'BUY';
+  const opposite = queryPosition(
+    'SELECT * FROM positions WHERE user_id = ? AND mode = ? AND instrument_token = ? AND side = ? AND exited = 0',
+    [userId, mode, position.instrumentToken, oppSide],
+  );
+
+  if (opposite) {
+    if (position.quantity === opposite.quantity) {
+      // Exact close
+      db.run(
+        'UPDATE positions SET exited = 1, exit_price = ?, exit_time = ? WHERE id = ?',
+        [position.entryPrice, now, opposite.id],
+      );
+      persist();
+      return mapPositionRow({ ...opposite, exited: 1, exit_price: position.entryPrice, exit_time: now });
+    }
+
+    if (position.quantity < opposite.quantity) {
+      // Partial close — reduce existing qty
+      db.run(
+        'UPDATE positions SET quantity = ? WHERE id = ?',
+        [opposite.quantity - position.quantity, opposite.id],
+      );
+      persist();
+      return mapPositionRow({ ...opposite, quantity: opposite.quantity - position.quantity });
+    }
+
+    // Over-close — close existing, open remainder in new side
+    db.run(
+      'UPDATE positions SET exited = 1, exit_price = ?, exit_time = ? WHERE id = ?',
+      [position.entryPrice, now, opposite.id],
+    );
+
+    const remainderId = crypto.randomUUID();
+    db.run(
+      `INSERT INTO positions (id, user_id, mode, tradingsymbol, instrument_token, strike, option_type, side, quantity, entry_price, entry_time, expiry)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [remainderId, userId, mode, position.tradingsymbol, position.instrumentToken, position.strike,
+       position.optionType, position.side, position.quantity - opposite.quantity, position.entryPrice, now, position.expiry],
+    );
+    persist();
+    return mapPositionRow({
+      id: remainderId, user_id: userId, mode, tradingsymbol: position.tradingsymbol,
+      instrument_token: position.instrumentToken, strike: position.strike, option_type: position.optionType,
+      side: position.side, quantity: position.quantity - opposite.quantity, entry_price: position.entryPrice,
+      entry_time: now, expiry: position.expiry, exited: 0, exit_price: null, exit_time: null,
+    });
+  }
+
+  // No existing — open fresh
+  const id = crypto.randomUUID();
+  db.run(
+    `INSERT INTO positions (id, user_id, mode, tradingsymbol, instrument_token, strike, option_type, side, quantity, entry_price, entry_time, expiry)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, userId, mode, position.tradingsymbol, position.instrumentToken, position.strike,
+     position.optionType, position.side, position.quantity, position.entryPrice, now, position.expiry],
+  );
+  persist();
+  return mapPositionRow({
+    id, user_id: userId, mode, tradingsymbol: position.tradingsymbol,
+    instrument_token: position.instrumentToken, strike: position.strike, option_type: position.optionType,
+    side: position.side, quantity: position.quantity, entry_price: position.entryPrice,
+    entry_time: now, expiry: position.expiry, exited: 0, exit_price: null, exit_time: null,
+  });
+}
+
+/**
+ * Exit a position by ID. Validates ownership.
+ */
+export function exitPositionById(id, userId, exitPrice) {
+  if (!db) throw new Error('Database not initialised');
+
+  const now = new Date().toISOString();
+  db.run(
+    'UPDATE positions SET exited = 1, exit_price = ?, exit_time = ? WHERE id = ? AND user_id = ? AND exited = 0',
+    [exitPrice, now, id, userId],
+  );
+
+  const changes = db.getRowsModified();
+  if (changes > 0) persist();
+  return changes > 0;
+}
+
+/**
+ * Remove a position by ID. Validates ownership.
+ */
+export function removePositionById(id, userId) {
+  if (!db) throw new Error('Database not initialised');
+
+  db.run('DELETE FROM positions WHERE id = ? AND user_id = ?', [id, userId]);
+  const changes = db.getRowsModified();
+  if (changes > 0) persist();
+  return changes > 0;
+}
+
+/**
+ * Clear all positions for a user, optionally filtered by mode.
+ */
+export function clearPositions(userId, mode = null) {
+  if (!db) throw new Error('Database not initialised');
+
+  if (mode) {
+    db.run('DELETE FROM positions WHERE user_id = ? AND mode = ?', [userId, mode]);
+  } else {
+    db.run('DELETE FROM positions WHERE user_id = ?', [userId]);
+  }
+  persist();
+}
+
+/**
+ * Helper: query a single position row.
+ */
+function queryPosition(sql, params) {
+  const results = db.exec(sql, params);
+  if (!results.length || !results[0].values.length) return null;
+
+  const columns = results[0].columns;
+  const row = {};
+  columns.forEach((col, i) => { row[col] = results[0].values[0][i]; });
+  return row;
 }
 
 // ---------------------------------------------------------------------------
