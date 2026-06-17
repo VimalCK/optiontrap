@@ -7,6 +7,8 @@
 .content {
   margin-left: var(--sidebar-width-expanded);
   flex: 1;
+  display: flex;
+  flex-direction: column;
   height: 100vh;
   overflow-y: auto;
   transition: margin-left var(--transition-speed) cubic-bezier(0.4, 0, 0.2, 1);
@@ -18,9 +20,12 @@
 }
 
 .content__inner {
+  flex: 1;
   max-width: 1200px;
   margin: 0 auto;
   padding: 40px 32px;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .page-header {
@@ -120,4 +125,14 @@
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.5;
+}
+
+/* ── Footer ── */
+
+.content__footer {
+  padding: 24px 32px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-secondary);
+  opacity: 0.6;
 }

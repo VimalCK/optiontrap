@@ -84,12 +84,13 @@ export function searchInstruments(
     if (inst.tradingsymbol.toUpperCase().includes(q)) return true;
     if (inst.name.toUpperCase().includes(q)) return true;
     if (inst.strike && String(inst.strike).includes(q)) return true;
+    if (getDisplayLabel(inst).toUpperCase().includes(q)) return true;
     return false;
   });
 
   matches.sort((a, b) => {
-    const aPrefix = a.tradingsymbol.toUpperCase().startsWith(q) || a.name.toUpperCase().startsWith(q) ? 0 : 1;
-    const bPrefix = b.tradingsymbol.toUpperCase().startsWith(q) || b.name.toUpperCase().startsWith(q) ? 0 : 1;
+    const aPrefix = a.tradingsymbol.toUpperCase().startsWith(q) || a.name.toUpperCase().startsWith(q) || getDisplayLabel(a).toUpperCase().startsWith(q) ? 0 : 1;
+    const bPrefix = b.tradingsymbol.toUpperCase().startsWith(q) || b.name.toUpperCase().startsWith(q) || getDisplayLabel(b).toUpperCase().startsWith(q) ? 0 : 1;
     if (aPrefix !== bPrefix) return aPrefix - bPrefix;
 
     // Stocks before options for same-name prefix

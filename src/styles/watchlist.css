@@ -138,6 +138,8 @@
 
 .wl-tab--add:hover { color: var(--accent); }
 
+.wl-tab--new { margin-bottom: 0; padding: 4px 0; }
+
 /* ── Search bar ── */
 
 .wl-search {

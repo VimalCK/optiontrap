@@ -74,6 +74,7 @@ const App: React.FC = () => {
                     <Route path="*" element={<Navigate to="/portfolio" replace />} />
                   </Routes>
                 </div>
+                <footer className="content__footer">&copy; 2026 OptionTrap</footer>
               </main>
             </div>
           ) : (
