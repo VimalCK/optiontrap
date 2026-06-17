@@ -176,6 +176,20 @@ export async function initDb() {
     )
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS oi_snapshots (
+      id         INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp  INTEGER NOT NULL,
+      time_label TEXT NOT NULL,
+      data       TEXT NOT NULL,
+      prices     TEXT
+    )
+  `);
+
+  db.run(`
+    CREATE INDEX IF NOT EXISTS idx_oi_snapshots_timestamp ON oi_snapshots(timestamp)
+  `);
+
   // Clean expired sessions on startup
   db.run('DELETE FROM sessions WHERE expires < ?', [Date.now()]);
 
@@ -867,6 +881,134 @@ function queryPosition(sql, params) {
   const row = {};
   columns.forEach((col, i) => { row[col] = results[0].values[0][i]; });
   return row;
+}
+
+// ---------------------------------------------------------------------------
+// OI Snapshots (shared across all users)
+// ---------------------------------------------------------------------------
+
+/**
+ * Helper: get today's midnight timestamp (IST-based, since market is NSE).
+ */
+function getTodayMidnight() {
+  const now = new Date();
+  // IST = UTC+5:30. Compute IST midnight in UTC ms.
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  const istNow = now.getTime() + istOffset;
+  const istMidnight = Math.floor(istNow / (24 * 60 * 60 * 1000)) * (24 * 60 * 60 * 1000);
+  return istMidnight - istOffset; // convert back to UTC ms
+}
+
+/**
+ * Round a timestamp down to the nearest 10-minute mark.
+ */
+function roundTo10Min(timestamp) {
+  const TEN_MIN = 10 * 60 * 1000;
+  return Math.floor(timestamp / TEN_MIN) * TEN_MIN;
+}
+
+/**
+ * Save an OI snapshot (shared). Merges tokens into existing row if one exists
+ * for the same 10-minute slot. Silently cleans old-day rows.
+ */
+export function saveOiSnapshot(snapshot) {
+  if (!db) throw new Error('Database not initialised');
+
+  const rounded = roundTo10Min(snapshot.timestamp);
+  const timeLabel = snapshot.timeLabel;
+  const newData = typeof snapshot.data === 'string' ? JSON.parse(snapshot.data) : snapshot.data;
+  const newPrices = snapshot.prices
+    ? (typeof snapshot.prices === 'string' ? JSON.parse(snapshot.prices) : snapshot.prices)
+    : null;
+
+  // Check if a row exists for this 10-min slot
+  const results = db.exec('SELECT id, data, prices FROM oi_snapshots WHERE timestamp = ?', [rounded]);
+
+  if (results.length && results[0].values.length) {
+    const columns = results[0].columns;
+    const row = {};
+    columns.forEach((col, i) => { row[col] = results[0].values[0][i]; });
+
+    // Merge tokens into existing data
+    const existingData = JSON.parse(row.data);
+    Object.assign(existingData, newData);
+
+    let mergedPrices = row.prices ? JSON.parse(row.prices) : {};
+    if (newPrices) Object.assign(mergedPrices, newPrices);
+    const pricesStr = Object.keys(mergedPrices).length > 0 ? JSON.stringify(mergedPrices) : null;
+
+    db.run(
+      'UPDATE oi_snapshots SET data = ?, prices = ? WHERE id = ?',
+      [JSON.stringify(existingData), pricesStr, row.id],
+    );
+  } else {
+    db.run(
+      'INSERT INTO oi_snapshots (timestamp, time_label, data, prices) VALUES (?, ?, ?, ?)',
+      [rounded, timeLabel, JSON.stringify(newData), newPrices ? JSON.stringify(newPrices) : null],
+    );
+  }
+
+  // Silent cleanup: remove rows older than today
+  const todayMidnight = getTodayMidnight();
+  db.run('DELETE FROM oi_snapshots WHERE timestamp < ?', [todayMidnight]);
+
+  persist();
+}
+
+/**
+ * Get all OI snapshots from today, ordered by timestamp.
+ */
+export function getTodayOiSnapshots() {
+  if (!db) throw new Error('Database not initialised');
+
+  const todayMidnight = getTodayMidnight();
+  const results = db.exec(
+    'SELECT timestamp, time_label, data, prices FROM oi_snapshots WHERE timestamp >= ? ORDER BY timestamp',
+    [todayMidnight],
+  );
+
+  if (!results.length) return [];
+
+  const columns = results[0].columns;
+  return results[0].values.map((row) => {
+    const obj = {};
+    columns.forEach((col, i) => { obj[col] = row[i]; });
+    return {
+      timestamp: obj.timestamp,
+      timeLabel: obj.time_label,
+      data: JSON.parse(obj.data),
+      prices: obj.prices ? JSON.parse(obj.prices) : undefined,
+    };
+  });
+}
+
+/**
+ * Clean OI snapshots older than today.
+ */
+export function cleanOldOiSnapshots() {
+  if (!db) throw new Error('Database not initialised');
+
+  const todayMidnight = getTodayMidnight();
+  db.run('DELETE FROM oi_snapshots WHERE timestamp < ?', [todayMidnight]);
+  const changes = db.getRowsModified();
+  if (changes > 0) persist();
+  return changes;
+}
+
+/**
+ * Get the timestamp of the most recent OI snapshot, or null if none today.
+ */
+export function getLatestOiSnapshotTimestamp() {
+  if (!db) throw new Error('Database not initialised');
+
+  const todayMidnight = getTodayMidnight();
+  const results = db.exec(
+    'SELECT MAX(timestamp) as ts FROM oi_snapshots WHERE timestamp >= ?',
+    [todayMidnight],
+  );
+
+  if (!results.length || !results[0].values.length) return null;
+  return results[0].values[0][0] || null;
 }
 
 // ---------------------------------------------------------------------------

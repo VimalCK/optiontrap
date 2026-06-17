@@ -355,14 +355,12 @@ const OptionChain: React.FC = () => {
     // Set up interval to capture snapshots
     const capture = async () => {
       if (!isMarketLive() || oiData.size === 0) return;
-      const snaps = await getTodaySnapshots();
-      if (shouldTakeSnapshot(snaps)) {
+      if (await shouldTakeSnapshot()) {
         await saveOiSnapshot(oiData, livePrices);
-        const updatedSnaps = await getTodaySnapshots();
-        setSnapshots(updatedSnaps);
       }
       // Recalculate velocity
       const latestSnaps = await getTodaySnapshots();
+      setSnapshots(latestSnaps);
       if (latestSnaps.length > 0) {
         setOiVelocity(calculateVelocity(oiData, latestSnaps));
       }

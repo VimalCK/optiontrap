@@ -1,16 +1,9 @@
 /**
  * Intraday OI Snapshots Service
- * Uses unified "optiontrap" DB → oi_snapshots store.
+ * Uses server-side SQLite via REST API (shared across all users).
  */
 
-import { dbPutNoKey, dbGetAllCursor, dbDeleteCursor, STORE_OI } from './db';
-
 const SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
-
-// Module-level counter used to break timestamp ties. Appended as the last
-// digit of the millisecond value so the timestamp stays usable for date
-// comparisons and getTimeLabel() while the key is always unique.
-let _snapshotSeq = 0;
 
 export interface OiSnapshot {
   timestamp: number;
@@ -39,38 +32,57 @@ export async function saveOiSnapshot(
   priceData?: Map<number, number>,
 ): Promise<void> {
   if (oiData.size === 0) return;
-  // Use Date.now() rounded down to the nearest 10 ms, then append a 0-9
-  // sequence digit. This keeps the value within ~10 ms of real time (well
-  // within the same minute for getTimeLabel) while guaranteeing uniqueness
-  // across up to 10 concurrent saves — far more than can realistically occur.
-  const base = Math.floor(Date.now() / 10) * 10;
-  const timestamp = base + (_snapshotSeq++ % 10);
+  const timestamp = Date.now();
   const data: Record<string, number> = {};
   oiData.forEach((oi, token) => { data[String(token)] = oi; });
   const prices: Record<string, number> | undefined = priceData && priceData.size > 0
     ? (() => { const p: Record<string, number> = {}; priceData.forEach((price, token) => { p[String(token)] = price; }); return p; })()
     : undefined;
-  const snapshot: OiSnapshot = { timestamp, timeLabel: getTimeLabel(timestamp), data, ...(prices ? { prices } : {}) };
-  await dbPutNoKey(STORE_OI, snapshot);
-  console.log(`[OI Snapshots] Saved at ${snapshot.timeLabel} (${Object.keys(data).length} instruments${prices ? `, ${Object.keys(prices).length} prices` : ''})`);
+
+  try {
+    await fetch('/api/oi-snapshots', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ timestamp, timeLabel: getTimeLabel(timestamp), data, prices }),
+    });
+    console.log(`[OI Snapshots] Saved at ${getTimeLabel(timestamp)} (${Object.keys(data).length} instruments${prices ? `, ${Object.keys(prices).length} prices` : ''})`);
+  } catch (err) {
+    console.error('[OI Snapshots] Failed to save:', err);
+  }
 }
 
 export async function getTodaySnapshots(): Promise<OiSnapshot[]> {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayStartMs = todayStart.getTime();
-  const results = await dbGetAllCursor<OiSnapshot>(
-    STORE_OI,
-    (s) => s.timestamp >= todayStartMs,
-  );
-  return results.sort((a, b) => a.timestamp - b.timestamp);
+  try {
+    const res = await fetch('/api/oi-snapshots');
+    if (!res.ok) return [];
+    const json = await res.json();
+    return (json.data || []).sort((a: OiSnapshot, b: OiSnapshot) => a.timestamp - b.timestamp);
+  } catch {
+    return [];
+  }
 }
 
 export async function cleanOldSnapshots(): Promise<void> {
-  const todayStart = new Date();
-  todayStart.setHours(0, 0, 0, 0);
-  const todayStartMs = todayStart.getTime();
-  await dbDeleteCursor(STORE_OI, (v) => (v as OiSnapshot).timestamp < todayStartMs);
+  try {
+    await fetch('/api/oi-snapshots/old', { method: 'DELETE' });
+  } catch { /* silently fail */ }
+}
+
+export async function shouldTakeSnapshot(): Promise<boolean> {
+  try {
+    const res = await fetch('/api/oi-snapshots/latest');
+    if (!res.ok) return true;
+    const json = await res.json();
+    const latest = json.data?.timestamp;
+    if (!latest) return true;
+    return (Date.now() - latest) >= SNAPSHOT_INTERVAL_MS;
+  } catch {
+    return true; // on error, allow snapshot
+  }
+}
+
+export function getSnapshotInterval(): number {
+  return SNAPSHOT_INTERVAL_MS;
 }
 
 export function calculateVelocity(
@@ -107,15 +119,6 @@ export function calculateVelocity(
   }
 
   return velocityMap;
-}
-
-export function shouldTakeSnapshot(snapshots: OiSnapshot[]): boolean {
-  if (snapshots.length === 0) return true;
-  return (Date.now() - snapshots[snapshots.length - 1].timestamp) >= SNAPSHOT_INTERVAL_MS;
-}
-
-export function getSnapshotInterval(): number {
-  return SNAPSHOT_INTERVAL_MS;
 }
 
 export interface VelocityPattern {

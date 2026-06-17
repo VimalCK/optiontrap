@@ -1,22 +1,3 @@
-import { dbGet, dbSet, STORE_NFO } from './db';
-
-async function getCachedCSV(): Promise<{ csv: string; date: string } | null> {
-  return dbGet<{ csv: string; date: string }>(STORE_NFO, 'nfo_instruments');
-}
-
-async function setCachedCSV(csv: string, date: string): Promise<void> {
-  return dbSet(STORE_NFO, 'nfo_instruments', { csv, date });
-}
-
-function getTodayIST(): string {
-  const now = new Date();
-  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const year = ist.getFullYear();
-  const month = String(ist.getMonth() + 1).padStart(2, '0');
-  const day = String(ist.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
-
 export interface OptionInstrument {
   instrumentToken: number;
   exchangeToken: number;
@@ -36,113 +17,39 @@ export interface OptionChainRow {
 }
 
 /**
- * Fetch NFO instruments CSV — cached daily in IndexedDB
+ * Fetch NIFTY options from the server's shared instrument cache.
+ * The server fetches from Kite once per day and caches in SQLite.
  */
 export async function fetchNiftyOptions(): Promise<OptionInstrument[]> {
-  const today = getTodayIST();
-
-  // Check cache first
-  const cached = await getCachedCSV();
-  if (cached && cached.date === today) {
-    console.log('[OptionChain] Using cached instruments from', cached.date);
-    return parseNiftyOptions(cached.csv);
-  }
-
-  // Fetch fresh data
-  console.log('[OptionChain] Fetching fresh instruments data...');
-  const response = await fetch('/api/instruments/NFO', {
+  const response = await fetch('/instruments', {
     credentials: 'include',
   });
 
   if (!response.ok) {
     const text = await response.text().catch(() => '');
-    console.error('[OptionChain] Fetch failed:', response.status, text.slice(0, 200));
     if (response.status === 403 || text.toLowerCase().includes('api_key') || text.toLowerCase().includes('access_token')) {
       throw new Error('Session expired. Please login again from the Profile page.');
     }
     throw new Error('Failed to fetch instruments');
   }
 
-  const csv = await response.text();
-  console.log('[OptionChain] CSV fetched, storing in cache...');
+  const json = await response.json();
+  const instruments: any[] = json.data || [];
 
-  // Store in IndexedDB for today
-  await setCachedCSV(csv, today);
-
-  const firstLines = csv.split('\n').slice(0, 3);
-  console.log('[OptionChain] CSV header:', firstLines[0]);
-  const result = parseNiftyOptions(csv);
-  console.log('[OptionChain] Parsed NIFTY options:', result.length);
-  if (result.length > 0) {
-    console.log('[OptionChain] Sample option:', result[0]);
-  }
-  return result;
-}
-
-function parseNiftyOptions(csv: string): OptionInstrument[] {
-  const lines = csv.trim().split('\n');
-  if (lines.length < 2) return [];
-
-  const headers = parseCsvLine(lines[0]);
-  const tokenIdx = headers.indexOf('instrument_token');
-  const exchangeTokenIdx = headers.indexOf('exchange_token');
-  const symbolIdx = headers.indexOf('tradingsymbol');
-  const nameIdx = headers.indexOf('name');
-  const expiryIdx = headers.indexOf('expiry');
-  const strikeIdx = headers.indexOf('strike');
-  const typeIdx = headers.indexOf('instrument_type');
-  const lotIdx = headers.indexOf('lot_size');
-  const lastPriceIdx = headers.indexOf('last_price');
-
-  const options: OptionInstrument[] = [];
-
-  for (let i = 1; i < lines.length; i++) {
-    const cols = parseCsvLine(lines[i]);
-    if (cols.length < headers.length) continue;
-
-    const name = cols[nameIdx];
-    const instrumentType = cols[typeIdx];
-
-    if (name !== 'NIFTY') continue;
-    if (instrumentType !== 'CE' && instrumentType !== 'PE') continue;
-
-    options.push({
-      instrumentToken: parseInt(cols[tokenIdx], 10),
-      exchangeToken: parseInt(cols[exchangeTokenIdx], 10),
-      tradingsymbol: cols[symbolIdx],
-      name,
-      expiry: cols[expiryIdx],
-      strike: parseFloat(cols[strikeIdx]),
-      instrumentType: instrumentType as 'CE' | 'PE',
-      lotSize: parseInt(cols[lotIdx], 10),
-      lastPrice: parseFloat(cols[lastPriceIdx]) || 0,
-    });
-  }
-
-  return options;
-}
-
-/**
- * Parse a CSV line handling quoted fields
- */
-function parseCsvLine(line: string): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-
-  for (let i = 0; i < line.length; i++) {
-    const char = line[i];
-    if (char === '"') {
-      inQuotes = !inQuotes;
-    } else if (char === ',' && !inQuotes) {
-      result.push(current.trim());
-      current = '';
-    } else {
-      current += char;
-    }
-  }
-  result.push(current.trim());
-  return result;
+  // Filter for NIFTY CE/PE options only (server returns NSE EQ + NIFTY F&O)
+  return instruments
+    .filter((i: any) => i.exchange === 'NFO' && i.name === 'NIFTY' && (i.instrumentType === 'CE' || i.instrumentType === 'PE'))
+    .map((i: any) => ({
+      instrumentToken: i.instrumentToken,
+      exchangeToken: i.exchangeToken,
+      tradingsymbol: i.tradingsymbol,
+      name: i.name,
+      expiry: i.expiry,
+      strike: i.strike,
+      instrumentType: i.instrumentType as 'CE' | 'PE',
+      lotSize: i.lotSize || 0,
+      lastPrice: i.lastPrice || 0,
+    }));
 }
 
 /**

@@ -59,6 +59,10 @@ import {
   exitPositionById,
   removePositionById,
   clearPositions,
+  saveOiSnapshot,
+  getTodayOiSnapshots,
+  cleanOldOiSnapshots,
+  getLatestOiSnapshotTimestamp,
 } from './db.js';
 import { SqliteSessionStore } from './sessionStore.js';
 import { createRateLimiter } from './rateLimit.js';
@@ -602,6 +606,52 @@ app.delete('/api/positions', requireAuth, (req, res) => {
   const mode = req.query.mode || null;
   clearPositions(userId, mode);
   res.json({ status: 'ok' });
+});
+
+// ---------- OI Snapshots (shared) ----------
+
+app.get('/api/oi-snapshots', requireAuth, (req, res) => {
+  try {
+    const snapshots = getTodayOiSnapshots();
+    res.json({ status: 'ok', data: snapshots });
+  } catch (err) {
+    console.error('[OI Snapshots] GET error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+app.get('/api/oi-snapshots/latest', requireAuth, (req, res) => {
+  try {
+    const timestamp = getLatestOiSnapshotTimestamp();
+    res.json({ status: 'ok', data: { timestamp } });
+  } catch (err) {
+    console.error('[OI Snapshots] GET latest error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+app.post('/api/oi-snapshots', requireAuth, (req, res) => {
+  try {
+    const { timestamp, timeLabel, data, prices } = req.body;
+    if (!timestamp || !timeLabel || !data) {
+      return res.status(400).json({ status: 'error', message: 'Missing required fields: timestamp, timeLabel, data' });
+    }
+    saveOiSnapshot({ timestamp, timeLabel, data, prices });
+    res.json({ status: 'ok' });
+  } catch (err) {
+    console.error('[OI Snapshots] POST error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+app.delete('/api/oi-snapshots/old', requireAuth, (req, res) => {
+  try {
+    const deleted = cleanOldOiSnapshots();
+    res.json({ status: 'ok', deleted });
+  } catch (err) {
+    console.error('[OI Snapshots] DELETE error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
 });
 
 // ---------- Instruments (shared cache) ----------
