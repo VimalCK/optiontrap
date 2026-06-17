@@ -60,7 +60,7 @@ const App: React.FC = () => {
         element={
           isAuthenticated ? (
             <div className="layout">
-              <Sidebar collapsed={sidebarCollapsed} onToggle={handleToggleSidebar} />
+              <Sidebar collapsed={sidebarCollapsed} onToggle={handleToggleSidebar} session={session} />
               <main className={`content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
                 <div className="content__inner">
                   <Routes>

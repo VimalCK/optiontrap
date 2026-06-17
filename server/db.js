@@ -192,6 +192,22 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_oi_snapshots_timestamp ON oi_snapshots(timestamp)
   `);
 
+  // Migrate existing oi_snapshots table: add close and spot columns if missing
+  try {
+    const tableInfo = db.exec('PRAGMA table_info(oi_snapshots)');
+    if (tableInfo.length) {
+      const columns = tableInfo[0].values.map((row) => row[1]);
+      if (!columns.includes('close')) {
+        db.run('ALTER TABLE oi_snapshots ADD COLUMN close TEXT');
+      }
+      if (!columns.includes('spot')) {
+        db.run('ALTER TABLE oi_snapshots ADD COLUMN spot REAL');
+      }
+    }
+  } catch (err) {
+    console.warn('[DB] oi_snapshots migration warning:', err.message);
+  }
+
   // Clean expired sessions on startup
   db.run('DELETE FROM sessions WHERE expires < ?', [Date.now()]);
 

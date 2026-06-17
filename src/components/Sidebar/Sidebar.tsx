@@ -10,7 +10,7 @@ import {
   ChevronLeftIcon,
   LogoIcon,
 } from '../icons/Icons';
-import { useKiteSession } from '@/hooks/useKiteSession';
+import { KiteSession } from '@/services/kiteAuth';
 import '@/styles/sidebar.css';
 
 interface NavItem {
@@ -29,10 +29,10 @@ const navItems: NavItem[] = [
 interface SidebarProps {
   collapsed: boolean;
   onToggle: () => void;
+  session: KiteSession | null;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle }) => {
-  const { session } = useKiteSession();
+const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, session }) => {
   const isSignedIn = session !== null;
 
   return (
