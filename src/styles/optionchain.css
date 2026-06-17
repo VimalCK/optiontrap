@@ -550,19 +550,24 @@
 
 /* Velocity indicators */
 .oc-chart__velocity {
-  font-size: 8px;
+  font-size: 10px;
   line-height: 1;
   position: absolute;
-  top: 4px;
   z-index: 2;
 }
 
 .oc-chart__velocity--ce {
-  left: 4px;
+  top: 2px;
+  left: 0;
+  right: 0;
+  text-align: center;
 }
 
 .oc-chart__velocity--pe {
-  right: 4px;
+  top: 12px;
+  left: 0;
+  right: 0;
+  text-align: center;
 }
 
 .oc-chart__velocity--up {
