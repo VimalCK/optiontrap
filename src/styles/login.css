@@ -156,6 +156,15 @@
   line-height: 1.5;
 }
 
+.login-card__privacy-note {
+  font-size: 11px;
+  color: var(--text-tertiary, #6b7280);
+  text-align: center;
+  margin-top: -12px;
+  margin-bottom: 16px;
+  opacity: 0.8;
+}
+
 /* ─── Primary login button ──────────────────────────────────────────── */
 
 .login-card__login-btn {

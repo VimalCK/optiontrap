@@ -1,21 +1,15 @@
 /**
  * OptionTrap Backend Server
  *
- * Multi-user server that securely manages per-user Kite API credentials.
- * Each user's api_secret is AES-256-GCM encrypted in SQLite. The browser
- * never sees apiSecret or accessToken — all sensitive operations happen
- * server-side.
- *
- * A signed persistent cookie (optiontrap_remember) remembers returning
- * users so they only need to click "Login with Kite" each day instead of
- * re-entering credentials.
+ * Multi-user server. Credentials (apiKey + apiSecret) are stored ONLY in
+ * the client browser's localStorage — the server never persists them.
+ * They are sent during OAuth token exchange and immediately discarded.
  *
  * Endpoints:
- *   GET  /auth/status      — credentials configured (via cookie) + session
- *   GET  /auth/login-url   — Kite OAuth URL using per-user api_key
- *   POST /auth/credentials — save api_key + secret (session temp → SQLite after OAuth)
- *   POST /auth/token       — exchange request_token, persist credentials, set cookie
- *   POST /auth/logout      — invalidate session, keep remember cookie
+ *   GET  /auth/status      — session active?
+ *   GET  /auth/login-url   — Kite OAuth URL (apiKey from query param)
+ *   POST /auth/token       — exchange request_token (apiKey + apiSecret from body)
+ *   POST /auth/logout      — invalidate session
  *   GET  /auth/me          — current session info
  *   ALL  /api/*            — proxy to api.kite.trade with per-user auth
  *   WS   /ws               — proxy to wss://ws.kite.trade with per-user auth
@@ -43,10 +37,8 @@ import { fileURLToPath } from 'url';
 import {
   initDb,
   closeDb,
-  saveCredentials,
-  getCredentialsByApiKey,
-  deleteCredentials,
-  migrateFromJson,
+  upsertUser,
+  deleteUser,
   createWatchlist,
   getWatchlists,
   getWatchlistItems,
@@ -74,10 +66,6 @@ const PORT = parseInt(process.env.PORT || '3001', 10);
 const SESSION_SECRET = process.env.SESSION_SECRET || 'insecure-dev-secret';
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
 const IS_PROD = process.env.NODE_ENV === 'production';
-const CREDENTIALS_JSON_PATH = path.join(__dirname, 'credentials.json');
-
-const REMEMBER_COOKIE = 'optiontrap_remember';
-const REMEMBER_MAX_AGE = 30 * 24 * 60 * 60 * 1000; // 30 days
 
 // ---------- Log colours ----------
 
@@ -90,40 +78,6 @@ const RESET = '\x1b[0m';
 
 function ts() {
   return `${GREY}${new Date().toLocaleTimeString()}${RESET}`;
-}
-
-// ---------- Resolve per-user credentials ----------
-
-/**
- * Look up credentials for the current request. Checks (in order):
- *   1. Active session (kiteSession.apiKey)
- *   2. Pending credentials in session (just saved, pre-OAuth)
- *   3. Persistent remember cookie → SQLite lookup
- *
- * Returns { apiKey, apiSecret } or null.
- */
-function resolveCredentials(req) {
-  // 1. Active session
-  const apiKey = req.session?.kiteSession?.apiKey;
-  if (apiKey) {
-    const creds = getCredentialsByApiKey(apiKey);
-    if (creds) return creds;
-  }
-
-  // 2. Pending (just entered, not yet OAuth'd)
-  const pending = req.session?.pendingCredentials;
-  if (pending?.apiKey && pending?.apiSecret) {
-    return { apiKey: pending.apiKey, apiSecret: pending.apiSecret };
-  }
-
-  // 3. Remember cookie
-  const rememberedKey = req.signedCookies?.[REMEMBER_COOKIE];
-  if (rememberedKey) {
-    const creds = getCredentialsByApiKey(rememberedKey);
-    if (creds) return creds;
-  }
-
-  return null;
 }
 
 // ---------- Express App ----------
@@ -207,77 +161,38 @@ app.use((req, res, next) => {
 
 // ---------- Auth Routes ----------
 
-// Combined status: are credentials available + is session active?
+// Session status check
 app.get('/auth/status', (req, res) => {
   const activeSession = req.session?.kiteSession || null;
-  const creds = resolveCredentials(req);
 
   if (activeSession) {
     const { accessToken, apiKey, ...safe } = activeSession;
     res.json({
       status: 'ok',
-      credentialsConfigured: true,
       authenticated: true,
       data: safe,
     });
   } else {
     res.json({
       status: 'ok',
-      credentialsConfigured: creds !== null,
       authenticated: false,
       data: null,
     });
   }
 });
 
-// Save credentials — stored in session until OAuth completes
-app.post('/auth/credentials', (req, res) => {
-  const { apiKey, apiSecret } = req.body;
-
-  if (!apiKey || !apiSecret) {
-    return res.status(400).json({
-      status: 'error',
-      message: 'apiKey and apiSecret are required',
-    });
-  }
-
-  const trimmedKey = apiKey.trim();
-  const trimmedSecret = apiSecret.trim();
-
-  // Store temporarily in session (persisted to SQLite after successful OAuth)
-  req.session.pendingCredentials = {
-    apiKey: trimmedKey,
-    apiSecret: trimmedSecret,
-  };
-
-  // Destroy any active Kite session — new credentials mean fresh login
-  if (req.session.kiteSession) {
-    delete req.session.kiteSession;
-  }
-
-  res.json({ status: 'ok', message: 'Credentials saved' });
-});
-
-// Get Kite OAuth login URL
+// Get Kite OAuth login URL — apiKey comes from client (stored in localStorage)
 app.get('/auth/login-url', (req, res) => {
-  const creds = resolveCredentials(req);
+  const apiKey = req.query.api_key;
 
-  if (!creds) {
+  if (!apiKey) {
     return res.status(400).json({
       status: 'error',
-      message: 'No credentials available. Please save credentials first.',
+      message: 'api_key query parameter is required',
     });
   }
 
-  // Ensure credentials are in session for the upcoming token exchange
-  if (!req.session.pendingCredentials) {
-    req.session.pendingCredentials = {
-      apiKey: creds.apiKey,
-      apiSecret: creds.apiSecret,
-    };
-  }
-
-  const url = `https://kite.zerodha.com/connect/login?v=3&api_key=${creds.apiKey}`;
+  const url = `https://kite.zerodha.com/connect/login?v=3&api_key=${apiKey}`;
   res.json({ url });
 });
 
@@ -292,27 +207,16 @@ app.get('/auth/me', (req, res) => {
 });
 
 // Exchange request_token for access_token
+// Credentials come from client body (stored in browser localStorage)
 app.post('/auth/token', async (req, res) => {
-  const { request_token } = req.body;
+  const { request_token, apiKey, apiSecret } = req.body;
 
-  if (!request_token) {
+  if (!request_token || !apiKey || !apiSecret) {
     return res.status(400).json({
       status: 'error',
-      message: 'request_token is required',
+      message: 'request_token, apiKey, and apiSecret are required',
     });
   }
-
-  // Resolve credentials: session pending → remember cookie → fail
-  const creds = resolveCredentials(req);
-
-  if (!creds) {
-    return res.status(400).json({
-      status: 'error',
-      message: 'No credentials found. Please save your API key and secret first.',
-    });
-  }
-
-  const { apiKey, apiSecret } = creds;
 
   try {
     console.log(`${ts()} ${CYAN}AUTH${RESET} token exchange for ${apiKey.slice(0, 4)}...`);
@@ -341,10 +245,10 @@ app.post('/auth/token', async (req, res) => {
     const result = await response.json();
     const data = result.data;
 
-    // 1. Persist credentials to SQLite (encrypted) with user identity
-    saveCredentials(apiKey, apiSecret, data.user_id, data.user_name);
+    // 1. Record user identity in SQLite (no credentials stored)
+    upsertUser(data.user_id, data.user_name);
 
-    // 2. Set active session with per-user api_key
+    // 2. Set active session
     req.session.kiteSession = {
       apiKey,
       accessToken: data.access_token,
@@ -357,18 +261,6 @@ app.post('/auth/token', async (req, res) => {
       avatarUrl: data.avatar_url || null,
     };
 
-    // 3. Clear pending credentials (now persisted in SQLite)
-    delete req.session.pendingCredentials;
-
-    // 4. Set persistent remember cookie (survives session expiry)
-    res.cookie(REMEMBER_COOKIE, apiKey, {
-      httpOnly: true,
-      secure: IS_PROD,
-      sameSite: 'lax',
-      maxAge: REMEMBER_MAX_AGE,
-      signed: true,
-    });
-
     const { accessToken: _tok, apiKey: _key, ...safe } = req.session.kiteSession;
     console.log(`${ts()} ${GREEN}AUTH${RESET} logged in: ${data.user_id} (${data.user_name})`);
     res.json({ status: 'ok', data: safe });
@@ -379,7 +271,7 @@ app.post('/auth/token', async (req, res) => {
   }
 });
 
-// Logout — destroy session but keep remember cookie for easy re-login
+// Logout — destroy session (credentials remain in browser localStorage)
 app.post('/auth/logout', async (req, res) => {
   const kiteSession = req.session?.kiteSession;
 
@@ -399,18 +291,16 @@ app.post('/auth/logout', async (req, res) => {
 
   req.session.destroy(() => {
     res.clearCookie('optiontrap_sid');
-    // Intentionally NOT clearing optiontrap_remember — user can re-login
-    // without re-entering credentials next time
     res.json({ status: 'ok' });
   });
 });
 
-// Delete account — permanently remove credentials from SQLite, destroy session, clear cookies
+// Delete account — remove user from SQLite, destroy session
 app.delete('/auth/account', (req, res) => {
   const kiteSession = req.session?.kiteSession;
-  const apiKey = kiteSession?.apiKey || req.signedCookies?.[REMEMBER_COOKIE];
+  const userId = kiteSession?.userId;
 
-  if (!apiKey) {
+  if (!userId) {
     return res.status(400).json({ status: 'error', message: 'No account found to delete' });
   }
 
@@ -425,14 +315,13 @@ app.delete('/auth/account', (req, res) => {
     }).catch(() => {});
   }
 
-  // Delete credentials from SQLite
-  deleteCredentials(apiKey);
+  // Delete user from SQLite
+  deleteUser(userId);
 
-  // Destroy session + clear all cookies
+  // Destroy session
   req.session.destroy(() => {
     res.clearCookie('optiontrap_sid');
-    res.clearCookie(REMEMBER_COOKIE);
-    console.log(`${ts()} ${RED}AUTH${RESET} account deleted: ${kiteSession?.userId || apiKey}`);
+    console.log(`${ts()} ${RED}AUTH${RESET} account deleted: ${userId}`);
     res.json({ status: 'ok' });
   });
 });
@@ -824,13 +713,10 @@ async function start() {
   // Initialise SQLite
   await initDb();
 
-  // One-time migration from legacy single-user credentials.json
-  migrateFromJson(CREDENTIALS_JSON_PATH);
-
   server.listen(PORT, () => {
     console.log(`${ts()} ${GREEN}Server${RESET} OptionTrap running on port ${PORT}`);
     console.log(`${ts()} ${GREEN}Server${RESET} Mode: ${IS_PROD ? 'production' : 'development'}`);
-    console.log(`${ts()} ${GREEN}Server${RESET} Multi-user: credentials stored in SQLite (encrypted)`);
+    console.log(`${ts()} ${GREEN}Server${RESET} Credentials: client-side only (localStorage)`);
   });
 }
 

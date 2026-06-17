@@ -1,19 +1,13 @@
 /**
  * Kite Authentication — Client-side module
  *
- * In this architecture, the backend server holds the apiSecret and accessToken.
- * The client never sees sensitive credentials. Session state is managed via
- * httpOnly cookies set by the server.
- *
- * The client only needs to:
- *  - Check auth status via GET /auth/status (credentials configured + session)
- *  - Save credentials via POST /auth/credentials (sent to server, stored server-side)
- *  - Get login URL via GET /auth/login-url
- *  - Exchange request_token via POST /auth/token (server does SHA-256 + exchange)
- *  - Logout via POST /auth/logout
+ * Credentials (apiKey + apiSecret) are stored ONLY in browser localStorage.
+ * The server never persists them — they are sent during OAuth token exchange
+ * and immediately discarded. Session state is managed via httpOnly cookies.
  */
 
 const AVATAR_STORAGE_KEY = 'optiontrap_avatar_url';
+const CREDS_KEY = 'optiontrap_credentials';
 
 export interface KiteSession {
   userId: string;
@@ -33,21 +27,19 @@ export interface AuthStatus {
 
 // In-memory cache of session (avoids /auth/me on every render)
 let cachedSession: KiteSession | null = null;
-let cachedCredentialsConfigured: boolean = false;
 
 /**
- * Check full auth status: credentials configured + session valid
+ * Check full auth status: credentials configured (localStorage) + session valid (server)
  */
 export async function fetchAuthStatus(): Promise<AuthStatus> {
+  const hasCreds = hasCredentials();
   try {
     const res = await fetch('/auth/status', { credentials: 'include' });
     if (!res.ok) {
       cachedSession = null;
-      cachedCredentialsConfigured = false;
-      return { credentialsConfigured: false, authenticated: false, session: null };
+      return { credentialsConfigured: hasCreds, authenticated: false, session: null };
     }
     const json = await res.json();
-    cachedCredentialsConfigured = json.credentialsConfigured;
     if (json.authenticated && json.data) {
       cachedSession = json.data;
       if (json.data.avatarUrl) {
@@ -57,39 +49,50 @@ export async function fetchAuthStatus(): Promise<AuthStatus> {
       cachedSession = null;
     }
     return {
-      credentialsConfigured: json.credentialsConfigured,
+      credentialsConfigured: hasCreds,
       authenticated: json.authenticated,
       session: cachedSession,
     };
   } catch {
     cachedSession = null;
-    cachedCredentialsConfigured = false;
-    return { credentialsConfigured: false, authenticated: false, session: null };
+    return { credentialsConfigured: hasCreds, authenticated: false, session: null };
   }
 }
 
 /**
- * Save API credentials to the server
+ * Save API credentials to browser localStorage (never sent to server for storage)
  */
-export async function saveCredentials(apiKey: string, apiSecret: string): Promise<void> {
-  const res = await fetch('/auth/credentials', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ apiKey, apiSecret }),
-  });
-  if (!res.ok) {
-    const error = await res.json().catch(() => ({ message: 'Failed to save credentials' }));
-    throw new Error(error.message);
-  }
-  cachedCredentialsConfigured = true;
+export function saveCredentials(apiKey: string, apiSecret: string): void {
+  localStorage.setItem(CREDS_KEY, JSON.stringify({ apiKey, apiSecret }));
 }
 
 /**
- * Check if credentials are configured (cached, synchronous)
+ * Get saved credentials from localStorage
+ */
+export function getCredentials(): { apiKey: string; apiSecret: string } | null {
+  try {
+    const raw = localStorage.getItem(CREDS_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (parsed.apiKey && parsed.apiSecret) return parsed;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Clear credentials from localStorage
+ */
+export function clearCredentials(): void {
+  localStorage.removeItem(CREDS_KEY);
+}
+
+/**
+ * Check if credentials are configured (synchronous, checks localStorage)
  */
 export function hasCredentials(): boolean {
-  return cachedCredentialsConfigured;
+  return getCredentials() !== null;
 }
 
 /**
@@ -139,20 +142,37 @@ export function clearSession(): void {
  * Get Kite OAuth login URL from server
  */
 export async function getLoginUrl(): Promise<string> {
-  const res = await fetch('/auth/login-url', { credentials: 'include' });
+  const creds = getCredentials();
+  if (!creds) throw new Error('No credentials configured');
+
+  const res = await fetch(`/auth/login-url?api_key=${encodeURIComponent(creds.apiKey)}`, {
+    credentials: 'include',
+  });
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ message: 'Failed to get login URL' }));
+    throw new Error(error.message);
+  }
   const { url } = await res.json();
   return url;
 }
 
 /**
- * Exchange request_token for session (server does the heavy lifting)
+ * Exchange request_token for session (server does SHA-256 + Kite exchange)
+ * Credentials are sent from localStorage — server uses them once and discards.
  */
 export async function exchangeToken(requestToken: string): Promise<KiteSession> {
+  const creds = getCredentials();
+  if (!creds) throw new Error('No credentials configured');
+
   const res = await fetch('/auth/token', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     credentials: 'include',
-    body: JSON.stringify({ request_token: requestToken }),
+    body: JSON.stringify({
+      request_token: requestToken,
+      apiKey: creds.apiKey,
+      apiSecret: creds.apiSecret,
+    }),
   });
 
   if (!res.ok) {
@@ -184,8 +204,7 @@ export async function logout(): Promise<void> {
 }
 
 /**
- * Delete account — permanently removes credentials from server,
- * destroys session, and clears all cookies.
+ * Delete account — removes user from server, clears localStorage credentials.
  */
 export async function deleteAccount(): Promise<void> {
   await fetch('/auth/account', {
@@ -193,7 +212,7 @@ export async function deleteAccount(): Promise<void> {
     credentials: 'include',
   });
   cachedSession = null;
-  cachedCredentialsConfigured = false;
+  clearCredentials();
   localStorage.removeItem(AVATAR_STORAGE_KEY);
 }
 

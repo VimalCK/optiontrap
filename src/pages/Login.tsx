@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { getLoginUrl, getLastAvatarUrl, saveCredentials, hasCredentials, fetchAuthStatus } from '@/services/kiteAuth';
+import { getLoginUrl, getLastAvatarUrl, saveCredentials, hasCredentials, getCredentials } from '@/services/kiteAuth';
 import { ShieldIcon } from '@/components/icons/Icons';
 import '@/styles/login.css';
 
@@ -107,11 +107,11 @@ const Login: React.FC = () => {
   const [searchParams] = useSearchParams();
   const expired = searchParams.get('expired') === '1';
 
-  const [apiKey, setApiKey] = useState('');
-  const [apiSecret, setApiSecret] = useState('');
+  const existingCreds = getCredentials();
+  const [apiKey, setApiKey] = useState(existingCreds?.apiKey ?? '');
+  const [apiSecret, setApiSecret] = useState(existingCreds?.apiSecret ?? '');
   const [showSecret, setShowSecret] = useState(false);
   const [credsSaved, setCredsSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [loginLoading, setLoginLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -120,25 +120,16 @@ const Login: React.FC = () => {
     const lastAvatar = getLastAvatarUrl();
     if (lastAvatar) setAvatarUrl(lastAvatar);
 
-    // Check if server already has credentials configured
-    fetchAuthStatus().then((status) => {
-      if (status.credentialsConfigured) {
-        setCredsSaved(true);
-      }
-    });
+    // Check if localStorage already has credentials
+    if (hasCredentials()) {
+      setCredsSaved(true);
+    }
   }, []);
 
-  const handleSave = async () => {
-    setSaving(true);
+  const handleSave = () => {
     setError(null);
-    try {
-      await saveCredentials(apiKey.trim(), apiSecret.trim());
-      setCredsSaved(true);
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : 'Failed to save credentials');
-    } finally {
-      setSaving(false);
-    }
+    saveCredentials(apiKey.trim(), apiSecret.trim());
+    setCredsSaved(true);
   };
 
   const handleLogin = async () => {
@@ -213,6 +204,9 @@ const Login: React.FC = () => {
                   Get keys
                 </a>
               </p>
+              <p className="login-card__privacy-note">
+                Your API key and secret are stored only in this browser and are never saved on the server.
+              </p>
 
               <div className="form-field">
                 <label className="form-field__label" htmlFor="login-api-key">
@@ -258,9 +252,9 @@ const Login: React.FC = () => {
                 <button
                   className="btn btn--primary"
                   onClick={handleSave}
-                  disabled={!hasCreds || saving}
+                  disabled={!hasCreds}
                 >
-                  {saving ? 'Saving...' : 'Save & Continue'}
+                  Save & Continue
                 </button>
               </div>
               {hasCredentials() && (
