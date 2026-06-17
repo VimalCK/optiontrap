@@ -26,7 +26,6 @@ async function kiteRequest<T>(endpoint: string, options: RequestOptions = {}): P
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => null);
-    const rawMessage = errorBody?.message || `API request failed (${response.status})`;
 
     // Expired / invalid session — clear locally so the auth guard redirects to login
     if (response.status === 401 || response.status === 403) {
@@ -35,7 +34,20 @@ async function kiteRequest<T>(endpoint: string, options: RequestOptions = {}): P
       throw new Error('Session expired. Please login again.');
     }
 
-    throw new Error(rawMessage);
+    // User-friendly messages for common failures
+    const friendlyMessages: Record<number, string> = {
+      429: 'Too many requests. Please wait a moment and try again.',
+      500: 'Something went wrong on the server. Please try again.',
+      502: 'Market data service is temporarily unavailable. Please try again shortly.',
+      503: 'Market data service is under maintenance. Please try again later.',
+      504: 'Request timed out. Please check your connection and try again.',
+    };
+
+    const message = friendlyMessages[response.status]
+      || errorBody?.message
+      || `Something went wrong (${response.status}). Please try again.`;
+
+    throw new Error(message);
   }
 
   const result = await response.json();
