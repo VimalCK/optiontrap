@@ -9,7 +9,9 @@ export interface OiSnapshot {
   timestamp: number;
   timeLabel: string;
   data: Record<string, number>;
-  prices?: Record<string, number>;  // token -> LTP (optional for backward compat)
+  prices?: Record<string, number>;  // token -> LTP
+  close?: Record<string, number>;   // token -> previous day close
+  spot?: number;                    // NIFTY spot price
 }
 
 export interface OiVelocity {
@@ -30,6 +32,8 @@ function getTimeLabel(timestamp: number): string {
 export async function saveOiSnapshot(
   oiData: Map<number, number>,
   priceData?: Map<number, number>,
+  closeData?: Map<number, number>,
+  spot?: number,
 ): Promise<void> {
   if (oiData.size === 0) return;
   const timestamp = Date.now();
@@ -38,12 +42,15 @@ export async function saveOiSnapshot(
   const prices: Record<string, number> | undefined = priceData && priceData.size > 0
     ? (() => { const p: Record<string, number> = {}; priceData.forEach((price, token) => { p[String(token)] = price; }); return p; })()
     : undefined;
+  const close: Record<string, number> | undefined = closeData && closeData.size > 0
+    ? (() => { const c: Record<string, number> = {}; closeData.forEach((price, token) => { c[String(token)] = price; }); return c; })()
+    : undefined;
 
   try {
     await fetch('/api/oi-snapshots', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ timestamp, timeLabel: getTimeLabel(timestamp), data, prices }),
+      body: JSON.stringify({ timestamp, timeLabel: getTimeLabel(timestamp), data, prices, close, spot }),
     });
     console.log(`[OI Snapshots] Saved at ${getTimeLabel(timestamp)} (${Object.keys(data).length} instruments${prices ? `, ${Object.keys(prices).length} prices` : ''})`);
   } catch (err) {

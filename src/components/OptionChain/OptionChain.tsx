@@ -69,7 +69,6 @@ const TrapInfoDetail: React.FC = () => (
 );
 
 import { fetchQuotes, fetchPreviousDayOI } from '@/services/kiteApi';
-import { cacheGet, cacheSet } from '@/services/cacheDb';
 import {
   fetchNiftyOptions,
   getExpiries,
@@ -356,7 +355,7 @@ const OptionChain: React.FC = () => {
     const capture = async () => {
       if (!isMarketLive() || oiData.size === 0) return;
       if (await shouldTakeSnapshot()) {
-        await saveOiSnapshot(oiData, livePrices);
+         await saveOiSnapshot(oiData, livePrices, closePrices, niftySpot || undefined);
       }
       // Recalculate velocity
       const latestSnaps = await getTodaySnapshots();
@@ -463,28 +462,18 @@ const OptionChain: React.FC = () => {
       if (missing.length > 0) console.warn(`[Trades] Missing quotes for: ${missing.join(', ')}`);
 
       console.log(`[Trades] Got quotes for ${priceMap.size} options, spot: ${niftyQuote?.last_price}`);
-
-      // Update cache in IndexedDB
-      const cacheKey = `oc_ltp_${selectedExpiry}`;
-      const pricesObj: Record<string, number> = {};
-      priceMap.forEach((v, k) => { pricesObj[String(k)] = v; });
-      const oiObj: Record<string, number> = {};
-      oiMap.forEach((v, k) => { oiObj[String(k)] = v; });
-      const closeObj: Record<string, number> = {};
-      closeMap.forEach((v, k) => { closeObj[String(k)] = v; });
-      cacheSet(cacheKey, { prices: pricesObj, oi: oiObj, close: closeObj, spot: niftyQuote?.last_price || 0 });
     }).catch((err) => {
       console.error('[Trades] Failed to fetch quotes:', err);
       // Reset so it can retry
       quoteFetchedRef.current = '';
-      // Fallback to IndexedDB cache
-      const cacheKey = `oc_ltp_${selectedExpiry}`;
-      cacheGet<{ prices: Record<string, number>; oi: Record<string, number>; close?: Record<string, number>; spot: number }>(cacheKey).then((cached) => {
-        if (cached) {
-          setLivePrices(new Map(Object.entries(cached.prices).map(([k, v]) => [Number(k), v])));
-          setOiData(new Map(Object.entries(cached.oi || {}).map(([k, v]) => [Number(k), v])));
-          if (cached.close) setClosePrices(new Map(Object.entries(cached.close).map(([k, v]) => [Number(k), v])));
-          if (cached.spot) setNiftySpot(cached.spot);
+      // Fallback to latest server OI snapshot
+      getTodaySnapshots().then((snaps) => {
+        if (snaps.length > 0) {
+          const latest = snaps[snaps.length - 1];
+          if (latest.prices) setLivePrices(new Map(Object.entries(latest.prices).map(([k, v]) => [Number(k), v])));
+          if (latest.data) setOiData(new Map(Object.entries(latest.data).map(([k, v]) => [Number(k), v])));
+          if (latest.close) setClosePrices(new Map(Object.entries(latest.close).map(([k, v]) => [Number(k), v])));
+          if (latest.spot) setNiftySpot(latest.spot);
         }
       });
     });

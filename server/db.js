@@ -182,7 +182,9 @@ export async function initDb() {
       timestamp  INTEGER NOT NULL,
       time_label TEXT NOT NULL,
       data       TEXT NOT NULL,
-      prices     TEXT
+      prices     TEXT,
+      close      TEXT,
+      spot       REAL
     )
   `);
 
@@ -920,9 +922,13 @@ export function saveOiSnapshot(snapshot) {
   const newPrices = snapshot.prices
     ? (typeof snapshot.prices === 'string' ? JSON.parse(snapshot.prices) : snapshot.prices)
     : null;
+  const newClose = snapshot.close
+    ? (typeof snapshot.close === 'string' ? JSON.parse(snapshot.close) : snapshot.close)
+    : null;
+  const newSpot = snapshot.spot || null;
 
   // Check if a row exists for this 10-min slot
-  const results = db.exec('SELECT id, data, prices FROM oi_snapshots WHERE timestamp = ?', [rounded]);
+  const results = db.exec('SELECT id, data, prices, close, spot FROM oi_snapshots WHERE timestamp = ?', [rounded]);
 
   if (results.length && results[0].values.length) {
     const columns = results[0].columns;
@@ -937,14 +943,20 @@ export function saveOiSnapshot(snapshot) {
     if (newPrices) Object.assign(mergedPrices, newPrices);
     const pricesStr = Object.keys(mergedPrices).length > 0 ? JSON.stringify(mergedPrices) : null;
 
+    let mergedClose = row.close ? JSON.parse(row.close) : {};
+    if (newClose) Object.assign(mergedClose, newClose);
+    const closeStr = Object.keys(mergedClose).length > 0 ? JSON.stringify(mergedClose) : null;
+
+    const spot = newSpot || row.spot || null;
+
     db.run(
-      'UPDATE oi_snapshots SET data = ?, prices = ? WHERE id = ?',
-      [JSON.stringify(existingData), pricesStr, row.id],
+      'UPDATE oi_snapshots SET data = ?, prices = ?, close = ?, spot = ? WHERE id = ?',
+      [JSON.stringify(existingData), pricesStr, closeStr, spot, row.id],
     );
   } else {
     db.run(
-      'INSERT INTO oi_snapshots (timestamp, time_label, data, prices) VALUES (?, ?, ?, ?)',
-      [rounded, timeLabel, JSON.stringify(newData), newPrices ? JSON.stringify(newPrices) : null],
+      'INSERT INTO oi_snapshots (timestamp, time_label, data, prices, close, spot) VALUES (?, ?, ?, ?, ?, ?)',
+      [rounded, timeLabel, JSON.stringify(newData), newPrices ? JSON.stringify(newPrices) : null, newClose ? JSON.stringify(newClose) : null, newSpot],
     );
   }
 
@@ -963,7 +975,7 @@ export function getTodayOiSnapshots() {
 
   const todayMidnight = getTodayMidnight();
   const results = db.exec(
-    'SELECT timestamp, time_label, data, prices FROM oi_snapshots WHERE timestamp >= ? ORDER BY timestamp',
+    'SELECT timestamp, time_label, data, prices, close, spot FROM oi_snapshots WHERE timestamp >= ? ORDER BY timestamp',
     [todayMidnight],
   );
 
@@ -978,6 +990,8 @@ export function getTodayOiSnapshots() {
       timeLabel: obj.time_label,
       data: JSON.parse(obj.data),
       prices: obj.prices ? JSON.parse(obj.prices) : undefined,
+      close: obj.close ? JSON.parse(obj.close) : undefined,
+      spot: obj.spot || undefined,
     };
   });
 }
