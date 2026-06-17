@@ -127,9 +127,9 @@ export function computeStrikeSignals(
 ): Map<number, StrikeSignal> {
   const result = new Map<number, StrikeSignal>();
 
-  // Find the most recent snapshot that has prices
+  // Find the first snapshot of the day that has prices (stable baseline)
   let refSnapshot: OiSnapshot | null = null;
-  for (let i = snapshots.length - 1; i >= 0; i--) {
+  for (let i = 0; i < snapshots.length; i++) {
     if (snapshots[i].prices && Object.keys(snapshots[i].prices!).length > 0) {
       refSnapshot = snapshots[i];
       break;
