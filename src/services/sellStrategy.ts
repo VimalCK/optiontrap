@@ -30,6 +30,8 @@ export interface SellRecommendation {
   pattern: string;           // dominant pattern name
   reasons: string[];
   breakdown: ScoreBreakdown;
+  pop: number;               // Probability of Profit (0–99)
+  premium: number;           // Premium amount (per unit)
 }
 
 // ── Scoring Sub-functions ──
@@ -300,6 +302,21 @@ interface StrikeScore {
   pattern: string;
   reasons: string[];
   breakdown: ScoreBreakdown;
+  pop: number;
+  premium: number;
+}
+
+/**
+ * Calculate Probability of Profit for selling an option.
+ * Uses a simplified normal distribution approximation based on expected move.
+ */
+function calculatePOP(strike: number, spotPrice: number, expectedMove: number, type: 'ce' | 'pe'): number {
+  if (expectedMove <= 0) return 50;
+  const sd = expectedMove;
+  const distance = type === 'ce' ? strike - spotPrice : spotPrice - strike;
+  const zScore = distance / sd;
+  const pop = 100 / (1 + Math.exp(-1.7 * zScore));
+  return Math.min(99, Math.max(1, pop));
 }
 
 /**
@@ -317,8 +334,20 @@ export function computeSellRecommendations(
   snapshots: OiSnapshot[],
   spotPrice: number,
   daysToExpiry?: number,
+  atmStrike?: number,
 ): SellRecommendation[] {
   if (chain.length === 0 || spotPrice === 0 || snapshots.length < 2) return [];
+
+  // Expected move from ATM straddle premium (for POP calculation)
+  let expectedMove = 0;
+  if (atmStrike) {
+    const atmRow = chain.find((r) => r.strike === atmStrike);
+    if (atmRow) {
+      const cePrice = atmRow.ce ? livePrices.get(atmRow.ce.instrumentToken) || 0 : 0;
+      const pePrice = atmRow.pe ? livePrices.get(atmRow.pe.instrumentToken) || 0 : 0;
+      expectedMove = cePrice + pePrice;
+    }
+  }
 
   // Market-level scores (same for all strikes)
   const pinningResult = scorePinning(snapshots, chain, oiData, spotPrice);
@@ -350,10 +379,10 @@ export function computeSellRecommendations(
       const totalScore = breakdown.pinning + breakdown.oiWall + breakdown.velocity + breakdown.pcrExtreme + breakdown.timeDecay;
       const reasons = [...pinningResult.reasons, ...wallResult.reasons, ...velocityResult.reasons, ...pcrResult.reasons, ...timeDecayResult.reasons];
 
-      // Determine dominant pattern
       const pattern = getDominantPattern(breakdown);
+      const pop = calculatePOP(row.strike, spotPrice, expectedMove, 'ce');
 
-      strikeScores.push({ strike: row.strike, type: 'ce', score: totalScore, pattern, reasons, breakdown });
+      strikeScores.push({ strike: row.strike, type: 'ce', score: totalScore, pattern, reasons, breakdown, pop, premium });
     }
 
     // PE selling: strikes below spot (OTM puts)
@@ -379,8 +408,9 @@ export function computeSellRecommendations(
       const reasons = [...pinningResult.reasons, ...wallResult.reasons, ...velocityResult.reasons, ...pcrResult.reasons, ...timeDecayResult.reasons];
 
       const pattern = getDominantPattern(breakdown);
+      const pop = calculatePOP(row.strike, spotPrice, expectedMove, 'pe');
 
-      strikeScores.push({ strike: row.strike, type: 'pe', score: totalScore, pattern, reasons, breakdown });
+      strikeScores.push({ strike: row.strike, type: 'pe', score: totalScore, pattern, reasons, breakdown, pop, premium });
     }
   }
 
@@ -397,6 +427,8 @@ export function computeSellRecommendations(
         pattern: ss.pattern,
         reasons: ss.reasons,
         breakdown: ss.breakdown,
+        pop: ss.pop,
+        premium: ss.premium,
       });
     }
   }
@@ -424,6 +456,8 @@ export function computeSellRecommendations(
           pattern: getDominantPattern(mergedBreakdown),
           reasons: [...new Set([...ce.reasons, ...pe.reasons])],
           breakdown: mergedBreakdown,
+          pop: Math.min(ce.pop, pe.pop),
+          premium: ce.premium + pe.premium,
         });
       }
     }
@@ -450,6 +484,8 @@ export function computeSellRecommendations(
         pattern: getDominantPattern(mergedBreakdown),
         reasons: [...new Set([...topCe.reasons, ...topPe.reasons])],
         breakdown: mergedBreakdown,
+        pop: Math.min(topCe.pop, topPe.pop),
+        premium: topCe.premium + topPe.premium,
       });
     }
   }

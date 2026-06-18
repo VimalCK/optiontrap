@@ -1,6 +1,5 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
-import BestStrikes from '@/components/TrapAnalyzer/BestStrikes';
 import SellStrategy from '@/components/SellStrategy/SellStrategy';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { calculateExpectedMove } from '@/services/edgeScore';
@@ -98,7 +97,6 @@ const OptionChain: React.FC = () => {
   const [selectedChartStrike, setSelectedChartStrike] = useState<number | null>(null);
   const [showTrapInfo, setShowTrapInfo] = useState(false);
   const [showOiChartInfo, setShowOiChartInfo] = useState(false);
-  const [showBestStrikesInfo, setShowBestStrikesInfo] = useState(false);
   const [showSellStrategyInfo, setShowSellStrategyInfo] = useState(false);
 
   const [orderForm, setOrderForm] = useState<{ strike: number; optionType: 'CE' | 'PE' } | null>(null);
@@ -1110,6 +1108,7 @@ const OptionChain: React.FC = () => {
             snapshots={snapshots}
             spotPrice={niftySpot}
             daysToExpiry={daysToExpiry}
+            atmStrike={atmStrike}
             orderMode={orderMode}
             expiry={selectedExpiry}
             onToast={showToast}
@@ -1140,66 +1139,7 @@ const OptionChain: React.FC = () => {
         </div>
       )}
 
-      {/* Best Strikes - Edge Score Recommendations */}
-      {!loading && !error && visibleChain.length > 0 && (
-        <div className="card" style={{ marginTop: 24 }}>
-          <div className="trap-card-header">
-            <div className="trap-card-header__left">
-              <h3 className="card__title" style={{ marginBottom: 0 }}>Best Strikes</h3>
-              <button className="trap-info-btn" onClick={() => setShowBestStrikesInfo(!showBestStrikesInfo)} title="How Best Strikes works">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
-                </svg>
-              </button>
-            </div>
-          </div>
-          {showBestStrikesInfo && (
-            <div className="trap-info-detail">
-              <h4>How Best Strikes Works</h4>
-              <p>Recommends the top 3 strikes for selling CE and PE options based on a combined Edge Score.</p>
 
-              <h5>Edge Score Formula</h5>
-              <p>Each strike is scored by combining:</p>
-              <ul>
-                <li><strong>POP (Probability of Profit)</strong> — Based on distance from spot vs expected move. Farther OTM = higher probability that price won't reach your strike.</li>
-                <li><strong>OI Wall Strength</strong> — Strikes with heavy OI (1.5x+ above average) have institutional defense. Sellers at these strikes are protected by the wall.</li>
-                <li><strong>Max Pain Alignment</strong> — Selling CE above max pain or PE below max pain means price gravitates away from your strike.</li>
-                <li><strong>Distance from Spot</strong> — More distance = more safety margin before your strike is threatened.</li>
-                <li><strong>Premium Value</strong> — Higher premium = better reward for the risk taken.</li>
-              </ul>
-
-              <h5>What the Metrics Mean</h5>
-              <ul>
-                <li><strong>POP 70%+</strong> — Strong probability. Price has a 70%+ chance of NOT reaching this strike.</li>
-                <li><strong>OI Wall 1.5x+</strong> — Significant institutional defense at this level.</li>
-                <li><strong>Premium</strong> — The amount you'd collect per lot for selling at this strike.</li>
-                <li><strong>Distance</strong> — Points between spot and your strike.</li>
-              </ul>
-
-              <h5>How to Use</h5>
-              <ul>
-                <li>Pick strikes with high Edge Score — they balance risk and reward.</li>
-                <li>Higher POP = safer but lower premium.</li>
-                <li>OI Wall = bonus protection on top of distance.</li>
-                <li>Avoid strikes inside the Expected Range (market likely to reach them).</li>
-              </ul>
-
-              <h5>Important</h5>
-              <p>These are recommendations based on current OI data, not guaranteed profits. Always manage risk with stop losses and position sizing.</p>
-            </div>
-          )}
-          <BestStrikes
-            chain={visibleChain}
-            oiData={oiData}
-            livePrices={livePrices}
-            spotPrice={niftySpot}
-            atmStrike={atmStrike}
-            orderMode={orderMode}
-            expiry={selectedExpiry}
-            onToast={showToast}
-          />
-        </div>
-      )}
     </div>
   );
 };

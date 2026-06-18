@@ -14,6 +14,7 @@ interface SellStrategyProps {
   snapshots: OiSnapshot[];
   spotPrice: number;
   daysToExpiry?: number;
+  atmStrike?: number;
   orderMode: 'paper' | 'live';
   expiry: string;
   onToast: (text: string, color: 'green' | 'red') => void;
@@ -58,6 +59,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
   snapshots,
   spotPrice,
   daysToExpiry,
+  atmStrike,
   orderMode,
   expiry,
   onToast,
@@ -65,8 +67,8 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
   const recommendations = useMemo(
-    () => computeSellRecommendations(chain, oiData, livePrices, prevDayOi, closePrices, snapshots, spotPrice, daysToExpiry),
-    [chain, oiData, livePrices, prevDayOi, closePrices, snapshots, spotPrice, daysToExpiry],
+    () => computeSellRecommendations(chain, oiData, livePrices, prevDayOi, closePrices, snapshots, spotPrice, daysToExpiry, atmStrike),
+    [chain, oiData, livePrices, prevDayOi, closePrices, snapshots, spotPrice, daysToExpiry, atmStrike],
   );
 
   const handleSell = useCallback(async (rec: SellRecommendation) => {
@@ -199,6 +201,13 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
                   </span>
                 </div>
 
+                <span className="sell-strategy__pop">
+                  <span className="sell-strategy__pop-label">POP</span>
+                  <span className={`sell-strategy__pop-value ${rec.pop >= 70 ? 'positive' : rec.pop >= 50 ? '' : 'negative'}`}>
+                    {rec.pop.toFixed(0)}%
+                  </span>
+                </span>
+                <span className="sell-strategy__premium">₹{rec.premium.toFixed(1)}</span>
                 <span className="sell-strategy__pattern">{rec.pattern}</span>
 
                 {orderMode === 'paper' && (
