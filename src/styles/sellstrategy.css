@@ -1,0 +1,303 @@
+/* ── Sell Strategy ── */
+
+.sell-strategy {
+  margin-top: 16px;
+}
+
+.sell-strategy__empty {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+/* ── Recommendation rows ── */
+
+.sell-strategy__list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sell-strategy__row {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  overflow: hidden;
+  transition: border-color 0.15s;
+}
+
+.sell-strategy__row:hover {
+  border-color: var(--accent);
+}
+
+.sell-strategy__row-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+}
+
+/* ── Type badge ── */
+
+.sell-strategy__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  white-space: nowrap;
+  min-width: 60px;
+  text-align: center;
+}
+
+.sell-strategy__badge--sell-ce {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+}
+
+.sell-strategy__badge--sell-pe {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
+
+.sell-strategy__badge--sell-straddle {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.sell-strategy__badge--sell-strangle {
+  background: rgba(167, 139, 250, 0.15);
+  color: #a78bfa;
+}
+
+/* ── Strike label ── */
+
+.sell-strategy__strike {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  min-width: 100px;
+}
+
+/* ── Score bar ── */
+
+.sell-strategy__score-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 120px;
+}
+
+.sell-strategy__score-track {
+  flex: 1;
+  height: 6px;
+  background: var(--sidebar-hover);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.sell-strategy__score-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.sell-strategy__score-value {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  min-width: 28px;
+  text-align: right;
+}
+
+/* Score colors */
+.sell-strategy__score-fill--low { background: #f87171; }
+.sell-strategy__score-fill--medium { background: #f59e0b; }
+.sell-strategy__score-fill--high { background: #4ade80; }
+.sell-strategy__score-fill--very-high { background: #22c55e; }
+
+.sell-strategy__score-value--low { color: #f87171; }
+.sell-strategy__score-value--medium { color: #f59e0b; }
+.sell-strategy__score-value--high { color: #4ade80; }
+.sell-strategy__score-value--very-high { color: #22c55e; }
+
+/* ── Pattern label ── */
+
+.sell-strategy__pattern {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  min-width: 100px;
+}
+
+/* ── Expand arrow ── */
+
+.sell-strategy__expand {
+  font-size: 10px;
+  color: var(--text-secondary);
+  transition: transform 0.2s;
+  margin-left: auto;
+}
+
+.sell-strategy__expand--open {
+  transform: rotate(180deg);
+}
+
+/* ── Expanded details ── */
+
+.sell-strategy__details {
+  padding: 0 16px 12px;
+  border-top: 1px solid var(--card-border);
+}
+
+/* Score breakdown grid */
+.sell-strategy__breakdown {
+  display: flex;
+  gap: 12px;
+  padding: 10px 0;
+  flex-wrap: wrap;
+}
+
+.sell-strategy__breakdown-item {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 80px;
+}
+
+.sell-strategy__breakdown-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sell-strategy__breakdown-value {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sell-strategy__breakdown-value--active {
+  color: var(--text-primary);
+}
+
+.sell-strategy__breakdown-value--zero {
+  color: var(--text-secondary);
+  opacity: 0.4;
+}
+
+/* ── Reasons ── */
+
+.sell-strategy__reasons {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 8px;
+}
+
+.sell-strategy__reason {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* ── Sell button ── */
+
+.sell-strategy__sell-btn {
+  padding: 5px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+
+.sell-strategy__sell-btn:hover { opacity: 0.85; }
+.sell-strategy__sell-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+.sell-strategy__sell-btn--ce {
+  background: rgba(74, 222, 128, 0.2);
+  color: #4ade80;
+}
+
+.sell-strategy__sell-btn--pe {
+  background: rgba(248, 113, 113, 0.2);
+  color: #f87171;
+}
+
+.sell-strategy__sell-btn--straddle {
+  background: rgba(245, 158, 11, 0.2);
+  color: #f59e0b;
+}
+
+.sell-strategy__sell-btn--strangle {
+  background: rgba(167, 139, 250, 0.2);
+  color: #a78bfa;
+}
+
+/* ── Info panel ── */
+
+.sell-strategy__info {
+  margin-bottom: 16px;
+}
+
+.sell-strategy__info h5 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 12px 0 4px;
+}
+
+.sell-strategy__info p {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+.sell-strategy__info ul {
+  margin: 4px 0 0 16px;
+  padding: 0;
+}
+
+.sell-strategy__info li {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.sell-strategy__color-scale {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.sell-strategy__color-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.sell-strategy__color-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}

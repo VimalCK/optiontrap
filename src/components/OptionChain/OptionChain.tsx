@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
 import BestStrikes from '@/components/TrapAnalyzer/BestStrikes';
+import SellStrategy from '@/components/SellStrategy/SellStrategy';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { calculateExpectedMove } from '@/services/edgeScore';
 import { saveOiSnapshot, getTodaySnapshots, cleanOldSnapshots, calculateVelocity, shouldTakeSnapshot, analyzeVelocityPattern, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
@@ -98,6 +99,7 @@ const OptionChain: React.FC = () => {
   const [showTrapInfo, setShowTrapInfo] = useState(false);
   const [showOiChartInfo, setShowOiChartInfo] = useState(false);
   const [showBestStrikesInfo, setShowBestStrikesInfo] = useState(false);
+  const [showSellStrategyInfo, setShowSellStrategyInfo] = useState(false);
 
   const [orderForm, setOrderForm] = useState<{ strike: number; optionType: 'CE' | 'PE' } | null>(null);
   const [orderQty, setOrderQty] = useState(50);
@@ -1052,6 +1054,66 @@ const OptionChain: React.FC = () => {
               {expectedMove > 0 && <span className="oc-chart__legend-item"><span className="oc-chart__legend-dot oc-chart__legend-dot--range"></span>Expected Range</span>}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Sell Strategy */}
+      {!loading && !error && visibleChain.length > 0 && (
+        <div className="card" style={{ marginTop: 24 }}>
+          <div className="trap-card-header">
+            <div className="trap-card-header__left">
+              <h3 className="card__title" style={{ marginBottom: 0 }}>Sell Strategy</h3>
+              <button className="trap-info-btn" onClick={() => setShowSellStrategyInfo(!showSellStrategyInfo)} title="How Sell Strategy works">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          {showSellStrategyInfo && (
+            <div className="sell-strategy__info">
+              <h5>How Sell Strategy Works</h5>
+              <p>Scores each OTM strike across 5 factors to find the best option selling opportunities. Requires 20+ minutes of OI snapshot data.</p>
+
+              <h5>Scoring Factors (0–100)</h5>
+              <ul>
+                <li><strong>Pinning (0–25)</strong> — Spot hovering near max pain with balanced PCR. Sellers defend both sides, price stays range-bound.</li>
+                <li><strong>OI Wall (0–25)</strong> — Heavy OI wall at/near the strike with fresh short buildup confirmation. Institutional defense.</li>
+                <li><strong>Velocity (0–20)</strong> — OI buildup trend over intraday snapshots. Accelerating buildup = sellers adding aggressively.</li>
+                <li><strong>PCR Extreme (0–15)</strong> — Sustained extreme PCR favouring the sell side. Low PCR for selling calls, high PCR for selling puts.</li>
+                <li><strong>Theta Decay (0–15)</strong> — Days to expiry bonus. Closer to expiry = more theta working for sellers.</li>
+              </ul>
+
+              <h5>Recommendation Types</h5>
+              <ul>
+                <li><strong>Sell CE</strong> — Sell a call at an OTM strike above spot</li>
+                <li><strong>Sell PE</strong> — Sell a put at an OTM strike below spot</li>
+                <li><strong>Straddle</strong> — Sell both CE and PE at the same near-ATM strike (pinning setup)</li>
+                <li><strong>Strangle</strong> — Sell OTM CE and OTM PE at different strikes</li>
+              </ul>
+
+              <h5>Score Scale</h5>
+              <div className="sell-strategy__color-scale">
+                <span className="sell-strategy__color-item"><span className="sell-strategy__color-dot" style={{ background: '#f87171' }}></span> 0–30 Weak</span>
+                <span className="sell-strategy__color-item"><span className="sell-strategy__color-dot" style={{ background: '#f59e0b' }}></span> 30–60 Moderate</span>
+                <span className="sell-strategy__color-item"><span className="sell-strategy__color-dot" style={{ background: '#4ade80' }}></span> 60–80 Strong</span>
+                <span className="sell-strategy__color-item"><span className="sell-strategy__color-dot" style={{ background: '#22c55e' }}></span> 80–100 Very Strong</span>
+              </div>
+            </div>
+          )}
+          <SellStrategy
+            chain={visibleChain}
+            oiData={oiData}
+            livePrices={livePrices}
+            prevDayOi={prevDayOi}
+            closePrices={closePrices}
+            snapshots={snapshots}
+            spotPrice={niftySpot}
+            daysToExpiry={daysToExpiry}
+            orderMode={orderMode}
+            expiry={selectedExpiry}
+            onToast={showToast}
+          />
         </div>
       )}
 
