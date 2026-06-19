@@ -55,6 +55,11 @@ import {
   getTodayOiSnapshots,
   cleanOldOiSnapshots,
   getLatestOiSnapshotTimestamp,
+  createOiHistoryTable,
+  insertOiHistoryRows,
+  getOiHistoryData,
+  getOiHistoryDates,
+  getNiftyOptionsForAtm,
 } from './db.js';
 import { SqliteSessionStore } from './sessionStore.js';
 import { createRateLimiter } from './rateLimit.js';
@@ -539,6 +544,238 @@ app.delete('/api/oi-snapshots/old', requireAuth, (req, res) => {
     res.json({ status: 'ok', deleted });
   } catch (err) {
     console.error('[OI Snapshots] DELETE error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// ---------- OI History (historical daily OI) ----------
+
+/**
+ * POST /api/oi-history/fetch — Fetch historical daily OI candles from Kite.
+ * Skips dates already stored in the database.
+ * Streams progress via Server-Sent Events (SSE).
+ * Body: { scrip: 'NIFTY50', from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' }
+ *
+ * SSE events:
+ *   step     — { step, message }
+ *   progress — { done, total, pct, batch, totalBatches, symbol }
+ *   done     — { rowCount, tradingDays, skippedDays, fetchedDays, uniqueTokens }
+ *   error    — { message }
+ */
+app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
+  // Set up SSE headers
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    Connection: 'keep-alive',
+  });
+
+  const send = (event, data) => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  try {
+    const { scrip, from, to } = req.body;
+    if (!scrip || !from || !to) {
+      send('error', { message: 'scrip, from, and to are required' });
+      return res.end();
+    }
+
+    const { apiKey, accessToken } = req.session.kiteSession;
+    const authHeader = `token ${apiKey}:${accessToken}`;
+
+    // Step 1: Fetch NIFTY 50 index daily candles for spot close
+    send('step', { step: 1, message: 'Fetching NIFTY 50 spot data...' });
+
+    const niftyToken = 256265; // NIFTY 50 index on NSE
+    const spotUrl = `https://api.kite.trade/instruments/historical/${niftyToken}/day?from=${from}&to=${to}&oi=1`;
+    const spotRes = await fetch(spotUrl, {
+      headers: { Authorization: authHeader, 'X-Kite-Version': '3' },
+    });
+    if (!spotRes.ok) {
+      const body = await spotRes.text();
+      send('error', { message: `Failed to fetch NIFTY index candles: ${body}` });
+      return res.end();
+    }
+
+    const spotData = await spotRes.json();
+    const spotCandles = spotData?.data?.candles;
+    if (!spotCandles?.length) {
+      send('done', { rowCount: 0, tradingDays: 0, skippedDays: 0, fetchedDays: 0, uniqueTokens: 0 });
+      return res.end();
+    }
+
+    // Check which dates we already have
+    createOiHistoryTable(scrip);
+    const existingDates = getOiHistoryDates(scrip, from, to);
+
+    // Step 2: For each trading day, compute ATM — but only process new days
+    send('step', { step: 2, message: `Found ${spotCandles.length} trading days. Checking existing data...` });
+
+    const stepSize = 50;
+    const allDays = []; // all trading days from Kite
+    const newDays = []; // days that need fetching
+
+    for (const candle of spotCandles) {
+      const date = candle[0].slice(0, 10);
+      const spotClose = candle[4];
+      const atm = Math.round(spotClose / stepSize) * stepSize;
+      const day = { date, spotClose, atm };
+      allDays.push(day);
+      if (!existingDates.has(date)) {
+        newDays.push(day);
+      }
+    }
+
+    const skippedDays = allDays.length - newDays.length;
+
+    if (newDays.length === 0) {
+      send('step', { step: 2, message: `All ${allDays.length} trading days already in database. Nothing to fetch.` });
+      send('done', { rowCount: 0, tradingDays: allDays.length, skippedDays, fetchedDays: 0, uniqueTokens: 0 });
+      return res.end();
+    }
+
+    if (skippedDays > 0) {
+      send('step', { step: 2, message: `${skippedDays} days already cached, fetching ${newDays.length} new days...` });
+    } else {
+      send('step', { step: 2, message: `Fetching ${newDays.length} trading days...` });
+    }
+
+    // Collect unique tokens needed across NEW days only
+    const uniqueTokens = new Map();
+    const dayTokenSets = [];
+
+    for (const { date, spotClose, atm } of newDays) {
+      const options = getNiftyOptionsForAtm(atm, 15);
+      const tokenSet = new Set();
+      for (const opt of options) {
+        tokenSet.add(opt.instrumentToken);
+        if (!uniqueTokens.has(opt.instrumentToken)) {
+          uniqueTokens.set(opt.instrumentToken, opt);
+        }
+      }
+      dayTokenSets.push({ date, spotClose, tokens: tokenSet });
+    }
+
+    if (uniqueTokens.size === 0) {
+      send('done', { rowCount: 0, tradingDays: allDays.length, skippedDays, fetchedDays: newDays.length, uniqueTokens: 0, message: 'No option instruments found. Ensure the server has loaded instruments today.' });
+      return res.end();
+    }
+
+    // Step 3: Fetch daily candles for each unique token (batches of 5, 300ms delay)
+    send('step', { step: 3, message: `Fetching OI candles for ${uniqueTokens.size} instruments...` });
+
+    const tokenCandles = new Map();
+    const tokenList = [...uniqueTokens.keys()];
+    const batchSize = 5;
+    const totalBatches = Math.ceil(tokenList.length / batchSize);
+
+    for (let i = 0; i < tokenList.length; i += batchSize) {
+      const batch = tokenList.slice(i, i + batchSize);
+      const batchNum = Math.floor(i / batchSize) + 1;
+      const promises = batch.map(async (token) => {
+        try {
+          const url = `https://api.kite.trade/instruments/historical/${token}/day?from=${from}&to=${to}&oi=1`;
+          const response = await fetch(url, {
+            headers: { Authorization: authHeader, 'X-Kite-Version': '3' },
+          });
+          if (!response.ok) return;
+
+          const result = await response.json();
+          const candles = result?.data?.candles;
+          if (!candles?.length) return;
+
+          const dateMap = new Map();
+          for (const c of candles) {
+            dateMap.set(c[0].slice(0, 10), c);
+          }
+          tokenCandles.set(token, dateMap);
+        } catch {
+          // Skip failed fetches
+        }
+      });
+
+      await Promise.all(promises);
+
+      // Send progress after each batch
+      const done = Math.min(i + batchSize, tokenList.length);
+      const lastToken = batch[batch.length - 1];
+      const lastMeta = uniqueTokens.get(lastToken);
+      send('progress', {
+        done,
+        total: tokenList.length,
+        pct: Math.round((done / tokenList.length) * 100),
+        batch: batchNum,
+        totalBatches,
+        symbol: lastMeta?.tradingsymbol || '',
+      });
+
+      if (i + batchSize < tokenList.length) {
+        await new Promise((r) => setTimeout(r, 300));
+      }
+    }
+
+    // Step 4: Build rows (only for new days) and insert
+    send('step', { step: 4, message: 'Saving to database...' });
+
+    const rows = [];
+    for (const { date, spotClose, tokens } of dayTokenSets) {
+      for (const token of tokens) {
+        const meta = uniqueTokens.get(token);
+        const dateMap = tokenCandles.get(token);
+        const candle = dateMap?.get(date);
+        if (!candle || !meta) continue;
+
+        rows.push({
+          date,
+          instrumentToken: token,
+          tradingsymbol: meta.tradingsymbol,
+          strike: meta.strike,
+          optionType: meta.optionType,
+          expiry: meta.expiry,
+          open: candle[1],
+          high: candle[2],
+          low: candle[3],
+          close: candle[4],
+          volume: candle[5],
+          oi: candle[6] ?? 0,
+          spotClose,
+        });
+      }
+    }
+
+    const rowCount = insertOiHistoryRows(scrip, rows);
+    console.log(`[OI History] Fetched ${rowCount} rows for ${scrip} (${newDays.length} new days, ${skippedDays} cached, ${uniqueTokens.size} tokens)`);
+
+    send('done', {
+      rowCount,
+      tradingDays: allDays.length,
+      skippedDays,
+      fetchedDays: newDays.length,
+      uniqueTokens: uniqueTokens.size,
+    });
+    res.end();
+  } catch (err) {
+    console.error('[OI History] Fetch error:', err.message);
+    send('error', { message: err.message });
+    res.end();
+  }
+});
+
+/**
+ * GET /api/oi-history?scrip=NIFTY50&from=YYYY-MM-DD&to=YYYY-MM-DD
+ * Returns stored OI history data.
+ */
+app.get('/api/oi-history', requireAuth, (req, res) => {
+  try {
+    const { scrip, from, to } = req.query;
+    if (!scrip) {
+      return res.status(400).json({ status: 'error', message: 'scrip is required' });
+    }
+    const data = getOiHistoryData(scrip, from, to);
+    res.json({ status: 'ok', data });
+  } catch (err) {
+    console.error('[OI History] GET error:', err.message);
     res.status(500).json({ status: 'error', message: err.message });
   }
 });

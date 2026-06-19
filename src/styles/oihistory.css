@@ -1,0 +1,296 @@
+/* ── OI History ── */
+
+.oi-history {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Controls card ── */
+
+.oi-history__controls {
+  padding: 16px 20px;
+}
+
+.oi-history__control-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.oi-history__label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.oi-history__select {
+  padding: 5px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  outline: none;
+  transition: border-color 0.15s;
+  color-scheme: dark;
+  min-width: 120px;
+}
+
+.oi-history__select:focus {
+  border-color: var(--accent);
+}
+
+.oi-history__select:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Date picker — matches trade journal theme */
+.oi-history__date-input {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-family: inherit;
+  padding: 5px 10px;
+  outline: none;
+  transition: border-color 0.15s;
+  color-scheme: dark;
+}
+
+.oi-history__date-input:focus {
+  border-color: var(--accent);
+}
+
+.oi-history__date-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.oi-history__btn {
+  padding: 7px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+  white-space: nowrap;
+}
+
+.oi-history__btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.oi-history__btn--fetch {
+  background: var(--accent);
+  color: #fff;
+}
+
+.oi-history__btn--load {
+  background: var(--card-border);
+  color: var(--text-primary);
+}
+
+/* ── Progress bar ── */
+
+.oi-history__progress {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.oi-history__progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+}
+
+.oi-history__progress-step {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.oi-history__progress-pct {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.oi-history__progress-track {
+  height: 6px;
+  background: var(--card-border);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.oi-history__progress-fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: 3px;
+  transition: width 0.2s ease-out;
+  min-width: 2px;
+}
+
+.oi-history__progress-detail {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+/* ── Status messages ── */
+
+.oi-history__status {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.oi-history__status--error {
+  color: var(--red, #ef4444);
+}
+
+/* ── Date filter bar ── */
+
+.oi-history__date-bar {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  padding: 0 4px;
+}
+
+.oi-history__date-btn {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+
+.oi-history__date-btn:hover {
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+
+.oi-history__date-btn--active {
+  color: #fff;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+/* ── Table ── */
+
+.oi-history__table-wrap {
+  padding: 12px 16px;
+  overflow: hidden;
+}
+
+.oi-history__table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 10px;
+}
+
+.oi-history__table-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.oi-history__table-count {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.oi-history__table-scroll {
+  overflow-x: auto;
+}
+
+.oi-history__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  table-layout: fixed;
+}
+
+.oi-history__table th {
+  padding: 6px 8px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-align: right;
+  border-bottom: 1px solid var(--card-border);
+  white-space: nowrap;
+}
+
+.oi-history__th-group {
+  text-align: center !important;
+  font-weight: 600 !important;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 2px solid var(--card-border) !important;
+}
+
+.oi-history__th-group--ce { color: var(--green, #22c55e); }
+.oi-history__th-group--pe { color: var(--red, #ef4444); }
+
+.oi-history__th-strike {
+  text-align: center !important;
+  font-weight: 600 !important;
+}
+
+.oi-history__table td {
+  padding: 5px 8px;
+  text-align: right;
+  border-bottom: 1px solid var(--card-border);
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.oi-history__cell--strike {
+  text-align: center !important;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+}
+
+.oi-history__cell--ce { color: var(--green, #22c55e); }
+.oi-history__cell--pe { color: var(--red, #ef4444); }
+.oi-history__cell--up { color: var(--green, #22c55e); text-align: right; }
+.oi-history__cell--down { color: var(--red, #ef4444); text-align: right; }
+
+.oi-history__row--atm {
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.oi-history__row--atm .oi-history__cell--strike {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--accent);
+}
+
+/* ── Empty state ── */
+
+.oi-history__empty {
+  padding: 32px 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
