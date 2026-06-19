@@ -996,15 +996,19 @@ const OptionChain: React.FC = () => {
                       );
                     })()}
                     {/* Velocity indicators */}
-                    {ceVelocity?.isHigh && (
-                      <span className={`oc-chart__velocity oc-chart__velocity--ce ${ceVelocity.changePct > 0 ? 'oc-chart__velocity--up' : 'oc-chart__velocity--down'}`}>
-                        {ceVelocity.changePct > 0 ? '▲' : '▼'}
-                      </span>
-                    )}
-                    {peVelocity?.isHigh && (
-                      <span className={`oc-chart__velocity oc-chart__velocity--pe ${peVelocity.changePct > 0 ? 'oc-chart__velocity--up' : 'oc-chart__velocity--down'}`}>
-                        {peVelocity.changePct > 0 ? '▲' : '▼'}
-                      </span>
+                    {(ceVelocity?.isHigh || peVelocity?.isHigh) && (
+                      <div className="oc-chart__velocity-stack">
+                        {ceVelocity?.isHigh && (
+                          <span className={`oc-chart__velocity oc-chart__velocity--ce ${ceVelocity.changePct > 0 ? 'oc-chart__velocity--up' : 'oc-chart__velocity--down'}`}>
+                            {ceVelocity.changePct > 0 ? '▲' : '▼'}
+                          </span>
+                        )}
+                        {peVelocity?.isHigh && (
+                          <span className={`oc-chart__velocity oc-chart__velocity--pe ${peVelocity.changePct > 0 ? 'oc-chart__velocity--up' : 'oc-chart__velocity--down'}`}>
+                            {peVelocity.changePct > 0 ? '▲' : '▼'}
+                          </span>
+                        )}
+                      </div>
                     )}
                     <div className="oc-chart__bar-group">
                       <div className="oc-chart__bar-wrapper">
