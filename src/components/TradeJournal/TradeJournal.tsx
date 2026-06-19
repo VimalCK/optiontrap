@@ -119,14 +119,14 @@ const TradeJournal: React.FC = () => {
               <label className="tj-date-label">From</label>
               <input
                 type="date"
-                className="tj-date-input"
+                className="app-date-input"
                 value={rangeStart}
                 onChange={(e) => setRangeStart(e.target.value)}
               />
               <label className="tj-date-label">To</label>
               <input
                 type="date"
-                className="tj-date-input"
+                className="app-date-input"
                 value={rangeEnd}
                 onChange={(e) => setRangeEnd(e.target.value)}
               />

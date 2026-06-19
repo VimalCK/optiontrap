@@ -78,28 +78,7 @@
   margin-bottom: 20px;
 }
 
-.option-chain-expiry-select {
-  padding: 8px 12px;
-  font-size: 13px;
-  font-family: inherit;
-  font-weight: 500;
-  color: var(--text-primary);
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 8px;
-  outline: none;
-  cursor: pointer;
-  transition: border-color 0.15s ease;
-}
-
-.option-chain-expiry-select:focus {
-  border-color: var(--accent);
-}
-
-.option-chain-expiry-select option {
-  background: var(--sidebar-bg);
-  color: var(--text-primary);
-}
+/* Expiry select now uses shared .app-select from global.css (via .oc-expiry-select) */
 
 /* Table Wrapper */
 .option-chain-table-wrapper {

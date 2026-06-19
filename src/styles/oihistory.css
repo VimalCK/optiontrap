@@ -30,78 +30,7 @@
   letter-spacing: 0.4px;
 }
 
-.oi-history__select {
-  padding: 5px 10px;
-  font-size: 12px;
-  font-family: inherit;
-  color: var(--text-primary);
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 6px;
-  outline: none;
-  transition: border-color 0.15s;
-  color-scheme: dark;
-  min-width: 120px;
-}
-
-.oi-history__select:focus {
-  border-color: var(--accent);
-}
-
-.oi-history__select:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Date picker — matches trade journal theme */
-.oi-history__date-input {
-  background: var(--card-bg);
-  border: 1px solid var(--card-border);
-  border-radius: 6px;
-  color: var(--text-primary);
-  font-size: 12px;
-  font-family: inherit;
-  padding: 5px 10px;
-  outline: none;
-  transition: border-color 0.15s;
-  color-scheme: dark;
-}
-
-.oi-history__date-input:focus {
-  border-color: var(--accent);
-}
-
-.oi-history__date-input:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.oi-history__btn {
-  padding: 7px 18px;
-  font-size: 13px;
-  font-weight: 500;
-  font-family: inherit;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: opacity 0.15s;
-  white-space: nowrap;
-}
-
-.oi-history__btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.oi-history__btn--fetch {
-  background: var(--accent);
-  color: #fff;
-}
-
-.oi-history__btn--load {
-  background: var(--card-border);
-  color: var(--text-primary);
-}
+/* Form controls now use shared .app-select, .app-date-input, .app-btn from global.css */
 
 /* ── Progress bar ── */
 

@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback } from 'react';
+import AppSelect from '@/components/AppSelect/AppSelect';
 import '@/styles/oihistory.css';
 
 interface OiHistoryRow {
@@ -254,23 +255,18 @@ const OiHistory: React.FC = () => {
         <div className="oi-history__control-row">
           <label className="oi-history__label">
             Script
-            <select
-              className="oi-history__select"
+            <AppSelect
               value={scrip}
-              onChange={(e) => setScrip(e.target.value)}
-              disabled={fetching}
-            >
-              {SCRIP_OPTIONS.map((o) => (
-                <option key={o.value} value={o.value}>{o.label}</option>
-              ))}
-            </select>
+              options={SCRIP_OPTIONS}
+              onChange={(v) => setScrip(String(v))}
+            />
           </label>
 
           <label className="oi-history__label">
             From
             <input
               type="date"
-              className="oi-history__date-input"
+               className="app-date-input"
               value={fromDate}
               onChange={(e) => setFromDate(e.target.value)}
               disabled={fetching}
@@ -281,7 +277,7 @@ const OiHistory: React.FC = () => {
             To
             <input
               type="date"
-              className="oi-history__date-input"
+               className="app-date-input"
               value={toDate}
               onChange={(e) => setToDate(e.target.value)}
               disabled={fetching}
@@ -289,7 +285,7 @@ const OiHistory: React.FC = () => {
           </label>
 
           <button
-            className="oi-history__btn oi-history__btn--fetch"
+             className="app-btn app-btn--primary"
             onClick={handleFetch}
             disabled={fetching}
           >

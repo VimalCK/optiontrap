@@ -152,3 +152,91 @@ ol {
 [data-theme='light'] .app-select option {
   background: #ffffff;
 }
+
+/* Text input — shared base */
+.app-input {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 7px 11px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.app-input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.app-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.app-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Date input — extends text input + dark calendar */
+.app-date-input {
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-family: inherit;
+  padding: 7px 11px;
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  color-scheme: dark;
+}
+
+.app-date-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-glow);
+}
+
+.app-date-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+[data-theme='light'] .app-date-input {
+  color-scheme: light;
+}
+
+/* Button — shared base */
+.app-btn {
+  padding: 7px 18px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: opacity 0.15s, box-shadow 0.15s;
+  white-space: nowrap;
+}
+
+.app-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.app-btn--primary {
+  background: var(--accent);
+  color: #fff;
+}
+
+.app-btn--primary:hover:not(:disabled) {
+  box-shadow: 0 2px 8px var(--accent-glow);
+}
+
+.app-btn--secondary {
+  background: var(--card-border);
+  color: var(--text-primary);
+}
