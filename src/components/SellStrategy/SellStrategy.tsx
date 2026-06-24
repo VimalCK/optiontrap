@@ -66,10 +66,26 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
 }) => {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
-  const recommendations = useMemo(
-    () => computeSellRecommendations(chain, oiData, livePrices, prevDayOi, closePrices, snapshots, spotPrice, daysToExpiry, atmStrike),
-    [chain, oiData, livePrices, prevDayOi, closePrices, snapshots, spotPrice, daysToExpiry, atmStrike],
-  );
+  const recommendations = useMemo(() => {
+    // When market is closed, oiData/livePrices are empty.
+    // Fall back to latest snapshot's data so the strategy still works.
+    let effectiveOi = oiData;
+    let effectivePrices = livePrices;
+    let effectiveSpot = spotPrice;
+
+    if (oiData.size === 0 && snapshots.length > 0) {
+      const latest = snapshots[snapshots.length - 1];
+      effectiveOi = new Map(Object.entries(latest.data).map(([k, v]) => [Number(k), v]));
+      if (latest.prices) {
+        effectivePrices = new Map(Object.entries(latest.prices).map(([k, v]) => [Number(k), v]));
+      }
+      if (effectiveSpot === 0 && latest.spot) {
+        effectiveSpot = latest.spot;
+      }
+    }
+
+    return computeSellRecommendations(chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, daysToExpiry, atmStrike);
+  }, [chain, oiData, livePrices, prevDayOi, closePrices, snapshots, spotPrice, daysToExpiry, atmStrike]);
 
   const handleSell = useCallback(async (rec: SellRecommendation) => {
     if (orderMode !== 'paper' || !expiry) return;
@@ -151,7 +167,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
     }
   }, [chain, livePrices, orderMode, expiry, onToast]);
 
-  if (snapshots.length < 2) {
+  if (snapshots.length < 2 && oiData.size === 0) {
     return (
       <div className="sell-strategy">
         <div className="sell-strategy__empty">

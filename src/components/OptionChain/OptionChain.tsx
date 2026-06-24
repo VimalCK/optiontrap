@@ -337,11 +337,9 @@ const OptionChain: React.FC = () => {
     return unsub;
   }, [visibleChain, handleTicks]);
 
-  // OI Snapshots: capture every 15 min during market hours, calculate velocity
+  // OI Snapshots: load existing snapshots always, capture new ones only during market hours
   useEffect(() => {
-    if (!isMarketLive()) return;
-
-    // Load today's snapshots and clean old ones
+    // Always load today's snapshots and clean old ones
     cleanOldSnapshots();
     getTodaySnapshots().then((snaps) => {
       setSnapshots(snaps);
@@ -350,6 +348,8 @@ const OptionChain: React.FC = () => {
         setOiVelocity(calculateVelocity(oiData, snaps));
       }
     });
+
+    if (!isMarketLive()) return;
 
     // Set up interval to capture snapshots
     const capture = async () => {
