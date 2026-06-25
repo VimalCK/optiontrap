@@ -3,7 +3,7 @@ import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
 import SellStrategy from '@/components/SellStrategy/SellStrategy';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { calculateExpectedMove } from '@/services/edgeScore';
-import { saveOiSnapshot, getTodaySnapshots, cleanOldSnapshots, calculateVelocity, shouldTakeSnapshot, analyzeVelocityPattern, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
+import { saveOiSnapshot, getTodaySnapshots, calculateVelocity, shouldTakeSnapshot, analyzeVelocityPattern, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
 import { computeStrikeSignals } from '@/services/combinedSignal';
 import { addPosition } from '@/services/positions';
 
@@ -339,8 +339,7 @@ const OptionChain: React.FC = () => {
 
   // OI Snapshots: load existing snapshots always, capture new ones only during market hours
   useEffect(() => {
-    // Always load today's snapshots and clean old ones
-    cleanOldSnapshots();
+    // Load snapshots (old ones are cleaned automatically when a new snapshot is saved)
     getTodaySnapshots().then((snaps) => {
       setSnapshots(snaps);
       // Calculate initial velocity

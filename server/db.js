@@ -901,15 +901,26 @@ export function saveOiSnapshot(snapshot) {
 }
 
 /**
- * Get all OI snapshots from today, ordered by timestamp.
+ * Get OI snapshots from the most recent date available, ordered by timestamp.
+ * When market is closed, this returns yesterday's snapshots (until a new one is saved today).
  */
 export function getTodayOiSnapshots() {
   if (!db) throw new Error('Database not initialised');
 
-  const todayMidnight = getTodayMidnight();
+  // Find the most recent date's midnight boundary
+  const maxResult = db.exec('SELECT MAX(timestamp) as maxTs FROM oi_snapshots');
+  if (!maxResult.length || !maxResult[0].values[0][0]) return [];
+
+  const maxTs = maxResult[0].values[0][0];
+  // Get IST midnight of that date
+  const maxDate = new Date(maxTs);
+  const istDate = new Date(maxDate.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  istDate.setHours(0, 0, 0, 0);
+  const midnightMs = istDate.getTime();
+
   const results = db.exec(
     'SELECT timestamp, time_label, data, prices, close, spot FROM oi_snapshots WHERE timestamp >= ? ORDER BY timestamp',
-    [todayMidnight],
+    [midnightMs],
   );
 
   if (!results.length) return [];
