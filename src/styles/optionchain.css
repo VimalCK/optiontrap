@@ -592,6 +592,10 @@
 .oc-chart__tooltip-signal span:last-child {
   font-weight: 600;
 }
+.oc-chart__tooltip-confidence { font-weight: 600; }
+.oc-chart__tooltip-confidence--high { color: #22c55e; }
+.oc-chart__tooltip-confidence--medium { color: #a1a1aa; }
+.oc-chart__tooltip-confidence--low { color: #f59e0b; }
 
 .oc-chart__legend {
   display: flex;

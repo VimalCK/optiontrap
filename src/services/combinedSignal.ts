@@ -16,6 +16,8 @@ export type CombinedStance =
   | 'fading-bull' | 'fading-bear'
   | null;
 
+export type VolumeConfidence = 'high' | 'medium' | 'low' | null;
+
 export interface StrikeSignal {
   stance: CombinedStance;
   ceSignal: OiSignal;
@@ -23,6 +25,7 @@ export interface StrikeSignal {
   label: string;
   color: string;
   weak: boolean;  // true for single-leg (0.5 opacity) stances
+  confidence: VolumeConfidence;  // volume-based confidence level
 }
 
 const OI_THRESHOLD = 2;      // % minimum OI change to count as signal
@@ -114,8 +117,34 @@ function classifyInstrument(
 }
 
 /**
+ * Compute volume confidence for a strike based on CE+PE volume vs average.
+ * high: either leg > 1.5x avg volume (institutional activity)
+ * medium: either leg > 0.8x avg volume (normal activity)
+ * low: both legs < 0.5x avg volume (thin, unreliable)
+ * null: no volume data available
+ */
+function computeVolumeConfidence(
+  ceToken: number | undefined,
+  peToken: number | undefined,
+  volumeData: Map<number, number>,
+  avgVolume: number,
+): VolumeConfidence {
+  if (avgVolume <= 0 || volumeData.size === 0) return null;
+
+  const ceVol = ceToken ? (volumeData.get(ceToken) || 0) : 0;
+  const peVol = peToken ? (volumeData.get(peToken) || 0) : 0;
+  const maxVol = Math.max(ceVol, peVol);
+
+  if (maxVol > avgVolume * 1.5) return 'high';
+  if (maxVol > avgVolume * 0.8) return 'medium';
+  if (maxVol > 0) return 'low';
+  return null;
+}
+
+/**
  * Compute combined CE+PE signal for each strike in the visible chain.
  * Uses the most recent snapshot with price data as baseline.
+ * Optionally incorporates volume data for confidence scoring.
  *
  * @returns Map keyed by strike number → StrikeSignal
  */
@@ -124,6 +153,8 @@ export function computeStrikeSignals(
   currentOi: Map<number, number>,
   currentPrices: Map<number, number>,
   snapshots: OiSnapshot[],
+  volumeData?: Map<number, number>,
+  avgVolume?: number,
 ): Map<number, StrikeSignal> {
   const result = new Map<number, StrikeSignal>();
 
@@ -137,6 +168,9 @@ export function computeStrikeSignals(
   }
 
   if (!refSnapshot) return result; // No snapshot with prices yet — no signals
+
+  const volData = volumeData ?? new Map<number, number>();
+  const avgVol = avgVolume ?? 0;
 
   for (const row of chain) {
     const ceToken = row.ce?.instrumentToken;
@@ -168,6 +202,8 @@ export function computeStrikeSignals(
 
     // Combine
     const config = combineSignals(ceSignal, peSignal);
+    const confidence = computeVolumeConfidence(ceToken, peToken, volData, avgVol);
+
     if (config.stance !== null) {
       result.set(row.strike, {
         stance: config.stance,
@@ -175,7 +211,8 @@ export function computeStrikeSignals(
         peSignal,
         label: config.label,
         color: config.color,
-        weak: config.weak,
+        weak: config.weak || confidence === 'low',
+        confidence,
       });
     }
   }

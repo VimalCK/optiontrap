@@ -155,29 +155,14 @@ export async function initDb() {
       data       TEXT NOT NULL,
       prices     TEXT,
       close      TEXT,
-      spot       REAL
+      spot       REAL,
+      volumes    TEXT
     )
   `);
 
   db.run(`
     CREATE INDEX IF NOT EXISTS idx_oi_snapshots_timestamp ON oi_snapshots(timestamp)
   `);
-
-  // Migrate existing oi_snapshots table: add close and spot columns if missing
-  try {
-    const tableInfo = db.exec('PRAGMA table_info(oi_snapshots)');
-    if (tableInfo.length) {
-      const columns = tableInfo[0].values.map((row) => row[1]);
-      if (!columns.includes('close')) {
-        db.run('ALTER TABLE oi_snapshots ADD COLUMN close TEXT');
-      }
-      if (!columns.includes('spot')) {
-        db.run('ALTER TABLE oi_snapshots ADD COLUMN spot REAL');
-      }
-    }
-  } catch (err) {
-    console.warn('[DB] oi_snapshots migration warning:', err.message);
-  }
 
   // Clean expired sessions on startup
   db.run('DELETE FROM sessions WHERE expires < ?', [Date.now()]);
@@ -859,9 +844,12 @@ export function saveOiSnapshot(snapshot) {
     ? (typeof snapshot.close === 'string' ? JSON.parse(snapshot.close) : snapshot.close)
     : null;
   const newSpot = snapshot.spot || null;
+  const newVolumes = snapshot.volumes
+    ? (typeof snapshot.volumes === 'string' ? JSON.parse(snapshot.volumes) : snapshot.volumes)
+    : null;
 
   // Check if a row exists for this 10-min slot
-  const results = db.exec('SELECT id, data, prices, close, spot FROM oi_snapshots WHERE timestamp = ?', [rounded]);
+  const results = db.exec('SELECT id, data, prices, close, spot, volumes FROM oi_snapshots WHERE timestamp = ?', [rounded]);
 
   if (results.length && results[0].values.length) {
     const columns = results[0].columns;
@@ -880,16 +868,20 @@ export function saveOiSnapshot(snapshot) {
     if (newClose) Object.assign(mergedClose, newClose);
     const closeStr = Object.keys(mergedClose).length > 0 ? JSON.stringify(mergedClose) : null;
 
+    let mergedVolumes = row.volumes ? JSON.parse(row.volumes) : {};
+    if (newVolumes) Object.assign(mergedVolumes, newVolumes);
+    const volumesStr = Object.keys(mergedVolumes).length > 0 ? JSON.stringify(mergedVolumes) : null;
+
     const spot = newSpot || row.spot || null;
 
     db.run(
-      'UPDATE oi_snapshots SET data = ?, prices = ?, close = ?, spot = ? WHERE id = ?',
-      [JSON.stringify(existingData), pricesStr, closeStr, spot, row.id],
+      'UPDATE oi_snapshots SET data = ?, prices = ?, close = ?, spot = ?, volumes = ? WHERE id = ?',
+      [JSON.stringify(existingData), pricesStr, closeStr, spot, volumesStr, row.id],
     );
   } else {
     db.run(
-      'INSERT INTO oi_snapshots (timestamp, time_label, data, prices, close, spot) VALUES (?, ?, ?, ?, ?, ?)',
-      [rounded, timeLabel, JSON.stringify(newData), newPrices ? JSON.stringify(newPrices) : null, newClose ? JSON.stringify(newClose) : null, newSpot],
+      'INSERT INTO oi_snapshots (timestamp, time_label, data, prices, close, spot, volumes) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [rounded, timeLabel, JSON.stringify(newData), newPrices ? JSON.stringify(newPrices) : null, newClose ? JSON.stringify(newClose) : null, newSpot, newVolumes ? JSON.stringify(newVolumes) : null],
     );
   }
 
@@ -919,7 +911,7 @@ export function getTodayOiSnapshots() {
   const midnightMs = istDate.getTime();
 
   const results = db.exec(
-    'SELECT timestamp, time_label, data, prices, close, spot FROM oi_snapshots WHERE timestamp >= ? ORDER BY timestamp',
+    'SELECT timestamp, time_label, data, prices, close, spot, volumes FROM oi_snapshots WHERE timestamp >= ? ORDER BY timestamp',
     [midnightMs],
   );
 
@@ -936,6 +928,7 @@ export function getTodayOiSnapshots() {
       prices: obj.prices ? JSON.parse(obj.prices) : undefined,
       close: obj.close ? JSON.parse(obj.close) : undefined,
       spot: obj.spot || undefined,
+      volumes: obj.volumes ? JSON.parse(obj.volumes) : undefined,
     };
   });
 }

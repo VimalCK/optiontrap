@@ -53,6 +53,31 @@ export interface BuyRecommendation {
   premium: number;
 }
 
+// ── Volume Helper ──
+
+/**
+ * Compute a volume multiplier for a token.
+ * High volume (>1.5x avg) = 1.3 (boost)
+ * Normal volume (0.8-1.5x avg) = 1.0 (neutral)
+ * Low volume (<0.5x avg) = 0.6 (penalize)
+ * Below average (0.5-0.8x) = 0.8
+ * No data = 1.0
+ */
+function volumeMultiplier(
+  token: number | undefined,
+  volumeData: Map<number, number>,
+  avgVolume: number,
+): number {
+  if (!token || avgVolume <= 0 || volumeData.size === 0) return 1.0;
+  const vol = volumeData.get(token) || 0;
+  if (vol <= 0) return 1.0;
+  const ratio = vol / avgVolume;
+  if (ratio > 1.5) return 1.3;
+  if (ratio > 0.8) return 1.0;
+  if (ratio > 0.5) return 0.8;
+  return 0.6;
+}
+
 // ── Scoring Sub-functions ──
 
 /**
@@ -121,6 +146,8 @@ function scoreOiWall(
   oiData: Map<number, number>,
   snapshots: OiSnapshot[],
   livePrices: Map<number, number>,
+  volumeData: Map<number, number> = new Map(),
+  avgVolume = 0,
 ): { score: number; reasons: string[] } {
   const reasons: string[] = [];
   let score = 0;
@@ -147,6 +174,19 @@ function scoreOiWall(
   } else {
     score += 5;
     reasons.push(`Mild ${wallType} at ${bestWall.strike} (${bestWall.strength.toFixed(1)}x avg OI)`);
+  }
+
+  // Volume confirmation on the wall
+  {
+    const wallRow = chain.find((r) => r.strike === bestWall.strike);
+    const wallToken = type === 'ce' ? wallRow?.ce?.instrumentToken : wallRow?.pe?.instrumentToken;
+    const volMul = volumeMultiplier(wallToken, volumeData, avgVolume);
+    if (volMul >= 1.3) {
+      reasons.push('Wall built on high volume — strong institutional defense');
+    } else if (volMul <= 0.6) {
+      score = Math.round(score * 0.6);
+      reasons.push('Wall on thin volume — may break easily');
+    }
   }
 
   // Check if wall OI is growing (short buildup confirmation)
@@ -191,6 +231,8 @@ function scoreVelocity(
   token: number | undefined,
   currentOi: number,
   snapshots: OiSnapshot[],
+  volumeData: Map<number, number> = new Map(),
+  avgVolume = 0,
 ): { score: number; reasons: string[] } {
   if (!token || currentOi <= 0 || snapshots.length < 2) {
     return { score: 0, reasons: [] };
@@ -221,6 +263,17 @@ function scoreVelocity(
     // No reason added — negative signal shouldn't be shown as a reason TO sell
   } else if (label === 'Volatile') {
     score = 2;
+  }
+
+  // Apply volume multiplier — high volume buildup is more reliable
+  if (score > 0) {
+    const volMul = volumeMultiplier(token, volumeData, avgVolume);
+    score = Math.round(score * volMul);
+    if (volMul >= 1.3) {
+      reasons.push('Volume-confirmed buildup — high conviction');
+    } else if (volMul <= 0.6) {
+      reasons.push('Low volume — buildup may not hold');
+    }
   }
 
   return { score: Math.min(20, score), reasons };
@@ -354,6 +407,8 @@ export function computeSellRecommendations(
   spotPrice: number,
   daysToExpiry?: number,
   atmStrike?: number,
+  volumeData: Map<number, number> = new Map(),
+  avgVolume = 0,
 ): SellRecommendation[] {
   if (chain.length === 0 || spotPrice === 0 || snapshots.length < 2) return [];
 
@@ -383,8 +438,8 @@ export function computeSellRecommendations(
       const premium = livePrices.get(ceToken) || 0;
       if (premium <= 0 || currentOi <= 0) continue;
 
-      const wallResult = scoreOiWall(row.strike, 'ce', chain, oiData, snapshots, livePrices);
-      const velocityResult = scoreVelocity(ceToken, currentOi, snapshots);
+      const wallResult = scoreOiWall(row.strike, 'ce', chain, oiData, snapshots, livePrices, volumeData, avgVolume);
+      const velocityResult = scoreVelocity(ceToken, currentOi, snapshots, volumeData, avgVolume);
       const pcrResult = scorePcrExtreme(snapshots, chain, oiData, 'ce');
 
       const breakdown: ScoreBreakdown = {
@@ -411,8 +466,8 @@ export function computeSellRecommendations(
       const premium = livePrices.get(peToken) || 0;
       if (premium <= 0 || currentOi <= 0) continue;
 
-      const wallResult = scoreOiWall(row.strike, 'pe', chain, oiData, snapshots, livePrices);
-      const velocityResult = scoreVelocity(peToken, currentOi, snapshots);
+      const wallResult = scoreOiWall(row.strike, 'pe', chain, oiData, snapshots, livePrices, volumeData, avgVolume);
+      const velocityResult = scoreVelocity(peToken, currentOi, snapshots, volumeData, avgVolume);
       const pcrResult = scorePcrExtreme(snapshots, chain, oiData, 'pe');
 
       const breakdown: ScoreBreakdown = {
@@ -546,6 +601,8 @@ function scoreBreakout(
   snapshots: OiSnapshot[],
   livePrices: Map<number, number>,
   spotPrice: number,
+  volumeData: Map<number, number> = new Map(),
+  avgVolume = 0,
 ): { score: number; reasons: string[] } {
   const reasons: string[] = [];
   let score = 0;
@@ -597,6 +654,16 @@ function scoreBreakout(
     } else if (signal.signal === 'long-unwinding') {
       score += 5;
       reasons.push(`Long unwinding at ${wall.strike} — ${wallType} weakening`);
+    }
+
+    // Volume confirmation on breakout
+    const volMul = volumeMultiplier(token, volumeData, avgVolume);
+    if (volMul >= 1.3 && score > 0) {
+      score += 5;
+      reasons.push('Breakout on surge volume — high conviction');
+    } else if (volMul <= 0.6 && score > 0) {
+      score = Math.round(score * 0.7);
+      reasons.push('Low volume breakout — could be fake breakout');
     }
 
     break; // Score only the nearest wall
@@ -895,6 +962,8 @@ export function computeBuyRecommendations(
   spotPrice: number,
   _daysToExpiry?: number,
   atmStrike?: number,
+  volumeData: Map<number, number> = new Map(),
+  avgVolume = 0,
 ): BuyRecommendation[] {
   if (chain.length === 0 || spotPrice === 0 || snapshots.length < 2) return [];
 
@@ -920,7 +989,7 @@ export function computeBuyRecommendations(
       const premium = livePrices.get(ceToken) || 0;
       if (premium <= 0) continue;
 
-      const breakoutResult = scoreBreakout('ce', chain, oiData, snapshots, livePrices, spotPrice);
+      const breakoutResult = scoreBreakout('ce', chain, oiData, snapshots, livePrices, spotPrice, volumeData, avgVolume);
       const directionalResult = scoreDirectionalOi('ce', chain, oiData, livePrices, snapshots, spotPrice);
       const momentumResult = scoreBuyMomentum('ce', chain, oiData, livePrices, snapshots, spotPrice);
       const pcrResult = scorePcrShift('ce', chain, oiData, snapshots);
@@ -955,7 +1024,7 @@ export function computeBuyRecommendations(
       const premium = livePrices.get(peToken) || 0;
       if (premium <= 0) continue;
 
-      const breakoutResult = scoreBreakout('pe', chain, oiData, snapshots, livePrices, spotPrice);
+      const breakoutResult = scoreBreakout('pe', chain, oiData, snapshots, livePrices, spotPrice, volumeData, avgVolume);
       const directionalResult = scoreDirectionalOi('pe', chain, oiData, livePrices, snapshots, spotPrice);
       const momentumResult = scoreBuyMomentum('pe', chain, oiData, livePrices, snapshots, spotPrice);
       const pcrResult = scorePcrShift('pe', chain, oiData, snapshots);

@@ -32,6 +32,8 @@ interface SellStrategyProps {
   onToast: (text: string, color: 'green' | 'red') => void;
   mode: StrategyMode;
   onModeChange: (mode: StrategyMode) => void;
+  volumeData: Map<number, number>;
+  avgVolume: number;
 }
 
 function scoreColorClass(score: number): string {
@@ -103,6 +105,8 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
   onToast,
   mode,
   onModeChange,
+  volumeData,
+  avgVolume,
 }) => {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
@@ -131,13 +135,13 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
   const expectedMove = useMemo(() => calculateExpectedMove(chain, atmStrike ?? 0, effectivePrices), [chain, atmStrike, effectivePrices]);
 
   const sellRecs = useMemo(
-    () => computeSellRecommendations(chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, daysToExpiry, atmStrike),
-    [chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, daysToExpiry, atmStrike],
+    () => computeSellRecommendations(chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, daysToExpiry, atmStrike, volumeData, avgVolume),
+    [chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, daysToExpiry, atmStrike, volumeData, avgVolume],
   );
 
   const buyRecs = useMemo(
-    () => computeBuyRecommendations(chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, daysToExpiry, atmStrike),
-    [chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, daysToExpiry, atmStrike],
+    () => computeBuyRecommendations(chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, daysToExpiry, atmStrike, volumeData, avgVolume),
+    [chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, daysToExpiry, atmStrike, volumeData, avgVolume],
   );
 
   const handleTrade = useCallback(async (rec: SellRecommendation | BuyRecommendation) => {

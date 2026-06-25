@@ -226,12 +226,6 @@ const OptionChain: React.FC = () => {
     return max;
   }, [visibleChain, oiData]);
 
-  // Compute combined CE+PE market stance signal per strike
-  const strikeSignals = useMemo(
-    () => computeStrikeSignals(visibleChain, oiData, livePrices, snapshots),
-    [visibleChain, oiData, livePrices, snapshots]
-  );
-
   // Compute average volume for volume-confirmation threshold
   const avgVolume = useMemo(() => {
     if (volumeData.size === 0) return 0;
@@ -243,6 +237,12 @@ const OptionChain: React.FC = () => {
     });
     return count > 0 ? total / count : 0;
   }, [visibleChain, volumeData]);
+
+  // Compute combined CE+PE market stance signal per strike
+  const strikeSignals = useMemo(
+    () => computeStrikeSignals(visibleChain, oiData, livePrices, snapshots, volumeData, avgVolume),
+    [visibleChain, oiData, livePrices, snapshots, volumeData, avgVolume]
+  );
 
   // Calculate days to expiry
   const daysToExpiry = useMemo(() => {
@@ -343,7 +343,7 @@ const OptionChain: React.FC = () => {
     const capture = async () => {
       if (!isMarketLive() || oiData.size === 0) return;
       if (await shouldTakeSnapshot()) {
-         await saveOiSnapshot(oiData, livePrices, closePrices, niftySpot || undefined);
+         await saveOiSnapshot(oiData, livePrices, closePrices, niftySpot || undefined, volumeData);
       }
       // Recalculate velocity
       const latestSnaps = await getTodaySnapshots();
@@ -944,10 +944,20 @@ const OptionChain: React.FC = () => {
                         {(() => {
                           const signal = strikeSignals.get(row.strike);
                           return signal ? (
-                            <div className="oc-chart__tooltip-row oc-chart__tooltip-signal">
-                              <span>Signal:</span>
-                              <span style={{ color: signal.color }}>{signal.label}</span>
-                            </div>
+                            <>
+                              <div className="oc-chart__tooltip-row oc-chart__tooltip-signal">
+                                <span>Signal:</span>
+                                <span style={{ color: signal.color }}>{signal.label}</span>
+                              </div>
+                              {signal.confidence && (
+                                <div className="oc-chart__tooltip-row oc-chart__tooltip-signal">
+                                  <span>Vol:</span>
+                                  <span className={`oc-chart__tooltip-confidence oc-chart__tooltip-confidence--${signal.confidence}`}>
+                                    {signal.confidence === 'high' ? 'Confirmed' : signal.confidence === 'medium' ? 'Normal' : 'Low Vol'}
+                                  </span>
+                                </div>
+                              )}
+                            </>
                           ) : null;
                         })()}
                         {orderMode === 'paper' && (
@@ -1069,8 +1079,8 @@ const OptionChain: React.FC = () => {
                   <h5>Scoring Factors (0–100)</h5>
                   <ul>
                     <li><strong>Pinning (0–25)</strong> — Spot hovering near max pain with balanced PCR. Sellers defend both sides, price stays range-bound.</li>
-                    <li><strong>OI Wall (0–25)</strong> — Heavy OI wall at/near the strike with fresh short buildup confirmation. Institutional defense.</li>
-                    <li><strong>Velocity (0–20)</strong> — OI buildup trend over intraday snapshots. Accelerating buildup = sellers adding aggressively.</li>
+                    <li><strong>OI Wall (0–25)</strong> — Heavy OI wall at/near the strike with fresh short buildup confirmation. Walls on high volume are boosted; thin volume walls are penalized.</li>
+                    <li><strong>Velocity (0–20)</strong> — OI buildup trend over intraday snapshots. Volume-confirmed buildup scores higher. Low volume buildup is penalized.</li>
                     <li><strong>PCR Extreme (0–15)</strong> — Sustained extreme PCR favouring the sell side. Low PCR for selling calls, high PCR for selling puts.</li>
                     <li><strong>Theta Decay (0–15)</strong> — Days to expiry bonus. Closer to expiry = more theta working for sellers.</li>
                   </ul>
@@ -1088,7 +1098,7 @@ const OptionChain: React.FC = () => {
                   <p>Scores ATM and slightly OTM strikes across 5 factors to find the best directional buying opportunities. Requires 20+ minutes of OI snapshot data.</p>
                   <h5>Scoring Factors (0–100)</h5>
                   <ul>
-                    <li><strong>Breakout (0–25)</strong> — OI walls weakening or cracking. Short covering at resistance/support means the barrier is breaking.</li>
+                    <li><strong>Breakout (0–25)</strong> — OI walls weakening or cracking. Breakout on surge volume scores higher. Low volume breakout is penalized (possible fake breakout).</li>
                     <li><strong>Directional OI (0–25)</strong> — Sustained Long Buildup (OI up + Price up) across nearby strikes. Strong buyer conviction.</li>
                     <li><strong>Momentum (0–20)</strong> — Velocity acceleration on the buy side with opposite side unwinding. Trend strengthening.</li>
                     <li><strong>PCR Shift (0–15)</strong> — PCR trending in a direction that favours the buy. Rising PCR for CE, falling PCR for PE.</li>
@@ -1133,6 +1143,8 @@ const OptionChain: React.FC = () => {
             onToast={showToast}
             mode={strategyMode}
             onModeChange={setStrategyMode}
+            volumeData={volumeData}
+            avgVolume={avgVolume}
           />
         </div>
       )}

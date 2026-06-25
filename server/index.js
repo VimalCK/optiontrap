@@ -526,11 +526,11 @@ app.get('/api/oi-snapshots/latest', requireAuth, (req, res) => {
 
 app.post('/api/oi-snapshots', requireAuth, (req, res) => {
   try {
-    const { timestamp, timeLabel, data, prices, close, spot } = req.body;
+    const { timestamp, timeLabel, data, prices, close, spot, volumes } = req.body;
     if (!timestamp || !timeLabel || !data) {
       return res.status(400).json({ status: 'error', message: 'Missing required fields: timestamp, timeLabel, data' });
     }
-    saveOiSnapshot({ timestamp, timeLabel, data, prices, close, spot });
+    saveOiSnapshot({ timestamp, timeLabel, data, prices, close, spot, volumes });
     res.json({ status: 'ok' });
   } catch (err) {
     console.error('[OI Snapshots] POST error:', err.message);
