@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { OptionChainRow } from '@/services/optionChain';
-import { analyzeTrap, buildTrapContext, TrapAnalysis, calculateMaxPain, calculatePCR } from '@/services/trapAnalysis';
-import { calculateExpectedMove } from '@/services/edgeScore';
+import { analyzeTrap, buildTrapContext, TrapAnalysis } from '@/services/trapAnalysis';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import '@/styles/trapanalyzer.css';
 
@@ -14,6 +13,8 @@ interface TrapAnalyzerProps {
   spotPrice: number;
   atmStrike: number;
   daysToExpiry?: number;
+  maxPain: number;
+  expectedMove: number;
 }
 
 type PositionSide = 'buy' | 'sell';
@@ -28,8 +29,10 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   spotPrice,
   atmStrike,
   daysToExpiry,
+  maxPain,
+  expectedMove,
 }) => {
-  const [positionSide, setPositionSide] = useState<PositionSide>('buy');
+  const [positionSide, setPositionSide] = useState<PositionSide>('sell');
   const [selectedStrike, setSelectedStrike] = useState<number>(atmStrike);
   const [view, setView] = useState<AnalyzerView>('map');
   const [hoveredStrike, setHoveredStrike] = useState<number | null>(null);
@@ -41,11 +44,6 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
 
   // Get available strikes for the dropdown
   const strikes = useMemo(() => chain.map((r) => r.strike), [chain]);
-
-  // Summary metrics
-  const maxPain = useMemo(() => calculateMaxPain(chain, oiData), [chain, oiData]);
-  const pcr = useMemo(() => calculatePCR(chain, oiData), [chain, oiData]);
-  const expectedMove = useMemo(() => calculateExpectedMove(chain, atmStrike, livePrices), [chain, atmStrike, livePrices]);
 
   // Shared context — computed ONCE per tick for the entire chain.
   // Avoids O(n³): previously each analyzeTrap() call recomputed maxPain (O(n²)),
@@ -253,28 +251,6 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
 
   return (
     <div className="trap-analyzer">
-      {/* Summary Bar */}
-      <div className="trap-summary">
-        <div className="trap-summary__item">
-          <span className="trap-summary__label">Max Pain</span>
-          <span className="trap-summary__value">{maxPain > 0 ? maxPain : '-'}</span>
-        </div>
-        <div className="trap-summary__item">
-          <span className="trap-summary__label">PCR</span>
-          <span className={`trap-summary__value ${pcr > 1 ? 'positive' : pcr < 1 ? 'negative' : ''}`}>
-            {pcr > 0 ? pcr.toFixed(2) : '-'}
-          </span>
-        </div>
-        <div className="trap-summary__item">
-          <span className="trap-summary__label">Spot</span>
-          <span className="trap-summary__value">{spotPrice > 0 ? spotPrice.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '-'}</span>
-        </div>
-        <div className="trap-summary__item">
-          <span className="trap-summary__label">Expected Move</span>
-          <span className="trap-summary__value">{expectedMove > 0 ? `±${expectedMove.toFixed(0)}` : '-'}</span>
-        </div>
-      </div>
-
       {/* View Toggle + Position Selector */}
       <div className="trap-input">
         <div className="trap-input__row">

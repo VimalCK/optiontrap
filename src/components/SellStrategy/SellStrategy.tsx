@@ -9,10 +9,13 @@ import {
   BuyScoreBreakdown,
   ScoreBreakdown,
 } from '@/services/sellStrategy';
+import { calculateMaxPain, calculatePCR } from '@/services/trapAnalysis';
+import { calculateExpectedMove } from '@/services/edgeScore';
 import { addPosition } from '@/services/positions';
+import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
 import '@/styles/sellstrategy.css';
 
-export type StrategyMode = 'sell' | 'buy';
+export type StrategyMode = 'sell' | 'buy' | 'analyzer';
 
 interface SellStrategyProps {
   chain: OptionChainRow[];
@@ -122,6 +125,11 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
     return { effectiveOi: oi, effectivePrices: prices, effectiveSpot: spot };
   }, [oiData, livePrices, spotPrice, snapshots]);
 
+  // Summary metrics — always visible regardless of mode
+  const maxPain = useMemo(() => calculateMaxPain(chain, effectiveOi), [chain, effectiveOi]);
+  const pcr = useMemo(() => calculatePCR(chain, effectiveOi), [chain, effectiveOi]);
+  const expectedMove = useMemo(() => calculateExpectedMove(chain, atmStrike ?? 0, effectivePrices), [chain, atmStrike, effectivePrices]);
+
   const sellRecs = useMemo(
     () => computeSellRecommendations(chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, daysToExpiry, atmStrike),
     [chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, daysToExpiry, atmStrike],
@@ -225,28 +233,83 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
   const recommendations = mode === 'sell' ? sellRecs : buyRecs;
   const breakdownLabels = mode === 'sell' ? SELL_BREAKDOWN_LABELS : BUY_BREAKDOWN_LABELS;
 
+  const renderSummaryBar = () => (
+    <div className="trap-summary">
+      <div className="trap-summary__item">
+        <span className="trap-summary__label">Max Pain</span>
+        <span className="trap-summary__value">{maxPain > 0 ? maxPain : '-'}</span>
+      </div>
+      <div className="trap-summary__item">
+        <span className="trap-summary__label">PCR</span>
+        <span className={`trap-summary__value ${pcr > 1 ? 'positive' : pcr < 1 ? 'negative' : ''}`}>
+          {pcr > 0 ? pcr.toFixed(2) : '-'}
+        </span>
+      </div>
+      <div className="trap-summary__item">
+        <span className="trap-summary__label">Spot</span>
+        <span className="trap-summary__value">{effectiveSpot > 0 ? effectiveSpot.toLocaleString('en-IN', { maximumFractionDigits: 0 }) : '-'}</span>
+      </div>
+      <div className="trap-summary__item">
+        <span className="trap-summary__label">Expected Move</span>
+        <span className="trap-summary__value">{expectedMove > 0 ? `±${expectedMove.toFixed(0)}` : '-'}</span>
+      </div>
+    </div>
+  );
+
+  const renderToggle = () => (
+    <div className="sell-strategy__toggle">
+      <button className={`sell-strategy__toggle-btn ${mode === 'sell' ? 'sell-strategy__toggle-btn--active-sell' : ''}`} onClick={() => handleModeChange('sell')}>Sell</button>
+      <button className={`sell-strategy__toggle-btn ${mode === 'buy' ? 'sell-strategy__toggle-btn--active-buy' : ''}`} onClick={() => handleModeChange('buy')}>Buy</button>
+      <button className={`sell-strategy__toggle-btn ${mode === 'analyzer' ? 'sell-strategy__toggle-btn--active-analyzer' : ''}`} onClick={() => handleModeChange('analyzer')}>Analyzer</button>
+    </div>
+  );
+
   if (snapshots.length < 2 && oiData.size === 0) {
     return (
       <div className="sell-strategy">
-        <div className="sell-strategy__toggle">
-          <button className={`sell-strategy__toggle-btn ${mode === 'sell' ? 'sell-strategy__toggle-btn--active-sell' : ''}`} onClick={() => handleModeChange('sell')}>Sell</button>
-          <button className={`sell-strategy__toggle-btn ${mode === 'buy' ? 'sell-strategy__toggle-btn--active-buy' : ''}`} onClick={() => handleModeChange('buy')}>Buy</button>
-        </div>
-        <div className="sell-strategy__empty">
-          Waiting for market data — need at least 20 minutes of OI snapshots to generate recommendations.
-        </div>
+        {renderSummaryBar()}
+        {renderToggle()}
+        {mode === 'analyzer' ? (
+          <TrapAnalyzer
+            chain={chain}
+            oiData={effectiveOi}
+            prevDayOi={prevDayOi}
+            closePrices={closePrices}
+            livePrices={effectivePrices}
+            spotPrice={effectiveSpot}
+            atmStrike={atmStrike ?? 0}
+            daysToExpiry={daysToExpiry}
+            maxPain={maxPain}
+            expectedMove={expectedMove}
+          />
+        ) : (
+          <div className="sell-strategy__empty">
+            Waiting for market data — need at least 20 minutes of OI snapshots to generate recommendations.
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div className="sell-strategy">
-      <div className="sell-strategy__toggle">
-        <button className={`sell-strategy__toggle-btn ${mode === 'sell' ? 'sell-strategy__toggle-btn--active-sell' : ''}`} onClick={() => handleModeChange('sell')}>Sell</button>
-        <button className={`sell-strategy__toggle-btn ${mode === 'buy' ? 'sell-strategy__toggle-btn--active-buy' : ''}`} onClick={() => handleModeChange('buy')}>Buy</button>
-      </div>
+      {renderSummaryBar()}
+      {renderToggle()}
 
-      {recommendations.length === 0 ? (
+      {mode === 'analyzer' ? (
+        <TrapAnalyzer
+          chain={chain}
+          oiData={effectiveOi}
+          prevDayOi={prevDayOi}
+          closePrices={closePrices}
+          livePrices={effectivePrices}
+          spotPrice={effectiveSpot}
+          atmStrike={atmStrike ?? 0}
+          daysToExpiry={daysToExpiry}
+          maxPain={maxPain}
+          expectedMove={expectedMove}
+        />
+      ) : recommendations.length === 0 ? (
         <div className="sell-strategy__empty">
           No {mode} opportunities detected — all strikes scored below threshold.
         </div>

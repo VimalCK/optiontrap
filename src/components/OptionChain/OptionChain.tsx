@@ -1,21 +1,10 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
-import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
 import SellStrategy from '@/components/SellStrategy/SellStrategy';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { calculateExpectedMove } from '@/services/edgeScore';
 import { saveOiSnapshot, getTodaySnapshots, calculateVelocity, shouldTakeSnapshot, analyzeVelocityPattern, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
 import { computeStrikeSignals } from '@/services/combinedSignal';
 import { addPosition } from '@/services/positions';
-
-const TrapInfoPanel: React.FC<{ onToggle: (show: boolean) => void; show: boolean }> = ({ onToggle, show }) => {
-  return (
-    <button className="trap-info-btn" onClick={() => onToggle(!show)} title="How does this work?">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-        <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
-      </svg>
-    </button>
-  );
-};
 
 const TrapInfoDetail: React.FC = () => (
   <div className="trap-info-detail">
@@ -95,10 +84,9 @@ const OptionChain: React.FC = () => {
   const [prevDayOi, setPrevDayOi] = useState<Map<number, number>>(new Map());
   const [niftySpot, setNiftySpot] = useState<number>(0);
   const [selectedChartStrike, setSelectedChartStrike] = useState<number | null>(null);
-  const [showTrapInfo, setShowTrapInfo] = useState(false);
   const [showOiChartInfo, setShowOiChartInfo] = useState(false);
   const [showSellStrategyInfo, setShowSellStrategyInfo] = useState(false);
-  const [strategyMode, setStrategyMode] = useState<'sell' | 'buy'>('sell');
+  const [strategyMode, setStrategyMode] = useState<'sell' | 'buy' | 'analyzer'>('sell');
 
   const [orderForm, setOrderForm] = useState<{ strike: number; optionType: 'CE' | 'PE' } | null>(null);
   const [orderQty, setOrderQty] = useState(50);
@@ -1059,13 +1047,13 @@ const OptionChain: React.FC = () => {
         </div>
       )}
 
-      {/* Strategy (Sell / Buy) */}
+      {/* Strategy (Sell / Buy / Analyzer) */}
       {!loading && !error && visibleChain.length > 0 && (
         <div className="card" style={{ marginTop: 24 }}>
           <div className="trap-card-header">
             <div className="trap-card-header__left">
-              <h3 className="card__title" style={{ marginBottom: 0 }}>{strategyMode === 'sell' ? 'Sell' : 'Buy'} Strategy</h3>
-              <button className="trap-info-btn" onClick={() => setShowSellStrategyInfo(!showSellStrategyInfo)} title={`How ${strategyMode === 'sell' ? 'Sell' : 'Buy'} Strategy works`}>
+              <h3 className="card__title" style={{ marginBottom: 0 }}>Strategy</h3>
+              <button className="trap-info-btn" onClick={() => setShowSellStrategyInfo(!showSellStrategyInfo)} title="How this works">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
                 </svg>
@@ -1094,7 +1082,7 @@ const OptionChain: React.FC = () => {
                     <li><strong>Strangle</strong> — Sell OTM CE and OTM PE at different strikes</li>
                   </ul>
                 </>
-              ) : (
+              ) : strategyMode === 'buy' ? (
                 <>
                   <h5>How Buy Strategy Works</h5>
                   <p>Scores ATM and slightly OTM strikes across 5 factors to find the best directional buying opportunities. Requires 20+ minutes of OI snapshot data.</p>
@@ -1114,14 +1102,20 @@ const OptionChain: React.FC = () => {
                     <li><strong>Strangle</strong> — Buy OTM CE and OTM PE at different strikes (cheaper volatility play)</li>
                   </ul>
                 </>
+              ) : (
+                <TrapInfoDetail />
               )}
-              <h5>Score Scale</h5>
-              <div className="sell-strategy__color-scale">
-                <span className="sell-strategy__color-item"><span className="sell-strategy__color-dot" style={{ background: '#f87171' }}></span> 0–30 Weak</span>
-                <span className="sell-strategy__color-item"><span className="sell-strategy__color-dot" style={{ background: '#f59e0b' }}></span> 30–60 Moderate</span>
-                <span className="sell-strategy__color-item"><span className="sell-strategy__color-dot" style={{ background: '#4ade80' }}></span> 60–80 Strong</span>
-                <span className="sell-strategy__color-item"><span className="sell-strategy__color-dot" style={{ background: '#22c55e' }}></span> 80–100 Very Strong</span>
-              </div>
+              {strategyMode !== 'analyzer' && (
+                <>
+                  <h5>Score Scale</h5>
+                  <div className="sell-strategy__color-scale">
+                    <span className="sell-strategy__color-item"><span className="sell-strategy__color-dot" style={{ background: '#f87171' }}></span> 0–30 Weak</span>
+                    <span className="sell-strategy__color-item"><span className="sell-strategy__color-dot" style={{ background: '#f59e0b' }}></span> 30–60 Moderate</span>
+                    <span className="sell-strategy__color-item"><span className="sell-strategy__color-dot" style={{ background: '#4ade80' }}></span> 60–80 Strong</span>
+                    <span className="sell-strategy__color-item"><span className="sell-strategy__color-dot" style={{ background: '#22c55e' }}></span> 80–100 Very Strong</span>
+                  </div>
+                </>
+              )}
             </div>
           )}
           <SellStrategy
@@ -1139,29 +1133,6 @@ const OptionChain: React.FC = () => {
             onToast={showToast}
             mode={strategyMode}
             onModeChange={setStrategyMode}
-          />
-        </div>
-      )}
-
-      {/* Trap Analyzer */}
-      {!loading && !error && visibleChain.length > 0 && (
-        <div className="card" style={{ marginTop: 24 }}>
-          <div className="trap-card-header">
-            <div className="trap-card-header__left">
-              <h3 className="card__title" style={{ marginBottom: 0 }}>Position Analyzer</h3>
-              <TrapInfoPanel show={showTrapInfo} onToggle={setShowTrapInfo} />
-            </div>
-          </div>
-          {showTrapInfo && <TrapInfoDetail />}
-          <TrapAnalyzer
-            chain={visibleChain}
-            oiData={oiData}
-            prevDayOi={prevDayOi}
-            closePrices={closePrices}
-            livePrices={livePrices}
-            spotPrice={niftySpot}
-            atmStrike={atmStrike}
-            daysToExpiry={daysToExpiry}
           />
         </div>
       )}
