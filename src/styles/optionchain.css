@@ -148,8 +148,6 @@
 
 /* ATM Row */
 .oc-row--atm {
-  border-top: 2px solid var(--accent);
-  border-bottom: 2px solid var(--accent);
 }
 
 .oc-row--atm .oc-cell-strike {
@@ -221,20 +219,20 @@
 .oc-oi-bar {
   position: absolute;
   bottom: 0;
-  height: 3px;
+  height: 2px;
   transition: width 0.3s ease;
 }
 
 .oc-oi-bar--ce {
   right: 50%;
   background: #22c55e;
-  border-radius: 2px 0 0 2px;
+  border-radius: 1px 0 0 1px;
 }
 
 .oc-oi-bar--pe {
   left: 50%;
   background: #ef4444;
-  border-radius: 0 2px 2px 0;
+  border-radius: 0 1px 1px 0;
 }
 
 .oc-oi-content {
