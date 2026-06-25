@@ -1,7 +1,45 @@
-/* ── Sell Strategy ── */
+/* ── Sell/Buy Strategy ── */
 
 .sell-strategy {
   margin-top: 16px;
+}
+
+/* ── Sell / Buy toggle ── */
+
+.sell-strategy__toggle {
+  display: flex;
+  gap: 0;
+  margin-bottom: 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  overflow: hidden;
+  width: fit-content;
+}
+
+.sell-strategy__toggle-btn {
+  padding: 5px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sell-strategy__toggle-btn:hover {
+  color: var(--text-primary);
+  background: var(--sidebar-hover);
+}
+
+.sell-strategy__toggle-btn--active-sell {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.sell-strategy__toggle-btn--active-buy {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
 }
 
 .sell-strategy__empty {
@@ -74,6 +112,27 @@
 }
 
 .sell-strategy__badge--sell-strangle {
+  background: rgba(167, 139, 250, 0.15);
+  color: #a78bfa;
+}
+
+/* Buy badges */
+.sell-strategy__badge--buy-ce {
+  background: rgba(74, 222, 128, 0.15);
+  color: #4ade80;
+}
+
+.sell-strategy__badge--buy-pe {
+  background: rgba(248, 113, 113, 0.15);
+  color: #f87171;
+}
+
+.sell-strategy__badge--buy-straddle {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+
+.sell-strategy__badge--buy-strangle {
   background: rgba(167, 139, 250, 0.15);
   color: #a78bfa;
 }
