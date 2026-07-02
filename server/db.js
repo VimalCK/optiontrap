@@ -1095,9 +1095,12 @@ export function getOiHistoryData(scrip, fromDate, toDate) {
 
 /**
  * Get NIFTY option instruments for a given ATM and range from the instruments table.
- * Returns CE+PE tokens for strikes ATM±range with the nearest monthly expiry.
+ * When allExpiries is false (default), returns only the nearest expiry.
+ * When allExpiries is true, returns all expiries within the selected month
+ * (or all expiries if no targetMonth provided).
+ * targetMonth format: 'YYYY-MM'
  */
-export function getNiftyOptionsForAtm(atmStrike, range = 15) {
+export function getNiftyOptionsForAtm(atmStrike, range = 15, { allExpiries = false, targetMonth = '' } = {}) {
   if (!db) throw new Error('Database not initialised');
 
   const stepSize = 50;
@@ -1125,18 +1128,27 @@ export function getNiftyOptionsForAtm(atmStrike, range = 15) {
     expiry,
   }));
 
-  // Find the nearest monthly expiry (the earliest expiry available)
-  const expiries = [...new Set(all.map((r) => r.expiry))].sort();
-  const targetExpiry = expiries[0]; // earliest = current month
+  if (allExpiries) {
+    // Filter to expiries within the target month if provided
+    if (targetMonth) {
+      return all.filter((r) => r.expiry && r.expiry.startsWith(targetMonth));
+    }
+    return all;
+  }
 
+  // Default: nearest expiry only
+  const expiries = [...new Set(all.map((r) => r.expiry))].sort();
+  const targetExpiry = expiries[0];
   return all.filter((r) => r.expiry === targetExpiry);
 }
 
 /**
  * Get distinct dates already stored for a scrip (within an optional range).
+ * When minExpiries > 0, only returns dates that have data for at least that many
+ * distinct expiries (used to detect partially-fetched days).
  * Returns a Set of 'YYYY-MM-DD' strings.
  */
-export function getOiHistoryDates(scrip, fromDate, toDate) {
+export function getOiHistoryDates(scrip, fromDate, toDate, minExpiries = 0) {
   if (!db) throw new Error('Database not initialised');
 
   const table = oiHistoryTableName(scrip);
@@ -1145,23 +1157,31 @@ export function getOiHistoryDates(scrip, fromDate, toDate) {
   const check = db.exec(`SELECT name FROM sqlite_master WHERE type='table' AND name='${table}'`);
   if (!check.length) return new Set();
 
-  let sql = `SELECT DISTINCT date FROM ${table}`;
+  let where = '';
   const params = [];
 
   if (fromDate && toDate) {
-    sql += ' WHERE date >= ? AND date <= ?';
+    where = ' WHERE date >= ? AND date <= ?';
     params.push(fromDate, toDate);
   } else if (fromDate) {
-    sql += ' WHERE date >= ?';
+    where = ' WHERE date >= ?';
     params.push(fromDate);
   } else if (toDate) {
-    sql += ' WHERE date <= ?';
+    where = ' WHERE date <= ?';
     params.push(toDate);
   }
 
+  if (minExpiries > 0) {
+    const sql = `SELECT date, COUNT(DISTINCT expiry) as ec FROM ${table}${where} GROUP BY date HAVING ec >= ?`;
+    params.push(minExpiries);
+    const results = db.exec(sql, params);
+    if (!results.length) return new Set();
+    return new Set(results[0].values.map(([d]) => d));
+  }
+
+  const sql = `SELECT DISTINCT date FROM ${table}${where}`;
   const results = db.exec(sql, params);
   if (!results.length) return new Set();
-
   return new Set(results[0].values.map(([d]) => d));
 }
 

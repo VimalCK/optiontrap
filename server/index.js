@@ -556,7 +556,7 @@ app.delete('/api/oi-snapshots/old', requireAuth, (req, res) => {
  * POST /api/oi-history/fetch — Fetch historical daily OI candles from Kite.
  * Skips dates already stored in the database.
  * Streams progress via Server-Sent Events (SSE).
- * Body: { scrip: 'NIFTY50', from: 'YYYY-MM-DD', to: 'YYYY-MM-DD' }
+ * Body: { scrip: 'NIFTY50', from: 'YYYY-MM-DD', to: 'YYYY-MM-DD', targetMonth?: 'YYYY-MM' }
  *
  * SSE events:
  *   step     — { step, message }
@@ -577,7 +577,7 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
   };
 
   try {
-    const { scrip, from, to } = req.body;
+    const { scrip, from, to, targetMonth } = req.body;
     if (!scrip || !from || !to) {
       send('error', { message: 'scrip, from, and to are required' });
       return res.end();
@@ -609,7 +609,12 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
 
     // Check which dates we already have
     createOiHistoryTable(scrip);
-    const existingDates = getOiHistoryDates(scrip, from, to);
+
+    // Count how many expiries exist for the target month to detect partially-fetched days
+    const sampleAtm = Math.round(spotCandles[0][4] / 50) * 50;
+    const sampleOptions = getNiftyOptionsForAtm(sampleAtm, 15, { allExpiries: true, targetMonth: targetMonth || '' });
+    const expectedExpiries = new Set(sampleOptions.map((o) => o.expiry)).size;
+    const existingDates = getOiHistoryDates(scrip, from, to, Math.max(1, expectedExpiries));
 
     // Step 2: For each trading day, compute ATM — but only process new days
     send('step', { step: 2, message: `Found ${spotCandles.length} trading days. Checking existing data...` });
@@ -648,7 +653,7 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
     const dayTokenSets = [];
 
     for (const { date, spotClose, atm } of newDays) {
-      const options = getNiftyOptionsForAtm(atm, 15);
+      const options = getNiftyOptionsForAtm(atm, 15, { allExpiries: true, targetMonth: targetMonth || '' });
       const tokenSet = new Set();
       for (const opt of options) {
         tokenSet.add(opt.instrumentToken);

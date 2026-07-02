@@ -24,57 +24,192 @@ interface FetchProgress {
   detail: string;
 }
 
-const SCRIP_OPTIONS = [
-  { value: 'NIFTY50', label: 'NIFTY 50' },
-];
+type RolloverPattern =
+  | 'Rolling Over'
+  | 'Exiting'
+  | 'Fresh Build'
+  | 'Doubling Down'
+  | 'Unwinding'
+  | 'Stable'
+  | '-';
+
+const SCRIP_OPTIONS = [{ value: 'NIFTY50', label: 'NIFTY 50' }];
 
 /** Format a number with Indian locale (e.g. 11,400,000) */
-const formatNum = (n: number) =>
-  n.toLocaleString('en-IN');
+const formatNum = (n: number) => n.toLocaleString('en-IN');
 
-/** Format OI change as percentage with sign */
-function formatOiChg(current: number, prev: number | undefined): { text: string; cls: string } {
-  if (prev === undefined || prev === 0) return { text: '-', cls: '' };
-  const chg = current - prev;
-  const pct = (chg / prev) * 100;
+/** Compact OI display: 11,400,000 → 11.4M, 850,000 → 850K */
+function formatOiCompact(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(0)}K`;
+  return String(n);
+}
+
+/** Format OI with change: "1.9M (+37%)" */
+function formatOiWithChg(oi: number, prev: number | undefined): { text: string; chgCls: string } {
+  if (oi === 0) return { text: '-', chgCls: '' };
+  const oiStr = formatOiCompact(oi);
+  if (prev === undefined || prev === 0) return { text: oiStr, chgCls: '' };
+  const chg = oi - prev;
+  const pct = Math.round((chg / prev) * 100);
   const sign = chg > 0 ? '+' : '';
   return {
-    text: `${sign}${pct.toFixed(1)}%`,
-    cls: chg > 0 ? 'oi-history__cell--up' : chg < 0 ? 'oi-history__cell--down' : '',
+    text: `${oiStr} (${sign}${pct}%)`,
+    chgCls: chg > 0 ? 'oi-history__cell--up' : chg < 0 ? 'oi-history__cell--down' : '',
   };
 }
 
-/** Get today's date in YYYY-MM-DD (IST) */
-function todayIST(): string {
+/** Get current month in YYYY-MM (IST) */
+function currentMonthIST(): string {
   const now = new Date();
   const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
   const y = ist.getFullYear();
   const m = String(ist.getMonth() + 1).padStart(2, '0');
-  const d = String(ist.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+  return `${y}-${m}`;
 }
 
-/** Get a date N days ago in YYYY-MM-DD */
-function daysAgo(n: number): string {
-  const d = new Date();
-  d.setDate(d.getDate() - n);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
+/** Build month options: current month + 2 previous months */
+function buildMonthOptions(): { value: string; label: string }[] {
+  const now = new Date();
+  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const options: { value: string; label: string }[] = [];
+  for (let i = 0; i < 3; i++) {
+    const d = new Date(ist.getFullYear(), ist.getMonth() - i, 1);
+    const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    options.push({ value: val, label });
+  }
+  return options;
+}
+
+/** Get first and last day of a month as YYYY-MM-DD */
+function monthRange(month: string): { from: string; to: string } {
+  const [y, m] = month.split('-').map(Number);
+  const from = `${y}-${String(m).padStart(2, '0')}-01`;
+  const last = new Date(y, m, 0).getDate();
+  const to = `${y}-${String(m).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
+  return { from, to };
+}
+
+/** Classify rollover pattern for a strike+optionType across expiries */
+function classifyPattern(
+  oiByExpiry: Map<string, { oi: number; prevOi: number | undefined }>,
+  expiries: string[],
+): RolloverPattern {
+  if (expiries.length < 2) return '-';
+
+  // Find the nearest expiry with data
+  let nearestIdx = -1;
+  for (let i = 0; i < expiries.length; i++) {
+    if (oiByExpiry.has(expiries[i])) { nearestIdx = i; break; }
+  }
+  if (nearestIdx < 0) return '-';
+
+  const nearest = oiByExpiry.get(expiries[nearestIdx])!;
+  const nearestChg = nearest.prevOi !== undefined && nearest.prevOi > 0
+    ? (nearest.oi - nearest.prevOi) / nearest.prevOi
+    : 0;
+
+  // Check further expiries
+  let anyRising = false;
+  let anyFalling = false;
+  let farCount = 0;
+
+  for (let i = nearestIdx + 1; i < expiries.length; i++) {
+    const entry = oiByExpiry.get(expiries[i]);
+    if (!entry || entry.oi === 0) continue;
+    farCount++;
+    const chg = entry.prevOi !== undefined && entry.prevOi > 0
+      ? (entry.oi - entry.prevOi) / entry.prevOi
+      : (entry.oi > 0 ? 1 : 0); // new position = rising
+    if (chg > 0.02) anyRising = true;
+    if (chg < -0.02) anyFalling = true;
+  }
+
+  const nearFalling = nearestChg < -0.02;
+  const nearRising = nearestChg > 0.02;
+
+  // No data on further expiries
+  if (farCount === 0) {
+    if (nearFalling) return 'Exiting';
+    if (nearRising) return 'Fresh Build';
+    return 'Stable';
+  }
+
+  // Classification logic
+  if (nearFalling && anyRising) return 'Rolling Over';
+  if (nearFalling && !anyRising && anyFalling) return 'Unwinding';
+  if (nearFalling && !anyRising) return 'Exiting';
+  if (nearRising && anyRising) return 'Doubling Down';
+  if (!nearFalling && !nearRising && anyRising) return 'Fresh Build';
+  if (!nearFalling && !nearRising && anyFalling) return 'Unwinding';
+  return 'Stable';
+}
+
+/** Color for pattern label */
+function patternColor(p: RolloverPattern): string {
+  switch (p) {
+    case 'Rolling Over': return 'var(--accent)';
+    case 'Exiting': return '#ef4444';
+    case 'Fresh Build': return '#22c55e';
+    case 'Doubling Down': return '#22c55e';
+    case 'Unwinding': return '#ef4444';
+    case 'Stable': return 'var(--text-secondary)';
+    default: return 'var(--text-secondary)';
+  }
+}
+
+/** Short expiry label: '2026-07-07' → 'Jul 7' with (W) or (M) suffix */
+function expiryLabel(expiry: string, isMonthly: boolean): string {
+  const d = new Date(expiry + 'T00:00:00');
+  const month = d.toLocaleDateString('en-US', { month: 'short' });
+  const day = d.getDate();
+  return `${month} ${day}${isMonthly ? ' (M)' : ''}`;
+}
+
+/** Check if an expiry is monthly (last Thursday of month — approximate: last 7 days) */
+function isMonthlyExpiry(expiry: string): boolean {
+  const d = new Date(expiry + 'T00:00:00');
+  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+  return d.getDate() > lastDay - 7;
 }
 
 const OiHistory: React.FC = () => {
   const [scrip, setScrip] = useState('NIFTY50');
-  const [fromDate, setFromDate] = useState(daysAgo(30));
-  const [toDate, setToDate] = useState(todayIST());
+  const [selectedMonth, setSelectedMonth] = useState(currentMonthIST());
   const [fetching, setFetching] = useState(false);
   const [progress, setProgress] = useState<FetchProgress | null>(null);
   const [fetchResult, setFetchResult] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [data, setData] = useState<OiHistoryRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [filterDate, setFilterDate] = useState<string>('');
+  const [filterDate, setFilterDate] = useState('');
+  const [showPatternInfo, setShowPatternInfo] = useState(false);
+  const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
+
+  const monthOptions = useMemo(() => buildMonthOptions(), []);
+
+  /** Load stored data from server */
+  const loadData = useCallback(async () => {
+    setLoading(true);
+    try {
+      const { from, to } = monthRange(selectedMonth);
+      const params = new URLSearchParams({ scrip, from, to });
+      const res = await fetch(`/api/oi-history?${params}`, { credentials: 'include' });
+      const json = await res.json();
+      if (json.status === 'ok') {
+        setData(json.data);
+        if (json.data.length > 0) {
+          const dates = [...new Set(json.data.map((r: OiHistoryRow) => r.date))].sort();
+          setFilterDate(dates[dates.length - 1] as string);
+        }
+      }
+    } catch (err) {
+      console.error('[OiHistory] Load error:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [scrip, selectedMonth]);
 
   /** Fetch historical OI from Kite via SSE stream */
   const handleFetch = useCallback(async () => {
@@ -84,11 +219,17 @@ const OiHistory: React.FC = () => {
     setFetchError(null);
 
     try {
+      const { from, to } = monthRange(selectedMonth);
       const res = await fetch('/api/oi-history/fetch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ scrip, from: fromDate, to: toDate }),
+        body: JSON.stringify({
+          scrip,
+          from,
+          to,
+          targetMonth: selectedMonth,
+        }),
       });
 
       if (!res.ok || !res.body) {
@@ -123,7 +264,7 @@ const OiHistory: React.FC = () => {
                   break;
                 case 'progress':
                   setProgress({
-                    step: `Fetching OI candles...`,
+                    step: 'Fetching OI data...',
                     pct: payload.pct,
                     detail: `${payload.done}/${payload.total} instruments (batch ${payload.batch}/${payload.totalBatches})`,
                   });
@@ -133,20 +274,16 @@ const OiHistory: React.FC = () => {
                   if (payload.message) {
                     parts.push(payload.message);
                   } else {
-                    if (payload.fetchedDays > 0) {
+                    if (payload.fetchedDays > 0)
                       parts.push(`Fetched ${formatNum(payload.rowCount)} rows for ${payload.fetchedDays} new days`);
-                    }
-                    if (payload.skippedDays > 0) {
+                    if (payload.skippedDays > 0)
                       parts.push(`${payload.skippedDays} days already cached`);
-                    }
-                    if (payload.uniqueTokens > 0) {
+                    if (payload.uniqueTokens > 0)
                       parts.push(`${payload.uniqueTokens} instruments`);
-                    }
-                    if (parts.length === 0) {
+                    if (parts.length === 0)
                       parts.push('All data already cached');
-                    }
                   }
-                  setFetchResult(parts.join(' · '));
+                  setFetchResult(parts.join(' \u00b7 '));
                   setProgress(null);
                   break;
                 }
@@ -167,86 +304,142 @@ const OiHistory: React.FC = () => {
       setProgress(null);
     } finally {
       setFetching(false);
-      // Auto-load data after fetch completes
       loadData();
     }
-  }, [scrip, fromDate, toDate]);
-
-  /** Load stored data from server */
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ scrip });
-      if (fromDate) params.set('from', fromDate);
-      if (toDate) params.set('to', toDate);
-
-      const res = await fetch(`/api/oi-history?${params}`, { credentials: 'include' });
-      const json = await res.json();
-      if (json.status === 'ok') {
-        setData(json.data);
-        // Set filter to latest available date
-        if (json.data.length > 0) {
-          const dates = [...new Set(json.data.map((r: OiHistoryRow) => r.date))].sort();
-          setFilterDate(dates[dates.length - 1] as string);
-        }
-      }
-    } catch (err) {
-      console.error('[OiHistory] Load error:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [scrip, fromDate, toDate]);
+  }, [scrip, selectedMonth, loadData]);
 
   /** Unique dates in the loaded data */
   const availableDates = useMemo(() => {
-    const dates = [...new Set(data.map((r) => r.date))].sort();
-    return dates;
+    return [...new Set(data.map((r) => r.date))].sort();
   }, [data]);
 
-  /** Filtered rows for the selected date */
+  /** Unique expiries in the loaded data for the selected month, sorted */
+  const expiries = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of data) {
+      if (r.expiry) set.add(r.expiry);
+    }
+    return [...set].sort();
+  }, [data]);
+
+  /** Rows for the selected date */
   const filteredRows = useMemo(() => {
-    if (!filterDate) return data;
+    if (!filterDate) return [];
     return data.filter((r) => r.date === filterDate);
   }, [data, filterDate]);
 
-  /** Group by strike for the table */
-  const strikeRows = useMemo(() => {
-    const byStrike = new Map<number, { ce?: OiHistoryRow; pe?: OiHistoryRow; spotClose: number }>();
-    for (const row of filteredRows) {
-      if (!row.strike) continue;
-      const existing = byStrike.get(row.strike) || { spotClose: row.spotClose };
-      if (row.optionType === 'CE') existing.ce = row;
-      if (row.optionType === 'PE') existing.pe = row;
-      byStrike.set(row.strike, existing);
-    }
-    return [...byStrike.entries()]
-      .sort(([a], [b]) => a - b)
-      .map(([strike, { ce, pe, spotClose }]) => ({ strike, ce, pe, spotClose }));
-  }, [filteredRows]);
-
-  /** Previous day's OI per instrument token (for OI Chg column) */
-  const prevDayOi = useMemo(() => {
-    const map = new Map<number, number>(); // instrumentToken → OI
-    if (!filterDate || availableDates.length < 2) return map;
-
+  /** Rows for the previous date (for OI change computation) */
+  const prevDateRows = useMemo(() => {
+    if (!filterDate || availableDates.length < 2) return [];
     const idx = availableDates.indexOf(filterDate);
-    if (idx <= 0) return map; // no previous day available
-
+    if (idx <= 0) return [];
     const prevDate = availableDates[idx - 1];
-    for (const row of data) {
-      if (row.date === prevDate) {
-        map.set(row.instrumentToken, row.oi);
-      }
+    return data.filter((r) => r.date === prevDate);
+  }, [data, filterDate, availableDates]);
+
+  /** Map: instrumentToken → previous day OI */
+  const prevDayOi = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const r of prevDateRows) {
+      map.set(r.instrumentToken, r.oi);
     }
     return map;
-  }, [data, filterDate, availableDates]);
+  }, [prevDateRows]);
 
   /** ATM strike for the selected date */
   const atmStrike = useMemo(() => {
-    if (strikeRows.length === 0) return null;
-    const spot = strikeRows[0].spotClose;
+    if (filteredRows.length === 0) return null;
+    const spot = filteredRows[0].spotClose;
     return Math.round(spot / 50) * 50;
-  }, [strikeRows]);
+  }, [filteredRows]);
+
+  /** Build table data: rows = strikes, columns = expiries */
+  const tableData = useMemo(() => {
+    if (filteredRows.length === 0 || expiries.length === 0) return [];
+
+    // Index: strike → expiry → { ce, pe }
+    type CellData = {
+      ceOi: number;
+      peOi: number;
+      cePrevOi: number | undefined;
+      pePrevOi: number | undefined;
+      ceToken: number | undefined;
+      peToken: number | undefined;
+    };
+
+    const grid = new Map<number, Map<string, CellData>>();
+
+    for (const r of filteredRows) {
+      if (!r.strike || !r.optionType || !r.expiry) continue;
+
+      if (!grid.has(r.strike)) grid.set(r.strike, new Map());
+      const strikeMap = grid.get(r.strike)!;
+
+      if (!strikeMap.has(r.expiry)) {
+        strikeMap.set(r.expiry, {
+          ceOi: 0, peOi: 0,
+          cePrevOi: undefined, pePrevOi: undefined,
+          ceToken: undefined, peToken: undefined,
+        });
+      }
+      const cell = strikeMap.get(r.expiry)!;
+
+      if (r.optionType === 'CE') {
+        cell.ceOi = r.oi;
+        cell.ceToken = r.instrumentToken;
+        cell.cePrevOi = prevDayOi.get(r.instrumentToken);
+      } else {
+        cell.peOi = r.oi;
+        cell.peToken = r.instrumentToken;
+        cell.pePrevOi = prevDayOi.get(r.instrumentToken);
+      }
+    }
+
+    // Build rows sorted by strike
+    const rows = [...grid.entries()]
+      .sort(([a], [b]) => a - b)
+      .map(([strike, expiryMap]) => {
+        // Filter: only show strikes with >100K OI on any expiry
+        let hasSignificantOi = false;
+        for (const cell of expiryMap.values()) {
+          if (cell.ceOi > 100_000 || cell.peOi > 100_000) {
+            hasSignificantOi = true;
+            break;
+          }
+        }
+        if (!hasSignificantOi) return null;
+
+        // Classify CE and PE patterns
+        const ceByExpiry = new Map<string, { oi: number; prevOi: number | undefined }>();
+        const peByExpiry = new Map<string, { oi: number; prevOi: number | undefined }>();
+        for (const [exp, cell] of expiryMap) {
+          if (cell.ceOi > 0) ceByExpiry.set(exp, { oi: cell.ceOi, prevOi: cell.cePrevOi });
+          if (cell.peOi > 0) peByExpiry.set(exp, { oi: cell.peOi, prevOi: cell.pePrevOi });
+        }
+
+        const cePattern = classifyPattern(ceByExpiry, expiries);
+        const pePattern = classifyPattern(peByExpiry, expiries);
+
+        return {
+          strike,
+          cells: expiryMap,
+          cePattern,
+          pePattern,
+        };
+      })
+      .filter(Boolean) as {
+        strike: number;
+        cells: Map<string, {
+          ceOi: number; peOi: number;
+          cePrevOi: number | undefined; pePrevOi: number | undefined;
+          ceToken: number | undefined; peToken: number | undefined;
+        }>;
+        cePattern: RolloverPattern;
+        pePattern: RolloverPattern;
+      }[];
+
+    return rows;
+  }, [filteredRows, expiries, prevDayOi]);
 
   return (
     <div className="oi-history">
@@ -263,29 +456,16 @@ const OiHistory: React.FC = () => {
           </label>
 
           <label className="oi-history__label">
-            From
-            <input
-              type="date"
-               className="app-date-input"
-              value={fromDate}
-              onChange={(e) => setFromDate(e.target.value)}
-              disabled={fetching}
-            />
-          </label>
-
-          <label className="oi-history__label">
-            To
-            <input
-              type="date"
-               className="app-date-input"
-              value={toDate}
-              onChange={(e) => setToDate(e.target.value)}
-              disabled={fetching}
+            Month
+            <AppSelect
+              value={selectedMonth}
+              options={monthOptions}
+              onChange={(v) => setSelectedMonth(String(v))}
             />
           </label>
 
           <button
-             className="app-btn app-btn--primary"
+            className="app-btn app-btn--primary"
             onClick={handleFetch}
             disabled={fetching}
           >
@@ -332,60 +512,124 @@ const OiHistory: React.FC = () => {
               className={`oi-history__date-btn ${filterDate === d ? 'oi-history__date-btn--active' : ''}`}
               onClick={() => setFilterDate(d)}
             >
-              {d.slice(5)} {/* MM-DD */}
+              {d.slice(5)}
             </button>
           ))}
         </div>
       )}
 
-      {/* Data table */}
-      {strikeRows.length > 0 && (
+      {/* Expiry-pivoted table */}
+      {tableData.length > 0 && (
         <div className="oi-history__table-wrap card">
           <div className="oi-history__table-header">
-            <span className="oi-history__table-title">
-              {filterDate} &mdash; Spot: {formatNum(strikeRows[0].spotClose)}
-            </span>
+            <div className="oi-history__table-header-left">
+              <span className="oi-history__table-title">
+                {filterDate} &mdash; Spot: {formatNum(filteredRows[0]?.spotClose || 0)}
+              </span>
+              <button className="trap-info-btn" onClick={() => setShowPatternInfo(!showPatternInfo)} title="Pattern definitions">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+                </svg>
+              </button>
+            </div>
             <span className="oi-history__table-count">
-              {strikeRows.length} strikes
+              {tableData.length} strikes &middot; {expiries.length} expiries
             </span>
           </div>
+
+          {showPatternInfo && (
+            <div className="trap-info-detail" style={{ marginBottom: 12 }}>
+              <h4>Rollover Pattern Definitions</h4>
+              <p>Patterns classify how OI is moving across expiries for each strike and option type (CE/PE separately).</p>
+              <ul>
+                <li><strong style={{ color: 'var(--accent)' }}>Rolling Over</strong> — Nearest expiry OI falling while a further expiry OI is rising. Institutions are maintaining their position at this strike by moving to the next expiry. Strong signal that this level matters.</li>
+                <li><strong style={{ color: '#ef4444' }}>Exiting</strong> — Nearest expiry OI falling with no buildup on any other expiry. Institutions are closing out — the wall or support at this strike is weakening.</li>
+                <li><strong style={{ color: '#22c55e' }}>Fresh Build</strong> — OI building on a further expiry where little or none existed before. New institutional bet — watch this strike for emerging support/resistance.</li>
+                <li><strong style={{ color: '#22c55e' }}>Doubling Down</strong> — OI rising on both nearest and further expiries. Strong conviction — institutions are adding at this level across multiple timeframes.</li>
+                <li><strong style={{ color: '#ef4444' }}>Unwinding</strong> — OI falling across all expiries at this strike. Full retreat — the level is no longer being defended.</li>
+                <li><strong style={{ color: 'var(--text-secondary)' }}>Stable</strong> — No significant change (&lt;2%) across expiries. Positions are being held, neither added nor removed.</li>
+              </ul>
+              <h5>How to Use</h5>
+              <ul>
+                <li><strong>CE Rolling Over</strong> at 24500 = call writers maintaining resistance at 24500 (bearish cap)</li>
+                <li><strong>PE Rolling Over</strong> at 24000 = put writers maintaining support at 24000 (bullish floor)</li>
+                <li><strong>PE Exiting</strong> at 24000 = support at 24000 is weakening — potential breakdown</li>
+                <li><strong>CE Exiting</strong> at 24500 = resistance at 24500 is weakening — potential breakout</li>
+              </ul>
+              <p>OI change (Chg) is vs the previous trading day. Use the date navigation to track how patterns evolve over time.</p>
+            </div>
+          )}
 
           <div className="oi-history__table-scroll">
             <table className="oi-history__table">
               <thead>
                 <tr>
-                  <th colSpan={4} className="oi-history__th-group oi-history__th-group--ce">CE</th>
+                  <th className="oi-history__th-pattern">CE Pattern</th>
+                  {expiries.map((exp) => (
+                    <th key={`ce-${exp}`} className="oi-history__th-group oi-history__th-group--ce">
+                      {expiryLabel(exp, isMonthlyExpiry(exp))}
+                    </th>
+                  ))}
                   <th className="oi-history__th-strike">Strike</th>
-                  <th colSpan={4} className="oi-history__th-group oi-history__th-group--pe">PE</th>
-                </tr>
-                <tr>
-                  <th>OI</th>
-                  <th>Volume</th>
-                  <th>Close</th>
-                  <th>OI Chg</th>
-                  <th></th>
-                  <th>OI</th>
-                  <th>Volume</th>
-                  <th>Close</th>
-                  <th>OI Chg</th>
+                  {expiries.map((exp) => (
+                    <th key={`pe-${exp}`} className="oi-history__th-group oi-history__th-group--pe">
+                      {expiryLabel(exp, isMonthlyExpiry(exp))}
+                    </th>
+                  ))}
+                  <th className="oi-history__th-pattern">PE Pattern</th>
                 </tr>
               </thead>
               <tbody>
-                {strikeRows.map(({ strike, ce, pe }) => {
+                {tableData.map(({ strike, cells, cePattern, pePattern }) => {
                   const isAtm = strike === atmStrike;
-                  const ceChg = ce ? formatOiChg(ce.oi, prevDayOi.get(ce.instrumentToken)) : { text: '-', cls: '' };
-                  const peChg = pe ? formatOiChg(pe.oi, prevDayOi.get(pe.instrumentToken)) : { text: '-', cls: '' };
                   return (
-                    <tr key={strike} className={isAtm ? 'oi-history__row--atm' : ''}>
-                      <td className="oi-history__cell--ce">{ce ? formatNum(ce.oi) : '-'}</td>
-                      <td className="oi-history__cell--ce">{ce ? formatNum(ce.volume) : '-'}</td>
-                      <td className="oi-history__cell--ce">{ce ? ce.close.toFixed(2) : '-'}</td>
-                      <td className={ceChg.cls}>{ceChg.text}</td>
-                      <td className="oi-history__cell--strike">{strike}</td>
-                      <td className="oi-history__cell--pe">{pe ? formatNum(pe.oi) : '-'}</td>
-                      <td className="oi-history__cell--pe">{pe ? formatNum(pe.volume) : '-'}</td>
-                      <td className="oi-history__cell--pe">{pe ? pe.close.toFixed(2) : '-'}</td>
-                      <td className={peChg.cls}>{peChg.text}</td>
+                    <tr
+                      key={strike}
+                      className={`${isAtm ? 'oi-history__row--atm' : ''} ${selectedStrike === strike ? 'oi-history__row--selected' : ''}`}
+                      onClick={() => setSelectedStrike(selectedStrike === strike ? null : strike)}
+                    >
+                      {/* CE Pattern */}
+                      <td
+                        className="oi-history__cell--pattern"
+                        style={{ color: patternColor(cePattern) }}
+                      >
+                        {cePattern}
+                      </td>
+
+                      {/* CE data per expiry */}
+                      {expiries.map((exp) => {
+                        const cell = cells.get(exp);
+                        const { text, chgCls } = formatOiWithChg(cell?.ceOi || 0, cell?.cePrevOi);
+                        return (
+                          <td key={`ce-${exp}`} className={`oi-history__cell--ce ${chgCls}`}>
+                            {text}
+                          </td>
+                        );
+                      })}
+
+                      {/* Strike */}
+                      <td className={`oi-history__cell--strike ${isAtm ? 'oi-history__cell--strike-atm' : ''}`}>
+                        {strike}
+                      </td>
+
+                      {/* PE data per expiry */}
+                      {expiries.map((exp) => {
+                        const cell = cells.get(exp);
+                        const { text, chgCls } = formatOiWithChg(cell?.peOi || 0, cell?.pePrevOi);
+                        return (
+                          <td key={`pe-${exp}`} className={`oi-history__cell--pe ${chgCls}`}>
+                            {text}
+                          </td>
+                        );
+                      })}
+
+                      {/* PE Pattern */}
+                      <td
+                        className="oi-history__cell--pattern"
+                        style={{ color: patternColor(pePattern) }}
+                      >
+                        {pePattern}
+                      </td>
                     </tr>
                   );
                 })}
@@ -397,7 +641,7 @@ const OiHistory: React.FC = () => {
 
       {data.length === 0 && !loading && !fetching && (
         <div className="oi-history__empty card">
-          Select a script and date range, then click <strong>Fetch</strong> to download historical OI data.
+          Select a month and click <strong>Fetch</strong> to download multi-expiry OI data.
           Already-fetched days are skipped automatically.
         </div>
       )}

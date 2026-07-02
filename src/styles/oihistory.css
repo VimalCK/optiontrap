@@ -30,7 +30,7 @@
   letter-spacing: 0.4px;
 }
 
-/* Form controls now use shared .app-select, .app-date-input, .app-btn from global.css */
+/* Form controls use shared .app-select, .app-btn from global.css */
 
 /* ── Progress bar ── */
 
@@ -134,8 +134,14 @@
 .oi-history__table-header {
   display: flex;
   justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   margin-bottom: 10px;
+}
+
+.oi-history__table-header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .oi-history__table-title {
@@ -156,12 +162,11 @@
 .oi-history__table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
-  table-layout: fixed;
+  font-size: 11px;
 }
 
 .oi-history__table th {
-  padding: 6px 8px;
+  padding: 5px 6px;
   font-weight: 500;
   color: var(--text-secondary);
   text-align: right;
@@ -172,9 +177,9 @@
 .oi-history__th-group {
   text-align: center !important;
   font-weight: 600 !important;
-  font-size: 11px;
+  font-size: 10px;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.3px;
   border-bottom: 2px solid var(--card-border) !important;
 }
 
@@ -184,11 +189,30 @@
 .oi-history__th-strike {
   text-align: center !important;
   font-weight: 600 !important;
+  border-bottom: 2px solid var(--card-border) !important;
+}
+
+.oi-history__th-pattern {
+  text-align: center !important;
+  font-weight: 600 !important;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  border-bottom: 2px solid var(--card-border) !important;
+  color: var(--text-secondary);
+  min-width: 80px;
+}
+
+.oi-history__th-sub {
+  font-size: 10px;
+  color: var(--text-secondary);
+  text-align: right;
+  padding: 3px 6px;
 }
 
 .oi-history__table td {
-  padding: 5px 8px;
-  text-align: right;
+  padding: 4px 6px;
+  text-align: center;
   border-bottom: 1px solid var(--card-border);
   color: var(--text-primary);
   white-space: nowrap;
@@ -199,20 +223,51 @@
   font-weight: 600;
   color: var(--text-primary);
   background: var(--bg-secondary);
+  min-width: 50px;
+}
+
+.oi-history__cell--strike-atm {
+  background: rgba(99, 102, 241, 0.12);
+  color: var(--accent);
+}
+
+.oi-history__cell--pattern {
+  text-align: center !important;
+  font-weight: 600;
+  font-size: 10px;
+  white-space: nowrap;
+  min-width: 80px;
 }
 
 .oi-history__cell--ce { color: var(--green, #22c55e); }
 .oi-history__cell--pe { color: var(--red, #ef4444); }
-.oi-history__cell--up { color: var(--green, #22c55e); text-align: right; }
-.oi-history__cell--down { color: var(--red, #ef4444); text-align: right; }
+.oi-history__cell--up { color: var(--green, #22c55e); }
+.oi-history__cell--down { color: var(--red, #ef4444); }
 
 .oi-history__row--atm {
   background: rgba(99, 102, 241, 0.06);
 }
 
-.oi-history__row--atm .oi-history__cell--strike {
-  background: rgba(99, 102, 241, 0.12);
-  color: var(--accent);
+.oi-history__table tbody tr {
+  cursor: pointer;
+}
+
+.oi-history__table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.oi-history__row--selected {
+  background: rgba(99, 102, 241, 0.10) !important;
+  outline: 1px solid rgba(99, 102, 241, 0.3);
+  outline-offset: -1px;
+}
+
+[data-theme='light'] .oi-history__table tbody tr:hover {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+[data-theme='light'] .oi-history__row--selected {
+  background: rgba(99, 102, 241, 0.08) !important;
 }
 
 /* ── Empty state ── */
