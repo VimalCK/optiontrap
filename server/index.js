@@ -241,10 +241,12 @@ app.post('/auth/token', async (req, res) => {
     if (!response.ok) {
       const errorText = await response.text();
       console.error(`${ts()} ${RED}AUTH${RESET} exchange failed: ${response.status} ${errorText}`);
-      return res.status(response.status).json({
-        status: 'error',
-        message: `Kite token exchange failed (${response.status})`,
-      });
+      let message = `Kite token exchange failed (${response.status})`;
+      try {
+        const parsed = JSON.parse(errorText);
+        if (parsed.message) message = parsed.message;
+      } catch { /* use default message */ }
+      return res.status(response.status).json({ status: 'error', message });
     }
 
     const result = await response.json();
