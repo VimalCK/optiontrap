@@ -25,9 +25,17 @@ interface FetchProgress {
 }
 
 type RolloverPattern =
+  | 'Rolling Over (Long)'
+  | 'Rolling Over (Short)'
   | 'Rolling Over'
+  | 'Exiting (Long Unwind)'
+  | 'Exiting (Short Cover)'
   | 'Exiting'
+  | 'Fresh Build (Long)'
+  | 'Fresh Build (Short)'
   | 'Fresh Build'
+  | 'Doubling Down (Long)'
+  | 'Doubling Down (Short)'
   | 'Doubling Down'
   | 'Unwinding'
   | 'Stable'
@@ -91,9 +99,30 @@ function monthRange(month: string): { from: string; to: string } {
   return { from, to };
 }
 
+/** Determine price direction: 'up' if price rose, 'down' if fell, null if unknown */
+function priceDirection(
+  data: Map<string, { close: number; prevClose: number | undefined }>,
+  expiries: string[],
+): 'up' | 'down' | null {
+  // Use weighted average price change across expiries with data
+  let totalChg = 0;
+  let count = 0;
+  for (const exp of expiries) {
+    const entry = data.get(exp);
+    if (!entry || !entry.prevClose || entry.prevClose === 0) continue;
+    totalChg += (entry.close - entry.prevClose) / entry.prevClose;
+    count++;
+  }
+  if (count === 0) return null;
+  const avgChg = totalChg / count;
+  if (avgChg > 0.005) return 'up';   // >0.5% rise
+  if (avgChg < -0.005) return 'down'; // >0.5% fall
+  return null;
+}
+
 /** Classify rollover pattern for a strike+optionType across expiries */
 function classifyPattern(
-  oiByExpiry: Map<string, { oi: number; prevOi: number | undefined }>,
+  oiByExpiry: Map<string, { oi: number; prevOi: number | undefined; close: number; prevClose: number | undefined }>,
   expiries: string[],
 ): RolloverPattern {
   if (expiries.length < 2) return '-';
@@ -129,34 +158,37 @@ function classifyPattern(
   const nearFalling = nearestChg < -0.02;
   const nearRising = nearestChg > 0.02;
 
+  // Get price direction for context
+  const pDir = priceDirection(oiByExpiry, expiries);
+  const longSuffix = pDir === 'up' ? ' (Long)' : pDir === 'down' ? ' (Short)' : '';
+  const exitSuffix = pDir === 'down' ? ' (Long Unwind)' : pDir === 'up' ? ' (Short Cover)' : '';
+
   // No data on further expiries
   if (farCount === 0) {
-    if (nearFalling) return 'Exiting';
-    if (nearRising) return 'Fresh Build';
+    if (nearFalling) return `Exiting${exitSuffix}` as RolloverPattern;
+    if (nearRising) return `Fresh Build${longSuffix}` as RolloverPattern;
     return 'Stable';
   }
 
   // Classification logic
-  if (nearFalling && anyRising) return 'Rolling Over';
+  if (nearFalling && anyRising) return `Rolling Over${longSuffix}` as RolloverPattern;
   if (nearFalling && !anyRising && anyFalling) return 'Unwinding';
-  if (nearFalling && !anyRising) return 'Exiting';
-  if (nearRising && anyRising) return 'Doubling Down';
-  if (!nearFalling && !nearRising && anyRising) return 'Fresh Build';
+  if (nearFalling && !anyRising) return `Exiting${exitSuffix}` as RolloverPattern;
+  if (nearRising && anyRising) return `Doubling Down${longSuffix}` as RolloverPattern;
+  if (!nearFalling && !nearRising && anyRising) return `Fresh Build${longSuffix}` as RolloverPattern;
   if (!nearFalling && !nearRising && anyFalling) return 'Unwinding';
   return 'Stable';
 }
 
 /** Color for pattern label */
 function patternColor(p: RolloverPattern): string {
-  switch (p) {
-    case 'Rolling Over': return 'var(--accent)';
-    case 'Exiting': return '#ef4444';
-    case 'Fresh Build': return '#22c55e';
-    case 'Doubling Down': return '#22c55e';
-    case 'Unwinding': return '#ef4444';
-    case 'Stable': return 'var(--text-secondary)';
-    default: return 'var(--text-secondary)';
-  }
+  if (p.startsWith('Rolling Over')) return 'var(--accent)';
+  if (p.startsWith('Exiting')) return '#ef4444';
+  if (p.startsWith('Fresh Build')) return '#22c55e';
+  if (p.startsWith('Doubling Down')) return '#22c55e';
+  if (p === 'Unwinding') return '#ef4444';
+  if (p === 'Stable') return 'var(--text-secondary)';
+  return 'var(--text-secondary)';
 }
 
 /** Short expiry label: '2026-07-07' → 'Jul 7' with (W) or (M) suffix */
@@ -346,6 +378,14 @@ const OiHistory: React.FC = () => {
     return map;
   }, [prevDateRows]);
 
+  const prevDayClose = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const r of prevDateRows) {
+      if (r.close > 0) map.set(r.instrumentToken, r.close);
+    }
+    return map;
+  }, [prevDateRows]);
+
   /** ATM strike for the selected date */
   const atmStrike = useMemo(() => {
     if (filteredRows.length === 0) return null;
@@ -363,6 +403,10 @@ const OiHistory: React.FC = () => {
       peOi: number;
       cePrevOi: number | undefined;
       pePrevOi: number | undefined;
+      ceClose: number;
+      peClose: number;
+      cePrevClose: number | undefined;
+      pePrevClose: number | undefined;
       ceToken: number | undefined;
       peToken: number | undefined;
     };
@@ -379,6 +423,8 @@ const OiHistory: React.FC = () => {
         strikeMap.set(r.expiry, {
           ceOi: 0, peOi: 0,
           cePrevOi: undefined, pePrevOi: undefined,
+          ceClose: 0, peClose: 0,
+          cePrevClose: undefined, pePrevClose: undefined,
           ceToken: undefined, peToken: undefined,
         });
       }
@@ -386,12 +432,16 @@ const OiHistory: React.FC = () => {
 
       if (r.optionType === 'CE') {
         cell.ceOi = r.oi;
+        cell.ceClose = r.close;
         cell.ceToken = r.instrumentToken;
         cell.cePrevOi = prevDayOi.get(r.instrumentToken);
+        cell.cePrevClose = prevDayClose.get(r.instrumentToken);
       } else {
         cell.peOi = r.oi;
+        cell.peClose = r.close;
         cell.peToken = r.instrumentToken;
         cell.pePrevOi = prevDayOi.get(r.instrumentToken);
+        cell.pePrevClose = prevDayClose.get(r.instrumentToken);
       }
     }
 
@@ -410,11 +460,11 @@ const OiHistory: React.FC = () => {
         if (!hasSignificantOi) return null;
 
         // Classify CE and PE patterns
-        const ceByExpiry = new Map<string, { oi: number; prevOi: number | undefined }>();
-        const peByExpiry = new Map<string, { oi: number; prevOi: number | undefined }>();
+        const ceByExpiry = new Map<string, { oi: number; prevOi: number | undefined; close: number; prevClose: number | undefined }>();
+        const peByExpiry = new Map<string, { oi: number; prevOi: number | undefined; close: number; prevClose: number | undefined }>();
         for (const [exp, cell] of expiryMap) {
-          if (cell.ceOi > 0) ceByExpiry.set(exp, { oi: cell.ceOi, prevOi: cell.cePrevOi });
-          if (cell.peOi > 0) peByExpiry.set(exp, { oi: cell.peOi, prevOi: cell.pePrevOi });
+          if (cell.ceOi > 0) ceByExpiry.set(exp, { oi: cell.ceOi, prevOi: cell.cePrevOi, close: cell.ceClose, prevClose: cell.cePrevClose });
+          if (cell.peOi > 0) peByExpiry.set(exp, { oi: cell.peOi, prevOi: cell.pePrevOi, close: cell.peClose, prevClose: cell.pePrevClose });
         }
 
         const cePattern = classifyPattern(ceByExpiry, expiries);
@@ -429,17 +479,13 @@ const OiHistory: React.FC = () => {
       })
       .filter(Boolean) as {
         strike: number;
-        cells: Map<string, {
-          ceOi: number; peOi: number;
-          cePrevOi: number | undefined; pePrevOi: number | undefined;
-          ceToken: number | undefined; peToken: number | undefined;
-        }>;
+        cells: Map<string, CellData>;
         cePattern: RolloverPattern;
         pePattern: RolloverPattern;
       }[];
 
     return rows;
-  }, [filteredRows, expiries, prevDayOi]);
+  }, [filteredRows, expiries, prevDayOi, prevDayClose]);
 
   return (
     <div className="oi-history">
@@ -540,23 +586,37 @@ const OiHistory: React.FC = () => {
           {showPatternInfo && (
             <div className="trap-info-detail" style={{ marginBottom: 12 }}>
               <h4>Rollover Pattern Definitions</h4>
-              <p>Patterns classify how OI is moving across expiries for each strike and option type (CE/PE separately).</p>
+              <p>Patterns combine OI movement across expiries with option price direction to classify <strong>who</strong> is driving the move — buyers (Long) or sellers (Short).</p>
+
+              <h5>Price Context</h5>
               <ul>
-                <li><strong style={{ color: 'var(--accent)' }}>Rolling Over</strong> — Nearest expiry OI falling while a further expiry OI is rising. Institutions are maintaining their position at this strike by moving to the next expiry. Strong signal that this level matters.</li>
-                <li><strong style={{ color: '#ef4444' }}>Exiting</strong> — Nearest expiry OI falling with no buildup on any other expiry. Institutions are closing out — the wall or support at this strike is weakening.</li>
-                <li><strong style={{ color: '#22c55e' }}>Fresh Build</strong> — OI building on a further expiry where little or none existed before. New institutional bet — watch this strike for emerging support/resistance.</li>
-                <li><strong style={{ color: '#22c55e' }}>Doubling Down</strong> — OI rising on both nearest and further expiries. Strong conviction — institutions are adding at this level across multiple timeframes.</li>
-                <li><strong style={{ color: '#ef4444' }}>Unwinding</strong> — OI falling across all expiries at this strike. Full retreat — the level is no longer being defended.</li>
-                <li><strong style={{ color: 'var(--text-secondary)' }}>Stable</strong> — No significant change (&lt;2%) across expiries. Positions are being held, neither added nor removed.</li>
+                <li><strong>(Long)</strong> — OI rising + price rising = <em>buyers</em> entering new positions</li>
+                <li><strong>(Short)</strong> — OI rising + price falling = <em>sellers</em> entering new positions</li>
+                <li><strong>(Long Unwind)</strong> — OI falling + price falling = <em>buyers</em> closing positions</li>
+                <li><strong>(Short Cover)</strong> — OI falling + price rising = <em>sellers</em> closing positions</li>
               </ul>
+
+              <h5>Rollover Patterns</h5>
+              <ul>
+                <li><strong style={{ color: 'var(--accent)' }}>Rolling Over (Short)</strong> — Writers moving positions to next expiry. The strike level is being actively defended.</li>
+                <li><strong style={{ color: 'var(--accent)' }}>Rolling Over (Long)</strong> — Buyers moving positions to next expiry. Directional conviction is being maintained.</li>
+                <li><strong style={{ color: '#ef4444' }}>Exiting (Long Unwind)</strong> — Buyers closing out, no new positions elsewhere. Support/resistance weakening.</li>
+                <li><strong style={{ color: '#ef4444' }}>Exiting (Short Cover)</strong> — Sellers closing out, no new positions elsewhere. The wall is being abandoned.</li>
+                <li><strong style={{ color: '#22c55e' }}>Fresh Build (Short)</strong> — New sellers at a far expiry. New wall/support being established.</li>
+                <li><strong style={{ color: '#22c55e' }}>Fresh Build (Long)</strong> — New buyers at a far expiry. New directional bet emerging.</li>
+                <li><strong style={{ color: '#22c55e' }}>Doubling Down</strong> — OI rising across multiple expiries. Strong conviction at this level.</li>
+                <li><strong style={{ color: '#ef4444' }}>Unwinding</strong> — OI falling across all expiries. Full retreat from this level.</li>
+                <li><strong style={{ color: 'var(--text-secondary)' }}>Stable</strong> — No significant change (&lt;2%). Positions held steady.</li>
+              </ul>
+
               <h5>How to Use</h5>
               <ul>
-                <li><strong>CE Rolling Over</strong> at 24500 = call writers maintaining resistance at 24500 (bearish cap)</li>
-                <li><strong>PE Rolling Over</strong> at 24000 = put writers maintaining support at 24000 (bullish floor)</li>
-                <li><strong>PE Exiting</strong> at 24000 = support at 24000 is weakening — potential breakdown</li>
-                <li><strong>CE Exiting</strong> at 24500 = resistance at 24500 is weakening — potential breakout</li>
+                <li><strong>CE Rolling Over (Short)</strong> at 24500 = call writers maintaining resistance (bearish cap). Good for selling CE.</li>
+                <li><strong>PE Rolling Over (Short)</strong> at 24000 = put writers maintaining support (bullish floor). Good for selling PE.</li>
+                <li><strong>PE Exiting (Short Cover)</strong> at 24000 = put sellers leaving, support weakening. Avoid selling PE here.</li>
+                <li><strong>CE Fresh Build (Long)</strong> at 24500 = new call buyers emerging. Potential breakout — consider buying CE.</li>
               </ul>
-              <p>OI change (Chg) is vs the previous trading day. Use the date navigation to track how patterns evolve over time.</p>
+              <p>The small price shown below each OI cell is the option close premium. Use the date navigation to track how patterns and premiums evolve.</p>
             </div>
           )}
 
@@ -600,9 +660,11 @@ const OiHistory: React.FC = () => {
                       {expiries.map((exp) => {
                         const cell = cells.get(exp);
                         const { text, chgCls } = formatOiWithChg(cell?.ceOi || 0, cell?.cePrevOi);
+                        const closePrice = cell?.ceClose || 0;
                         return (
                           <td key={`ce-${exp}`} className={`oi-history__cell--ce ${chgCls}`}>
-                            {text}
+                            <span className="oi-history__cell-primary">{text}</span>
+                            {closePrice > 0 && <span className="oi-history__cell-price">₹{closePrice.toFixed(closePrice < 10 ? 2 : closePrice < 100 ? 1 : 0)}</span>}
                           </td>
                         );
                       })}
@@ -616,9 +678,11 @@ const OiHistory: React.FC = () => {
                       {expiries.map((exp) => {
                         const cell = cells.get(exp);
                         const { text, chgCls } = formatOiWithChg(cell?.peOi || 0, cell?.pePrevOi);
+                        const closePrice = cell?.peClose || 0;
                         return (
                           <td key={`pe-${exp}`} className={`oi-history__cell--pe ${chgCls}`}>
-                            {text}
+                            <span className="oi-history__cell-primary">{text}</span>
+                            {closePrice > 0 && <span className="oi-history__cell-price">₹{closePrice.toFixed(closePrice < 10 ? 2 : closePrice < 100 ? 1 : 0)}</span>}
                           </td>
                         );
                       })}
