@@ -617,19 +617,14 @@ const OiHistory: React.FC = () => {
       {tableData.length > 0 && (
         <div className="oi-history__table-wrap card">
           <div className="oi-history__table-header">
-            <div className="oi-history__table-header-left">
-              <span className="oi-history__table-title">
-                {filterDate} &mdash; Spot: {formatNum(filteredRows[0]?.spotClose || 0)}
-              </span>
-              <button className="trap-info-btn" onClick={() => setShowPatternInfo(!showPatternInfo)} title="Pattern definitions">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
-                </svg>
-              </button>
-            </div>
-            <span className="oi-history__table-count">
+            <div className="oi-history__table-count">
               {tableData.length} strikes &middot; {expiries.length} expiries
-            </span>
+            </div>
+            <button className="trap-info-btn" onClick={() => setShowPatternInfo(!showPatternInfo)} title="Pattern definitions">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+              </svg>
+            </button>
           </div>
 
           {showPatternInfo && (

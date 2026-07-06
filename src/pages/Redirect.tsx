@@ -31,6 +31,7 @@ const Redirect: React.FC = () => {
         navigate('/portfolio', { replace: true });
       })
       .catch((err) => {
+        console.error('[Redirect] Token exchange error:', err);
         setError(err.message || 'Failed to complete authentication.');
       });
   }, [searchParams, navigate]);

@@ -153,6 +153,7 @@
 .oi-history__table-count {
   font-size: 11px;
   color: var(--text-secondary);
+  margin-bottom: 8px;
 }
 
 .oi-history__table-scroll {
@@ -165,49 +166,48 @@
   font-size: 11px;
 }
 
+.oi-history__table thead {}
+
 .oi-history__table th {
-  padding: 5px 6px;
-  font-weight: 500;
+  padding: 8px 6px;
+  font-weight: 600;
+  font-size: 10px;
   color: var(--text-secondary);
-  text-align: right;
-  border-bottom: 1px solid var(--card-border);
+  text-align: center;
   white-space: nowrap;
+  background: var(--card-bg-solid);
+  border-bottom: 2px solid var(--card-border);
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
 }
 
 .oi-history__th-group {
-  text-align: center !important;
-  font-weight: 600 !important;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  border-bottom: 2px solid var(--card-border) !important;
+  position: relative;
 }
 
-.oi-history__th-group--ce { color: var(--green, #22c55e); }
-.oi-history__th-group--pe { color: var(--red, #ef4444); }
+.oi-history__th-group--ce {
+  color: var(--green, #22c55e);
+  border-bottom-color: rgba(34, 197, 94, 0.3);
+}
+
+.oi-history__th-group--pe {
+  color: var(--red, #ef4444);
+  border-bottom-color: rgba(239, 68, 68, 0.3);
+}
 
 .oi-history__th-strike {
-  text-align: center !important;
-  font-weight: 600 !important;
-  border-bottom: 2px solid var(--card-border) !important;
+  color: var(--text-primary);
+  background: var(--bg-secondary);
+  border-bottom-color: var(--accent);
+  min-width: 50px;
 }
 
 .oi-history__th-pattern {
-  text-align: center !important;
-  font-weight: 600 !important;
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.3px;
-  border-bottom: 2px solid var(--card-border) !important;
   color: var(--text-secondary);
-  min-width: 80px;
-}
-
-.oi-history__th-sub {
-  font-size: 10px;
-  color: var(--text-secondary);
-  text-align: right;
-  padding: 3px 6px;
+  min-width: 90px;
+  font-size: 9px;
+  letter-spacing: 0.6px;
+  opacity: 0.8;
 }
 
 .oi-history__table td {

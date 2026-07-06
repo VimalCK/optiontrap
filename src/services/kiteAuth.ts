@@ -176,8 +176,14 @@ export async function exchangeToken(requestToken: string): Promise<KiteSession> 
   });
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ message: 'Token exchange failed' }));
-    throw new Error(error.message || `Token exchange failed (${res.status})`);
+    const text = await res.text();
+    console.error('[kiteAuth] Token exchange failed:', res.status, text);
+    let message = `Token exchange failed (${res.status})`;
+    try {
+      const parsed = JSON.parse(text);
+      if (parsed.message) message = parsed.message;
+    } catch { /* response wasn't JSON */ }
+    throw new Error(message);
   }
 
   const { data } = await res.json();
