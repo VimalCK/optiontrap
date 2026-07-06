@@ -769,17 +769,17 @@ const OiHistory: React.FC = () => {
 
               // Build price lines per expiry
               const priceLines = expiries.map((exp) => {
-                const points: string[] = [];
+                const pts: { x: number; y: number; price: number; date: string }[] = [];
                 dates.forEach((d, i) => {
                   const x = PAD_L + (i + 0.5) * (plotW / n);
                   const entry = dateMap.get(d)?.get(exp);
                   if (entry && entry.ceClose > 0) {
                     const y = PAD_T + plotH - (entry.ceClose / safeMaxPrice) * plotH;
-                    points.push(`${x},${y}`);
+                    pts.push({ x, y, price: entry.ceClose, date: d });
                   }
                 });
-                return { exp, points: points.join(' ') };
-              }).filter((l) => l.points.length > 0);
+                return { exp, pts, points: pts.map((p) => `${p.x},${p.y}`).join(' ') };
+              }).filter((l) => l.pts.length > 0);
 
               return (
                 <div className="oi-history__chart-panel">
@@ -809,9 +809,19 @@ const OiHistory: React.FC = () => {
                       });
                     })}
 
-                    {/* Price lines */}
-                    {priceLines.map(({ exp, points }) => (
-                      <polyline key={exp} points={points} fill="none" stroke={expiryColors.get(exp)} strokeWidth="1.2" strokeLinejoin="round" />
+                    {/* Price lines + data points with price labels */}
+                    {priceLines.map(({ exp, points, pts }) => (
+                      <g key={exp}>
+                        <polyline points={points} fill="none" stroke={expiryColors.get(exp)} strokeWidth="1.2" strokeLinejoin="round" />
+                        {pts.map((p, k) => (
+                          <g key={k}>
+                            <circle cx={p.x} cy={p.y} r="1.5" fill={expiryColors.get(exp)} />
+                            <text x={p.x} y={p.y - 4} textAnchor="middle" fontSize="4" fill={expiryColors.get(exp)}>
+                              ₹{p.price < 10 ? p.price.toFixed(1) : Math.round(p.price)}
+                            </text>
+                          </g>
+                        ))}
+                      </g>
                     ))}
 
                     {/* Left axis labels (price) */}
@@ -854,17 +864,17 @@ const OiHistory: React.FC = () => {
               const safeMaxPrice = maxPePrice || 1;
 
               const priceLines = expiries.map((exp) => {
-                const points: string[] = [];
+                const pts: { x: number; y: number; price: number; date: string }[] = [];
                 dates.forEach((d, i) => {
                   const x = PAD_L + (i + 0.5) * (plotW / n);
                   const entry = dateMap.get(d)?.get(exp);
                   if (entry && entry.peClose > 0) {
                     const y = PAD_T + plotH - (entry.peClose / safeMaxPrice) * plotH;
-                    points.push(`${x},${y}`);
+                    pts.push({ x, y, price: entry.peClose, date: d });
                   }
                 });
-                return { exp, points: points.join(' ') };
-              }).filter((l) => l.points.length > 0);
+                return { exp, pts, points: pts.map((p) => `${p.x},${p.y}`).join(' ') };
+              }).filter((l) => l.pts.length > 0);
 
               return (
                 <div className="oi-history__chart-panel">
@@ -892,8 +902,19 @@ const OiHistory: React.FC = () => {
                       });
                     })}
 
-                    {priceLines.map(({ exp, points }) => (
-                      <polyline key={exp} points={points} fill="none" stroke={expiryColors.get(exp)} strokeWidth="1.2" strokeLinejoin="round" />
+                    {/* Price lines + data points with price labels */}
+                    {priceLines.map(({ exp, points, pts }) => (
+                      <g key={exp}>
+                        <polyline points={points} fill="none" stroke={expiryColors.get(exp)} strokeWidth="1.2" strokeLinejoin="round" />
+                        {pts.map((p, k) => (
+                          <g key={k}>
+                            <circle cx={p.x} cy={p.y} r="1.5" fill={expiryColors.get(exp)} />
+                            <text x={p.x} y={p.y - 4} textAnchor="middle" fontSize="4" fill={expiryColors.get(exp)}>
+                              ₹{p.price < 10 ? p.price.toFixed(1) : Math.round(p.price)}
+                            </text>
+                          </g>
+                        ))}
+                      </g>
                     ))}
 
                     {[0, 0.5, 1].map((frac) => (
