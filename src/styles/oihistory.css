@@ -328,7 +328,8 @@
   display: flex;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 8px;
+  justify-content: center;
+  margin-top: 8px;
   font-size: 10px;
   color: var(--text-secondary);
 }
@@ -357,7 +358,8 @@
 
 .oi-history__chart-pair {
   display: flex;
-  gap: 16px;
+  flex-direction: column;
+  gap: 12px;
 }
 
 .oi-history__chart-panel {
@@ -368,8 +370,9 @@
 
 .oi-history__chart-label {
   position: absolute;
-  top: 4px;
-  left: 56px;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
   font-size: 11px;
   font-weight: 700;
   color: var(--green, #22c55e);
@@ -385,12 +388,6 @@
 .oi-history__chart-svg {
   width: 100%;
   height: auto;
-}
-
-@media (max-width: 800px) {
-  .oi-history__chart-pair {
-    flex-direction: column;
-  }
 }
 
 /* ── Empty state ── */

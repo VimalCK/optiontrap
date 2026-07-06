@@ -755,29 +755,16 @@ const OiHistory: React.FC = () => {
             <button className="oi-history__chart-close" onClick={() => setSelectedStrike(null)} title="Close chart">&times;</button>
           </div>
 
-          {/* Legend */}
-          <div className="oi-history__chart-legend">
-            {expiries.map((exp) => (
-              <span key={exp} className="oi-history__chart-legend-item">
-                <span className="oi-history__chart-legend-swatch" style={{ background: expiryColors.get(exp) }} />
-                {expiryLabel(exp, isMonthlyExpiry(exp))}
-              </span>
-            ))}
-            <span className="oi-history__chart-legend-item">
-              <span className="oi-history__chart-legend-bar" /> OI
-            </span>
-          </div>
-
           <div className="oi-history__chart-pair">
             {/* CE Chart */}
             {(() => {
-              const W = 400, H = 180, PAD_L = 50, PAD_R = 50, PAD_T = 20, PAD_B = 30;
+              const W = 700, H = 150, PAD_L = 50, PAD_R = 50, PAD_T = 16, PAD_B = 18;
               const plotW = W - PAD_L - PAD_R;
               const plotH = H - PAD_T - PAD_B;
               const { dates, dateMap, maxOi, maxCePrice } = chartData;
               const n = dates.length;
               if (n === 0 || maxOi === 0) return null;
-              const barW = Math.min(plotW / n * 0.6, 20);
+              const barW = Math.min(plotW / n * 0.4, 10);
               const safeMaxPrice = maxCePrice || 1;
 
               // Build price lines per expiry
@@ -802,6 +789,8 @@ const OiHistory: React.FC = () => {
                     {[0.25, 0.5, 0.75].map((frac) => (
                       <line key={frac} x1={PAD_L} x2={W - PAD_R} y1={PAD_T + plotH * (1 - frac)} y2={PAD_T + plotH * (1 - frac)} stroke="var(--card-border)" strokeWidth="0.5" />
                     ))}
+                    {/* X-axis baseline */}
+                    <line x1={PAD_L} x2={W - PAD_R} y1={PAD_T + plotH} y2={PAD_T + plotH} stroke="var(--text-secondary)" strokeWidth="0.5" opacity="0.5" />
 
                     {/* OI bars (stacked per expiry) */}
                     {dates.map((d, i) => {
@@ -822,27 +811,19 @@ const OiHistory: React.FC = () => {
 
                     {/* Price lines */}
                     {priceLines.map(({ exp, points }) => (
-                      <polyline key={exp} points={points} fill="none" stroke={expiryColors.get(exp)} strokeWidth="2" strokeLinejoin="round" />
+                      <polyline key={exp} points={points} fill="none" stroke={expiryColors.get(exp)} strokeWidth="1.2" strokeLinejoin="round" />
                     ))}
-
-                    {/* Price dots */}
-                    {priceLines.map(({ exp, points }) =>
-                      points.split(' ').map((pt, k) => {
-                        const [cx, cy] = pt.split(',').map(Number);
-                        return <circle key={`${exp}-${k}`} cx={cx} cy={cy} r="2.5" fill={expiryColors.get(exp)} />;
-                      })
-                    )}
 
                     {/* Left axis labels (price) */}
                     {[0, 0.5, 1].map((frac) => (
-                      <text key={frac} x={PAD_L - 4} y={PAD_T + plotH * (1 - frac) + 3} textAnchor="end" fontSize="9" fill="var(--text-secondary)">
+                      <text key={frac} x={PAD_L - 4} y={PAD_T + plotH * (1 - frac) + 3} textAnchor="end" fontSize="6" fill="var(--text-secondary)">
                         ₹{Math.round(safeMaxPrice * frac)}
                       </text>
                     ))}
 
                     {/* Right axis labels (OI) */}
                     {[0, 0.5, 1].map((frac) => (
-                      <text key={frac} x={W - PAD_R + 4} y={PAD_T + plotH * (1 - frac) + 3} textAnchor="start" fontSize="9" fill="var(--text-secondary)">
+                      <text key={frac} x={W - PAD_R + 4} y={PAD_T + plotH * (1 - frac) + 3} textAnchor="start" fontSize="6" fill="var(--text-secondary)">
                         {formatOiCompact(Math.round(maxOi * frac))}
                       </text>
                     ))}
@@ -851,7 +832,7 @@ const OiHistory: React.FC = () => {
                     {dates.map((d, i) => {
                       const x = PAD_L + (i + 0.5) * (plotW / n);
                       return (
-                        <text key={d} x={x} y={H - 4} textAnchor="middle" fontSize="8" fill="var(--text-secondary)">
+                        <text key={d} x={x} y={H - 4} textAnchor="middle" fontSize="5.5" fill="var(--text-secondary)">
                           {d.slice(5)}
                         </text>
                       );
@@ -863,13 +844,13 @@ const OiHistory: React.FC = () => {
 
             {/* PE Chart */}
             {(() => {
-              const W = 400, H = 180, PAD_L = 50, PAD_R = 50, PAD_T = 20, PAD_B = 30;
+              const W = 700, H = 150, PAD_L = 50, PAD_R = 50, PAD_T = 16, PAD_B = 18;
               const plotW = W - PAD_L - PAD_R;
               const plotH = H - PAD_T - PAD_B;
               const { dates, dateMap, maxOi, maxPePrice } = chartData;
               const n = dates.length;
               if (n === 0 || maxOi === 0) return null;
-              const barW = Math.min(plotW / n * 0.6, 20);
+              const barW = Math.min(plotW / n * 0.4, 10);
               const safeMaxPrice = maxPePrice || 1;
 
               const priceLines = expiries.map((exp) => {
@@ -892,6 +873,8 @@ const OiHistory: React.FC = () => {
                     {[0.25, 0.5, 0.75].map((frac) => (
                       <line key={frac} x1={PAD_L} x2={W - PAD_R} y1={PAD_T + plotH * (1 - frac)} y2={PAD_T + plotH * (1 - frac)} stroke="var(--card-border)" strokeWidth="0.5" />
                     ))}
+                    {/* X-axis baseline */}
+                    <line x1={PAD_L} x2={W - PAD_R} y1={PAD_T + plotH} y2={PAD_T + plotH} stroke="var(--text-secondary)" strokeWidth="0.5" opacity="0.5" />
 
                     {dates.map((d, i) => {
                       const x = PAD_L + (i + 0.5) * (plotW / n);
@@ -910,24 +893,17 @@ const OiHistory: React.FC = () => {
                     })}
 
                     {priceLines.map(({ exp, points }) => (
-                      <polyline key={exp} points={points} fill="none" stroke={expiryColors.get(exp)} strokeWidth="2" strokeLinejoin="round" />
+                      <polyline key={exp} points={points} fill="none" stroke={expiryColors.get(exp)} strokeWidth="1.2" strokeLinejoin="round" />
                     ))}
 
-                    {priceLines.map(({ exp, points }) =>
-                      points.split(' ').map((pt, k) => {
-                        const [cx, cy] = pt.split(',').map(Number);
-                        return <circle key={`${exp}-${k}`} cx={cx} cy={cy} r="2.5" fill={expiryColors.get(exp)} />;
-                      })
-                    )}
-
                     {[0, 0.5, 1].map((frac) => (
-                      <text key={frac} x={PAD_L - 4} y={PAD_T + plotH * (1 - frac) + 3} textAnchor="end" fontSize="9" fill="var(--text-secondary)">
+                      <text key={frac} x={PAD_L - 4} y={PAD_T + plotH * (1 - frac) + 3} textAnchor="end" fontSize="6" fill="var(--text-secondary)">
                         ₹{Math.round(safeMaxPrice * frac)}
                       </text>
                     ))}
 
                     {[0, 0.5, 1].map((frac) => (
-                      <text key={frac} x={W - PAD_R + 4} y={PAD_T + plotH * (1 - frac) + 3} textAnchor="start" fontSize="9" fill="var(--text-secondary)">
+                      <text key={frac} x={W - PAD_R + 4} y={PAD_T + plotH * (1 - frac) + 3} textAnchor="start" fontSize="6" fill="var(--text-secondary)">
                         {formatOiCompact(Math.round(maxOi * frac))}
                       </text>
                     ))}
@@ -935,7 +911,7 @@ const OiHistory: React.FC = () => {
                     {dates.map((d, i) => {
                       const x = PAD_L + (i + 0.5) * (plotW / n);
                       return (
-                        <text key={d} x={x} y={H - 4} textAnchor="middle" fontSize="8" fill="var(--text-secondary)">
+                        <text key={d} x={x} y={H - 4} textAnchor="middle" fontSize="5.5" fill="var(--text-secondary)">
                           {d.slice(5)}
                         </text>
                       );
@@ -944,6 +920,19 @@ const OiHistory: React.FC = () => {
                 </div>
               );
             })()}
+          </div>
+
+          {/* Legend */}
+          <div className="oi-history__chart-legend">
+            {expiries.map((exp) => (
+              <span key={exp} className="oi-history__chart-legend-item">
+                <span className="oi-history__chart-legend-swatch" style={{ background: expiryColors.get(exp) }} />
+                {expiryLabel(exp, isMonthlyExpiry(exp))}
+              </span>
+            ))}
+            <span className="oi-history__chart-legend-item">
+              <span className="oi-history__chart-legend-bar" /> OI
+            </span>
           </div>
         </div>
       )}
