@@ -1,9 +1,10 @@
 /**
  * AppSelect — custom styled combobox/select component.
  * Replaces native <select> with a fully theme-aware dropdown.
+ * Supports optional search/filter when `searchable` prop is set.
  */
 
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import './AppSelect.css';
 
@@ -18,6 +19,7 @@ interface AppSelectProps {
   onChange: (value: string | number) => void;
   className?: string;
   placeholder?: string;
+  searchable?: boolean;
 }
 
 const AppSelect: React.FC<AppSelectProps> = ({
@@ -26,18 +28,29 @@ const AppSelect: React.FC<AppSelectProps> = ({
   onChange,
   className = '',
   placeholder = 'Select...',
+  searchable = false,
 }) => {
   const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const selectedLabel = options.find((o) => o.value === value)?.label ?? placeholder;
+
+  const filteredOptions = useMemo(() => {
+    if (!searchable || !search.trim()) return options;
+    const q = search.trim().toUpperCase();
+    return options.filter((o) =>
+      o.label.toUpperCase().includes(q) || String(o.value).toUpperCase().includes(q)
+    );
+  }, [options, search, searchable]);
 
   const positionDropdown = useCallback(() => {
     if (!triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
-    const dropdownHeight = Math.min(options.length * 34 + 8, 280);
+    const dropdownHeight = Math.min(filteredOptions.length * 34 + (searchable ? 44 : 0) + 8, 320);
     const spaceBelow = window.innerHeight - rect.bottom;
     const openUpward = spaceBelow < dropdownHeight + 8 && rect.top > dropdownHeight;
 
@@ -50,11 +63,15 @@ const AppSelect: React.FC<AppSelectProps> = ({
         ? { bottom: window.innerHeight - rect.top + 4 }
         : { top: rect.bottom + 4 }),
     });
-  }, [options.length]);
+  }, [filteredOptions.length, searchable]);
 
   const handleOpen = () => {
+    setSearch('');
     positionDropdown();
     setOpen(true);
+    if (searchable) {
+      setTimeout(() => searchInputRef.current?.focus(), 10);
+    }
   };
 
   // Close on outside click
@@ -76,7 +93,6 @@ const AppSelect: React.FC<AppSelectProps> = ({
   useEffect(() => {
     if (!open) return;
     const close = (e: Event) => {
-      // Ignore scroll events that happen inside the dropdown
       if (dropdownRef.current && dropdownRef.current.contains(e.target as Node)) return;
       setOpen(false);
     };
@@ -91,22 +107,31 @@ const AppSelect: React.FC<AppSelectProps> = ({
   const handleSelect = (optValue: string | number) => {
     onChange(optValue);
     setOpen(false);
+    setSearch('');
   };
 
   // Keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') { setOpen(false); return; }
-    if (e.key === 'Enter' || e.key === ' ') { open ? setOpen(false) : handleOpen(); return; }
+    if (e.key === 'Enter') {
+      if (!open) { handleOpen(); return; }
+      // Select first filtered option on Enter
+      if (searchable && filteredOptions.length > 0) {
+        handleSelect(filteredOptions[0].value);
+      }
+      return;
+    }
+    if (e.key === ' ' && !searchable) { open ? setOpen(false) : handleOpen(); return; }
     if (!open) return;
-    const currentIdx = options.findIndex((o) => o.value === value);
+    const currentIdx = filteredOptions.findIndex((o) => o.value === value);
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      const next = options[Math.min(currentIdx + 1, options.length - 1)];
+      const next = filteredOptions[Math.min(currentIdx + 1, filteredOptions.length - 1)];
       if (next) onChange(next.value);
     }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
-      const prev = options[Math.max(currentIdx - 1, 0)];
+      const prev = filteredOptions[Math.max(currentIdx - 1, 0)];
       if (prev) onChange(prev.value);
     }
   };
@@ -118,7 +143,7 @@ const AppSelect: React.FC<AppSelectProps> = ({
         type="button"
         className={`app-select-trigger ${open ? 'app-select-trigger--open' : ''} ${className}`}
         onClick={() => open ? setOpen(false) : handleOpen()}
-        onKeyDown={handleKeyDown}
+        onKeyDown={!searchable ? handleKeyDown : undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
       >
@@ -138,8 +163,25 @@ const AppSelect: React.FC<AppSelectProps> = ({
           style={dropdownStyle}
           role="listbox"
         >
+          {searchable && (
+            <div className="app-select-search">
+              <input
+                ref={searchInputRef}
+                type="text"
+                className="app-select-search__input"
+                placeholder="Search..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                onKeyDown={handleKeyDown}
+                autoComplete="off"
+              />
+            </div>
+          )}
           <div className="app-select-dropdown__inner">
-            {options.map((opt) => (
+            {filteredOptions.length === 0 && (
+              <div className="app-select-option app-select-option--empty">No matches</div>
+            )}
+            {filteredOptions.map((opt) => (
               <div
                 key={opt.value}
                 role="option"
