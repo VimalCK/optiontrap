@@ -30,6 +30,10 @@
   letter-spacing: 0.4px;
 }
 
+.oi-history__label:first-child .app-select-trigger {
+  width: 180px;
+}
+
 /* Form controls use shared .app-select, .app-btn from global.css */
 
 /* ── Progress bar ── */

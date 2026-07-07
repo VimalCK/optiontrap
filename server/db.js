@@ -1206,3 +1206,65 @@ export function deleteOiHistoryByMonth(month) {
   if (changes > 0) persist();
   return changes;
 }
+
+/**
+ * Get distinct F&O symbol names from the instruments cache.
+ * Returns sorted array of names (e.g. ['BANKNIFTY', 'HDFCBANK', 'NIFTY', 'RELIANCE', ...])
+ */
+export function getFnoSymbols() {
+  if (!db) throw new Error('Database not initialised');
+
+  const results = db.exec(
+    "SELECT DISTINCT name FROM instruments WHERE exchange = 'NFO' AND instrument_type IN ('CE', 'PE') ORDER BY name",
+  );
+  if (!results.length) return [];
+  return results[0].values.map(([name]) => name);
+}
+
+/**
+ * Look up the NSE EQ instrument token for a stock (used as spot token).
+ * Matches by tradingsymbol since NSE `name` is the full company name
+ * while NFO `name` is the short symbol.
+ * Returns the instrument_token or null if not found.
+ */
+export function getSpotToken(name) {
+  if (!db) throw new Error('Database not initialised');
+
+  const results = db.exec(
+    "SELECT instrument_token FROM instruments WHERE tradingsymbol = ? AND exchange = 'NSE' AND instrument_type = 'EQ' LIMIT 1",
+    [name],
+  );
+  if (!results.length || !results[0].values.length) return null;
+  return results[0].values[0][0];
+}
+
+/**
+ * Get the strike step size for a symbol by looking at the gap between adjacent strikes.
+ * Returns the most common step size, or 50 as default.
+ */
+export function getStrikeStepSize(scripName) {
+  if (!db) throw new Error('Database not initialised');
+
+  const results = db.exec(
+    `SELECT DISTINCT strike FROM instruments
+     WHERE name = ? AND exchange = 'NFO' AND instrument_type = 'CE' AND strike > 0
+     ORDER BY strike LIMIT 20`,
+    [scripName],
+  );
+  if (!results.length || results[0].values.length < 2) return 50;
+
+  const strikes = results[0].values.map(([s]) => s);
+  // Find the most common gap between consecutive strikes
+  const gaps = new Map();
+  for (let i = 1; i < strikes.length; i++) {
+    const gap = Math.round(strikes[i] - strikes[i - 1]);
+    if (gap > 0) gaps.set(gap, (gaps.get(gap) || 0) + 1);
+  }
+
+  let bestGap = 50;
+  let bestCount = 0;
+  for (const [gap, count] of gaps) {
+    if (count > bestCount) { bestGap = gap; bestCount = count; }
+  }
+  return bestGap;
+}

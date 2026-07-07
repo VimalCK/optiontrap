@@ -61,6 +61,9 @@ import {
   getOiHistoryDates,
   getOptionsForAtm,
   deleteOiHistoryByMonth,
+  getFnoSymbols,
+  getSpotToken,
+  getStrikeStepSize,
 } from './db.js';
 import { SqliteSessionStore } from './sessionStore.js';
 import { createRateLimiter } from './rateLimit.js';
@@ -587,20 +590,26 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
     const { apiKey, accessToken } = req.session.kiteSession;
     const authHeader = `token ${apiKey}:${accessToken}`;
 
-    // Determine scrip configuration
-    // scripName = name in NFO instruments table, spotToken = index/equity token for spot price
-    const SCRIP_CONFIG = {
-      NIFTY50: { scripName: 'NIFTY', spotToken: 256265, stepSize: 50, range: 15 },
-      BANKNIFTY: { scripName: 'BANKNIFTY', spotToken: 260105, stepSize: 100, range: 15 },
+    // Determine scrip configuration dynamically
+    // Index scrips have known spot tokens; stocks use their NSE EQ token
+    const INDEX_SPOT_TOKENS = {
+      NIFTY: 256265,
+      BANKNIFTY: 260105,
     };
 
-    const config = SCRIP_CONFIG[scrip];
-    if (!config) {
-      send('error', { message: `Unknown scrip: ${scrip}. Supported: ${Object.keys(SCRIP_CONFIG).join(', ')}` });
+    // scripName is the name in the NFO instruments table
+    // For indices: scrip="NIFTY50" → scripName="NIFTY", scrip="BANKNIFTY" → scripName="BANKNIFTY"
+    // For stocks: scrip="RELIANCE" → scripName="RELIANCE"
+    const scripName = scrip === 'NIFTY50' ? 'NIFTY' : scrip;
+
+    const spotToken = INDEX_SPOT_TOKENS[scripName] || getSpotToken(scripName);
+    if (!spotToken) {
+      send('error', { message: `Cannot find spot token for ${scrip}. Ensure instruments are loaded.` });
       return res.end();
     }
 
-    const { scripName, spotToken, stepSize, range } = config;
+    const stepSize = getStrikeStepSize(scripName);
+    const range = 15;
 
     // Step 1: Fetch spot index daily candles for spot close
     send('step', { step: 1, message: `Fetching ${scrip} spot data...` });
@@ -816,6 +825,18 @@ app.delete('/api/oi-history', requireAuth, (req, res) => {
     res.json({ status: 'ok', deleted });
   } catch (err) {
     console.error('[OI History] DELETE error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// ---------- F&O Symbols ----------
+
+app.get('/api/fno-symbols', requireAuth, (req, res) => {
+  try {
+    const symbols = getFnoSymbols();
+    res.json({ status: 'ok', data: symbols });
+  } catch (err) {
+    console.error('[F&O Symbols] Error:', err.message);
     res.status(500).json({ status: 'error', message: err.message });
   }
 });

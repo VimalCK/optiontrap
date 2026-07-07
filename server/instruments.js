@@ -52,6 +52,29 @@ function unquote(val) {
  * @param {(cols: string[], indices: Record<string, number>) => object | null} rowFilter
  *   Called for each data row. Return an instrument object to include it, or null to skip.
  */
+/**
+ * Split a CSV line respecting quoted fields (handles commas inside quotes).
+ */
+function splitCSVLine(line) {
+  const fields = [];
+  let current = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+    } else if (ch === ',' && !inQuotes) {
+      fields.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  fields.push(current);
+  return fields;
+}
+
 function parseCSV(csv, rowFilter) {
   const lines = csv.trim().split('\n');
   if (lines.length < 2) return [];
@@ -67,7 +90,7 @@ function parseCSV(csv, rowFilter) {
   const instruments = [];
 
   for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(',').map(unquote);
+    const cols = splitCSVLine(lines[i]);
     if (cols.length < headers.length) continue;
 
     const result = rowFilter(cols, indices);
@@ -101,16 +124,14 @@ function nseFilter(cols, idx) {
 }
 
 /**
- * Filter for NFO CSV — options (CE/PE) and futures (FUT) for supported indices.
+ * Filter for NFO CSV — all F&O options (CE/PE) and futures (FUT).
  */
-const NFO_NAMES = new Set(['NIFTY', 'BANKNIFTY']);
-
 function nfoFilter(cols, idx) {
-  const name = cols[idx.name]?.trim();
-  if (!NFO_NAMES.has(name)) return null;
-
   const type = cols[idx.instrument_type]?.trim();
   if (type !== 'CE' && type !== 'PE' && type !== 'FUT') return null;
+
+  const name = cols[idx.name]?.trim();
+  if (!name) return null;
 
   const tradingsymbol = cols[idx.tradingsymbol]?.trim();
   if (!tradingsymbol) return null;
@@ -164,6 +185,10 @@ async function fetchFromKite(apiKey, accessToken) {
   ]);
 
   console.log(`[Instruments] Parsed: ${nse.length} NSE stocks, ${nfo.length} NFO F&O`);
+
+  // Log unique NFO names for debugging
+  const nfoNames = new Set(nfo.map((i) => i.name));
+  console.log(`[Instruments] NFO unique names (${nfoNames.size}): ${[...nfoNames].slice(0, 20).join(', ')}${nfoNames.size > 20 ? '...' : ''}`);
 
   const combined = [...nse, ...nfo];
 

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import '@/styles/oihistory.css';
 
@@ -45,7 +45,8 @@ type RolloverPattern =
   | 'Stable'
   | '-';
 
-const SCRIP_OPTIONS = [
+/** Default scrip options shown before dynamic list loads */
+const DEFAULT_SCRIP_OPTIONS = [
   { value: 'NIFTY50', label: 'NIFTY 50' },
   { value: 'BANKNIFTY', label: 'BANK NIFTY' },
 ];
@@ -253,8 +254,25 @@ const OiHistory: React.FC = () => {
   const [filterDate, setFilterDate] = useState('');
   const [showPatternInfo, setShowPatternInfo] = useState(false);
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
+  const [scripOptions, setScripOptions] = useState(DEFAULT_SCRIP_OPTIONS);
 
   const monthOptions = useMemo(() => buildMonthOptions(), []);
+
+  // Fetch available F&O symbols on mount
+  useEffect(() => {
+    fetch('/api/fno-symbols', { credentials: 'include' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.status === 'ok' && json.data?.length > 0) {
+          const options = json.data.map((name: string) => ({
+            value: name === 'NIFTY' ? 'NIFTY50' : name,
+            label: name === 'NIFTY' ? 'NIFTY 50' : name === 'BANKNIFTY' ? 'BANK NIFTY' : name,
+          }));
+          setScripOptions(options);
+        }
+      })
+      .catch(() => { /* keep defaults */ });
+  }, []);
 
   /** Load stored data from server */
   const loadData = useCallback(async () => {
@@ -447,8 +465,20 @@ const OiHistory: React.FC = () => {
   const atmStrike = useMemo(() => {
     if (filteredRows.length === 0) return null;
     const spot = filteredRows[0].spotClose;
-    // Use scrip-specific step size
-    const stepSize = scrip === 'BANKNIFTY' ? 100 : 50;
+    // Derive step size from actual strike gaps in the data
+    const strikes = [...new Set(filteredRows.filter((r) => r.strike).map((r) => r.strike as number))].sort((a, b) => a - b);
+    let stepSize = 50; // default
+    if (strikes.length >= 2) {
+      const gaps = new Map<number, number>();
+      for (let i = 1; i < Math.min(strikes.length, 20); i++) {
+        const gap = Math.round(strikes[i] - strikes[i - 1]);
+        if (gap > 0) gaps.set(gap, (gaps.get(gap) || 0) + 1);
+      }
+      let bestCount = 0;
+      for (const [gap, count] of gaps) {
+        if (count > bestCount) { stepSize = gap; bestCount = count; }
+      }
+    }
     return Math.round(spot / stepSize) * stepSize;
   }, [filteredRows, scrip]);
 
@@ -504,13 +534,22 @@ const OiHistory: React.FC = () => {
       }
     }
 
+    // Compute dynamic OI threshold: show strikes with OI > 10% of the max OI in the dataset
+    // This adapts to any scrip (indices have millions, stocks have thousands)
+    let maxOiInGrid = 0;
+    for (const expiryMap of grid.values()) {
+      for (const cell of expiryMap.values()) {
+        if (cell.ceOi > maxOiInGrid) maxOiInGrid = cell.ceOi;
+        if (cell.peOi > maxOiInGrid) maxOiInGrid = cell.peOi;
+      }
+    }
+    const oiThreshold = Math.max(1000, maxOiInGrid * 0.1);
+
     // Build rows sorted by strike
     const rows = [...grid.entries()]
       .sort(([a], [b]) => a - b)
       .map(([strike, expiryMap]) => {
-        // Filter: only show strikes with significant OI on any expiry
-        // Threshold varies by scrip — BANKNIFTY has lower absolute OI than NIFTY
-        const oiThreshold = scrip === 'NIFTY50' ? 100_000 : 50_000;
+        // Filter: only show strikes with significant OI
         let hasSignificantOi = false;
         for (const cell of expiryMap.values()) {
           if (cell.ceOi > oiThreshold || cell.peOi > oiThreshold) {
@@ -606,7 +645,7 @@ const OiHistory: React.FC = () => {
             Script
             <AppSelect
               value={scrip}
-              options={SCRIP_OPTIONS}
+              options={scripOptions}
               onChange={(v) => setScrip(String(v))}
             />
           </label>
