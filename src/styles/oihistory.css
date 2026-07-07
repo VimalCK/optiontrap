@@ -270,6 +270,10 @@
   background: rgba(99, 102, 241, 0.06);
 }
 
+.oi-history__row--dimmed {
+  opacity: 0.4;
+}
+
 .oi-history__table tbody tr {
   cursor: pointer;
 }
