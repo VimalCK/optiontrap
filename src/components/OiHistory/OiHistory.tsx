@@ -37,6 +37,10 @@ type RolloverPattern =
   | 'Doubling Down (Long)'
   | 'Doubling Down (Short)'
   | 'Doubling Down'
+  | 'Long Buildup'
+  | 'Short Buildup'
+  | 'Long Unwinding'
+  | 'Short Covering'
   | 'Unwinding'
   | 'Stable'
   | '-';
@@ -128,7 +132,31 @@ function classifyPattern(
   oiByExpiry: Map<string, { oi: number; prevOi: number | undefined; close: number; prevClose: number | undefined }>,
   expiries: string[],
 ): RolloverPattern {
-  if (expiries.length < 2) return '-';
+  // Single expiry (monthly scrips like BANKNIFTY): use OI + Price signal
+  if (expiries.length < 2) {
+    // Find the expiry with data
+    let entry: { oi: number; prevOi: number | undefined; close: number; prevClose: number | undefined } | undefined;
+    for (const exp of expiries) {
+      if (oiByExpiry.has(exp)) { entry = oiByExpiry.get(exp); break; }
+    }
+    if (!entry || entry.prevOi === undefined || entry.prevOi === 0) return '-';
+
+    const oiChg = (entry.oi - entry.prevOi) / entry.prevOi;
+    const priceChg = entry.prevClose !== undefined && entry.prevClose > 0
+      ? (entry.close - entry.prevClose) / entry.prevClose
+      : 0;
+
+    const oiRising = oiChg > 0.02;
+    const oiFalling = oiChg < -0.02;
+    const priceUp = priceChg > 0.005;
+    const priceDown = priceChg < -0.005;
+
+    if (oiRising && priceUp) return 'Long Buildup';
+    if (oiRising && priceDown) return 'Short Buildup';
+    if (oiFalling && priceDown) return 'Long Unwinding';
+    if (oiFalling && priceUp) return 'Short Covering';
+    return 'Stable';
+  }
 
   // Find the nearest expiry with data
   let nearestIdx = -1;
@@ -189,6 +217,10 @@ function patternColor(p: RolloverPattern): string {
   if (p.startsWith('Exiting')) return '#ef4444';
   if (p.startsWith('Fresh Build')) return '#22c55e';
   if (p.startsWith('Doubling Down')) return '#22c55e';
+  if (p === 'Long Buildup') return '#22c55e';
+  if (p === 'Short Buildup') return '#ef4444';
+  if (p === 'Long Unwinding') return '#ef4444';
+  if (p === 'Short Covering') return '#22c55e';
   if (p === 'Unwinding') return '#ef4444';
   if (p === 'Stable') return 'var(--text-secondary)';
   return 'var(--text-secondary)';
@@ -589,20 +621,25 @@ const OiHistory: React.FC = () => {
           </label>
 
           <button
-            className="app-btn app-btn--primary"
+            className="app-btn app-btn--primary app-btn--icon"
             onClick={handleFetch}
             disabled={fetching}
+            title="Fetch OI data from Kite"
           >
-            {fetching ? 'Fetching...' : 'Fetch'}
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
           </button>
 
           <button
-            className="app-btn app-btn--danger"
+            className="app-btn app-btn--danger app-btn--icon"
             onClick={handleDeleteMonth}
             disabled={fetching}
             title={`Delete all data for ${selectedMonth}`}
           >
-            Delete Month
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
           </button>
         </div>
 

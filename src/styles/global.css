@@ -246,6 +246,14 @@ ol {
   box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
 }
 
+.app-btn--icon {
+  padding: 6px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: unset;
+}
+
 .app-btn--secondary {
   background: var(--card-border);
   color: var(--text-primary);
