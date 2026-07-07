@@ -164,6 +164,28 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_oi_snapshots_timestamp ON oi_snapshots(timestamp)
   `);
 
+  db.run(`
+    CREATE TABLE IF NOT EXISTS oi_history (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      scrip            TEXT NOT NULL,
+      date             TEXT NOT NULL,
+      instrument_token INTEGER NOT NULL,
+      tradingsymbol    TEXT NOT NULL,
+      strike           REAL,
+      option_type      TEXT,
+      expiry           TEXT,
+      open             REAL,
+      high             REAL,
+      low              REAL,
+      close            REAL,
+      volume           INTEGER,
+      oi               INTEGER,
+      spot_close       REAL,
+      UNIQUE(scrip, date, instrument_token)
+    )
+  `);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_oi_history_scrip_date ON oi_history(scrip, date)`);
+
   // Clean expired sessions on startup
   db.run('DELETE FROM sessions WHERE expires < ?', [Date.now()]);
 
@@ -963,27 +985,19 @@ export function getLatestOiSnapshotTimestamp() {
 }
 
 // ===========================================================================
-// OI History — per-scrip tables for historical daily OI data
+// OI History — single unified table for historical daily OI data
 // ===========================================================================
 
 /**
- * Sanitise a scrip name into a safe SQLite table name.
- * e.g. "NIFTY50" → "nifty50_oi_history", "RELIANCE" → "reliance_oi_history"
+ * Create the unified OI history table if it doesn't exist.
  */
-function oiHistoryTableName(scrip) {
-  return scrip.toLowerCase().replace(/[^a-z0-9]/g, '') + '_oi_history';
-}
-
-/**
- * Create the OI history table for a scrip if it doesn't exist.
- */
-export function createOiHistoryTable(scrip) {
+export function createOiHistoryTable() {
   if (!db) throw new Error('Database not initialised');
 
-  const table = oiHistoryTableName(scrip);
   db.run(`
-    CREATE TABLE IF NOT EXISTS ${table} (
+    CREATE TABLE IF NOT EXISTS oi_history (
       id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      scrip            TEXT NOT NULL,
       date             TEXT NOT NULL,
       instrument_token INTEGER NOT NULL,
       tradingsymbol    TEXT NOT NULL,
@@ -997,10 +1011,10 @@ export function createOiHistoryTable(scrip) {
       volume           INTEGER,
       oi               INTEGER,
       spot_close       REAL,
-      UNIQUE(date, instrument_token)
+      UNIQUE(scrip, date, instrument_token)
     )
   `);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_${table}_date ON ${table}(date)`);
+  db.run(`CREATE INDEX IF NOT EXISTS idx_oi_history_scrip_date ON oi_history(scrip, date)`);
   persist();
 }
 
@@ -1012,18 +1026,17 @@ export function insertOiHistoryRows(scrip, rows) {
   if (!db) throw new Error('Database not initialised');
   if (!rows.length) return 0;
 
-  const table = oiHistoryTableName(scrip);
   db.run('BEGIN TRANSACTION');
   try {
     const stmt = db.prepare(`
-      INSERT OR REPLACE INTO ${table}
-        (date, instrument_token, tradingsymbol, strike, option_type, expiry, open, high, low, close, volume, oi, spot_close)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO oi_history
+        (scrip, date, instrument_token, tradingsymbol, strike, option_type, expiry, open, high, low, close, volume, oi, spot_close)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     for (const r of rows) {
       stmt.run([
-        r.date, r.instrumentToken, r.tradingsymbol, r.strike || null,
+        scrip, r.date, r.instrumentToken, r.tradingsymbol, r.strike || null,
         r.optionType || null, r.expiry || null,
         r.open, r.high, r.low, r.close, r.volume, r.oi, r.spotClose,
       ]);
@@ -1044,25 +1057,19 @@ export function insertOiHistoryRows(scrip, rows) {
 export function getOiHistoryData(scrip, fromDate, toDate) {
   if (!db) throw new Error('Database not initialised');
 
-  const table = oiHistoryTableName(scrip);
-
-  // Check table exists
-  const check = db.exec(`SELECT name FROM sqlite_master WHERE type='table' AND name='${table}'`);
-  if (!check.length) return [];
-
   let sql = `SELECT date, instrument_token, tradingsymbol, strike, option_type, expiry,
              open, high, low, close, volume, oi, spot_close
-             FROM ${table}`;
-  const params = [];
+             FROM oi_history WHERE scrip = ?`;
+  const params = [scrip];
 
   if (fromDate && toDate) {
-    sql += ' WHERE date >= ? AND date <= ?';
+    sql += ' AND date >= ? AND date <= ?';
     params.push(fromDate, toDate);
   } else if (fromDate) {
-    sql += ' WHERE date >= ?';
+    sql += ' AND date >= ?';
     params.push(fromDate);
   } else if (toDate) {
-    sql += ' WHERE date <= ?';
+    sql += ' AND date <= ?';
     params.push(toDate);
   }
 
@@ -1094,28 +1101,33 @@ export function getOiHistoryData(scrip, fromDate, toDate) {
 }
 
 /**
- * Get NIFTY option instruments for a given ATM and range from the instruments table.
+ * Get option instruments for a given scrip, ATM, and range from the instruments table.
  * When allExpiries is false (default), returns only the nearest expiry.
  * When allExpiries is true, returns all expiries within the selected month
  * (or all expiries if no targetMonth provided).
  * targetMonth format: 'YYYY-MM'
+ *
+ * @param {string} scripName - Instrument name in NFO (e.g. 'NIFTY', 'BANKNIFTY', 'RELIANCE')
+ * @param {number} atmStrike - At-the-money strike price
+ * @param {number} stepSize - Strike step size (50 for NIFTY, 100 for BANKNIFTY, varies for stocks)
+ * @param {number} range - Number of strikes above/below ATM to include
+ * @param {{ allExpiries?: boolean, targetMonth?: string }} options
  */
-export function getNiftyOptionsForAtm(atmStrike, range = 15, { allExpiries = false, targetMonth = '' } = {}) {
+export function getOptionsForAtm(scripName, atmStrike, stepSize = 50, range = 15, { allExpiries = false, targetMonth = '' } = {}) {
   if (!db) throw new Error('Database not initialised');
 
-  const stepSize = 50;
   const lowerStrike = atmStrike - range * stepSize;
   const upperStrike = atmStrike + range * stepSize;
 
   const results = db.exec(
     `SELECT instrument_token, tradingsymbol, strike, instrument_type, expiry
      FROM instruments
-     WHERE name = 'NIFTY'
+     WHERE name = ?
        AND exchange = 'NFO'
        AND instrument_type IN ('CE', 'PE')
        AND strike >= ? AND strike <= ?
      ORDER BY expiry, strike, instrument_type`,
-    [lowerStrike, upperStrike],
+    [scripName, lowerStrike, upperStrike],
   );
 
   if (!results.length) return [];
@@ -1151,38 +1163,46 @@ export function getNiftyOptionsForAtm(atmStrike, range = 15, { allExpiries = fal
 export function getOiHistoryDates(scrip, fromDate, toDate, minExpiries = 0) {
   if (!db) throw new Error('Database not initialised');
 
-  const table = oiHistoryTableName(scrip);
-
-  // Check table exists
-  const check = db.exec(`SELECT name FROM sqlite_master WHERE type='table' AND name='${table}'`);
-  if (!check.length) return new Set();
-
-  let where = '';
-  const params = [];
+  let where = ' WHERE scrip = ?';
+  const params = [scrip];
 
   if (fromDate && toDate) {
-    where = ' WHERE date >= ? AND date <= ?';
+    where += ' AND date >= ? AND date <= ?';
     params.push(fromDate, toDate);
   } else if (fromDate) {
-    where = ' WHERE date >= ?';
+    where += ' AND date >= ?';
     params.push(fromDate);
   } else if (toDate) {
-    where = ' WHERE date <= ?';
+    where += ' AND date <= ?';
     params.push(toDate);
   }
 
   if (minExpiries > 0) {
-    const sql = `SELECT date, COUNT(DISTINCT expiry) as ec FROM ${table}${where} GROUP BY date HAVING ec >= ?`;
+    const sql = `SELECT date, COUNT(DISTINCT expiry) as ec FROM oi_history${where} GROUP BY date HAVING ec >= ?`;
     params.push(minExpiries);
     const results = db.exec(sql, params);
     if (!results.length) return new Set();
     return new Set(results[0].values.map(([d]) => d));
   }
 
-  const sql = `SELECT DISTINCT date FROM ${table}${where}`;
+  const sql = `SELECT DISTINCT date FROM oi_history${where}`;
   const results = db.exec(sql, params);
   if (!results.length) return new Set();
   return new Set(results[0].values.map(([d]) => d));
 }
 
 
+
+/**
+ * Delete all OI history rows for a given month (all scrips).
+ * @param {string} month - Format 'YYYY-MM'
+ * @returns {number} Number of rows deleted
+ */
+export function deleteOiHistoryByMonth(month) {
+  if (!db) throw new Error('Database not initialised');
+
+  db.run("DELETE FROM oi_history WHERE date LIKE ? || '%'", [month]);
+  const changes = db.getRowsModified();
+  if (changes > 0) persist();
+  return changes;
+}

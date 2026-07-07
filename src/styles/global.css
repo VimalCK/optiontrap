@@ -236,6 +236,16 @@ ol {
   box-shadow: 0 2px 8px var(--accent-glow);
 }
 
+.app-btn--danger {
+  background: #ef4444;
+  color: #fff;
+}
+
+.app-btn--danger:hover:not(:disabled) {
+  background: #dc2626;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
 .app-btn--secondary {
   background: var(--card-border);
   color: var(--text-primary);

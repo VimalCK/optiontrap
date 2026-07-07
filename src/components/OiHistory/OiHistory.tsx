@@ -41,7 +41,10 @@ type RolloverPattern =
   | 'Stable'
   | '-';
 
-const SCRIP_OPTIONS = [{ value: 'NIFTY50', label: 'NIFTY 50' }];
+const SCRIP_OPTIONS = [
+  { value: 'NIFTY50', label: 'NIFTY 50' },
+  { value: 'BANKNIFTY', label: 'BANK NIFTY' },
+];
 
 /** Format a number with Indian locale (e.g. 11,400,000) */
 const formatNum = (n: number) => n.toLocaleString('en-IN');
@@ -340,6 +343,28 @@ const OiHistory: React.FC = () => {
     }
   }, [scrip, selectedMonth, loadData]);
 
+  /** Delete all OI history for the selected month (all scrips) */
+  const handleDeleteMonth = useCallback(async () => {
+    const label = monthOptions.find((m) => m.value === selectedMonth)?.label || selectedMonth;
+    if (!confirm(`Delete ALL OI history data for ${label}? This cannot be undone.`)) return;
+
+    try {
+      const res = await fetch(`/api/oi-history?month=${selectedMonth}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const json = await res.json();
+      if (json.status === 'ok') {
+        setData([]);
+        setFetchResult(`Deleted ${json.deleted} rows for ${label}`);
+      } else {
+        setFetchError(json.message || 'Failed to delete');
+      }
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Network error');
+    }
+  }, [selectedMonth, monthOptions]);
+
   /** Unique dates in the loaded data */
   const availableDates = useMemo(() => {
     return [...new Set(data.map((r) => r.date))].sort();
@@ -390,8 +415,10 @@ const OiHistory: React.FC = () => {
   const atmStrike = useMemo(() => {
     if (filteredRows.length === 0) return null;
     const spot = filteredRows[0].spotClose;
-    return Math.round(spot / 50) * 50;
-  }, [filteredRows]);
+    // Use scrip-specific step size
+    const stepSize = scrip === 'BANKNIFTY' ? 100 : 50;
+    return Math.round(spot / stepSize) * stepSize;
+  }, [filteredRows, scrip]);
 
   /** Build table data: rows = strikes, columns = expiries */
   const tableData = useMemo(() => {
@@ -449,10 +476,12 @@ const OiHistory: React.FC = () => {
     const rows = [...grid.entries()]
       .sort(([a], [b]) => a - b)
       .map(([strike, expiryMap]) => {
-        // Filter: only show strikes with >100K OI on any expiry
+        // Filter: only show strikes with significant OI on any expiry
+        // Threshold varies by scrip — BANKNIFTY has lower absolute OI than NIFTY
+        const oiThreshold = scrip === 'NIFTY50' ? 100_000 : 50_000;
         let hasSignificantOi = false;
         for (const cell of expiryMap.values()) {
-          if (cell.ceOi > 100_000 || cell.peOi > 100_000) {
+          if (cell.ceOi > oiThreshold || cell.peOi > oiThreshold) {
             hasSignificantOi = true;
             break;
           }
@@ -485,7 +514,7 @@ const OiHistory: React.FC = () => {
       }[];
 
     return rows;
-  }, [filteredRows, expiries, prevDayOi, prevDayClose]);
+  }, [filteredRows, expiries, prevDayOi, prevDayClose, scrip]);
 
   /** Chart data for selected strike across all dates */
   const chartData = useMemo(() => {
@@ -565,6 +594,15 @@ const OiHistory: React.FC = () => {
             disabled={fetching}
           >
             {fetching ? 'Fetching...' : 'Fetch'}
+          </button>
+
+          <button
+            className="app-btn app-btn--danger"
+            onClick={handleDeleteMonth}
+            disabled={fetching}
+            title={`Delete all data for ${selectedMonth}`}
+          >
+            Delete Month
           </button>
         </div>
 

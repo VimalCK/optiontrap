@@ -59,7 +59,8 @@ import {
   insertOiHistoryRows,
   getOiHistoryData,
   getOiHistoryDates,
-  getNiftyOptionsForAtm,
+  getOptionsForAtm,
+  deleteOiHistoryByMonth,
 } from './db.js';
 import { SqliteSessionStore } from './sessionStore.js';
 import { createRateLimiter } from './rateLimit.js';
@@ -586,17 +587,31 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
     const { apiKey, accessToken } = req.session.kiteSession;
     const authHeader = `token ${apiKey}:${accessToken}`;
 
-    // Step 1: Fetch NIFTY 50 index daily candles for spot close
-    send('step', { step: 1, message: 'Fetching NIFTY 50 spot data...' });
+    // Determine scrip configuration
+    // scripName = name in NFO instruments table, spotToken = index/equity token for spot price
+    const SCRIP_CONFIG = {
+      NIFTY50: { scripName: 'NIFTY', spotToken: 256265, stepSize: 50, range: 15 },
+      BANKNIFTY: { scripName: 'BANKNIFTY', spotToken: 260105, stepSize: 100, range: 15 },
+    };
 
-    const niftyToken = 256265; // NIFTY 50 index on NSE
-    const spotUrl = `https://api.kite.trade/instruments/historical/${niftyToken}/day?from=${from}&to=${to}&oi=1`;
+    const config = SCRIP_CONFIG[scrip];
+    if (!config) {
+      send('error', { message: `Unknown scrip: ${scrip}. Supported: ${Object.keys(SCRIP_CONFIG).join(', ')}` });
+      return res.end();
+    }
+
+    const { scripName, spotToken, stepSize, range } = config;
+
+    // Step 1: Fetch spot index daily candles for spot close
+    send('step', { step: 1, message: `Fetching ${scrip} spot data...` });
+
+    const spotUrl = `https://api.kite.trade/instruments/historical/${spotToken}/day?from=${from}&to=${to}&oi=1`;
     const spotRes = await fetch(spotUrl, {
       headers: { Authorization: authHeader, 'X-Kite-Version': '3' },
     });
     if (!spotRes.ok) {
       const body = await spotRes.text();
-      send('error', { message: `Failed to fetch NIFTY index candles: ${body}` });
+      send('error', { message: `Failed to fetch ${scrip} index candles: ${body}` });
       return res.end();
     }
 
@@ -608,18 +623,17 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
     }
 
     // Check which dates we already have
-    createOiHistoryTable(scrip);
+    createOiHistoryTable();
 
     // Count how many expiries exist for the target month to detect partially-fetched days
-    const sampleAtm = Math.round(spotCandles[0][4] / 50) * 50;
-    const sampleOptions = getNiftyOptionsForAtm(sampleAtm, 15, { allExpiries: true, targetMonth: targetMonth || '' });
+    const sampleAtm = Math.round(spotCandles[0][4] / stepSize) * stepSize;
+    const sampleOptions = getOptionsForAtm(scripName, sampleAtm, stepSize, range, { allExpiries: true, targetMonth: targetMonth || '' });
     const expectedExpiries = new Set(sampleOptions.map((o) => o.expiry)).size;
     const existingDates = getOiHistoryDates(scrip, from, to, Math.max(1, expectedExpiries));
 
     // Step 2: For each trading day, compute ATM — but only process new days
     send('step', { step: 2, message: `Found ${spotCandles.length} trading days. Checking existing data...` });
 
-    const stepSize = 50;
     const allDays = []; // all trading days from Kite
     const newDays = []; // days that need fetching
 
@@ -653,7 +667,7 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
     const dayTokenSets = [];
 
     for (const { date, spotClose, atm } of newDays) {
-      const options = getNiftyOptionsForAtm(atm, 15, { allExpiries: true, targetMonth: targetMonth || '' });
+      const options = getOptionsForAtm(scripName, atm, stepSize, range, { allExpiries: true, targetMonth: targetMonth || '' });
       const tokenSet = new Set();
       for (const opt of options) {
         tokenSet.add(opt.instrumentToken);
@@ -783,6 +797,25 @@ app.get('/api/oi-history', requireAuth, (req, res) => {
     res.json({ status: 'ok', data });
   } catch (err) {
     console.error('[OI History] GET error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+/**
+ * DELETE /api/oi-history?month=YYYY-MM
+ * Deletes all OI history rows for the given month (all scrips).
+ */
+app.delete('/api/oi-history', requireAuth, (req, res) => {
+  try {
+    const { month } = req.query;
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ status: 'error', message: 'month is required (format: YYYY-MM)' });
+    }
+    const deleted = deleteOiHistoryByMonth(month);
+    console.log(`[OI History] Deleted ${deleted} rows for month ${month}`);
+    res.json({ status: 'ok', deleted });
+  } catch (err) {
+    console.error('[OI History] DELETE error:', err.message);
     res.status(500).json({ status: 'error', message: err.message });
   }
 });

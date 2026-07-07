@@ -101,11 +101,13 @@ function nseFilter(cols, idx) {
 }
 
 /**
- * Filter for NFO CSV — only NIFTY options (CE/PE) and futures (FUT).
+ * Filter for NFO CSV — options (CE/PE) and futures (FUT) for supported indices.
  */
+const NFO_NAMES = new Set(['NIFTY', 'BANKNIFTY']);
+
 function nfoFilter(cols, idx) {
   const name = cols[idx.name]?.trim();
-  if (name !== 'NIFTY') return null;
+  if (!NFO_NAMES.has(name)) return null;
 
   const type = cols[idx.instrument_type]?.trim();
   if (type !== 'CE' && type !== 'PE' && type !== 'FUT') return null;
@@ -121,7 +123,7 @@ function nfoFilter(cols, idx) {
     instrumentToken: parseInt(cols[idx.instrument_token], 10),
     exchangeToken: parseInt(cols[idx.exchange_token], 10) || 0,
     tradingsymbol,
-    name: 'NIFTY',
+    name,
     exchange: 'NFO',
     instrumentType: type,
     strike,
@@ -161,7 +163,7 @@ async function fetchFromKite(apiKey, accessToken) {
     fetchAndParse('https://api.kite.trade/instruments/NFO', nfoFilter, apiKey, accessToken),
   ]);
 
-  console.log(`[Instruments] Parsed: ${nse.length} NSE stocks, ${nfo.length} NIFTY F&O`);
+  console.log(`[Instruments] Parsed: ${nse.length} NSE stocks, ${nfo.length} NFO F&O`);
 
   const combined = [...nse, ...nfo];
 
@@ -211,7 +213,7 @@ export async function getOrFetchInstruments(apiKey, accessToken) {
       console.log('[Instruments] Fetching NSE + NFO instruments from Kite...');
       const instruments = await fetchFromKite(apiKey, accessToken);
       saveInstruments(instruments, today);
-      console.log(`[Instruments] Cached ${instruments.length} instruments (NSE EQ + NIFTY F&O) for ${today}`);
+      console.log(`[Instruments] Cached ${instruments.length} instruments (NSE EQ + NFO F&O) for ${today}`);
       return instruments;
     } finally {
       fetchInFlight = null;
