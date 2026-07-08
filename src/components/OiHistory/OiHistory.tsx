@@ -437,6 +437,7 @@ const OiHistory: React.FC = () => {
       if (json.status === 'ok') {
         setData([]);
         lastFetchedRef.current = '';
+        handleFetch();
       } else {
         setFetchError(json.message || 'Failed to delete');
       }
