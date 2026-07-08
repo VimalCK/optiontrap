@@ -514,6 +514,13 @@ const OiHistory: React.FC = () => {
     return Math.round(spot / stepSize) * stepSize;
   }, [filteredRows, scrip]);
 
+  // Auto-select ATM strike to show chart on load
+  useEffect(() => {
+    if (atmStrike && selectedStrike === null) {
+      setSelectedStrike(atmStrike);
+    }
+  }, [atmStrike]);
+
   /** Build table data: rows = strikes, columns = expiries */
   const tableData = useMemo(() => {
     if (filteredRows.length === 0 || expiries.length === 0) return [];
