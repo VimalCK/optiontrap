@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import '@/styles/oihistory.css';
 
@@ -246,6 +246,7 @@ const OiHistory: React.FC = () => {
   const [scrip, setScrip] = useState('NIFTY50');
   const [selectedMonth, setSelectedMonth] = useState(currentMonthIST());
   const [fetching, setFetching] = useState(false);
+  const lastFetchedRef = useRef('');
   const [progress, setProgress] = useState<FetchProgress | null>(null);
   const [fetchResult, setFetchResult] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -348,10 +349,14 @@ const OiHistory: React.FC = () => {
                   setProgress({ step: payload.message, pct: 0, detail: '' });
                   break;
                 case 'progress':
-                  setProgress({
-                    step: 'Fetching OI data...',
-                    pct: payload.pct,
-                    detail: `${payload.done}/${payload.total} instruments (batch ${payload.batch}/${payload.totalBatches})`,
+                  setProgress((prev) => {
+                    // Only move forward — prevent flickering from interleaved events
+                    if (prev && payload.pct < prev.pct) return prev;
+                    return {
+                      step: 'Fetching OI data...',
+                      pct: payload.pct,
+                      detail: `${payload.done}/${payload.total} instruments (batch ${payload.batch}/${payload.totalBatches})`,
+                    };
                   });
                   break;
                 case 'done': {
@@ -364,7 +369,7 @@ const OiHistory: React.FC = () => {
                     if (payload.uniqueTokens > 0)
                       parts.push(`${payload.uniqueTokens} instruments`);
                   }
-                  if (parts.length > 0) setFetchResult(parts.join(' \u00b7 '));
+                  if (parts.length > 0) setFetchResult(null);
                   setProgress(null);
                   break;
                 }
@@ -390,8 +395,32 @@ const OiHistory: React.FC = () => {
   }, [scrip, selectedMonth, loadData]);
 
   // Auto-fetch when scrip or month changes
+  // First loads from DB; only fetches from Kite if no data exists
   useEffect(() => {
-    handleFetch();
+    const key = `${scrip}_${selectedMonth}`;
+    if (lastFetchedRef.current === key) return;
+    lastFetchedRef.current = key;
+
+    // Load from DB first
+    (async () => {
+      setLoading(true);
+      try {
+        const { from, to } = monthRange(selectedMonth);
+        const params = new URLSearchParams({ scrip, from, to });
+        const res = await fetch(`/api/oi-history?${params}`, { credentials: 'include' });
+        const json = await res.json();
+        if (json.status === 'ok' && json.data.length > 0) {
+          setData(json.data);
+          const dates = [...new Set(json.data.map((r: OiHistoryRow) => r.date))].sort();
+          setFilterDate(dates[dates.length - 1] as string);
+          setLoading(false);
+          return; // Data exists in DB, no need to fetch from Kite
+        }
+      } catch { /* fall through to fetch */ }
+      setLoading(false);
+      // No data in DB — fetch from Kite
+      handleFetch();
+    })();
   }, [scrip, selectedMonth]);
 
   /** Delete all OI history for the selected month (all scrips) */
@@ -407,7 +436,7 @@ const OiHistory: React.FC = () => {
       const json = await res.json();
       if (json.status === 'ok') {
         setData([]);
-        setFetchResult(`Deleted ${json.deleted} rows for ${label}`);
+        lastFetchedRef.current = '';
       } else {
         setFetchError(json.message || 'Failed to delete');
       }
