@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import AppSelect from '@/components/AppSelect/AppSelect';
+import { addPosition } from '@/services/positions';
 import '@/styles/oihistory.css';
 
 interface OiHistoryRow {
@@ -447,6 +448,46 @@ const OiHistory: React.FC = () => {
     }
   }, [selectedMonth, monthOptions]);
 
+  // Toast notifications for trade feedback
+  const [toasts, setToasts] = useState<{ id: number; text: string; color: 'green' | 'red' }[]>([]);
+  const toastIdRef = useRef(0);
+  const showToast = useCallback((text: string, color: 'green' | 'red') => {
+    const id = ++toastIdRef.current;
+    setToasts((prev) => [...prev, { id, text, color }]);
+    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 2000);
+  }, []);
+
+  // Handle buy/sell from OI history cells
+  const handleTrade = useCallback(async (
+    cell: any,
+    optionType: 'CE' | 'PE',
+    side: 'BUY' | 'SELL',
+    strike: number,
+    expiry: string,
+  ) => {
+    const token = optionType === 'CE' ? cell.ceToken : cell.peToken;
+    const tradingsymbol = optionType === 'CE' ? cell.ceTradingsymbol : cell.peTradingsymbol;
+    const price = optionType === 'CE' ? cell.ceClose : cell.peClose;
+
+    if (!token || !tradingsymbol || !price) return;
+
+    try {
+      await addPosition({
+        tradingsymbol,
+        instrumentToken: token,
+        strike,
+        optionType,
+        side,
+        quantity: 1, // lot size not available in history data; user can adjust in positions
+        entryPrice: price,
+        expiry,
+      });
+      showToast(`${side} ${strike}${optionType} @ ₹${price.toFixed(2)}`, 'green');
+    } catch {
+      showToast('Failed to add position', 'red');
+    }
+  }, [showToast]);
+
   /** Unique dates in the loaded data */
   const availableDates = useMemo(() => {
     return [...new Set(data.map((r) => r.date))].sort();
@@ -537,6 +578,10 @@ const OiHistory: React.FC = () => {
       pePrevClose: number | undefined;
       ceToken: number | undefined;
       peToken: number | undefined;
+      ceTradingsymbol: string | undefined;
+      peTradingsymbol: string | undefined;
+      ceExpiry: string | undefined;
+      peExpiry: string | undefined;
     };
 
     const grid = new Map<number, Map<string, CellData>>();
@@ -554,6 +599,8 @@ const OiHistory: React.FC = () => {
           ceClose: 0, peClose: 0,
           cePrevClose: undefined, pePrevClose: undefined,
           ceToken: undefined, peToken: undefined,
+          ceTradingsymbol: undefined, peTradingsymbol: undefined,
+          ceExpiry: undefined, peExpiry: undefined,
         });
       }
       const cell = strikeMap.get(r.expiry)!;
@@ -562,12 +609,16 @@ const OiHistory: React.FC = () => {
         cell.ceOi = r.oi;
         cell.ceClose = r.close;
         cell.ceToken = r.instrumentToken;
+        cell.ceTradingsymbol = r.tradingsymbol;
+        cell.ceExpiry = r.expiry;
         cell.cePrevOi = prevDayOi.get(r.instrumentToken);
         cell.cePrevClose = prevDayClose.get(r.instrumentToken);
       } else {
         cell.peOi = r.oi;
         cell.peClose = r.close;
         cell.peToken = r.instrumentToken;
+        cell.peTradingsymbol = r.tradingsymbol;
+        cell.peExpiry = r.expiry;
         cell.pePrevOi = prevDayOi.get(r.instrumentToken);
         cell.pePrevClose = prevDayClose.get(r.instrumentToken);
       }
@@ -677,6 +728,14 @@ const OiHistory: React.FC = () => {
 
   return (
     <div className="oi-history">
+      {toasts.length > 0 && (
+        <div className="oi-history__toast-stack">
+          {toasts.map((t) => (
+            <div key={t.id} className={`oi-history__toast oi-history__toast--${t.color}`}>{t.text}</div>
+          ))}
+        </div>
+      )}
+
       {/* Controls */}
       <div className="oi-history__controls card">
         <div className="oi-history__control-row">
@@ -849,9 +908,17 @@ const OiHistory: React.FC = () => {
                         const { text, chgCls } = formatOiWithChg(cell?.ceOi || 0, cell?.cePrevOi);
                         const closePrice = cell?.ceClose || 0;
                         return (
-                          <td key={`ce-${exp}`} className={`oi-history__cell--ce ${chgCls}`}>
-                            <span className="oi-history__cell-primary">{text}</span>
-                            {closePrice > 0 && <span className="oi-history__cell-price">₹{closePrice.toFixed(closePrice < 10 ? 2 : closePrice < 100 ? 1 : 0)}</span>}
+                          <td key={`ce-${exp}`} className={`oi-history__cell--ce oi-history__cell--tradeable ${chgCls}`}>
+                            <div className="oi-history__cell-content">
+                              <span className="oi-history__cell-primary">{text}</span>
+                              {closePrice > 0 && <span className="oi-history__cell-price">₹{closePrice.toFixed(closePrice < 10 ? 2 : closePrice < 100 ? 1 : 0)}</span>}
+                            </div>
+                            {cell?.ceToken && closePrice > 0 && (
+                              <div className="oi-history__cell-actions">
+                                <button className="oi-history__action-btn oi-history__action-btn--buy" onClick={(e) => { e.stopPropagation(); handleTrade(cell!, 'CE', 'BUY', strike, exp); }}>B</button>
+                                <button className="oi-history__action-btn oi-history__action-btn--sell" onClick={(e) => { e.stopPropagation(); handleTrade(cell!, 'CE', 'SELL', strike, exp); }}>S</button>
+                              </div>
+                            )}
                           </td>
                         );
                       })}
@@ -867,9 +934,17 @@ const OiHistory: React.FC = () => {
                         const { text, chgCls } = formatOiWithChg(cell?.peOi || 0, cell?.pePrevOi);
                         const closePrice = cell?.peClose || 0;
                         return (
-                          <td key={`pe-${exp}`} className={`oi-history__cell--pe ${chgCls}`}>
-                            <span className="oi-history__cell-primary">{text}</span>
-                            {closePrice > 0 && <span className="oi-history__cell-price">₹{closePrice.toFixed(closePrice < 10 ? 2 : closePrice < 100 ? 1 : 0)}</span>}
+                          <td key={`pe-${exp}`} className={`oi-history__cell--pe oi-history__cell--tradeable ${chgCls}`}>
+                            <div className="oi-history__cell-content">
+                              <span className="oi-history__cell-primary">{text}</span>
+                              {closePrice > 0 && <span className="oi-history__cell-price">₹{closePrice.toFixed(closePrice < 10 ? 2 : closePrice < 100 ? 1 : 0)}</span>}
+                            </div>
+                            {cell?.peToken && closePrice > 0 && (
+                              <div className="oi-history__cell-actions">
+                                <button className="oi-history__action-btn oi-history__action-btn--buy" onClick={(e) => { e.stopPropagation(); handleTrade(cell!, 'PE', 'BUY', strike, exp); }}>B</button>
+                                <button className="oi-history__action-btn oi-history__action-btn--sell" onClick={(e) => { e.stopPropagation(); handleTrade(cell!, 'PE', 'SELL', strike, exp); }}>S</button>
+                              </div>
+                            )}
                           </td>
                         );
                       })}

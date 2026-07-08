@@ -459,3 +459,85 @@
   from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+
+/* ── Trade action buttons on hover ── */
+.oi-history__cell--tradeable {
+  position: relative;
+}
+
+.oi-history__cell-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.oi-history__cell-actions {
+  display: none;
+  position: absolute;
+  inset: 0;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px;
+}
+
+.oi-history__cell--tradeable:hover .oi-history__cell-actions {
+  display: flex;
+}
+
+.oi-history__action-btn {
+  width: 20px;
+  height: 20px;
+  border: none;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.85;
+  transition: opacity 0.1s, transform 0.1s;
+}
+
+.oi-history__action-btn:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.oi-history__action-btn--buy {
+  background: #22c55e;
+  color: #fff;
+}
+
+.oi-history__action-btn--sell {
+  background: #ef4444;
+  color: #fff;
+}
+
+/* ── Toast notifications ── */
+.oi-history__toast-stack {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 10001;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.oi-history__toast {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #fff;
+  animation: slideUp 0.15s ease;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.oi-history__toast--green {
+  background: #22c55e;
+}
+
+.oi-history__toast--red {
+  background: #ef4444;
+}
