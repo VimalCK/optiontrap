@@ -59,7 +59,9 @@ const TrapInfoDetail: React.FC = () => (
 
 import { fetchQuotes, fetchPreviousDayOI } from '@/services/kiteApi';
 import {
-  fetchNiftyOptions,
+  fetchOptions,
+  fetchFnoSymbols,
+  getSpotToken,
   getExpiries,
   buildOptionChain,
   OptionInstrument,
@@ -70,9 +72,13 @@ import { tickerSubscribe, tickerUpdateTokens } from '@/services/tickerSingleton'
 import { isMarketLive } from '@/utils/marketStatus';
 import '@/styles/optionchain.css';
 
-const NIFTY_INDEX_TOKEN = 256265; // NSE:NIFTY 50
-
 const OptionChain: React.FC = () => {
+  const [selectedSymbol, setSelectedSymbol] = useState<string>('NIFTY');
+  const [symbolOptions, setSymbolOptions] = useState<{ value: string | number; label: string }[]>([
+    { value: 'NIFTY', label: 'NIFTY 50' },
+    { value: 'BANKNIFTY', label: 'BANK NIFTY' },
+  ]);
+  const [spotToken, setSpotToken] = useState<number>(256265);
   const [options, setOptions] = useState<OptionInstrument[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -82,7 +88,7 @@ const OptionChain: React.FC = () => {
   const [oiData, setOiData] = useState<Map<number, number>>(new Map());
   const [volumeData, setVolumeData] = useState<Map<number, number>>(new Map());
   const [prevDayOi, setPrevDayOi] = useState<Map<number, number>>(new Map());
-  const [niftySpot, setNiftySpot] = useState<number>(0);
+  const [spotPrice, setSpotPrice] = useState<number>(0);
   const [selectedChartStrike, setSelectedChartStrike] = useState<number | null>(null);
   const [showOiChartInfo, setShowOiChartInfo] = useState(false);
   const [showSellStrategyInfo, setShowSellStrategyInfo] = useState(false);
@@ -111,10 +117,10 @@ const OptionChain: React.FC = () => {
 
   const handleTicks = useCallback((ticks: Tick[]) => {
     // Update spot price eagerly (not a Map, no clone needed)
-    const spotTick = ticks.find((t) => t.instrumentToken === NIFTY_INDEX_TOKEN);
-    if (spotTick) setNiftySpot(spotTick.lastPrice);
+    const spotTick = ticks.find((t) => t.instrumentToken === spotToken);
+    if (spotTick) setSpotPrice(spotTick.lastPrice);
 
-    const priceTicks = ticks.filter((t) => t.instrumentToken !== NIFTY_INDEX_TOKEN);
+    const priceTicks = ticks.filter((t) => t.instrumentToken !== spotToken);
 
     setLivePrices((prev) => {
       if (priceTicks.length === 0) return prev;
@@ -146,11 +152,23 @@ const OptionChain: React.FC = () => {
       relevant.forEach((t) => next.set(t.instrumentToken, t.volume!));
       return next;
     });
+  }, [spotToken]);
+
+  // Load F&O symbols on mount
+  useEffect(() => {
+    fetchFnoSymbols().then((symbols) => {
+      const opts = symbols.map((name) => ({
+        value: name,
+        label: name === 'NIFTY' ? 'NIFTY 50' : name === 'BANKNIFTY' ? 'BANK NIFTY' : name,
+      }));
+      setSymbolOptions(opts);
+    });
   }, []);
 
+  // Load options when symbol changes
   useEffect(() => {
     loadOptions();
-  }, []);
+  }, [selectedSymbol]);
 
 
 
@@ -158,12 +176,15 @@ const OptionChain: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchNiftyOptions();
+      const data = await fetchOptions(selectedSymbol);
       setOptions(data);
       const expiries = getExpiries(data);
       if (expiries.length > 0) {
         setSelectedExpiry(expiries[0]);
       }
+      // Update spot token for the selected symbol
+      const token = getSpotToken(selectedSymbol);
+      if (token) setSpotToken(token);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load option chain';
       setError(msg);
@@ -181,12 +202,12 @@ const OptionChain: React.FC = () => {
   // Find ATM strike (closest to NIFTY spot price)
   const atmStrike = useMemo(() => {
     if (chain.length === 0) return 0;
-    if (niftySpot > 0) {
+    if (spotPrice > 0) {
       // Find strike closest to spot
       let closest = chain[0].strike;
-      let minDiff = Math.abs(chain[0].strike - niftySpot);
+      let minDiff = Math.abs(chain[0].strike - spotPrice);
       for (const row of chain) {
-        const diff = Math.abs(row.strike - niftySpot);
+        const diff = Math.abs(row.strike - spotPrice);
         if (diff < minDiff) {
           minDiff = diff;
           closest = row.strike;
@@ -197,7 +218,7 @@ const OptionChain: React.FC = () => {
     // Fallback: middle of chain
     const mid = Math.floor(chain.length / 2);
     return chain[mid].strike;
-  }, [chain, niftySpot]);
+  }, [chain, spotPrice]);
 
   // Show exactly 31 strikes centred on ATM (±15). When ATM is near an edge,
   // the window shifts rather than shrinks — count stays fixed so the table
@@ -305,7 +326,7 @@ const OptionChain: React.FC = () => {
   useEffect(() => {
     if (visibleChain.length === 0 || !isMarketLive()) return;
 
-    const tokens: number[] = [NIFTY_INDEX_TOKEN];
+    const tokens: number[] = [spotToken];
     visibleChain.forEach((row) => {
       if (row.ce) tokens.push(row.ce.instrumentToken);
       if (row.pe) tokens.push(row.pe.instrumentToken);
@@ -343,7 +364,7 @@ const OptionChain: React.FC = () => {
     const capture = async () => {
       if (!isMarketLive() || oiData.size === 0) return;
       if (await shouldTakeSnapshot()) {
-         await saveOiSnapshot(oiData, livePrices, closePrices, niftySpot || undefined, volumeData);
+         await saveOiSnapshot(oiData, livePrices, closePrices, spotPrice || undefined, volumeData);
       }
       // Recalculate velocity
       const latestSnaps = await getTodaySnapshots();
@@ -404,7 +425,14 @@ const OptionChain: React.FC = () => {
     if (quoteFetchedRef.current === fetchKey) return;
     quoteFetchedRef.current = fetchKey;
 
-    const instruments: string[] = ['NSE:NIFTY 50'];
+    // Build spot instrument key for Kite quotes API
+    const SPOT_QUOTE_KEYS: Record<string, string> = {
+      NIFTY: 'NSE:NIFTY 50',
+      BANKNIFTY: 'NSE:NIFTY BANK',
+    };
+    const spotQuoteKey = SPOT_QUOTE_KEYS[selectedSymbol] || `NSE:${selectedSymbol}`;
+
+    const instruments: string[] = [spotQuoteKey];
     strikes.forEach((row) => {
       if (row.ce) instruments.push(`NFO:${row.ce.tradingsymbol}`);
       if (row.pe) instruments.push(`NFO:${row.pe.tradingsymbol}`);
@@ -438,8 +466,8 @@ const OptionChain: React.FC = () => {
       setOiData(oiMap);
       setClosePrices(closeMap);
 
-      const niftyQuote = quotes.get('NSE:NIFTY 50');
-      if (niftyQuote) setNiftySpot(niftyQuote.last_price);
+      const spotQuote = quotes.get(spotQuoteKey);
+      if (spotQuote) setSpotPrice(spotQuote.last_price);
 
       // Log any missing instruments
       const missing: string[] = [];
@@ -449,7 +477,7 @@ const OptionChain: React.FC = () => {
       });
       if (missing.length > 0) console.warn(`[Trades] Missing quotes for: ${missing.join(', ')}`);
 
-      console.log(`[Trades] Got quotes for ${priceMap.size} options, spot: ${niftyQuote?.last_price}`);
+      console.log(`[Trades] Got quotes for ${priceMap.size} options, spot: ${spotQuote?.last_price}`);
     }).catch((err) => {
       console.error('[Trades] Failed to fetch quotes:', err);
       // Reset so it can retry
@@ -461,11 +489,11 @@ const OptionChain: React.FC = () => {
           if (latest.prices) setLivePrices(new Map(Object.entries(latest.prices).map(([k, v]) => [Number(k), v])));
           if (latest.data) setOiData(new Map(Object.entries(latest.data).map(([k, v]) => [Number(k), v])));
           if (latest.close) setClosePrices(new Map(Object.entries(latest.close).map(([k, v]) => [Number(k), v])));
-          if (latest.spot) setNiftySpot(latest.spot);
+          if (latest.spot) setSpotPrice(latest.spot);
         }
       });
     });
-  }, [chain, atmStrike, selectedExpiry]);
+  }, [chain, atmStrike, selectedExpiry, selectedSymbol]);
 
   // Helper to get live price or fallback to CSV price
   const getPrice = (instrument: OptionInstrument | null): number | null => {
@@ -510,6 +538,12 @@ const OptionChain: React.FC = () => {
       {/* Global Expiry Selector */}
       {expiries.length > 0 && (
         <div className="oc-expiry-bar">
+          <AppSelect
+            value={selectedSymbol}
+            options={symbolOptions}
+            onChange={(v) => setSelectedSymbol(String(v))}
+            searchable
+          />
           <span className="oc-expiry-bar__label">Expiry</span>
           <AppSelect
             value={selectedExpiry}
@@ -530,7 +564,7 @@ const OptionChain: React.FC = () => {
       <div className="card option-chain-card" ref={chainCardRef}>
           <div className="trap-card-header">
           <div className="trap-card-header__left">
-            <h3 className="card__title" style={{ marginBottom: 0 }}>NIFTY Option Chain</h3>
+            <h3 className="card__title" style={{ marginBottom: 0 }}>{selectedSymbol === 'NIFTY' ? 'NIFTY 50' : selectedSymbol === 'BANKNIFTY' ? 'BANK NIFTY' : selectedSymbol} Option Chain</h3>
           </div>
 
         </div>
@@ -810,7 +844,7 @@ const OptionChain: React.FC = () => {
                   ))}
                 </div>
                 {/* Expected Range Overlay */}
-                {expectedMove > 0 && niftySpot > 0 && (() => {
+                {expectedMove > 0 && spotPrice > 0 && (() => {
                   const totalStrikes = visibleChain.length;
                   if (totalStrikes < 2) return null;
                   // Find first and last strike index within expected range
@@ -818,7 +852,7 @@ const OptionChain: React.FC = () => {
                   let endIdx = -1;
                   for (let i = 0; i < totalStrikes; i++) {
                     const s = visibleChain[i].strike;
-                    if (s >= (niftySpot - expectedMove) && s <= (niftySpot + expectedMove)) {
+                    if (s >= (spotPrice - expectedMove) && s <= (spotPrice + expectedMove)) {
                       if (startIdx === -1) startIdx = i;
                       endIdx = i;
                     }
@@ -1135,7 +1169,7 @@ const OptionChain: React.FC = () => {
             prevDayOi={prevDayOi}
             closePrices={closePrices}
             snapshots={snapshots}
-            spotPrice={niftySpot}
+            spotPrice={spotPrice}
             daysToExpiry={daysToExpiry}
             atmStrike={atmStrike}
             orderMode={orderMode}

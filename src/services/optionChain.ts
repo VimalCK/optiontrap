@@ -16,29 +16,34 @@ export interface OptionChainRow {
   pe: OptionInstrument | null;
 }
 
+/** In-memory cache of all instruments to avoid re-fetching */
+let instrumentsCache: any[] | null = null;
+
 /**
- * Fetch NIFTY options from the server's shared instrument cache.
+ * Fetch options for a given symbol from the server's shared instrument cache.
  * The server fetches from Kite once per day and caches in SQLite.
  */
-export async function fetchNiftyOptions(): Promise<OptionInstrument[]> {
-  const response = await fetch('/instruments', {
-    credentials: 'include',
-  });
+export async function fetchOptions(symbol: string): Promise<OptionInstrument[]> {
+  if (!instrumentsCache) {
+    const response = await fetch('/instruments', {
+      credentials: 'include',
+    });
 
-  if (!response.ok) {
-    const text = await response.text().catch(() => '');
-    if (response.status === 403 || text.toLowerCase().includes('api_key') || text.toLowerCase().includes('access_token')) {
-      throw new Error('Session expired. Please login again from the Profile page.');
+    if (!response.ok) {
+      const text = await response.text().catch(() => '');
+      if (response.status === 403 || text.toLowerCase().includes('api_key') || text.toLowerCase().includes('access_token')) {
+        throw new Error('Session expired. Please login again from the Profile page.');
+      }
+      throw new Error('Failed to fetch instruments');
     }
-    throw new Error('Failed to fetch instruments');
+
+    const json = await response.json();
+    instrumentsCache = json.data || [];
   }
 
-  const json = await response.json();
-  const instruments: any[] = json.data || [];
-
-  // Filter for NIFTY CE/PE options only (server returns NSE EQ + NIFTY F&O)
-  return instruments
-    .filter((i: any) => i.exchange === 'NFO' && i.name === 'NIFTY' && (i.instrumentType === 'CE' || i.instrumentType === 'PE'))
+  // Filter for the given symbol's CE/PE options
+  return instrumentsCache!
+    .filter((i: any) => i.exchange === 'NFO' && i.name === symbol && (i.instrumentType === 'CE' || i.instrumentType === 'PE'))
     .map((i: any) => ({
       instrumentToken: i.instrumentToken,
       exchangeToken: i.exchangeToken,
@@ -50,6 +55,39 @@ export async function fetchNiftyOptions(): Promise<OptionInstrument[]> {
       lotSize: i.lotSize || 0,
       lastPrice: i.lastPrice || 0,
     }));
+}
+
+/**
+ * Look up the spot token for a symbol from the instruments cache.
+ * For indices, returns known tokens. For stocks, finds the NSE EQ instrument.
+ */
+export function getSpotToken(symbol: string): number | null {
+  const INDEX_TOKENS: Record<string, number> = {
+    NIFTY: 256265,
+    BANKNIFTY: 260105,
+  };
+
+  if (INDEX_TOKENS[symbol]) return INDEX_TOKENS[symbol];
+
+  if (!instrumentsCache) return null;
+  const eq = instrumentsCache.find(
+    (i: any) => i.exchange === 'NSE' && i.instrumentType === 'EQ' && i.tradingsymbol === symbol,
+  );
+  return eq ? eq.instrumentToken : null;
+}
+
+/**
+ * Fetch the list of available F&O symbols.
+ */
+export async function fetchFnoSymbols(): Promise<string[]> {
+  try {
+    const res = await fetch('/api/fno-symbols', { credentials: 'include' });
+    const json = await res.json();
+    if (json.status === 'ok' && json.data?.length > 0) {
+      return json.data;
+    }
+  } catch { /* fallback */ }
+  return ['NIFTY', 'BANKNIFTY'];
 }
 
 /**

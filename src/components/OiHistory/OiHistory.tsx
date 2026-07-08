@@ -887,7 +887,6 @@ const OiHistory: React.FC = () => {
         <div className="oi-history__chart-wrap card">
           <div className="oi-history__chart-header">
             <span className="oi-history__chart-title">Strike {selectedStrike} — Price &amp; OI History</span>
-            <button className="oi-history__chart-close" onClick={() => setSelectedStrike(null)} title="Close chart">&times;</button>
           </div>
 
           <div className="oi-history__chart-pair">
