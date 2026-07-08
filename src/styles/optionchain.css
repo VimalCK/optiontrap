@@ -23,6 +23,10 @@
   margin-left: auto;
 }
 
+.oc-expiry-bar > .app-select-trigger:first-child {
+  width: 180px;
+}
+
 /* AppSelect inside expiry bar — fixed width */
 .oc-expiry-select {
   width: 160px;

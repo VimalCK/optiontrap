@@ -424,9 +424,10 @@ const OiHistory: React.FC = () => {
   }, [scrip, selectedMonth]);
 
   /** Delete all OI history for the selected month (all scrips) */
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
   const handleDeleteMonth = useCallback(async () => {
-    const label = monthOptions.find((m) => m.value === selectedMonth)?.label || selectedMonth;
-    if (!confirm(`Delete ALL OI history data for ${label}? This cannot be undone.`)) return;
+    setConfirmDelete(false);
 
     try {
       const res = await fetch(`/api/oi-history?month=${selectedMonth}`, {
@@ -697,7 +698,7 @@ const OiHistory: React.FC = () => {
 
           <button
             className="app-btn app-btn--danger app-btn--icon"
-            onClick={handleDeleteMonth}
+            onClick={() => setConfirmDelete(true)}
             disabled={fetching}
             title={`Delete all data for ${selectedMonth}`}
             style={{ marginLeft: 'auto' }}
@@ -1096,6 +1097,22 @@ const OiHistory: React.FC = () => {
         <div className="oi-history__empty card">
           Select a month and click <strong>Fetch</strong> to download multi-expiry OI data.
           Already-fetched days are skipped automatically.
+        </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      {confirmDelete && (
+        <div className="oi-confirm-overlay" onClick={() => setConfirmDelete(false)}>
+          <div className="oi-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <h4 className="oi-confirm-modal__title">Delete Month Data</h4>
+            <p className="oi-confirm-modal__text">
+              Delete ALL OI history data for <strong>{monthOptions.find((m) => m.value === selectedMonth)?.label || selectedMonth}</strong>? This cannot be undone.
+            </p>
+            <div className="oi-confirm-modal__actions">
+              <button className="app-btn app-btn--secondary" onClick={() => setConfirmDelete(false)}>Cancel</button>
+              <button className="app-btn app-btn--danger" onClick={handleDeleteMonth}>Delete</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

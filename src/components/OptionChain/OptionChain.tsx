@@ -562,12 +562,6 @@ const OptionChain: React.FC = () => {
 
       {/* Option Chain Card */}
       <div className="card option-chain-card" ref={chainCardRef}>
-          <div className="trap-card-header">
-          <div className="trap-card-header__left">
-            <h3 className="card__title" style={{ marginBottom: 0 }}>{selectedSymbol === 'NIFTY' ? 'NIFTY 50' : selectedSymbol === 'BANKNIFTY' ? 'BANK NIFTY' : selectedSymbol} Option Chain</h3>
-          </div>
-
-        </div>
 
         {loading && (
           <div className="holdings-loading">
@@ -1074,9 +1068,9 @@ const OptionChain: React.FC = () => {
               })}
             </div>
             <div className="oc-chart__strike-labels">
-              {visibleChain.map((row) => (
+              {visibleChain.map((row, idx) => (
                 <span key={row.strike} className="oc-chart__strike-labels-item">
-                  {row.strike % 100 === 0 ? row.strike : ''}
+                  {idx % 2 === 0 ? row.strike : ''}
                 </span>
               ))}
             </div>

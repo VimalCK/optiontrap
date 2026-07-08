@@ -9,9 +9,9 @@ type AnalyticsTab = 'analyzer' | 'journal' | 'winloss' | 'history';
 
 const TABS: { id: AnalyticsTab; label: string }[] = [
   { id: 'analyzer', label: 'Option Analyzer' },
+  { id: 'history',  label: 'OI History'       },
   { id: 'journal',  label: 'Trade Journal'   },
   { id: 'winloss',  label: 'Win/Loss Patterns'},
-  { id: 'history',  label: 'OI History'       },
 ];
 
 const Analytics: React.FC = () => {
