@@ -557,7 +557,7 @@ const OiHistory: React.FC = () => {
 
   // Auto-select ATM strike to show chart on load
   useEffect(() => {
-    if (atmStrike && selectedStrike === null) {
+    if (atmStrike) {
       setSelectedStrike(atmStrike);
     }
   }, [atmStrike]);
@@ -734,87 +734,6 @@ const OiHistory: React.FC = () => {
     expiries.forEach((exp, i) => map.set(exp, palette[i % palette.length]));
     return map;
   }, [expiries]);
-
-  /** Compute per-day pattern for the selected strike (for chart dominant indicator) */
-  const chartPatterns = useMemo(() => {
-    if (!chartData || !selectedStrike) return null;
-
-    const { dates, dateMap } = chartData;
-    type DaySignal = 'bullish' | 'bearish' | 'neutral';
-
-    const classify = (oiToday: number, oiYesterday: number, priceToday: number, priceYesterday: number): DaySignal => {
-      if (oiYesterday === 0 || priceYesterday === 0) return 'neutral';
-      const oiChg = (oiToday - oiYesterday) / oiYesterday;
-      const priceChg = (priceToday - priceYesterday) / priceYesterday;
-      const oiUp = oiChg > 0.02;
-      const oiDown = oiChg < -0.02;
-      const priceUp = priceChg > 0.005;
-      const priceDown = priceChg < -0.005;
-      if (oiUp && priceUp) return 'bullish';   // Long Buildup
-      if (oiUp && priceDown) return 'bearish';  // Short Buildup
-      if (oiDown && priceDown) return 'bearish'; // Long Unwinding
-      if (oiDown && priceUp) return 'bullish';   // Short Covering
-      return 'neutral';
-    };
-
-    // Compute per-day signals for CE and PE (using nearest expiry with data)
-    const computeSignals = (type: 'ce' | 'pe'): { signals: DaySignal[]; dominant: string; color: string } => {
-      const signals: DaySignal[] = [];
-      for (let i = 0; i < dates.length; i++) {
-        if (i === 0) { signals.push('neutral'); continue; }
-        const today = dateMap.get(dates[i]);
-        const yesterday = dateMap.get(dates[i - 1]);
-        if (!today || !yesterday) { signals.push('neutral'); continue; }
-
-        // Aggregate across expiries for this type
-        let todayOi = 0, yesterdayOi = 0, todayPrice = 0, yesterdayPrice = 0, count = 0;
-        for (const exp of expiries) {
-          const t = today.get(exp);
-          const y = yesterday.get(exp);
-          if (t && y) {
-            const tOi = type === 'ce' ? t.ceOi : t.peOi;
-            const yOi = type === 'ce' ? y.ceOi : y.peOi;
-            const tP = type === 'ce' ? t.ceClose : t.peClose;
-            const yP = type === 'ce' ? y.ceClose : y.peClose;
-            if (tOi > 0 && yOi > 0 && tP > 0 && yP > 0) {
-              todayOi += tOi; yesterdayOi += yOi;
-              todayPrice += tP; yesterdayPrice += yP;
-              count++;
-            }
-          }
-        }
-        if (count === 0) { signals.push('neutral'); continue; }
-        signals.push(classify(todayOi, yesterdayOi, todayPrice / count, yesterdayPrice / count));
-      }
-
-      // Recency-weighted scoring: recent days matter more
-      // Most recent = 3x, second most = 2x, older = 1x
-      const scoredSignals = signals.slice(1); // exclude first day (always neutral)
-      let bullishScore = 0;
-      let bearishScore = 0;
-      let totalWeight = 0;
-      const len = scoredSignals.length;
-      for (let i = 0; i < len; i++) {
-        const weight = i === len - 1 ? 3 : i === len - 2 ? 2 : 1;
-        totalWeight += weight;
-        if (scoredSignals[i] === 'bullish') bullishScore += weight;
-        else if (scoredSignals[i] === 'bearish') bearishScore += weight;
-      }
-
-      const bullish = signals.filter((s) => s === 'bullish').length;
-      const bearish = signals.filter((s) => s === 'bearish').length;
-      let dominant: string;
-      let color: string;
-      if (totalWeight === 0) { dominant = 'No data'; color = 'var(--text-secondary)'; }
-      else if (bearishScore / totalWeight >= 0.5) { dominant = `Dominant Short (${bearish}S)`; color = '#ef4444'; }
-      else if (bullishScore / totalWeight >= 0.5) { dominant = `Dominant Long (${bullish}L)`; color = '#22c55e'; }
-      else { dominant = `Contested (${bullish}L / ${bearish}S)`; color = 'var(--text-secondary)'; }
-
-      return { signals, dominant, color };
-    };
-
-    return { ce: computeSignals('ce'), pe: computeSignals('pe') };
-  }, [chartData, selectedStrike, expiries]);
 
   return (
     <div className="oi-history">
@@ -993,7 +912,7 @@ const OiHistory: React.FC = () => {
                     <tr
                       key={strike}
                       className={`${isAtm ? 'oi-history__row--atm' : ''} ${selectedStrike === strike ? 'oi-history__row--selected' : ''} ${dimmed ? 'oi-history__row--dimmed' : ''}`}
-                      onClick={() => setSelectedStrike(selectedStrike === strike ? null : strike)}
+                      onClick={() => setSelectedStrike(strike)}
                     >
                       {/* CE Pattern */}
                       <td
@@ -1101,17 +1020,7 @@ const OiHistory: React.FC = () => {
 
               return (
                 <div className="oi-history__chart-panel">
-                  {chartPatterns && (
-                    <div className="oi-history__chart-dominant">
-                      <span className="oi-history__chart-dominant-label">CE</span>
-                      <span className="oi-history__chart-dominant-text" style={{ color: chartPatterns.ce.color }}>{chartPatterns.ce.dominant}</span>
-                      <span className="oi-history__chart-dots">
-                        {chartPatterns.ce.signals.slice(1).map((s, i) => (
-                          <span key={i} className={`oi-history__chart-dot oi-history__chart-dot--${s}`} />
-                        ))}
-                      </span>
-                    </div>
-                  )}
+                  <div className="oi-history__chart-label">CE</div>
                   <svg viewBox={`0 0 ${W} ${H}`} className="oi-history__chart-svg">
                     {/* Grid lines */}
                     {[0.25, 0.5, 0.75].map((frac) => (
@@ -1206,17 +1115,7 @@ const OiHistory: React.FC = () => {
 
               return (
                 <div className="oi-history__chart-panel">
-                  {chartPatterns && (
-                    <div className="oi-history__chart-dominant">
-                      <span className="oi-history__chart-dominant-label oi-history__chart-dominant-label--pe">PE</span>
-                      <span className="oi-history__chart-dominant-text" style={{ color: chartPatterns.pe.color }}>{chartPatterns.pe.dominant}</span>
-                      <span className="oi-history__chart-dots">
-                        {chartPatterns.pe.signals.slice(1).map((s, i) => (
-                          <span key={i} className={`oi-history__chart-dot oi-history__chart-dot--${s}`} />
-                        ))}
-                      </span>
-                    </div>
-                  )}
+                  <div className="oi-history__chart-label oi-history__chart-label--pe">PE</div>
                   <svg viewBox={`0 0 ${W} ${H}`} className="oi-history__chart-svg">
                     {[0.25, 0.5, 0.75].map((frac) => (
                       <line key={frac} x1={PAD_L} x2={W - PAD_R} y1={PAD_T + plotH * (1 - frac)} y2={PAD_T + plotH * (1 - frac)} stroke="var(--card-border)" strokeWidth="0.5" />
