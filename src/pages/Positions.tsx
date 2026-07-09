@@ -127,6 +127,7 @@ const PaperPositions: React.FC = () => {
                       <span className="positions-table__name">{pos.tradingsymbol.replace(/\d.*/,'')}</span>
                       <span className="positions-table__strike">{pos.strike}</span>
                       <span className={`positions-table__type positions-table__type--${pos.optionType.toLowerCase()}`}>{pos.optionType}</span>
+                      <span className="positions-table__expiry">{new Date(pos.expiry).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
                     </span>
                   </td>
                   <td><span className={`positions-table__side positions-table__side--${pos.side.toLowerCase()}`}>{pos.side}</span></td>

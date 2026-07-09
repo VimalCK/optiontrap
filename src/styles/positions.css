@@ -66,6 +66,11 @@
   table-layout: fixed;
 }
 
+.positions-table th:first-child,
+.positions-table td:first-child {
+  width: 25%;
+}
+
 .positions-table th {
   position: sticky;
   top: 0;
@@ -82,7 +87,7 @@
 }
 
 .positions-table td {
-  padding: 10px 12px;
+  padding: 10px 8px;
   font-size: 13px;
   color: var(--text-primary);
   border-bottom: 1px solid var(--card-border);
@@ -98,6 +103,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
 }
 
 .positions-table__strike {
@@ -121,10 +127,15 @@
   color: #ef4444;
 }
 
-.positions-table__side {
+.positions-table__expiry {
   font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.positions-table__side {
+  font-size: 10px;
   font-weight: 600;
-  padding: 2px 6px;
+  padding: 2px 4px;
   border-radius: 3px;
 }
 
