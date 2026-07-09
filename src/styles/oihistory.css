@@ -390,6 +390,57 @@
   color: var(--red, #ef4444);
 }
 
+/* Dominant pattern indicator */
+.oi-history__chart-dominant {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.oi-history__chart-dominant-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: #22c55e;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.oi-history__chart-dominant-label--pe {
+  color: #ef4444;
+}
+
+.oi-history__chart-dominant-text {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.oi-history__chart-dots {
+  display: flex;
+  gap: 3px;
+  margin-left: auto;
+}
+
+.oi-history__chart-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.oi-history__chart-dot--bullish {
+  background: #22c55e;
+}
+
+.oi-history__chart-dot--bearish {
+  background: #ef4444;
+}
+
+.oi-history__chart-dot--neutral {
+  background: var(--text-secondary);
+  opacity: 0.4;
+}
+
 .oi-history__chart-svg {
   width: 100%;
   height: auto;

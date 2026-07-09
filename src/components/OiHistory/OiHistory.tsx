@@ -258,6 +258,10 @@ const OiHistory: React.FC = () => {
   const [showPatternInfo, setShowPatternInfo] = useState(false);
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [scripOptions, setScripOptions] = useState(DEFAULT_SCRIP_OPTIONS);
+  const [strikeRange, setStrikeRange] = useState<number>(() => {
+    const stored = localStorage.getItem('optiontrap_strike_range');
+    return stored ? parseInt(stored, 10) : 10;
+  });
 
   const monthOptions = useMemo(() => buildMonthOptions(), []);
 
@@ -539,22 +543,17 @@ const OiHistory: React.FC = () => {
   const atmStrike = useMemo(() => {
     if (filteredRows.length === 0) return null;
     const spot = filteredRows[0].spotClose;
-    // Derive step size from actual strike gaps in the data
+    // Find the closest strike to spot price from the actual data
     const strikes = [...new Set(filteredRows.filter((r) => r.strike).map((r) => r.strike as number))].sort((a, b) => a - b);
-    let stepSize = 50; // default
-    if (strikes.length >= 2) {
-      const gaps = new Map<number, number>();
-      for (let i = 1; i < Math.min(strikes.length, 20); i++) {
-        const gap = Math.round(strikes[i] - strikes[i - 1]);
-        if (gap > 0) gaps.set(gap, (gaps.get(gap) || 0) + 1);
-      }
-      let bestCount = 0;
-      for (const [gap, count] of gaps) {
-        if (count > bestCount) { stepSize = gap; bestCount = count; }
-      }
+    if (strikes.length === 0) return null;
+    let closest = strikes[0];
+    let minDiff = Math.abs(strikes[0] - spot);
+    for (const s of strikes) {
+      const diff = Math.abs(s - spot);
+      if (diff < minDiff) { minDiff = diff; closest = s; }
     }
-    return Math.round(spot / stepSize) * stepSize;
-  }, [filteredRows, scrip]);
+    return closest;
+  }, [filteredRows]);
 
   // Auto-select ATM strike to show chart on load
   useEffect(() => {
@@ -675,17 +674,17 @@ const OiHistory: React.FC = () => {
         dimmed: boolean;
       }[];
 
-    // Limit to 20 strikes above and below ATM
-    if (atmStrike && rows.length > 0) {
+    // Limit strikes around ATM based on selected range
+    if (strikeRange > 0 && atmStrike && rows.length > 0) {
       const atmIdx = rows.findIndex((r) => r.strike >= atmStrike);
       const center = atmIdx >= 0 ? atmIdx : Math.floor(rows.length / 2);
-      const start = Math.max(0, center - 20);
-      const end = Math.min(rows.length, center + 21);
+      const start = Math.max(0, center - strikeRange);
+      const end = Math.min(rows.length, center + strikeRange + 1);
       return rows.slice(start, end);
     }
 
     return rows;
-  }, [filteredRows, expiries, prevDayOi, prevDayClose, scrip, atmStrike]);
+  }, [filteredRows, expiries, prevDayOi, prevDayClose, scrip, atmStrike, strikeRange]);
 
   /** Chart data for selected strike across all dates */
   const chartData = useMemo(() => {
@@ -736,6 +735,87 @@ const OiHistory: React.FC = () => {
     return map;
   }, [expiries]);
 
+  /** Compute per-day pattern for the selected strike (for chart dominant indicator) */
+  const chartPatterns = useMemo(() => {
+    if (!chartData || !selectedStrike) return null;
+
+    const { dates, dateMap } = chartData;
+    type DaySignal = 'bullish' | 'bearish' | 'neutral';
+
+    const classify = (oiToday: number, oiYesterday: number, priceToday: number, priceYesterday: number): DaySignal => {
+      if (oiYesterday === 0 || priceYesterday === 0) return 'neutral';
+      const oiChg = (oiToday - oiYesterday) / oiYesterday;
+      const priceChg = (priceToday - priceYesterday) / priceYesterday;
+      const oiUp = oiChg > 0.02;
+      const oiDown = oiChg < -0.02;
+      const priceUp = priceChg > 0.005;
+      const priceDown = priceChg < -0.005;
+      if (oiUp && priceUp) return 'bullish';   // Long Buildup
+      if (oiUp && priceDown) return 'bearish';  // Short Buildup
+      if (oiDown && priceDown) return 'bearish'; // Long Unwinding
+      if (oiDown && priceUp) return 'bullish';   // Short Covering
+      return 'neutral';
+    };
+
+    // Compute per-day signals for CE and PE (using nearest expiry with data)
+    const computeSignals = (type: 'ce' | 'pe'): { signals: DaySignal[]; dominant: string; color: string } => {
+      const signals: DaySignal[] = [];
+      for (let i = 0; i < dates.length; i++) {
+        if (i === 0) { signals.push('neutral'); continue; }
+        const today = dateMap.get(dates[i]);
+        const yesterday = dateMap.get(dates[i - 1]);
+        if (!today || !yesterday) { signals.push('neutral'); continue; }
+
+        // Aggregate across expiries for this type
+        let todayOi = 0, yesterdayOi = 0, todayPrice = 0, yesterdayPrice = 0, count = 0;
+        for (const exp of expiries) {
+          const t = today.get(exp);
+          const y = yesterday.get(exp);
+          if (t && y) {
+            const tOi = type === 'ce' ? t.ceOi : t.peOi;
+            const yOi = type === 'ce' ? y.ceOi : y.peOi;
+            const tP = type === 'ce' ? t.ceClose : t.peClose;
+            const yP = type === 'ce' ? y.ceClose : y.peClose;
+            if (tOi > 0 && yOi > 0 && tP > 0 && yP > 0) {
+              todayOi += tOi; yesterdayOi += yOi;
+              todayPrice += tP; yesterdayPrice += yP;
+              count++;
+            }
+          }
+        }
+        if (count === 0) { signals.push('neutral'); continue; }
+        signals.push(classify(todayOi, yesterdayOi, todayPrice / count, yesterdayPrice / count));
+      }
+
+      // Recency-weighted scoring: recent days matter more
+      // Most recent = 3x, second most = 2x, older = 1x
+      const scoredSignals = signals.slice(1); // exclude first day (always neutral)
+      let bullishScore = 0;
+      let bearishScore = 0;
+      let totalWeight = 0;
+      const len = scoredSignals.length;
+      for (let i = 0; i < len; i++) {
+        const weight = i === len - 1 ? 3 : i === len - 2 ? 2 : 1;
+        totalWeight += weight;
+        if (scoredSignals[i] === 'bullish') bullishScore += weight;
+        else if (scoredSignals[i] === 'bearish') bearishScore += weight;
+      }
+
+      const bullish = signals.filter((s) => s === 'bullish').length;
+      const bearish = signals.filter((s) => s === 'bearish').length;
+      let dominant: string;
+      let color: string;
+      if (totalWeight === 0) { dominant = 'No data'; color = 'var(--text-secondary)'; }
+      else if (bearishScore / totalWeight >= 0.5) { dominant = `Dominant Short (${bearish}S)`; color = '#ef4444'; }
+      else if (bullishScore / totalWeight >= 0.5) { dominant = `Dominant Long (${bullish}L)`; color = '#22c55e'; }
+      else { dominant = `Contested (${bullish}L / ${bearish}S)`; color = 'var(--text-secondary)'; }
+
+      return { signals, dominant, color };
+    };
+
+    return { ce: computeSignals('ce'), pe: computeSignals('pe') };
+  }, [chartData, selectedStrike, expiries]);
+
   return (
     <div className="oi-history">
       {toasts.length > 0 && (
@@ -765,6 +845,17 @@ const OiHistory: React.FC = () => {
               onChange={(v) => setSelectedMonth(String(v))}
             />
           </label>
+
+          <AppSelect
+            value={strikeRange}
+            options={[
+              { value: 5, label: '5' },
+              { value: 10, label: '10' },
+              { value: 20, label: '20' },
+              { value: 0, label: 'All' },
+            ]}
+            onChange={(v) => { const val = Number(v); setStrikeRange(val); localStorage.setItem('optiontrap_strike_range', String(val)); }}
+          />
 
           <button className="app-btn app-btn--icon" onClick={() => setShowPatternInfo(!showPatternInfo)} title="Pattern definitions">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1010,7 +1101,17 @@ const OiHistory: React.FC = () => {
 
               return (
                 <div className="oi-history__chart-panel">
-                  <div className="oi-history__chart-label">CE</div>
+                  {chartPatterns && (
+                    <div className="oi-history__chart-dominant">
+                      <span className="oi-history__chart-dominant-label">CE</span>
+                      <span className="oi-history__chart-dominant-text" style={{ color: chartPatterns.ce.color }}>{chartPatterns.ce.dominant}</span>
+                      <span className="oi-history__chart-dots">
+                        {chartPatterns.ce.signals.slice(1).map((s, i) => (
+                          <span key={i} className={`oi-history__chart-dot oi-history__chart-dot--${s}`} />
+                        ))}
+                      </span>
+                    </div>
+                  )}
                   <svg viewBox={`0 0 ${W} ${H}`} className="oi-history__chart-svg">
                     {/* Grid lines */}
                     {[0.25, 0.5, 0.75].map((frac) => (
@@ -1105,7 +1206,17 @@ const OiHistory: React.FC = () => {
 
               return (
                 <div className="oi-history__chart-panel">
-                  <div className="oi-history__chart-label oi-history__chart-label--pe">PE</div>
+                  {chartPatterns && (
+                    <div className="oi-history__chart-dominant">
+                      <span className="oi-history__chart-dominant-label oi-history__chart-dominant-label--pe">PE</span>
+                      <span className="oi-history__chart-dominant-text" style={{ color: chartPatterns.pe.color }}>{chartPatterns.pe.dominant}</span>
+                      <span className="oi-history__chart-dots">
+                        {chartPatterns.pe.signals.slice(1).map((s, i) => (
+                          <span key={i} className={`oi-history__chart-dot oi-history__chart-dot--${s}`} />
+                        ))}
+                      </span>
+                    </div>
+                  )}
                   <svg viewBox={`0 0 ${W} ${H}`} className="oi-history__chart-svg">
                     {[0.25, 0.5, 0.75].map((frac) => (
                       <line key={frac} x1={PAD_L} x2={W - PAD_R} y1={PAD_T + plotH * (1 - frac)} y2={PAD_T + plotH * (1 - frac)} stroke="var(--card-border)" strokeWidth="0.5" />
