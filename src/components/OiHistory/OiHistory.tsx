@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { addPosition } from '@/services/positions';
+import { getLotSize } from '@/services/optionChain';
 import '@/styles/oihistory.css';
 
 interface OiHistoryRow {
@@ -478,7 +479,7 @@ const OiHistory: React.FC = () => {
         strike,
         optionType,
         side,
-        quantity: 1, // lot size not available in history data; user can adjust in positions
+        quantity: getLotSize(token),
         entryPrice: price,
         expiry,
       });
@@ -674,8 +675,17 @@ const OiHistory: React.FC = () => {
         dimmed: boolean;
       }[];
 
+    // Limit to 20 strikes above and below ATM
+    if (atmStrike && rows.length > 0) {
+      const atmIdx = rows.findIndex((r) => r.strike >= atmStrike);
+      const center = atmIdx >= 0 ? atmIdx : Math.floor(rows.length / 2);
+      const start = Math.max(0, center - 20);
+      const end = Math.min(rows.length, center + 21);
+      return rows.slice(start, end);
+    }
+
     return rows;
-  }, [filteredRows, expiries, prevDayOi, prevDayClose, scrip]);
+  }, [filteredRows, expiries, prevDayOi, prevDayClose, scrip, atmStrike]);
 
   /** Chart data for selected strike across all dates */
   const chartData = useMemo(() => {

@@ -124,6 +124,7 @@ const PaperPositions: React.FC = () => {
                 <tr key={pos.id} className={pos.exited ? 'positions-table__row--exited' : ''}>
                   <td>
                     <span className="positions-table__instrument">
+                      <span className="positions-table__name">{pos.tradingsymbol.replace(/\d.*/,'')}</span>
                       <span className="positions-table__strike">{pos.strike}</span>
                       <span className={`positions-table__type positions-table__type--${pos.optionType.toLowerCase()}`}>{pos.optionType}</span>
                     </span>

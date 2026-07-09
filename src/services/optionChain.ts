@@ -77,6 +77,15 @@ export function getSpotToken(symbol: string): number | null {
 }
 
 /**
+ * Look up the lot size for an instrument token from the cache.
+ */
+export function getLotSize(instrumentToken: number): number {
+  if (!instrumentsCache) return 1;
+  const inst = instrumentsCache.find((i: any) => i.instrumentToken === instrumentToken);
+  return inst?.lotSize || 1;
+}
+
+/**
  * Fetch the list of available F&O symbols.
  */
 export async function fetchFnoSymbols(): Promise<string[]> {

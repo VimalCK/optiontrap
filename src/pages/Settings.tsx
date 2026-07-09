@@ -1,12 +1,10 @@
 import React, { useState } from 'react';
-import { useTheme } from '@/context/ThemeContext';
 import { SettingsIcon } from '@/components/icons/Icons';
 import '@/styles/settings.css';
 
 const TRADING_MODE_KEY = 'optiontrap_order_mode';
 
 const Settings: React.FC = () => {
-  const { theme, setTheme } = useTheme();
   const [tradingMode, setTradingMode] = useState<'paper' | 'live'>(() =>
     (localStorage.getItem(TRADING_MODE_KEY) as 'paper' | 'live') || 'paper'
   );
@@ -37,45 +35,6 @@ const Settings: React.FC = () => {
           >
             <span className="settings-mode-btn__dot" />
             Live
-          </button>
-        </div>
-      </div>
-
-      <div className="settings-section">
-        <h2 className="settings-section__title">Appearance</h2>
-        <p className="settings-section__description">
-          Choose your preferred color theme
-        </p>
-
-        <div className="theme-switcher">
-          <button
-            className={`theme-option ${theme === 'dark' ? 'active' : ''}`}
-            onClick={() => setTheme('dark')}
-            aria-pressed={theme === 'dark'}
-          >
-            <div className="theme-option__preview theme-option__preview--dark">
-              <div className="theme-preview__sidebar" />
-              <div className="theme-preview__content">
-                <div className="theme-preview__line" />
-                <div className="theme-preview__line theme-preview__line--short" />
-              </div>
-            </div>
-            <span className="theme-option__label">Dark</span>
-          </button>
-
-          <button
-            className={`theme-option ${theme === 'light' ? 'active' : ''}`}
-            onClick={() => setTheme('light')}
-            aria-pressed={theme === 'light'}
-          >
-            <div className="theme-option__preview theme-option__preview--light">
-              <div className="theme-preview__sidebar" />
-              <div className="theme-preview__content">
-                <div className="theme-preview__line" />
-                <div className="theme-preview__line theme-preview__line--short" />
-              </div>
-            </div>
-            <span className="theme-option__label">Light</span>
           </button>
         </div>
       </div>

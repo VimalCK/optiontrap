@@ -288,14 +288,6 @@
   outline-offset: -1px;
 }
 
-[data-theme='light'] .oi-history__table tbody tr:hover {
-  background: rgba(0, 0, 0, 0.03);
-}
-
-[data-theme='light'] .oi-history__row--selected {
-  background: rgba(99, 102, 241, 0.08) !important;
-}
-
 /* ── Chart ── */
 
 .oi-history__chart-wrap {
