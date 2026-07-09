@@ -105,16 +105,21 @@
 }
 
 .oi-history__date-btn {
-  padding: 4px 10px;
+  width: 30px;
+  height: 30px;
+  padding: 0;
   font-size: 11px;
   font-weight: 500;
   font-family: inherit;
   color: var(--text-secondary);
   background: var(--bg-secondary);
   border: 1px solid var(--card-border);
-  border-radius: 4px;
+  border-radius: 50%;
   cursor: pointer;
   transition: all 0.12s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .oi-history__date-btn:hover {

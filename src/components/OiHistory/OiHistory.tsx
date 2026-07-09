@@ -861,7 +861,7 @@ const OiHistory: React.FC = () => {
               className={`oi-history__date-btn ${filterDate === d ? 'oi-history__date-btn--active' : ''}`}
               onClick={() => setFilterDate(d)}
             >
-              {d.slice(5)}
+              {d.slice(8)}
             </button>
           ))}
         </div>
