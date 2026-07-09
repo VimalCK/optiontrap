@@ -151,6 +151,48 @@
   margin: 0;
 }
 
+/* Accent Picker */
+.settings-accent-picker {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.settings-accent-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border: 2px solid var(--card-border);
+  border-radius: 8px;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+
+.settings-accent-btn:hover {
+  border-color: var(--swatch-color);
+}
+
+.settings-accent-btn--active {
+  border-color: var(--swatch-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--swatch-color) 30%, transparent);
+}
+
+.settings-accent-btn__swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--swatch-color);
+}
+
+.settings-accent-btn__label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
 /* Settings Link */
 .settings-link {
   color: var(--accent);

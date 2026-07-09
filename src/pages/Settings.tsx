@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
+import { useTheme, ACCENT_THEMES, AccentTheme } from '@/context/ThemeContext';
+import AppSelect from '@/components/AppSelect/AppSelect';
 import { SettingsIcon } from '@/components/icons/Icons';
 import '@/styles/settings.css';
 
 const TRADING_MODE_KEY = 'optiontrap_order_mode';
 
 const Settings: React.FC = () => {
+  const { accent, setAccent } = useTheme();
   const [tradingMode, setTradingMode] = useState<'paper' | 'live'>(() =>
     (localStorage.getItem(TRADING_MODE_KEY) as 'paper' | 'live') || 'paper'
   );
@@ -36,6 +39,27 @@ const Settings: React.FC = () => {
             <span className="settings-mode-btn__dot" />
             Live
           </button>
+        </div>
+      </div>
+
+      <div className="settings-section">
+        <h2 className="settings-section__title">Accent Color</h2>
+        <p className="settings-section__description">
+          Choose your accent color for the app
+        </p>
+        <div className="settings-accent-picker">
+          {ACCENT_THEMES.map((t) => (
+            <button
+              key={t.id}
+              className={`settings-accent-btn ${accent === t.id ? 'settings-accent-btn--active' : ''}`}
+              style={{ '--swatch-color': t.color } as React.CSSProperties}
+              onClick={() => setAccent(t.id)}
+              title={t.label}
+            >
+              <span className="settings-accent-btn__swatch" />
+              <span className="settings-accent-btn__label">{t.label}</span>
+            </button>
+          ))}
         </div>
       </div>
 
