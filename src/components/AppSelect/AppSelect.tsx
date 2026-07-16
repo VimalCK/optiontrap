@@ -38,6 +38,7 @@ const AppSelect: React.FC<AppSelectProps> = ({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const selectedRef = useRef<HTMLDivElement>(null);
 
   const selectedLabel = options.find((o) => o.value === value)?.label ?? placeholder;
 
@@ -75,6 +76,8 @@ const AppSelect: React.FC<AppSelectProps> = ({
     if (searchable) {
       setTimeout(() => searchInputRef.current?.focus(), 10);
     }
+    // Scroll selected option into view when dropdown opens
+    setTimeout(() => selectedRef.current?.scrollIntoView({ block: 'nearest' }), 0);
   };
 
   // Close on outside click
@@ -118,8 +121,11 @@ const AppSelect: React.FC<AppSelectProps> = ({
     if (e.key === 'Escape') { setOpen(false); return; }
     if (e.key === 'Enter') {
       if (!open) { handleOpen(); return; }
-      // Select first filtered option on Enter
-      if (searchable && filteredOptions.length > 0) {
+      // Select the currently highlighted option (the one matching `value`)
+      const current = filteredOptions.find((o) => o.value === value);
+      if (current) {
+        handleSelect(current.value);
+      } else if (filteredOptions.length > 0) {
         handleSelect(filteredOptions[0].value);
       }
       return;
@@ -130,12 +136,18 @@ const AppSelect: React.FC<AppSelectProps> = ({
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       const next = filteredOptions[Math.min(currentIdx + 1, filteredOptions.length - 1)];
-      if (next) onChange(next.value);
+      if (next) {
+        onChange(next.value);
+        setTimeout(() => selectedRef.current?.scrollIntoView({ block: 'nearest' }), 0);
+      }
     }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
       const prev = filteredOptions[Math.max(currentIdx - 1, 0)];
-      if (prev) onChange(prev.value);
+      if (prev) {
+        onChange(prev.value);
+        setTimeout(() => selectedRef.current?.scrollIntoView({ block: 'nearest' }), 0);
+      }
     }
   };
 
@@ -187,6 +199,7 @@ const AppSelect: React.FC<AppSelectProps> = ({
             {filteredOptions.map((opt) => (
               <div
                 key={opt.value}
+                ref={opt.value === value ? selectedRef : null}
                 role="option"
                 aria-selected={opt.value === value}
                 className={`app-select-option ${opt.value === value ? 'app-select-option--selected' : ''}`}

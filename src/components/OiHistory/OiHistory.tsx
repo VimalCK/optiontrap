@@ -400,8 +400,8 @@ const OiHistory: React.FC = () => {
     }
   }, [scrip, selectedMonth, loadData]);
 
-  // Auto-fetch when scrip or month changes
-  // First loads from DB; only fetches from Kite if no data exists
+  // When scrip or month changes, load existing data from the DB only.
+  // Fetching fresh data from Kite is an explicit action via the Fetch button.
   useEffect(() => {
     const key = `${scrip}_${selectedMonth}`;
     if (lastFetchedRef.current === key) return;
@@ -411,28 +411,11 @@ const OiHistory: React.FC = () => {
     setData([]);
     setSelectedStrike(null);
     setFilterDate('');
+    setFetchResult(null);
+    setFetchError(null);
 
-    // Load from DB first
-    (async () => {
-      setLoading(true);
-      try {
-        const { from, to } = monthRange(selectedMonth);
-        const params = new URLSearchParams({ scrip, from, to });
-        const res = await fetch(`/api/oi-history?${params}`, { credentials: 'include' });
-        const json = await res.json();
-        if (json.status === 'ok' && json.data.length > 0) {
-          setData(json.data);
-          const dates = [...new Set(json.data.map((r: OiHistoryRow) => r.date))].sort();
-          setFilterDate(dates[dates.length - 1] as string);
-          setLoading(false);
-          return; // Data exists in DB, no need to fetch from Kite
-        }
-      } catch { /* fall through to fetch */ }
-      setLoading(false);
-      // No data in DB — fetch from Kite
-      handleFetch();
-    })();
-  }, [scrip, selectedMonth]);
+    loadData();
+  }, [scrip, selectedMonth, loadData]);
 
   /** Delete all OI history for the selected month (all scrips) */
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -449,14 +432,15 @@ const OiHistory: React.FC = () => {
       if (json.status === 'ok') {
         setData([]);
         lastFetchedRef.current = '';
-        handleFetch();
+        setSelectedStrike(null);
+        setFilterDate('');
       } else {
         setFetchError(json.message || 'Failed to delete');
       }
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Network error');
     }
-  }, [selectedMonth, monthOptions, handleFetch]);
+  }, [selectedMonth]);
 
   // Toast notifications for trade feedback
   const [toasts, setToasts] = useState<{ id: number; text: string; color: 'green' | 'red' }[]>([]);
@@ -783,10 +767,13 @@ const OiHistory: React.FC = () => {
             onChange={(v) => { const val = Number(v); setStrikeRange(val); localStorage.setItem('optiontrap_strike_range', String(val)); }}
           />
 
-          <button className="app-btn app-btn--icon" onClick={() => setShowPatternInfo(!showPatternInfo)} title="Pattern definitions">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
-            </svg>
+          <button
+            className="app-btn app-btn--primary"
+            onClick={handleFetch}
+            disabled={fetching}
+            title={`Fetch ${scrip} data for ${selectedMonth} from Kite`}
+          >
+            {fetching ? 'Fetching…' : 'Fetch'}
           </button>
 
           <button
@@ -794,10 +781,20 @@ const OiHistory: React.FC = () => {
             onClick={() => setConfirmDelete(true)}
             disabled={fetching}
             title={`Delete all data for ${selectedMonth}`}
-            style={{ marginLeft: 'auto' }}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+          </button>
+
+          <button
+            className="app-btn app-btn--icon"
+            onClick={() => setShowPatternInfo(!showPatternInfo)}
+            title="Pattern definitions"
+            style={{ marginLeft: 'auto' }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
             </svg>
           </button>
         </div>
