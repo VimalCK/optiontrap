@@ -1052,7 +1052,7 @@ const OiHistory: React.FC = () => {
                         <polyline points={points} fill="none" stroke={expiryColors.get(exp)} strokeWidth="1.2" strokeLinejoin="round" />
                         {pts.map((p, k) => (
                           <g key={k}>
-                            <circle cx={p.x} cy={p.y} r="1.5" fill={expiryColors.get(exp)} />
+                            <circle cx={p.x} cy={p.y} r={p.date === filterDate ? 3.5 : 1.5} fill={expiryColors.get(exp)} stroke={p.date === filterDate ? '#fff' : 'none'} strokeWidth={p.date === filterDate ? 0.8 : 0} />
                             <text x={p.x} y={p.y - 4} textAnchor="middle" fontSize="4" fill={expiryColors.get(exp)}>
                               ₹{p.price < 10 ? p.price.toFixed(1) : Math.round(p.price)}
                             </text>
@@ -1060,6 +1060,28 @@ const OiHistory: React.FC = () => {
                         ))}
                       </g>
                     ))}
+
+                    {/* Average price line */}
+                    {(() => {
+                      const allPrices = priceLines.flatMap((l) => l.pts.map((p) => p.price));
+                      if (allPrices.length === 0) return null;
+                      const avg = allPrices.reduce((s, v) => s + v, 0) / allPrices.length;
+                      const avgY = PAD_T + plotH - (avg / safeMaxPrice) * plotH;
+                      return (
+                        <g>
+                          <line x1={PAD_L} y1={avgY} x2={W - PAD_R} y2={avgY} stroke="var(--text-secondary)" strokeWidth="0.5" strokeDasharray="3,2" opacity="0.6" />
+                          <text x={PAD_L - 4} y={avgY + 2} textAnchor="end" fontSize="5" fill="var(--text-secondary)" opacity="0.7">avg</text>
+                        </g>
+                      );
+                    })()}
+
+                    {/* Selected date vertical highlight */}
+                    {(() => {
+                      const dateIdx = dates.indexOf(filterDate);
+                      if (dateIdx < 0) return null;
+                      const x = PAD_L + (dateIdx + 0.5) * (plotW / n);
+                      return <line x1={x} y1={PAD_T} x2={x} y2={PAD_T + plotH} stroke="var(--accent)" strokeWidth="0.7" strokeDasharray="2,2" opacity="0.5" />;
+                    })()}
 
                     {/* Left axis labels (price) */}
                     {[0, 0.5, 1].map((frac) => (
@@ -1145,7 +1167,7 @@ const OiHistory: React.FC = () => {
                         <polyline points={points} fill="none" stroke={expiryColors.get(exp)} strokeWidth="1.2" strokeLinejoin="round" />
                         {pts.map((p, k) => (
                           <g key={k}>
-                            <circle cx={p.x} cy={p.y} r="1.5" fill={expiryColors.get(exp)} />
+                            <circle cx={p.x} cy={p.y} r={p.date === filterDate ? 3.5 : 1.5} fill={expiryColors.get(exp)} stroke={p.date === filterDate ? '#fff' : 'none'} strokeWidth={p.date === filterDate ? 0.8 : 0} />
                             <text x={p.x} y={p.y - 4} textAnchor="middle" fontSize="4" fill={expiryColors.get(exp)}>
                               ₹{p.price < 10 ? p.price.toFixed(1) : Math.round(p.price)}
                             </text>
@@ -1153,6 +1175,28 @@ const OiHistory: React.FC = () => {
                         ))}
                       </g>
                     ))}
+
+                    {/* Average price line */}
+                    {(() => {
+                      const allPrices = priceLines.flatMap((l) => l.pts.map((p) => p.price));
+                      if (allPrices.length === 0) return null;
+                      const avg = allPrices.reduce((s, v) => s + v, 0) / allPrices.length;
+                      const avgY = PAD_T + plotH - (avg / safeMaxPrice) * plotH;
+                      return (
+                        <g>
+                          <line x1={PAD_L} y1={avgY} x2={W - PAD_R} y2={avgY} stroke="var(--text-secondary)" strokeWidth="0.5" strokeDasharray="3,2" opacity="0.6" />
+                          <text x={PAD_L - 4} y={avgY + 2} textAnchor="end" fontSize="5" fill="var(--text-secondary)" opacity="0.7">avg</text>
+                        </g>
+                      );
+                    })()}
+
+                    {/* Selected date vertical highlight */}
+                    {(() => {
+                      const dateIdx = dates.indexOf(filterDate);
+                      if (dateIdx < 0) return null;
+                      const x = PAD_L + (dateIdx + 0.5) * (plotW / n);
+                      return <line x1={x} y1={PAD_T} x2={x} y2={PAD_T + plotH} stroke="var(--accent)" strokeWidth="0.7" strokeDasharray="2,2" opacity="0.5" />;
+                    })()}
 
                     {[0, 0.5, 1].map((frac) => (
                       <text key={frac} x={PAD_L - 4} y={PAD_T + plotH * (1 - frac) + 3} textAnchor="end" fontSize="6" fill="var(--text-secondary)">
