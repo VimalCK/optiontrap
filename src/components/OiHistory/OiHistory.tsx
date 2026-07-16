@@ -1075,6 +1075,37 @@ const OiHistory: React.FC = () => {
                       );
                     })()}
 
+                    {/* Deepest deviation lines from average (one above, one below) */}
+                    {(() => {
+                      const allPts = priceLines.flatMap((l) => l.pts);
+                      if (allPts.length === 0) return null;
+                      const avg = allPts.reduce((s, p) => s + p.price, 0) / allPts.length;
+                      const avgY = PAD_T + plotH - (avg / safeMaxPrice) * plotH;
+                      let maxAbove: any = null;
+                      let maxBelow: any = null;
+                      let maxAboveDev = 0;
+                      let maxBelowDev = 0;
+                      for (const p of allPts) {
+                        const dev = p.price - avg;
+                        if (dev > 0 && dev > maxAboveDev) { maxAboveDev = dev; maxAbove = p; }
+                        if (dev < 0 && Math.abs(dev) > maxBelowDev) { maxBelowDev = Math.abs(dev); maxBelow = p; }
+                      }
+                      const abovePct = avg > 0 ? Math.round((maxAboveDev / avg) * 100) : 0;
+                      const belowPct = avg > 0 ? Math.round((maxBelowDev / avg) * 100) : 0;
+                      return (
+                        <g>
+                          {maxAbove && <>
+                            <line x1={maxAbove.x} y1={avgY} x2={maxAbove.x} y2={maxAbove.y} stroke="var(--accent)" strokeWidth="0.8" opacity="0.6" />
+                            <text x={maxAbove.x + 3} y={(avgY + maxAbove.y) / 2 + 2} fontSize="5" fill="var(--accent)" opacity="0.8">+{abovePct}%</text>
+                          </>}
+                          {maxBelow && <>
+                            <line x1={maxBelow.x} y1={avgY} x2={maxBelow.x} y2={maxBelow.y} stroke="var(--accent)" strokeWidth="0.8" opacity="0.6" />
+                            <text x={maxBelow.x + 3} y={(avgY + maxBelow.y) / 2 + 2} fontSize="5" fill="var(--accent)" opacity="0.8">-{belowPct}%</text>
+                          </>}
+                        </g>
+                      );
+                    })()}
+
                     {/* Selected date vertical highlight */}
                     {(() => {
                       const dateIdx = dates.indexOf(filterDate);
@@ -1186,6 +1217,37 @@ const OiHistory: React.FC = () => {
                         <g>
                           <line x1={PAD_L} y1={avgY} x2={W - PAD_R} y2={avgY} stroke="var(--text-secondary)" strokeWidth="0.5" strokeDasharray="3,2" opacity="0.6" />
                           <text x={PAD_L - 4} y={avgY + 2} textAnchor="end" fontSize="5" fill="var(--text-secondary)" opacity="0.7">avg</text>
+                        </g>
+                      );
+                    })()}
+
+                    {/* Deepest deviation lines from average (one above, one below) */}
+                    {(() => {
+                      const allPts = priceLines.flatMap((l) => l.pts);
+                      if (allPts.length === 0) return null;
+                      const avg = allPts.reduce((s, p) => s + p.price, 0) / allPts.length;
+                      const avgY = PAD_T + plotH - (avg / safeMaxPrice) * plotH;
+                      let maxAbove = null;
+                      let maxBelow = null;
+                      let maxAboveDev = 0;
+                      let maxBelowDev = 0;
+                      for (const p of allPts) {
+                        const dev = p.price - avg;
+                        if (dev > 0 && dev > maxAboveDev) { maxAboveDev = dev; maxAbove = p; }
+                        if (dev < 0 && Math.abs(dev) > maxBelowDev) { maxBelowDev = Math.abs(dev); maxBelow = p; }
+                      }
+                      const abovePct = avg > 0 ? Math.round((maxAboveDev / avg) * 100) : 0;
+                      const belowPct = avg > 0 ? Math.round((maxBelowDev / avg) * 100) : 0;
+                      return (
+                        <g>
+                          {maxAbove && <>
+                            <line x1={maxAbove.x} y1={avgY} x2={maxAbove.x} y2={maxAbove.y} stroke="var(--accent)" strokeWidth="0.8" opacity="0.6" />
+                            <text x={maxAbove.x + 3} y={(avgY + maxAbove.y) / 2 + 2} fontSize="5" fill="var(--accent)" opacity="0.8">+{abovePct}%</text>
+                          </>}
+                          {maxBelow && <>
+                            <line x1={maxBelow.x} y1={avgY} x2={maxBelow.x} y2={maxBelow.y} stroke="var(--accent)" strokeWidth="0.8" opacity="0.6" />
+                            <text x={maxBelow.x + 3} y={(avgY + maxBelow.y) / 2 + 2} fontSize="5" fill="var(--accent)" opacity="0.8">-{belowPct}%</text>
+                          </>}
                         </g>
                       );
                     })()}
