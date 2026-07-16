@@ -407,6 +407,11 @@ const OiHistory: React.FC = () => {
     if (lastFetchedRef.current === key) return;
     lastFetchedRef.current = key;
 
+    // Clear old data immediately so stale content isn't shown
+    setData([]);
+    setSelectedStrike(null);
+    setFilterDate('');
+
     // Load from DB first
     (async () => {
       setLoading(true);
@@ -754,6 +759,7 @@ const OiHistory: React.FC = () => {
               options={scripOptions}
               onChange={(v) => setScrip(String(v))}
               searchable
+              disabled={fetching}
             />
           </label>
 
@@ -762,6 +768,7 @@ const OiHistory: React.FC = () => {
               value={selectedMonth}
               options={monthOptions}
               onChange={(v) => setSelectedMonth(String(v))}
+              disabled={fetching}
             />
           </label>
 
@@ -874,6 +881,14 @@ const OiHistory: React.FC = () => {
               {d.slice(8)}
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Loading indicator */}
+      {(loading || fetching) && data.length === 0 && (
+        <div className="card oi-history__loading-card">
+          <div className="oi-history__loading-spinner" />
+          <span className="oi-history__loading-text">Loading data...</span>
         </div>
       )}
 

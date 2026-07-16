@@ -20,6 +20,7 @@ interface AppSelectProps {
   className?: string;
   placeholder?: string;
   searchable?: boolean;
+  disabled?: boolean;
 }
 
 const AppSelect: React.FC<AppSelectProps> = ({
@@ -29,6 +30,7 @@ const AppSelect: React.FC<AppSelectProps> = ({
   className = '',
   placeholder = 'Select...',
   searchable = false,
+  disabled = false,
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -66,6 +68,7 @@ const AppSelect: React.FC<AppSelectProps> = ({
   }, [filteredOptions.length, searchable]);
 
   const handleOpen = () => {
+    if (disabled) return;
     setSearch('');
     positionDropdown();
     setOpen(true);
@@ -141,8 +144,8 @@ const AppSelect: React.FC<AppSelectProps> = ({
       <button
         ref={triggerRef}
         type="button"
-        className={`app-select-trigger ${open ? 'app-select-trigger--open' : ''} ${className}`}
-        onClick={() => open ? setOpen(false) : handleOpen()}
+        className={`app-select-trigger ${open ? 'app-select-trigger--open' : ''} ${disabled ? 'app-select-trigger--disabled' : ''} ${className}`}
+        onClick={() => { if (disabled) return; open ? setOpen(false) : handleOpen(); }}
         onKeyDown={!searchable ? handleKeyDown : undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
