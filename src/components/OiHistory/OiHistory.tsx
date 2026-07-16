@@ -86,18 +86,10 @@ function currentMonthIST(): string {
   return `${y}-${m}`;
 }
 
-/** Build month options: current month + 2 previous months */
-function buildMonthOptions(): { value: string; label: string }[] {
-  const now = new Date();
-  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const options: { value: string; label: string }[] = [];
-  for (let i = 0; i < 3; i++) {
-    const d = new Date(ist.getFullYear(), ist.getMonth() - i, 1);
-    const val = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-    const label = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    options.push({ value: val, label });
-  }
-  return options;
+/** Format a month string (YYYY-MM) to label (e.g., "July 2026") */
+function formatMonthLabel(month: string): string {
+  const [y, m] = month.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
 
 /** Get first and last day of a month as YYYY-MM-DD */
@@ -258,12 +250,35 @@ const OiHistory: React.FC = () => {
   const [showPatternInfo, setShowPatternInfo] = useState(false);
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [scripOptions, setScripOptions] = useState(DEFAULT_SCRIP_OPTIONS);
+  const [monthOptions, setMonthOptions] = useState<{ value: string; label: string }[]>(() => {
+    const current = currentMonthIST();
+    return [{ value: current, label: formatMonthLabel(current) }];
+  });
   const [strikeRange, setStrikeRange] = useState<number>(() => {
     const stored = localStorage.getItem('optiontrap_strike_range');
     return stored ? parseInt(stored, 10) : 10;
   });
 
-  const monthOptions = useMemo(() => buildMonthOptions(), []);
+  // Fetch available months for the selected scrip from DB
+  useEffect(() => {
+    const current = currentMonthIST();
+    fetch(`/api/oi-history/months?scrip=${scrip}`, { credentials: 'include' })
+      .then((res) => res.json())
+      .then((json) => {
+        if (json.status === 'ok') {
+          const months: string[] = json.months || [];
+          // Ensure current month is always included
+          if (!months.includes(current)) {
+            months.unshift(current);
+          }
+          setMonthOptions(months.map((m) => ({ value: m, label: formatMonthLabel(m) })));
+        }
+      })
+      .catch(() => {
+        // Fallback to just current month
+        setMonthOptions([{ value: current, label: formatMonthLabel(current) }]);
+      });
+  }, [scrip]);
 
   // Fetch available F&O symbols on mount
   useEffect(() => {

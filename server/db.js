@@ -1191,6 +1191,18 @@ export function getOiHistoryDates(scrip, fromDate, toDate, minExpiries = 0) {
   return new Set(results[0].values.map(([d]) => d));
 }
 
+/**
+ * Get distinct months that have data for a given scrip.
+ * Returns sorted array of 'YYYY-MM' strings (newest first).
+ */
+export function getOiHistoryMonths(scrip) {
+  if (!db) throw new Error('Database not initialised');
+
+  const sql = `SELECT DISTINCT substr(date, 1, 7) as month FROM oi_history WHERE scrip = ? ORDER BY month DESC`;
+  const results = db.exec(sql, [scrip]);
+  if (!results.length) return [];
+  return results[0].values.map(([m]) => m);
+}
 
 
 /**

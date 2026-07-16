@@ -59,6 +59,7 @@ import {
   insertOiHistoryRows,
   getOiHistoryData,
   getOiHistoryDates,
+  getOiHistoryMonths,
   getOptionsForAtm,
   deleteOiHistoryByMonth,
   getFnoSymbols,
@@ -789,6 +790,24 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
     console.error('[OI History] Fetch error:', err.message);
     send('error', { message: err.message });
     res.end();
+  }
+});
+
+/**
+ * GET /api/oi-history/months?scrip=NIFTY50
+ * Returns list of months that have data for the given scrip.
+ */
+app.get('/api/oi-history/months', requireAuth, (req, res) => {
+  try {
+    const { scrip } = req.query;
+    if (!scrip) {
+      return res.status(400).json({ status: 'error', message: 'scrip is required' });
+    }
+    const months = getOiHistoryMonths(scrip);
+    res.json({ status: 'ok', months });
+  } catch (err) {
+    console.error('[OI History] Months error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
   }
 });
 
