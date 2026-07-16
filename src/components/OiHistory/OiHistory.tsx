@@ -451,7 +451,7 @@ const OiHistory: React.FC = () => {
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Network error');
     }
-  }, [selectedMonth, monthOptions]);
+  }, [selectedMonth, monthOptions, handleFetch]);
 
   // Toast notifications for trade feedback
   const [toasts, setToasts] = useState<{ id: number; text: string; color: 'green' | 'red' }[]>([]);
