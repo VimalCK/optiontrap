@@ -1102,33 +1102,53 @@ const OiHistory: React.FC = () => {
                       );
                     })()}
 
-                    {/* Deepest deviation lines from average (one above, one below) */}
+                    {/* Deviation lines for days with >20% move from average */}
                     {(() => {
                       const allPts = priceLines.flatMap((l) => l.pts);
                       if (allPts.length === 0) return null;
                       const avg = allPts.reduce((s, p) => s + p.price, 0) / allPts.length;
                       const avgY = PAD_T + plotH - (avg / safeMaxPrice) * plotH;
-                      let maxAbove: any = null;
-                      let maxBelow: any = null;
-                      let maxAboveDev = 0;
-                      let maxBelowDev = 0;
+
+                      // Group points by date, find max deviation per date
+                      const byDate = new Map<string, { above: typeof allPts[0] | null; below: typeof allPts[0] | null; abovePct: number; belowPct: number }>();
                       for (const p of allPts) {
                         const dev = p.price - avg;
-                        if (dev > 0 && dev > maxAboveDev) { maxAboveDev = dev; maxAbove = p; }
-                        if (dev < 0 && Math.abs(dev) > maxBelowDev) { maxBelowDev = Math.abs(dev); maxBelow = p; }
+                        const pct = avg > 0 ? Math.abs((dev / avg) * 100) : 0;
+                        if (!byDate.has(p.date)) {
+                          byDate.set(p.date, { above: null, below: null, abovePct: 0, belowPct: 0 });
+                        }
+                        const entry = byDate.get(p.date)!;
+                        if (dev > 0 && pct > entry.abovePct) {
+                          entry.above = p;
+                          entry.abovePct = pct;
+                        }
+                        if (dev < 0 && pct > entry.belowPct) {
+                          entry.below = p;
+                          entry.belowPct = pct;
+                        }
                       }
-                      const abovePct = avg > 0 ? Math.round((maxAboveDev / avg) * 100) : 0;
-                      const belowPct = avg > 0 ? Math.round((maxBelowDev / avg) * 100) : 0;
+
+                      // Filter to only days with >= 10% deviation
+                      const significantDays = [...byDate.entries()].filter(([, v]) => v.abovePct >= 10 || v.belowPct >= 10);
+
                       return (
                         <g>
-                          {maxAbove && <>
-                            <line x1={maxAbove.x} y1={avgY} x2={maxAbove.x} y2={maxAbove.y} stroke="var(--accent)" strokeWidth="0.8" opacity="0.6" />
-                            <text x={maxAbove.x + 3} y={(avgY + maxAbove.y) / 2 + 2} fontSize="5" fill="var(--accent)" opacity="0.8">+{abovePct}%</text>
-                          </>}
-                          {maxBelow && <>
-                            <line x1={maxBelow.x} y1={avgY} x2={maxBelow.x} y2={maxBelow.y} stroke="var(--accent)" strokeWidth="0.8" opacity="0.6" />
-                            <text x={maxBelow.x + 3} y={(avgY + maxBelow.y) / 2 + 2} fontSize="5" fill="var(--accent)" opacity="0.8">-{belowPct}%</text>
-                          </>}
+                          {significantDays.map(([date, v]) => (
+                            <g key={date}>
+                              {v.above && v.abovePct >= 10 && (
+                                <>
+                                  <line x1={v.above.x} y1={avgY} x2={v.above.x} y2={v.above.y} stroke="var(--accent)" strokeWidth="0.8" opacity="0.6" />
+                                  <text x={v.above.x + 3} y={(avgY + v.above.y) / 2 + 2} fontSize="5" fill="var(--accent)" opacity="0.8">+{Math.round(v.abovePct)}%</text>
+                                </>
+                              )}
+                              {v.below && v.belowPct >= 10 && (
+                                <>
+                                  <line x1={v.below.x} y1={avgY} x2={v.below.x} y2={v.below.y} stroke="var(--accent)" strokeWidth="0.8" opacity="0.6" />
+                                  <text x={v.below.x + 3} y={(avgY + v.below.y) / 2 + 2} fontSize="5" fill="var(--accent)" opacity="0.8">-{Math.round(v.belowPct)}%</text>
+                                </>
+                              )}
+                            </g>
+                          ))}
                         </g>
                       );
                     })()}
@@ -1248,33 +1268,53 @@ const OiHistory: React.FC = () => {
                       );
                     })()}
 
-                    {/* Deepest deviation lines from average (one above, one below) */}
+                    {/* Deviation lines for days with >20% move from average */}
                     {(() => {
                       const allPts = priceLines.flatMap((l) => l.pts);
                       if (allPts.length === 0) return null;
                       const avg = allPts.reduce((s, p) => s + p.price, 0) / allPts.length;
                       const avgY = PAD_T + plotH - (avg / safeMaxPrice) * plotH;
-                      let maxAbove = null;
-                      let maxBelow = null;
-                      let maxAboveDev = 0;
-                      let maxBelowDev = 0;
+
+                      // Group points by date, find max deviation per date
+                      const byDate = new Map<string, { above: typeof allPts[0] | null; below: typeof allPts[0] | null; abovePct: number; belowPct: number }>();
                       for (const p of allPts) {
                         const dev = p.price - avg;
-                        if (dev > 0 && dev > maxAboveDev) { maxAboveDev = dev; maxAbove = p; }
-                        if (dev < 0 && Math.abs(dev) > maxBelowDev) { maxBelowDev = Math.abs(dev); maxBelow = p; }
+                        const pct = avg > 0 ? Math.abs((dev / avg) * 100) : 0;
+                        if (!byDate.has(p.date)) {
+                          byDate.set(p.date, { above: null, below: null, abovePct: 0, belowPct: 0 });
+                        }
+                        const entry = byDate.get(p.date)!;
+                        if (dev > 0 && pct > entry.abovePct) {
+                          entry.above = p;
+                          entry.abovePct = pct;
+                        }
+                        if (dev < 0 && pct > entry.belowPct) {
+                          entry.below = p;
+                          entry.belowPct = pct;
+                        }
                       }
-                      const abovePct = avg > 0 ? Math.round((maxAboveDev / avg) * 100) : 0;
-                      const belowPct = avg > 0 ? Math.round((maxBelowDev / avg) * 100) : 0;
+
+                      // Filter to only days with >= 10% deviation
+                      const significantDays = [...byDate.entries()].filter(([, v]) => v.abovePct >= 10 || v.belowPct >= 10);
+
                       return (
                         <g>
-                          {maxAbove && <>
-                            <line x1={maxAbove.x} y1={avgY} x2={maxAbove.x} y2={maxAbove.y} stroke="var(--accent)" strokeWidth="0.8" opacity="0.6" />
-                            <text x={maxAbove.x + 3} y={(avgY + maxAbove.y) / 2 + 2} fontSize="5" fill="var(--accent)" opacity="0.8">+{abovePct}%</text>
-                          </>}
-                          {maxBelow && <>
-                            <line x1={maxBelow.x} y1={avgY} x2={maxBelow.x} y2={maxBelow.y} stroke="var(--accent)" strokeWidth="0.8" opacity="0.6" />
-                            <text x={maxBelow.x + 3} y={(avgY + maxBelow.y) / 2 + 2} fontSize="5" fill="var(--accent)" opacity="0.8">-{belowPct}%</text>
-                          </>}
+                          {significantDays.map(([date, v]) => (
+                            <g key={date}>
+                              {v.above && v.abovePct >= 10 && (
+                                <>
+                                  <line x1={v.above.x} y1={avgY} x2={v.above.x} y2={v.above.y} stroke="var(--accent)" strokeWidth="0.8" opacity="0.6" />
+                                  <text x={v.above.x + 3} y={(avgY + v.above.y) / 2 + 2} fontSize="5" fill="var(--accent)" opacity="0.8">+{Math.round(v.abovePct)}%</text>
+                                </>
+                              )}
+                              {v.below && v.belowPct >= 10 && (
+                                <>
+                                  <line x1={v.below.x} y1={avgY} x2={v.below.x} y2={v.below.y} stroke="var(--accent)" strokeWidth="0.8" opacity="0.6" />
+                                  <text x={v.below.x + 3} y={(avgY + v.below.y) / 2 + 2} fontSize="5" fill="var(--accent)" opacity="0.8">-{Math.round(v.belowPct)}%</text>
+                                </>
+                              )}
+                            </g>
+                          ))}
                         </g>
                       );
                     })()}

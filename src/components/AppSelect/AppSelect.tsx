@@ -34,11 +34,12 @@ const AppSelect: React.FC<AppSelectProps> = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
+  const [highlightedIdx, setHighlightedIdx] = useState<number | null>(null);
   const [dropdownStyle, setDropdownStyle] = useState<React.CSSProperties>({});
   const triggerRef = useRef<HTMLButtonElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
-  const selectedRef = useRef<HTMLDivElement>(null);
+  const highlightedRef = useRef<HTMLDivElement>(null);
 
   const selectedLabel = options.find((o) => o.value === value)?.label ?? placeholder;
 
@@ -49,6 +50,15 @@ const AppSelect: React.FC<AppSelectProps> = ({
       o.label.toUpperCase().includes(q) || String(o.value).toUpperCase().includes(q)
     );
   }, [options, search, searchable]);
+
+  // Reset highlighted index when filtered options change
+  useEffect(() => {
+    if (!open) return;
+    setHighlightedIdx((prev) => {
+      if (prev === null || prev >= filteredOptions.length) return 0;
+      return prev;
+    });
+  }, [filteredOptions, open]);
 
   const positionDropdown = useCallback(() => {
     if (!triggerRef.current) return;
@@ -71,13 +81,15 @@ const AppSelect: React.FC<AppSelectProps> = ({
   const handleOpen = () => {
     if (disabled) return;
     setSearch('');
+    const currentIdx = options.findIndex((o) => o.value === value);
+    setHighlightedIdx(currentIdx >= 0 ? currentIdx : 0);
     positionDropdown();
     setOpen(true);
     if (searchable) {
       setTimeout(() => searchInputRef.current?.focus(), 10);
     }
-    // Scroll selected option into view when dropdown opens
-    setTimeout(() => selectedRef.current?.scrollIntoView({ block: 'nearest' }), 0);
+    // Scroll highlighted option into view when dropdown opens
+    setTimeout(() => highlightedRef.current?.scrollIntoView({ block: 'nearest' }), 0);
   };
 
   // Close on outside click
@@ -121,33 +133,29 @@ const AppSelect: React.FC<AppSelectProps> = ({
     if (e.key === 'Escape') { setOpen(false); return; }
     if (e.key === 'Enter') {
       if (!open) { handleOpen(); return; }
-      // Select the currently highlighted option (the one matching `value`)
-      const current = filteredOptions.find((o) => o.value === value);
-      if (current) {
-        handleSelect(current.value);
-      } else if (filteredOptions.length > 0) {
-        handleSelect(filteredOptions[0].value);
+      // Select the currently highlighted option
+      if (highlightedIdx !== null && filteredOptions[highlightedIdx]) {
+        handleSelect(filteredOptions[highlightedIdx].value);
       }
       return;
     }
     if (e.key === ' ' && !searchable) { open ? setOpen(false) : handleOpen(); return; }
     if (!open) return;
-    const currentIdx = filteredOptions.findIndex((o) => o.value === value);
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      const next = filteredOptions[Math.min(currentIdx + 1, filteredOptions.length - 1)];
-      if (next) {
-        onChange(next.value);
-        setTimeout(() => selectedRef.current?.scrollIntoView({ block: 'nearest' }), 0);
-      }
+      setHighlightedIdx((prev) => {
+        const next = prev === null ? 0 : Math.min(prev + 1, filteredOptions.length - 1);
+        setTimeout(() => highlightedRef.current?.scrollIntoView({ block: 'nearest' }), 0);
+        return next;
+      });
     }
     if (e.key === 'ArrowUp') {
       e.preventDefault();
-      const prev = filteredOptions[Math.max(currentIdx - 1, 0)];
-      if (prev) {
-        onChange(prev.value);
-        setTimeout(() => selectedRef.current?.scrollIntoView({ block: 'nearest' }), 0);
-      }
+      setHighlightedIdx((prev) => {
+        const next = prev === null ? 0 : Math.max(prev - 1, 0);
+        setTimeout(() => highlightedRef.current?.scrollIntoView({ block: 'nearest' }), 0);
+        return next;
+      });
     }
   };
 
@@ -196,14 +204,15 @@ const AppSelect: React.FC<AppSelectProps> = ({
             {filteredOptions.length === 0 && (
               <div className="app-select-option app-select-option--empty">No matches</div>
             )}
-            {filteredOptions.map((opt) => (
+            {filteredOptions.map((opt, idx) => (
               <div
                 key={opt.value}
-                ref={opt.value === value ? selectedRef : null}
+                ref={idx === highlightedIdx ? highlightedRef : null}
                 role="option"
                 aria-selected={opt.value === value}
-                className={`app-select-option ${opt.value === value ? 'app-select-option--selected' : ''}`}
+                className={`app-select-option ${opt.value === value ? 'app-select-option--selected' : ''} ${idx === highlightedIdx ? 'app-select-option--highlighted' : ''}`}
                 onMouseDown={(e) => { e.preventDefault(); handleSelect(opt.value); }}
+                onMouseEnter={() => setHighlightedIdx(idx)}
               >
                 {opt.value === value && (
                   <svg className="app-select-option__check" width="12" height="10" viewBox="0 0 12 10" fill="none">

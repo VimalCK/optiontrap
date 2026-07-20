@@ -1220,6 +1220,25 @@ export function deleteOiHistoryByMonth(month) {
 }
 
 /**
+ * Delete OI history rows for specific dates (for a given scrip).
+ * Used before re-fetching to ensure clean data for those dates.
+ * @param {string} scrip - Scrip name (e.g., 'NIFTY50')
+ * @param {string[]} dates - Array of 'YYYY-MM-DD' strings
+ * @returns {number} Number of rows deleted
+ */
+export function deleteOiHistoryByDates(scrip, dates) {
+  if (!db) throw new Error('Database not initialised');
+  if (!dates.length) return 0;
+
+  const placeholders = dates.map(() => '?').join(', ');
+  const sql = `DELETE FROM oi_history WHERE scrip = ? AND date IN (${placeholders})`;
+  db.run(sql, [scrip, ...dates]);
+  const changes = db.getRowsModified();
+  if (changes > 0) persist();
+  return changes;
+}
+
+/**
  * Get distinct F&O symbol names from the instruments cache.
  * Returns sorted array of names (e.g. ['BANKNIFTY', 'HDFCBANK', 'NIFTY', 'RELIANCE', ...])
  */

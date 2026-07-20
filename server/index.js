@@ -62,6 +62,7 @@ import {
   getOiHistoryMonths,
   getOptionsForAtm,
   deleteOiHistoryByMonth,
+  deleteOiHistoryByDates,
   getFnoSymbols,
   getSpotToken,
   getStrikeStepSize,
@@ -88,6 +89,16 @@ const RESET = '\x1b[0m';
 
 function ts() {
   return `${GREY}${new Date().toLocaleTimeString()}${RESET}`;
+}
+
+/** Get current date in IST as YYYY-MM-DD */
+function todayIST() {
+  const now = new Date();
+  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const y = ist.getFullYear();
+  const m = String(ist.getMonth() + 1).padStart(2, '0');
+  const d = String(ist.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 // ---------- Express App ----------
@@ -644,6 +655,7 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
     // Step 2: For each trading day, compute ATM — but only process new days
     send('step', { step: 2, message: `Found ${spotCandles.length} trading days. Checking existing data...` });
 
+    const today = todayIST();
     const allDays = []; // all trading days from Kite
     const newDays = []; // days that need fetching
 
@@ -653,7 +665,8 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
       const atm = Math.round(spotClose / stepSize) * stepSize;
       const day = { date, spotClose, atm };
       allDays.push(day);
-      if (!existingDates.has(date)) {
+      // Fetch if date is missing OR if it's today (to refresh current market data)
+      if (!existingDates.has(date) || date === today) {
         newDays.push(day);
       }
     }
@@ -773,6 +786,12 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
           spotClose,
         });
       }
+    }
+
+    // Delete existing rows for fetched dates before inserting fresh data
+    const fetchedDates = [...new Set(rows.map((r) => r.date))];
+    if (fetchedDates.length > 0) {
+      deleteOiHistoryByDates(scrip, fetchedDates);
     }
 
     const rowCount = insertOiHistoryRows(scrip, rows);
