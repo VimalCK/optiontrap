@@ -559,6 +559,8 @@ const OiHistory: React.FC = () => {
     return closest;
   }, [filteredRows]);
 
+  const selectedSpotClose = filteredRows[0]?.spotClose ?? null;
+
   // Auto-select ATM strike to show chart on load
   useEffect(() => {
     if (atmStrike) {
@@ -935,6 +937,8 @@ const OiHistory: React.FC = () => {
               <tbody>
                 {tableData.map(({ strike, cells, cePattern, pePattern, dimmed }) => {
                   const isAtm = strike === atmStrike;
+                  const isCeItm = selectedSpotClose !== null && selectedSpotClose > 0 && strike < selectedSpotClose;
+                  const isPeItm = selectedSpotClose !== null && selectedSpotClose > 0 && strike > selectedSpotClose;
                   return (
                     <tr
                       key={strike}
@@ -955,7 +959,7 @@ const OiHistory: React.FC = () => {
                         const { text, chgCls } = formatOiWithChg(cell?.ceOi || 0, cell?.cePrevOi);
                         const closePrice = cell?.ceClose || 0;
                         return (
-                          <td key={`ce-${exp}`} className={`oi-history__cell--ce oi-history__cell--tradeable ${chgCls}`}>
+                          <td key={`ce-${exp}`} className={`oi-history__cell--ce oi-history__cell--tradeable ${isCeItm ? 'oi-history__cell--itm-ce' : ''} ${chgCls}`}>
                             <div className="oi-history__cell-content">
                               <span className="oi-history__cell-primary">{text}</span>
                               {closePrice > 0 && <span className="oi-history__cell-price">₹{closePrice.toFixed(closePrice < 10 ? 2 : closePrice < 100 ? 1 : 0)}</span>}
@@ -981,7 +985,7 @@ const OiHistory: React.FC = () => {
                         const { text, chgCls } = formatOiWithChg(cell?.peOi || 0, cell?.pePrevOi);
                         const closePrice = cell?.peClose || 0;
                         return (
-                          <td key={`pe-${exp}`} className={`oi-history__cell--pe oi-history__cell--tradeable ${chgCls}`}>
+                          <td key={`pe-${exp}`} className={`oi-history__cell--pe oi-history__cell--tradeable ${isPeItm ? 'oi-history__cell--itm-pe' : ''} ${chgCls}`}>
                             <div className="oi-history__cell-content">
                               <span className="oi-history__cell-primary">{text}</span>
                               {closePrice > 0 && <span className="oi-history__cell-price">₹{closePrice.toFixed(closePrice < 10 ? 2 : closePrice < 100 ? 1 : 0)}</span>}
