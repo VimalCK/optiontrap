@@ -233,6 +233,38 @@
   color: var(--text-primary);
   background: var(--bg-secondary);
   min-width: 50px;
+  position: relative;
+  overflow: visible;
+  z-index: 2;
+}
+
+.oi-history__strike-bars {
+  position: absolute;
+  bottom: 0;
+  left: calc(-100% * var(--oi-history-expiry-count, 1));
+  right: calc(-100% * var(--oi-history-expiry-count, 1));
+  height: 3px;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.oi-history__oi-bar {
+  position: absolute;
+  bottom: 0;
+  height: 2px;
+  transition: width 0.3s ease;
+}
+
+.oi-history__oi-bar--ce {
+  right: 50%;
+  background: rgba(34, 197, 94, 0.35);
+  border-radius: 1px 0 0 1px;
+}
+
+.oi-history__oi-bar--pe {
+  left: 50%;
+  background: rgba(239, 68, 68, 0.35);
+  border-radius: 0 1px 1px 0;
 }
 
 .oi-history__cell--strike-atm {

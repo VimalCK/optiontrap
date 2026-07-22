@@ -664,12 +664,27 @@ const OiHistory: React.FC = () => {
 
         const cePattern = classifyPattern(ceByExpiry, expiries);
         const pePattern = classifyPattern(peByExpiry, expiries);
+        const weeklyExpiries = expiries.filter((exp) => !isMonthlyExpiry(exp) && expiryMap.has(exp));
+        const consolidatedExpiries = weeklyExpiries.length > 0 ? weeklyExpiries : expiries;
+        const consolidatedOi = consolidatedExpiries.reduce(
+          (total, exp) => {
+            const cell = expiryMap.get(exp);
+            if (!cell) return total;
+            return {
+              ce: total.ce + cell.ceOi,
+              pe: total.pe + cell.peOi,
+            };
+          },
+          { ce: 0, pe: 0 },
+        );
 
         return {
           strike,
           cells: expiryMap,
           cePattern,
           pePattern,
+          ceConsolidatedOi: consolidatedOi.ce,
+          peConsolidatedOi: consolidatedOi.pe,
           dimmed: !hasSignificantOi,
         };
       }) as {
@@ -677,6 +692,8 @@ const OiHistory: React.FC = () => {
         cells: Map<string, CellData>;
         cePattern: RolloverPattern;
         pePattern: RolloverPattern;
+        ceConsolidatedOi: number;
+        peConsolidatedOi: number;
         dimmed: boolean;
       }[];
 
@@ -691,6 +708,15 @@ const OiHistory: React.FC = () => {
 
     return rows;
   }, [filteredRows, expiries, prevDayOi, prevDayClose, scrip, atmStrike, strikeRange]);
+
+  const maxConsolidatedOi = useMemo(() => {
+    let max = 0;
+    for (const row of tableData) {
+      if (row.ceConsolidatedOi > max) max = row.ceConsolidatedOi;
+      if (row.peConsolidatedOi > max) max = row.peConsolidatedOi;
+    }
+    return max;
+  }, [tableData]);
 
   /** Chart data for selected strike across all dates */
   const chartData = useMemo(() => {
@@ -935,10 +961,12 @@ const OiHistory: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {tableData.map(({ strike, cells, cePattern, pePattern, dimmed }) => {
+                {tableData.map(({ strike, cells, cePattern, pePattern, ceConsolidatedOi, peConsolidatedOi, dimmed }) => {
                   const isAtm = strike === atmStrike;
                   const isCeItm = selectedSpotClose !== null && selectedSpotClose > 0 && strike < selectedSpotClose;
                   const isPeItm = selectedSpotClose !== null && selectedSpotClose > 0 && strike > selectedSpotClose;
+                  const ceBarWidth = maxConsolidatedOi > 0 ? (ceConsolidatedOi / maxConsolidatedOi) * 50 : 0;
+                  const peBarWidth = maxConsolidatedOi > 0 ? (peConsolidatedOi / maxConsolidatedOi) * 50 : 0;
                   return (
                     <tr
                       key={strike}
@@ -976,6 +1004,10 @@ const OiHistory: React.FC = () => {
 
                       {/* Strike */}
                       <td className={`oi-history__cell--strike ${isAtm ? 'oi-history__cell--strike-atm' : ''}`}>
+                        <div className="oi-history__strike-bars" style={{ '--oi-history-expiry-count': expiries.length } as React.CSSProperties}>
+                          <div className="oi-history__oi-bar oi-history__oi-bar--ce" style={{ width: `${ceBarWidth}%` }} />
+                          <div className="oi-history__oi-bar oi-history__oi-bar--pe" style={{ width: `${peBarWidth}%` }} />
+                        </div>
                         {strike}
                       </td>
 
