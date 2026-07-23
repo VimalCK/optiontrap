@@ -511,11 +511,45 @@ const OiHistory: React.FC = () => {
     return [...set].sort();
   }, [data]);
 
+  /** Dates that are weekly expiries in the selected month. */
+  const weeklyExpiryDates = useMemo(() => {
+    const knownWeeklyExpiries = expiries.filter((exp) => !isMonthlyExpiry(exp));
+    const weeklyExpiryWeekdays = new Set(
+      knownWeeklyExpiries.map((exp) => new Date(`${exp}T00:00:00`).getDay()),
+    );
+
+    const set = new Set<string>(knownWeeklyExpiries);
+    if (weeklyExpiryWeekdays.size === 0) return set;
+
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const availableDateSet = new Set(availableDates);
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month - 1, day);
+      const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      if (weeklyExpiryWeekdays.has(date.getDay()) && !isMonthlyExpiry(dateKey) && availableDateSet.has(dateKey)) {
+        set.add(dateKey);
+      }
+    }
+
+    return set;
+  }, [availableDates, expiries, selectedMonth]);
+
   /** Rows for the selected date */
   const filteredRows = useMemo(() => {
     if (!filterDate) return [];
     return data.filter((r) => r.date === filterDate);
   }, [data, filterDate]);
+
+  /** Expiries available on the selected date. Expired weekly contracts are not shown after expiry. */
+  const tableExpiries = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of filteredRows) {
+      if (r.expiry) set.add(r.expiry);
+    }
+    return [...set].sort();
+  }, [filteredRows]);
 
   /** Rows for the previous date (for OI change computation) */
   const prevDateRows = useMemo(() => {
@@ -570,7 +604,7 @@ const OiHistory: React.FC = () => {
 
   /** Build table data: rows = strikes, columns = expiries */
   const tableData = useMemo(() => {
-    if (filteredRows.length === 0 || expiries.length === 0) return [];
+    if (filteredRows.length === 0 || tableExpiries.length === 0) return [];
 
     // Index: strike → expiry → { ce, pe }
     type CellData = {
@@ -662,10 +696,10 @@ const OiHistory: React.FC = () => {
           if (cell.peOi > 0) peByExpiry.set(exp, { oi: cell.peOi, prevOi: cell.pePrevOi, close: cell.peClose, prevClose: cell.pePrevClose });
         }
 
-        const cePattern = classifyPattern(ceByExpiry, expiries);
-        const pePattern = classifyPattern(peByExpiry, expiries);
-        const weeklyExpiries = expiries.filter((exp) => !isMonthlyExpiry(exp) && expiryMap.has(exp));
-        const consolidatedExpiries = weeklyExpiries.length > 0 ? weeklyExpiries : expiries;
+        const cePattern = classifyPattern(ceByExpiry, tableExpiries);
+        const pePattern = classifyPattern(peByExpiry, tableExpiries);
+        const weeklyExpiries = tableExpiries.filter((exp) => !isMonthlyExpiry(exp) && expiryMap.has(exp));
+        const consolidatedExpiries = weeklyExpiries.length > 0 ? weeklyExpiries : tableExpiries;
         const consolidatedOi = consolidatedExpiries.reduce(
           (total, exp) => {
             const cell = expiryMap.get(exp);
@@ -707,7 +741,7 @@ const OiHistory: React.FC = () => {
     }
 
     return rows;
-  }, [filteredRows, expiries, prevDayOi, prevDayClose, scrip, atmStrike, strikeRange]);
+  }, [filteredRows, tableExpiries, prevDayOi, prevDayClose, scrip, atmStrike, strikeRange]);
 
   const maxConsolidatedOi = useMemo(() => {
     let max = 0;
@@ -912,15 +946,19 @@ const OiHistory: React.FC = () => {
       {/* Date filter */}
       {availableDates.length > 0 && (
         <div className="oi-history__date-bar">
-          {availableDates.map((d) => (
-            <button
-              key={d}
-              className={`oi-history__date-btn ${filterDate === d ? 'oi-history__date-btn--active' : ''}`}
-              onClick={() => setFilterDate(d)}
-            >
-              {d.slice(8)}
-            </button>
-          ))}
+          {availableDates.map((d) => {
+            const isWeeklyExpiry = weeklyExpiryDates.has(d);
+            return (
+              <button
+                key={d}
+                className={`oi-history__date-btn ${filterDate === d ? 'oi-history__date-btn--active' : ''} ${isWeeklyExpiry ? 'oi-history__date-btn--weekly-expiry' : ''}`}
+                onClick={() => setFilterDate(d)}
+                title={isWeeklyExpiry ? 'Weekly expiry' : undefined}
+              >
+                {d.slice(8)}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -937,7 +975,7 @@ const OiHistory: React.FC = () => {
         <div className="oi-history__table-wrap card">
           <div className="oi-history__table-header">
             <div className="oi-history__table-count">
-              {tableData.length} strikes &middot; {expiries.length} expiries
+              {tableData.length} strikes &middot; {tableExpiries.length} expiries
             </div>
           </div>
 
@@ -946,13 +984,13 @@ const OiHistory: React.FC = () => {
               <thead>
                 <tr>
                   <th className="oi-history__th-pattern">CE Pattern</th>
-                  {expiries.map((exp) => (
+                  {tableExpiries.map((exp) => (
                     <th key={`ce-${exp}`} className="oi-history__th-group oi-history__th-group--ce">
                       {expiryLabel(exp, isMonthlyExpiry(exp))}
                     </th>
                   ))}
                   <th className="oi-history__th-strike">Strike</th>
-                  {expiries.map((exp) => (
+                  {tableExpiries.map((exp) => (
                     <th key={`pe-${exp}`} className="oi-history__th-group oi-history__th-group--pe">
                       {expiryLabel(exp, isMonthlyExpiry(exp))}
                     </th>
@@ -982,7 +1020,7 @@ const OiHistory: React.FC = () => {
                       </td>
 
                       {/* CE data per expiry */}
-                      {expiries.map((exp) => {
+                      {tableExpiries.map((exp) => {
                         const cell = cells.get(exp);
                         const { text, chgCls } = formatOiWithChg(cell?.ceOi || 0, cell?.cePrevOi);
                         const closePrice = cell?.ceClose || 0;
@@ -1004,7 +1042,7 @@ const OiHistory: React.FC = () => {
 
                       {/* Strike */}
                       <td className={`oi-history__cell--strike ${isAtm ? 'oi-history__cell--strike-atm' : ''}`}>
-                        <div className="oi-history__strike-bars" style={{ '--oi-history-expiry-count': expiries.length } as React.CSSProperties}>
+                        <div className="oi-history__strike-bars" style={{ '--oi-history-expiry-count': tableExpiries.length } as React.CSSProperties}>
                           <div className="oi-history__oi-bar oi-history__oi-bar--ce" style={{ width: `${ceBarWidth}%` }} />
                           <div className="oi-history__oi-bar oi-history__oi-bar--pe" style={{ width: `${peBarWidth}%` }} />
                         </div>
@@ -1012,7 +1050,7 @@ const OiHistory: React.FC = () => {
                       </td>
 
                       {/* PE data per expiry */}
-                      {expiries.map((exp) => {
+                      {tableExpiries.map((exp) => {
                         const cell = cells.get(exp);
                         const { text, chgCls } = formatOiWithChg(cell?.peOi || 0, cell?.pePrevOi);
                         const closePrice = cell?.peClose || 0;

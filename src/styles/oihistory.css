@@ -105,6 +105,7 @@
 }
 
 .oi-history__date-btn {
+  position: relative;
   width: 30px;
   height: 30px;
   padding: 0;
@@ -127,10 +128,30 @@
   border-color: var(--text-secondary);
 }
 
+.oi-history__date-btn--weekly-expiry {
+  color: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+}
+
+.oi-history__date-btn--weekly-expiry::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
 .oi-history__date-btn--active {
   color: #fff;
   background: var(--accent);
   border-color: var(--accent);
+}
+
+.oi-history__date-btn--active.oi-history__date-btn--weekly-expiry::after {
+  background: #fff;
 }
 
 /* ── Table ── */
