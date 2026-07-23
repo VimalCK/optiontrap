@@ -129,9 +129,7 @@
 }
 
 .oi-history__date-btn--weekly-expiry {
-  color: var(--accent);
-  border-color: var(--accent);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent);
+  padding-bottom: 2px;
 }
 
 .oi-history__date-btn--weekly-expiry::after {
