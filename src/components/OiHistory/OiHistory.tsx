@@ -53,9 +53,6 @@ const DEFAULT_SCRIP_OPTIONS = [
   { value: 'BANKNIFTY', label: 'BANK NIFTY' },
 ];
 
-/** Format a number with Indian locale (e.g. 11,400,000) */
-const formatNum = (n: number) => n.toLocaleString('en-IN');
-
 /** Compact OI display: 11,400,000 → 11.4M, 850,000 → 850K */
 function formatOiCompact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -96,20 +93,23 @@ function todayIST(): string {
   return `${y}-${m}-${d}`;
 }
 
-function shiftDate(dateStr: string, deltaDays: number): string {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  date.setDate(date.getDate() + deltaDays);
-  const ny = date.getFullYear();
-  const nm = String(date.getMonth() + 1).padStart(2, '0');
-  const nd = String(date.getDate()).padStart(2, '0');
-  return `${ny}-${nm}-${nd}`;
-}
-
 /** Format a month string (YYYY-MM) to label (e.g., "July 2026") */
 function formatMonthLabel(month: string): string {
   const [y, m] = month.split('-').map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+/** Format a month string (YYYY-MM) to short label (e.g., "Jul '26") */
+function formatMonthShortLabel(month: string): string {
+  const [y, m] = month.split('-').map(Number);
+  const mon = new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'short' });
+  return `${mon} '${String(y).slice(2)}`;
+}
+
+/** Format a full date (YYYY-MM-DD) to label (e.g., "Mon, Jul 1") */
+function formatFullDateLabel(date: string): string {
+  const [y, m, d] = date.split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
 }
 
 /** Determine price direction: 'up' if price rose, 'down' if fell, null if unknown */
@@ -267,7 +267,9 @@ const OiHistory: React.FC = () => {
   });
   const [strikeRange, setStrikeRange] = useState<number>(() => {
     const stored = localStorage.getItem('optiontrap_strike_range');
-    return stored ? parseInt(stored, 10) : 10;
+    const val = stored ? parseInt(stored, 10) : 10;
+    // 0 ("All") is no longer offered — fall back to 10
+    return [5, 10, 20].includes(val) ? val : 10;
   });
 
   // Fetch available future expiry months for the selected scrip from instruments
@@ -324,7 +326,7 @@ const OiHistory: React.FC = () => {
       const params = new URLSearchParams({
         scrip,
         expiryMonth: selectedExpiryMonth,
-        from: shiftDate(todayIST(), -180),
+        from: `${todayIST().slice(0, 7)}-01`,
       });
       const res = await fetch(`/api/oi-history?${params}`, { credentials: 'include' });
       const json = await res.json();
@@ -371,62 +373,71 @@ const OiHistory: React.FC = () => {
       const decoder = new TextDecoder();
       let buffer = '';
 
+      const handleEvent = (eventType: string, dataStr: string) => {
+        if (!eventType || !dataStr) return;
+        let payload: any;
+        try {
+          payload = JSON.parse(dataStr);
+        } catch {
+          return; // ignore malformed SSE data
+        }
+        switch (eventType) {
+          case 'step':
+            setProgress({ step: payload.message, pct: 0, detail: '' });
+            break;
+          case 'progress':
+            setProgress((prev) => {
+              // Only move forward — prevent flickering from interleaved events
+              if (prev && payload.pct < prev.pct) return prev;
+              return {
+                step: 'Fetching OI data...',
+                pct: payload.pct,
+                detail: `${payload.done}/${payload.total} instruments (batch ${payload.batch}/${payload.totalBatches})`,
+              };
+            });
+            break;
+          case 'done':
+            setProgress(null);
+            break;
+          case 'error':
+            setFetchError(payload.message);
+            setProgress(null);
+            break;
+        }
+      };
+
+      // Parse complete SSE event blocks (separated by a blank line). This is
+      // robust to network chunks splitting anywhere, including between the
+      // "event:" and "data:" lines of a single message.
+      const processBlock = (block: string) => {
+        let eventType = '';
+        let dataStr = '';
+        for (const line of block.split('\n')) {
+          if (line.startsWith('event:')) {
+            eventType = line.slice(6).trim();
+          } else if (line.startsWith('data:')) {
+            dataStr += line.slice(5).replace(/^ /, '');
+          }
+        }
+        handleEvent(eventType, dataStr);
+      };
+
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
 
         buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
 
-        let eventType = '';
-        for (const line of lines) {
-          if (line.startsWith('event: ')) {
-            eventType = line.slice(7).trim();
-          } else if (line.startsWith('data: ') && eventType) {
-            try {
-              const payload = JSON.parse(line.slice(6));
-              switch (eventType) {
-                case 'step':
-                  setProgress({ step: payload.message, pct: 0, detail: '' });
-                  break;
-                case 'progress':
-                  setProgress((prev) => {
-                    // Only move forward — prevent flickering from interleaved events
-                    if (prev && payload.pct < prev.pct) return prev;
-                    return {
-                      step: 'Fetching OI data...',
-                      pct: payload.pct,
-                      detail: `${payload.done}/${payload.total} instruments (batch ${payload.batch}/${payload.totalBatches})`,
-                    };
-                  });
-                  break;
-                case 'done': {
-                  const parts: string[] = [];
-                  if (payload.message) {
-                    parts.push(payload.message);
-                  } else {
-                    if (payload.fetchedDays > 0)
-                      parts.push(`Fetched ${formatNum(payload.rowCount)} rows for ${payload.fetchedDays} new days`);
-                    if (payload.uniqueTokens > 0)
-                      parts.push(`${payload.uniqueTokens} instruments`);
-                  }
-                  if (parts.length > 0) setFetchResult(null);
-                  setProgress(null);
-                  break;
-                }
-                case 'error':
-                  setFetchError(payload.message);
-                  setProgress(null);
-                  break;
-              }
-            } catch {
-              // ignore malformed SSE data
-            }
-            eventType = '';
-          }
+        let sep: number;
+        while ((sep = buffer.indexOf('\n\n')) !== -1) {
+          const block = buffer.slice(0, sep);
+          buffer = buffer.slice(sep + 2);
+          if (block.trim()) processBlock(block);
         }
       }
+
+      // Flush any trailing complete block left without a terminating blank line
+      if (buffer.trim()) processBlock(buffer);
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Network error');
       setProgress(null);
@@ -523,6 +534,21 @@ const OiHistory: React.FC = () => {
   const availableDates = useMemo(() => {
     return [...new Set(data.map((r) => r.date))].sort();
   }, [data]);
+
+  /** Dates grouped by month (YYYY-MM) for a clearer date bar */
+  const datesByMonth = useMemo(() => {
+    const groups: { month: string; dates: string[] }[] = [];
+    let current: { month: string; dates: string[] } | null = null;
+    for (const d of availableDates) {
+      const month = d.slice(0, 7);
+      if (!current || current.month !== month) {
+        current = { month, dates: [] };
+        groups.push(current);
+      }
+      current.dates.push(d);
+    }
+    return groups;
+  }, [availableDates]);
 
   /** Unique expiries in the loaded data for the selected expiry month, sorted */
   const expiries = useMemo(() => {
@@ -776,6 +802,19 @@ const OiHistory: React.FC = () => {
     return max;
   }, [tableData]);
 
+  // When the selected strike is no longer visible in the table (e.g. after
+  // narrowing the strike range), fall back to the ATM strike if it's visible,
+  // otherwise clear the selection.
+  useEffect(() => {
+    if (selectedStrike === null) return;
+    if (tableData.some((r) => r.strike === selectedStrike)) return;
+    if (atmStrike && tableData.some((r) => r.strike === atmStrike)) {
+      setSelectedStrike(atmStrike);
+    } else {
+      setSelectedStrike(null);
+    }
+  }, [tableData, selectedStrike, atmStrike]);
+
   /** Chart data for selected strike across all dates */
   const chartData = useMemo(() => {
     if (!selectedStrike || availableDates.length === 0 || tableExpiries.length === 0) return null;
@@ -864,7 +903,6 @@ const OiHistory: React.FC = () => {
               { value: 5, label: '5' },
               { value: 10, label: '10' },
               { value: 20, label: '20' },
-              { value: 0, label: 'All' },
             ]}
             onChange={(v) => { const val = Number(v); setStrikeRange(val); localStorage.setItem('optiontrap_strike_range', String(val)); }}
           />
@@ -968,22 +1006,29 @@ const OiHistory: React.FC = () => {
         )}
       </div>
 
-      {/* Date filter */}
+      {/* Date filter — grouped by month */}
       {availableDates.length > 0 && (
         <div className="oi-history__date-bar">
-          {availableDates.map((d) => {
-            const isWeeklyExpiry = weeklyExpiryDates.has(d);
-            return (
-              <button
-                key={d}
-                className={`oi-history__date-btn ${filterDate === d ? 'oi-history__date-btn--active' : ''} ${isWeeklyExpiry ? 'oi-history__date-btn--weekly-expiry' : ''}`}
-                onClick={() => setFilterDate(d)}
-                title={isWeeklyExpiry ? 'Weekly expiry' : undefined}
-              >
-                {d.slice(8)}
-              </button>
-            );
-          })}
+          {datesByMonth.map(({ month, dates }) => (
+            <div key={month} className="oi-history__date-group">
+              <span className="oi-history__date-group-label">{formatMonthShortLabel(month)}</span>
+              <div className="oi-history__date-group-days">
+                {dates.map((d) => {
+                  const isWeeklyExpiry = weeklyExpiryDates.has(d);
+                  return (
+                    <button
+                      key={d}
+                      className={`oi-history__date-btn ${filterDate === d ? 'oi-history__date-btn--active' : ''} ${isWeeklyExpiry ? 'oi-history__date-btn--weekly-expiry' : ''}`}
+                      onClick={() => setFilterDate(d)}
+                      title={`${formatFullDateLabel(d)}${isWeeklyExpiry ? ' — Weekly expiry' : ''}`}
+                    >
+                      {Number(d.slice(8))}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 

@@ -99,15 +99,54 @@
 
 .oi-history__date-bar {
   display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 6px;
   padding: 0 4px;
+}
+
+.oi-history__date-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.oi-history__date-group-label {
+  flex: 0 0 auto;
+  width: 52px;
+  height: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: var(--card-border);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  opacity: 0.55;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.oi-history__date-group-days {
+  display: flex;
+  gap: 3px;
+  flex: 1 1 auto;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.oi-history__date-btn {
+  flex: 0 0 auto;
 }
 
 .oi-history__date-btn {
   position: relative;
-  width: 30px;
-  height: 30px;
+  width: 24px;
+  height: 24px;
   padding: 0;
   font-size: 11px;
   font-weight: 500;
@@ -135,9 +174,9 @@
 .oi-history__date-btn--weekly-expiry::after {
   content: '';
   position: absolute;
-  bottom: 4px;
-  width: 4px;
-  height: 4px;
+  bottom: 3px;
+  width: 3px;
+  height: 3px;
   border-radius: 50%;
   background: var(--accent);
 }

@@ -59,12 +59,10 @@ import {
   insertOiHistoryRows,
   getOiHistoryData,
   getOiHistoryDataByExpiryMonth,
-  getOiHistoryDatesForExpiryMonth,
   getOiHistoryExpiryMonths,
   getOptionsForAtm,
   deleteOiHistoryByMonth,
   deleteOiHistoryByExpiryMonth,
-  deleteOiHistoryByDatesForExpiryMonth,
   getFnoSymbols,
   getSpotToken,
   getStrikeStepSize,
@@ -101,16 +99,6 @@ function todayIST() {
   const m = String(ist.getMonth() + 1).padStart(2, '0');
   const d = String(ist.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
-}
-
-function shiftDateIST(dateStr, deltaDays) {
-  const [y, m, d] = dateStr.split('-').map(Number);
-  const date = new Date(y, m - 1, d);
-  date.setDate(date.getDate() + deltaDays);
-  const ny = date.getFullYear();
-  const nm = String(date.getMonth() + 1).padStart(2, '0');
-  const nd = String(date.getDate()).padStart(2, '0');
-  return `${ny}-${nm}-${nd}`;
 }
 
 // ---------- Express App ----------
@@ -616,8 +604,13 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
       return res.end();
     }
 
-    const to = todayIST();
-    const from = shiftDateIST(to, -180);
+    // Date window: from the 1st of the CURRENT month up to today (or the end
+    // of the selected expiry month, whichever is earlier). No fixed lookback.
+    const today = todayIST();
+    const from = `${today.slice(0, 7)}-01`;
+    const [ey, em] = expiryMonth.split('-').map(Number);
+    const expiryMonthEnd = `${expiryMonth}-${String(new Date(ey, em, 0).getDate()).padStart(2, '0')}`;
+    const to = today < expiryMonthEnd ? today : expiryMonthEnd;
 
     const { apiKey, accessToken } = req.session.kiteSession;
     const authHeader = `token ${apiKey}:${accessToken}`;
@@ -641,7 +634,7 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
     }
 
     const stepSize = getStrikeStepSize(scripName);
-    const range = 15;
+    const range = 20;
 
     // Step 1: Fetch spot index daily candles for spot close
     send('step', { step: 1, message: `Fetching ${scrip} spot data...` });
@@ -663,53 +656,25 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
       return res.end();
     }
 
-    // Check which dates we already have
     createOiHistoryTable();
 
-    // Count how many expiries exist for the target month to detect partially-fetched days
-    const sampleAtm = Math.round(spotCandles[0][4] / stepSize) * stepSize;
-    const sampleOptions = getOptionsForAtm(scripName, sampleAtm, stepSize, range, { allExpiries: true, targetMonth: expiryMonth });
-    const expectedExpiries = new Set(sampleOptions.map((o) => o.expiry)).size;
-    const existingDates = getOiHistoryDatesForExpiryMonth(scrip, expiryMonth, from, to, Math.max(1, expectedExpiries));
+    // Step 2: For each trading day, compute ATM. Always process ALL trading
+    // days in the window — every fetch hits Kite and upserts (no cache skip).
+    send('step', { step: 2, message: `Found ${spotCandles.length} trading days.` });
 
-    // Step 2: For each trading day, compute ATM — but only process new days
-    send('step', { step: 2, message: `Found ${spotCandles.length} trading days. Checking existing data...` });
-
-    const today = todayIST();
     const allDays = []; // all trading days from Kite
-    const newDays = []; // days that need fetching
-
     for (const candle of spotCandles) {
       const date = candle[0].slice(0, 10);
       const spotClose = candle[4];
       const atm = Math.round(spotClose / stepSize) * stepSize;
-      const day = { date, spotClose, atm };
-      allDays.push(day);
-      // Fetch if date is missing OR if it's today (to refresh current market data)
-      if (!existingDates.has(date) || date === today) {
-        newDays.push(day);
-      }
+      allDays.push({ date, spotClose, atm });
     }
 
-    const skippedDays = allDays.length - newDays.length;
-
-    if (newDays.length === 0) {
-      send('step', { step: 2, message: `All ${allDays.length} trading days already in database. Nothing to fetch.` });
-      send('done', { rowCount: 0, tradingDays: allDays.length, skippedDays, fetchedDays: 0, uniqueTokens: 0 });
-      return res.end();
-    }
-
-    if (skippedDays > 0) {
-      send('step', { step: 2, message: `${skippedDays} days already cached, fetching ${newDays.length} new days...` });
-    } else {
-      send('step', { step: 2, message: `Fetching ${newDays.length} trading days...` });
-    }
-
-    // Collect unique tokens needed across NEW days only
+    // Collect unique tokens needed across all days
     const uniqueTokens = new Map();
     const dayTokenSets = [];
 
-    for (const { date, spotClose, atm } of newDays) {
+    for (const { date, spotClose, atm } of allDays) {
       const options = getOptionsForAtm(scripName, atm, stepSize, range, { allExpiries: true, targetMonth: expiryMonth })
         .filter((opt) => opt.expiry && opt.expiry >= date);
       const tokenSet = new Set();
@@ -723,7 +688,7 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
     }
 
     if (uniqueTokens.size === 0) {
-      send('done', { rowCount: 0, tradingDays: allDays.length, skippedDays, fetchedDays: newDays.length, uniqueTokens: 0, message: 'No option instruments found. Ensure the server has loaded instruments today.' });
+      send('done', { rowCount: 0, tradingDays: allDays.length, skippedDays: 0, fetchedDays: 0, uniqueTokens: 0, message: 'No option instruments found. Ensure the server has loaded instruments today.' });
       return res.end();
     }
 
@@ -780,7 +745,7 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
       }
     }
 
-    // Step 4: Build rows (only for new days) and insert
+    // Step 4: Build rows and upsert
     send('step', { step: 4, message: 'Saving to database...' });
 
     const rows = [];
@@ -809,20 +774,16 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
       }
     }
 
-    // Delete existing rows for fetched dates before inserting fresh data
-    const fetchedDates = [...new Set(rows.map((r) => r.date))];
-    if (fetchedDates.length > 0) {
-      deleteOiHistoryByDatesForExpiryMonth(scrip, expiryMonth, fetchedDates);
-    }
-
+    // Upsert: insertOiHistoryRows uses INSERT OR REPLACE keyed on
+    // (scrip, date, instrument_token), so existing rows are overwritten.
     const rowCount = insertOiHistoryRows(scrip, rows);
-    console.log(`[OI History] Fetched ${rowCount} rows for ${scrip} (${newDays.length} new days, ${skippedDays} cached, ${uniqueTokens.size} tokens)`);
+    console.log(`[OI History] Fetched ${rowCount} rows for ${scrip} ${expiryMonth} (${allDays.length} days, ${uniqueTokens.size} tokens)`);
 
     send('done', {
       rowCount,
       tradingDays: allDays.length,
-      skippedDays,
-      fetchedDays: newDays.length,
+      skippedDays: 0,
+      fetchedDays: allDays.length,
       uniqueTokens: uniqueTokens.size,
     });
     res.end();
