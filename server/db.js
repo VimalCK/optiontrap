@@ -1101,6 +1101,50 @@ export function getOiHistoryData(scrip, fromDate, toDate) {
 }
 
 /**
+ * Get OI history rows for a specific expiry month, optionally from a start date.
+ * expiryMonth format: 'YYYY-MM'
+ */
+export function getOiHistoryDataByExpiryMonth(scrip, expiryMonth, fromDate = null) {
+  if (!db) throw new Error('Database not initialised');
+
+  let sql = `SELECT date, instrument_token, tradingsymbol, strike, option_type, expiry,
+             open, high, low, close, volume, oi, spot_close
+             FROM oi_history WHERE scrip = ? AND expiry LIKE ? || '%'`;
+  const params = [scrip, expiryMonth];
+
+  if (fromDate) {
+    sql += ' AND date >= ?';
+    params.push(fromDate);
+  }
+
+  sql += ' ORDER BY date, strike, option_type';
+
+  const results = db.exec(sql, params);
+  if (!results.length) return [];
+
+  const columns = results[0].columns;
+  return results[0].values.map((row) => {
+    const obj = {};
+    columns.forEach((col, i) => { obj[col] = row[i]; });
+    return {
+      date: obj.date,
+      instrumentToken: obj.instrument_token,
+      tradingsymbol: obj.tradingsymbol,
+      strike: obj.strike,
+      optionType: obj.option_type,
+      expiry: obj.expiry,
+      open: obj.open,
+      high: obj.high,
+      low: obj.low,
+      close: obj.close,
+      volume: obj.volume,
+      oi: obj.oi,
+      spotClose: obj.spot_close,
+    };
+  });
+}
+
+/**
  * Get option instruments for a given scrip, ATM, and range from the instruments table.
  * When allExpiries is false (default), returns only the nearest expiry.
  * When allExpiries is true, returns all expiries within the selected month
@@ -1192,6 +1236,41 @@ export function getOiHistoryDates(scrip, fromDate, toDate, minExpiries = 0) {
 }
 
 /**
+ * Get distinct dates already stored for a scrip and expiry month.
+ * Used to avoid skipping a day just because a different expiry month exists.
+ */
+export function getOiHistoryDatesForExpiryMonth(scrip, expiryMonth, fromDate, toDate, minExpiries = 0) {
+  if (!db) throw new Error('Database not initialised');
+
+  let where = " WHERE scrip = ? AND expiry LIKE ? || '%'";
+  const params = [scrip, expiryMonth];
+
+  if (fromDate && toDate) {
+    where += ' AND date >= ? AND date <= ?';
+    params.push(fromDate, toDate);
+  } else if (fromDate) {
+    where += ' AND date >= ?';
+    params.push(fromDate);
+  } else if (toDate) {
+    where += ' AND date <= ?';
+    params.push(toDate);
+  }
+
+  if (minExpiries > 0) {
+    const sql = `SELECT date, COUNT(DISTINCT expiry) as ec FROM oi_history${where} GROUP BY date HAVING ec >= ?`;
+    params.push(minExpiries);
+    const results = db.exec(sql, params);
+    if (!results.length) return new Set();
+    return new Set(results[0].values.map(([d]) => d));
+  }
+
+  const sql = `SELECT DISTINCT date FROM oi_history${where}`;
+  const results = db.exec(sql, params);
+  if (!results.length) return new Set();
+  return new Set(results[0].values.map(([d]) => d));
+}
+
+/**
  * Get distinct months that have data for a given scrip.
  * Returns sorted array of 'YYYY-MM' strings (newest first).
  */
@@ -1200,6 +1279,32 @@ export function getOiHistoryMonths(scrip) {
 
   const sql = `SELECT DISTINCT substr(date, 1, 7) as month FROM oi_history WHERE scrip = ? ORDER BY month DESC`;
   const results = db.exec(sql, [scrip]);
+  if (!results.length) return [];
+  return results[0].values.map(([m]) => m);
+}
+
+/**
+ * Get the nearest future expiry months from the current instruments cache.
+ * NSE lists 3 monthly expiries per F&O underlying, so we cap the result to
+ * the nearest `limit` months and drop far-dated (semi-annual) contracts.
+ * Returns sorted array of 'YYYY-MM' strings.
+ */
+export function getOiHistoryExpiryMonths(scrip, minExpiryDate, limit = 3) {
+  if (!db) throw new Error('Database not initialised');
+
+  const scripName = scrip === 'NIFTY50' ? 'NIFTY' : scrip;
+  const sql = `
+    SELECT DISTINCT substr(expiry, 1, 7) as month
+    FROM instruments
+    WHERE name = ?
+      AND exchange = 'NFO'
+      AND instrument_type IN ('CE', 'PE')
+      AND expiry IS NOT NULL
+      AND expiry >= ?
+    ORDER BY month
+    LIMIT ?
+  `;
+  const results = db.exec(sql, [scripName, minExpiryDate, limit]);
   if (!results.length) return [];
   return results[0].values.map(([m]) => m);
 }
@@ -1220,6 +1325,21 @@ export function deleteOiHistoryByMonth(month) {
 }
 
 /**
+ * Delete all OI history rows for a given expiry month.
+ * @param {string} scrip - Scrip name (e.g., 'NIFTY50')
+ * @param {string} expiryMonth - Format 'YYYY-MM'
+ * @returns {number} Number of rows deleted
+ */
+export function deleteOiHistoryByExpiryMonth(scrip, expiryMonth) {
+  if (!db) throw new Error('Database not initialised');
+
+  db.run("DELETE FROM oi_history WHERE scrip = ? AND expiry LIKE ? || '%'", [scrip, expiryMonth]);
+  const changes = db.getRowsModified();
+  if (changes > 0) persist();
+  return changes;
+}
+
+/**
  * Delete OI history rows for specific dates (for a given scrip).
  * Used before re-fetching to ensure clean data for those dates.
  * @param {string} scrip - Scrip name (e.g., 'NIFTY50')
@@ -1233,6 +1353,21 @@ export function deleteOiHistoryByDates(scrip, dates) {
   const placeholders = dates.map(() => '?').join(', ');
   const sql = `DELETE FROM oi_history WHERE scrip = ? AND date IN (${placeholders})`;
   db.run(sql, [scrip, ...dates]);
+  const changes = db.getRowsModified();
+  if (changes > 0) persist();
+  return changes;
+}
+
+/**
+ * Delete OI history rows for specific dates and expiry month.
+ */
+export function deleteOiHistoryByDatesForExpiryMonth(scrip, expiryMonth, dates) {
+  if (!db) throw new Error('Database not initialised');
+  if (!dates.length) return 0;
+
+  const placeholders = dates.map(() => '?').join(', ');
+  const sql = `DELETE FROM oi_history WHERE scrip = ? AND expiry LIKE ? || '%' AND date IN (${placeholders})`;
+  db.run(sql, [scrip, expiryMonth, ...dates]);
   const changes = db.getRowsModified();
   if (changes > 0) persist();
   return changes;

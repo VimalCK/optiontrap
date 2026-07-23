@@ -58,11 +58,13 @@ import {
   createOiHistoryTable,
   insertOiHistoryRows,
   getOiHistoryData,
-  getOiHistoryDates,
-  getOiHistoryMonths,
+  getOiHistoryDataByExpiryMonth,
+  getOiHistoryDatesForExpiryMonth,
+  getOiHistoryExpiryMonths,
   getOptionsForAtm,
   deleteOiHistoryByMonth,
-  deleteOiHistoryByDates,
+  deleteOiHistoryByExpiryMonth,
+  deleteOiHistoryByDatesForExpiryMonth,
   getFnoSymbols,
   getSpotToken,
   getStrikeStepSize,
@@ -99,6 +101,16 @@ function todayIST() {
   const m = String(ist.getMonth() + 1).padStart(2, '0');
   const d = String(ist.getDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+function shiftDateIST(dateStr, deltaDays) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + deltaDays);
+  const ny = date.getFullYear();
+  const nm = String(date.getMonth() + 1).padStart(2, '0');
+  const nd = String(date.getDate()).padStart(2, '0');
+  return `${ny}-${nm}-${nd}`;
 }
 
 // ---------- Express App ----------
@@ -572,7 +584,7 @@ app.delete('/api/oi-snapshots/old', requireAuth, (req, res) => {
  * POST /api/oi-history/fetch — Fetch historical daily OI candles from Kite.
  * Skips dates already stored in the database.
  * Streams progress via Server-Sent Events (SSE).
- * Body: { scrip: 'NIFTY50', from: 'YYYY-MM-DD', to: 'YYYY-MM-DD', targetMonth?: 'YYYY-MM' }
+ * Body: { scrip: 'NIFTY50', expiryMonth: 'YYYY-MM' }
  *
  * SSE events:
  *   step     — { step, message }
@@ -593,11 +605,19 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
   };
 
   try {
-    const { scrip, from, to, targetMonth } = req.body;
-    if (!scrip || !from || !to) {
-      send('error', { message: 'scrip, from, and to are required' });
+    const { scrip, expiryMonth } = req.body;
+    if (!scrip || !expiryMonth) {
+      send('error', { message: 'scrip and expiryMonth are required' });
       return res.end();
     }
+
+    if (!/^\d{4}-\d{2}$/.test(expiryMonth)) {
+      send('error', { message: 'expiryMonth must be in YYYY-MM format' });
+      return res.end();
+    }
+
+    const to = todayIST();
+    const from = shiftDateIST(to, -180);
 
     const { apiKey, accessToken } = req.session.kiteSession;
     const authHeader = `token ${apiKey}:${accessToken}`;
@@ -648,9 +668,9 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
 
     // Count how many expiries exist for the target month to detect partially-fetched days
     const sampleAtm = Math.round(spotCandles[0][4] / stepSize) * stepSize;
-    const sampleOptions = getOptionsForAtm(scripName, sampleAtm, stepSize, range, { allExpiries: true, targetMonth: targetMonth || '' });
+    const sampleOptions = getOptionsForAtm(scripName, sampleAtm, stepSize, range, { allExpiries: true, targetMonth: expiryMonth });
     const expectedExpiries = new Set(sampleOptions.map((o) => o.expiry)).size;
-    const existingDates = getOiHistoryDates(scrip, from, to, Math.max(1, expectedExpiries));
+    const existingDates = getOiHistoryDatesForExpiryMonth(scrip, expiryMonth, from, to, Math.max(1, expectedExpiries));
 
     // Step 2: For each trading day, compute ATM — but only process new days
     send('step', { step: 2, message: `Found ${spotCandles.length} trading days. Checking existing data...` });
@@ -690,7 +710,8 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
     const dayTokenSets = [];
 
     for (const { date, spotClose, atm } of newDays) {
-      const options = getOptionsForAtm(scripName, atm, stepSize, range, { allExpiries: true, targetMonth: targetMonth || '' });
+      const options = getOptionsForAtm(scripName, atm, stepSize, range, { allExpiries: true, targetMonth: expiryMonth })
+        .filter((opt) => opt.expiry && opt.expiry >= date);
       const tokenSet = new Set();
       for (const opt of options) {
         tokenSet.add(opt.instrumentToken);
@@ -791,7 +812,7 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
     // Delete existing rows for fetched dates before inserting fresh data
     const fetchedDates = [...new Set(rows.map((r) => r.date))];
     if (fetchedDates.length > 0) {
-      deleteOiHistoryByDates(scrip, fetchedDates);
+      deleteOiHistoryByDatesForExpiryMonth(scrip, expiryMonth, fetchedDates);
     }
 
     const rowCount = insertOiHistoryRows(scrip, rows);
@@ -813,32 +834,40 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
 });
 
 /**
- * GET /api/oi-history/months?scrip=NIFTY50
- * Returns list of months that have data for the given scrip.
+ * GET /api/oi-history/expiry-months?scrip=NIFTY50
+ * Returns list of future expiry months available in current instruments.
  */
-app.get('/api/oi-history/months', requireAuth, (req, res) => {
+app.get('/api/oi-history/expiry-months', requireAuth, async (req, res) => {
   try {
     const { scrip } = req.query;
     if (!scrip) {
       return res.status(400).json({ status: 'error', message: 'scrip is required' });
     }
-    const months = getOiHistoryMonths(scrip);
+
+    const { apiKey, accessToken } = req.session.kiteSession;
+    await getOrFetchInstruments(apiKey, accessToken);
+
+    const months = getOiHistoryExpiryMonths(scrip, todayIST());
     res.json({ status: 'ok', months });
   } catch (err) {
-    console.error('[OI History] Months error:', err.message);
+    console.error('[OI History] Expiry months error:', err.message);
     res.status(500).json({ status: 'error', message: err.message });
   }
 });
 
 /**
- * GET /api/oi-history?scrip=NIFTY50&from=YYYY-MM-DD&to=YYYY-MM-DD
- * Returns stored OI history data.
+ * GET /api/oi-history?scrip=NIFTY50&expiryMonth=YYYY-MM
+ * Returns stored OI history data for the selected expiry month.
  */
 app.get('/api/oi-history', requireAuth, (req, res) => {
   try {
-    const { scrip, from, to } = req.query;
+    const { scrip, from, to, expiryMonth } = req.query;
     if (!scrip) {
       return res.status(400).json({ status: 'error', message: 'scrip is required' });
+    }
+    if (expiryMonth) {
+      const data = getOiHistoryDataByExpiryMonth(scrip, expiryMonth, from || null);
+      return res.json({ status: 'ok', data });
     }
     const data = getOiHistoryData(scrip, from, to);
     res.json({ status: 'ok', data });
@@ -849,15 +878,28 @@ app.get('/api/oi-history', requireAuth, (req, res) => {
 });
 
 /**
- * DELETE /api/oi-history?month=YYYY-MM
- * Deletes all OI history rows for the given month (all scrips).
+ * DELETE /api/oi-history?scrip=NIFTY50&expiryMonth=YYYY-MM
+ * Deletes all OI history rows for the given scrip and expiry month.
  */
 app.delete('/api/oi-history', requireAuth, (req, res) => {
   try {
-    const { month } = req.query;
-    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
-      return res.status(400).json({ status: 'error', message: 'month is required (format: YYYY-MM)' });
+    const { scrip, month, expiryMonth } = req.query;
+    if (expiryMonth) {
+      if (!scrip) {
+        return res.status(400).json({ status: 'error', message: 'scrip is required' });
+      }
+      if (!/^\d{4}-\d{2}$/.test(expiryMonth)) {
+        return res.status(400).json({ status: 'error', message: 'expiryMonth is required (format: YYYY-MM)' });
+      }
+      const deleted = deleteOiHistoryByExpiryMonth(scrip, expiryMonth);
+      console.log(`[OI History] Deleted ${deleted} rows for ${scrip} expiry month ${expiryMonth}`);
+      return res.json({ status: 'ok', deleted });
     }
+
+    if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+      return res.status(400).json({ status: 'error', message: 'expiryMonth is required (format: YYYY-MM)' });
+    }
+
     const deleted = deleteOiHistoryByMonth(month);
     console.log(`[OI History] Deleted ${deleted} rows for month ${month}`);
     res.json({ status: 'ok', deleted });

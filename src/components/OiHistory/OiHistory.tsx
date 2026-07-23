@@ -86,19 +86,30 @@ function currentMonthIST(): string {
   return `${y}-${m}`;
 }
 
+/** Get today's date in YYYY-MM-DD (IST) */
+function todayIST(): string {
+  const now = new Date();
+  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
+  const y = ist.getFullYear();
+  const m = String(ist.getMonth() + 1).padStart(2, '0');
+  const d = String(ist.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function shiftDate(dateStr: string, deltaDays: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  date.setDate(date.getDate() + deltaDays);
+  const ny = date.getFullYear();
+  const nm = String(date.getMonth() + 1).padStart(2, '0');
+  const nd = String(date.getDate()).padStart(2, '0');
+  return `${ny}-${nm}-${nd}`;
+}
+
 /** Format a month string (YYYY-MM) to label (e.g., "July 2026") */
 function formatMonthLabel(month: string): string {
   const [y, m] = month.split('-').map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-}
-
-/** Get first and last day of a month as YYYY-MM-DD */
-function monthRange(month: string): { from: string; to: string } {
-  const [y, m] = month.split('-').map(Number);
-  const from = `${y}-${String(m).padStart(2, '0')}-01`;
-  const last = new Date(y, m, 0).getDate();
-  const to = `${y}-${String(m).padStart(2, '0')}-${String(last).padStart(2, '0')}`;
-  return { from, to };
 }
 
 /** Determine price direction: 'up' if price rose, 'down' if fell, null if unknown */
@@ -238,7 +249,7 @@ function isMonthlyExpiry(expiry: string): boolean {
 
 const OiHistory: React.FC = () => {
   const [scrip, setScrip] = useState('NIFTY50');
-  const [selectedMonth, setSelectedMonth] = useState(currentMonthIST());
+  const [selectedExpiryMonth, setSelectedExpiryMonth] = useState(currentMonthIST());
   const [fetching, setFetching] = useState(false);
   const lastFetchedRef = useRef('');
   const [progress, setProgress] = useState<FetchProgress | null>(null);
@@ -250,7 +261,7 @@ const OiHistory: React.FC = () => {
   const [showPatternInfo, setShowPatternInfo] = useState(false);
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [scripOptions, setScripOptions] = useState(DEFAULT_SCRIP_OPTIONS);
-  const [monthOptions, setMonthOptions] = useState<{ value: string; label: string }[]>(() => {
+  const [expiryMonthOptions, setExpiryMonthOptions] = useState<{ value: string; label: string }[]>(() => {
     const current = currentMonthIST();
     return [{ value: current, label: formatMonthLabel(current) }];
   });
@@ -259,24 +270,34 @@ const OiHistory: React.FC = () => {
     return stored ? parseInt(stored, 10) : 10;
   });
 
-  // Fetch available months for the selected scrip from DB
+  // Fetch available future expiry months for the selected scrip from instruments
   useEffect(() => {
     const current = currentMonthIST();
-    fetch(`/api/oi-history/months?scrip=${scrip}`, { credentials: 'include' })
-      .then((res) => res.json())
+    setFetchError(null);
+    fetch(`/api/oi-history/expiry-months?scrip=${scrip}`, { credentials: 'include' })
+      .then((res) => {
+        if (!res.ok) throw new Error(`Failed to load expiry months (${res.status})`);
+        return res.json();
+      })
       .then((json) => {
         if (json.status === 'ok') {
           const months: string[] = json.months || [];
-          // Ensure current month is always included
-          if (!months.includes(current)) {
-            months.unshift(current);
+          if (months.length > 0) {
+            const options = months.map((m) => ({ value: m, label: formatMonthLabel(m) }));
+            setExpiryMonthOptions(options);
+            setSelectedExpiryMonth((prev) => months.includes(prev) ? prev : months[0]);
+          } else {
+            setExpiryMonthOptions([{ value: current, label: formatMonthLabel(current) }]);
+            setSelectedExpiryMonth(current);
           }
-          setMonthOptions(months.map((m) => ({ value: m, label: formatMonthLabel(m) })));
+        } else {
+          throw new Error(json.message || 'Failed to load expiry months');
         }
       })
-      .catch(() => {
-        // Fallback to just current month
-        setMonthOptions([{ value: current, label: formatMonthLabel(current) }]);
+      .catch((err) => {
+        setExpiryMonthOptions([{ value: current, label: formatMonthLabel(current) }]);
+        setSelectedExpiryMonth(current);
+        setFetchError(err instanceof Error ? err.message : 'Failed to load expiry months');
       });
   }, [scrip]);
 
@@ -300,8 +321,11 @@ const OiHistory: React.FC = () => {
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const { from, to } = monthRange(selectedMonth);
-      const params = new URLSearchParams({ scrip, from, to });
+      const params = new URLSearchParams({
+        scrip,
+        expiryMonth: selectedExpiryMonth,
+        from: shiftDate(todayIST(), -180),
+      });
       const res = await fetch(`/api/oi-history?${params}`, { credentials: 'include' });
       const json = await res.json();
       if (json.status === 'ok') {
@@ -316,7 +340,7 @@ const OiHistory: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [scrip, selectedMonth]);
+  }, [scrip, selectedExpiryMonth]);
 
   /** Fetch historical OI from Kite via SSE stream */
   const handleFetch = useCallback(async () => {
@@ -326,16 +350,13 @@ const OiHistory: React.FC = () => {
     setFetchError(null);
 
     try {
-      const { from, to } = monthRange(selectedMonth);
       const res = await fetch('/api/oi-history/fetch', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
           scrip,
-          from,
-          to,
-          targetMonth: selectedMonth,
+          expiryMonth: selectedExpiryMonth,
         }),
       });
 
@@ -413,12 +434,12 @@ const OiHistory: React.FC = () => {
       setFetching(false);
       loadData();
     }
-  }, [scrip, selectedMonth, loadData]);
+  }, [scrip, selectedExpiryMonth, loadData]);
 
-  // When scrip or month changes, load existing data from the DB only.
+  // When scrip or expiry month changes, load existing data from the DB only.
   // Fetching fresh data from Kite is an explicit action via the Fetch button.
   useEffect(() => {
-    const key = `${scrip}_${selectedMonth}`;
+    const key = `${scrip}_${selectedExpiryMonth}`;
     if (lastFetchedRef.current === key) return;
     lastFetchedRef.current = key;
 
@@ -430,16 +451,17 @@ const OiHistory: React.FC = () => {
     setFetchError(null);
 
     loadData();
-  }, [scrip, selectedMonth, loadData]);
+  }, [scrip, selectedExpiryMonth, loadData]);
 
-  /** Delete all OI history for the selected month (all scrips) */
+  /** Delete all OI history for the selected scrip and expiry month */
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const handleDeleteMonth = useCallback(async () => {
     setConfirmDelete(false);
 
     try {
-      const res = await fetch(`/api/oi-history?month=${selectedMonth}`, {
+      const params = new URLSearchParams({ scrip, expiryMonth: selectedExpiryMonth });
+      const res = await fetch(`/api/oi-history?${params}`, {
         method: 'DELETE',
         credentials: 'include',
       });
@@ -455,7 +477,7 @@ const OiHistory: React.FC = () => {
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Network error');
     }
-  }, [selectedMonth]);
+  }, [scrip, selectedExpiryMonth]);
 
   // Toast notifications for trade feedback
   const [toasts, setToasts] = useState<{ id: number; text: string; color: 'green' | 'red' }[]>([]);
@@ -502,7 +524,7 @@ const OiHistory: React.FC = () => {
     return [...new Set(data.map((r) => r.date))].sort();
   }, [data]);
 
-  /** Unique expiries in the loaded data for the selected month, sorted */
+  /** Unique expiries in the loaded data for the selected expiry month, sorted */
   const expiries = useMemo(() => {
     const set = new Set<string>();
     for (const r of data) {
@@ -511,7 +533,7 @@ const OiHistory: React.FC = () => {
     return [...set].sort();
   }, [data]);
 
-  /** Dates that are weekly expiries in the selected month. */
+  /** Dates that are weekly expiries in the loaded trading dates. */
   const weeklyExpiryDates = useMemo(() => {
     const knownWeeklyExpiries = expiries.filter((exp) => !isMonthlyExpiry(exp));
     const weeklyExpiryWeekdays = new Set(
@@ -521,7 +543,9 @@ const OiHistory: React.FC = () => {
     const set = new Set<string>(knownWeeklyExpiries);
     if (weeklyExpiryWeekdays.size === 0) return set;
 
-    const [year, month] = selectedMonth.split('-').map(Number);
+    if (availableDates.length === 0) return set;
+
+    const [year, month] = availableDates[availableDates.length - 1].slice(0, 7).split('-').map(Number);
     const daysInMonth = new Date(year, month, 0).getDate();
     const availableDateSet = new Set(availableDates);
 
@@ -534,7 +558,7 @@ const OiHistory: React.FC = () => {
     }
 
     return set;
-  }, [availableDates, expiries, selectedMonth]);
+  }, [availableDates, expiries]);
 
   /** Rows for the selected date */
   const filteredRows = useMemo(() => {
@@ -754,13 +778,14 @@ const OiHistory: React.FC = () => {
 
   /** Chart data for selected strike across all dates */
   const chartData = useMemo(() => {
-    if (!selectedStrike || availableDates.length === 0) return null;
+    if (!selectedStrike || availableDates.length === 0 || tableExpiries.length === 0) return null;
 
     // Group data by date+expiry for the selected strike
     const dateMap = new Map<string, Map<string, { ceOi: number; peOi: number; ceClose: number; peClose: number }>>();
+    const tableExpirySet = new Set(tableExpiries);
 
     for (const r of data) {
-      if (r.strike !== selectedStrike || !r.expiry) continue;
+      if (r.strike !== selectedStrike || !r.expiry || !tableExpirySet.has(r.expiry)) continue;
       if (!dateMap.has(r.date)) dateMap.set(r.date, new Map());
       const expMap = dateMap.get(r.date)!;
       if (!expMap.has(r.expiry)) expMap.set(r.expiry, { ceOi: 0, peOi: 0, ceClose: 0, peClose: 0 });
@@ -791,7 +816,7 @@ const OiHistory: React.FC = () => {
     }
 
     return { dates, dateMap, maxOi, maxCePrice, maxPePrice };
-  }, [data, selectedStrike, availableDates]);
+  }, [data, selectedStrike, availableDates, tableExpiries]);
 
   /** Expiry colors for chart lines */
   const expiryColors = useMemo(() => {
@@ -826,9 +851,9 @@ const OiHistory: React.FC = () => {
 
           <label className="oi-history__label">
             <AppSelect
-              value={selectedMonth}
-              options={monthOptions}
-              onChange={(v) => setSelectedMonth(String(v))}
+              value={selectedExpiryMonth}
+              options={expiryMonthOptions}
+              onChange={(v) => setSelectedExpiryMonth(String(v))}
               disabled={fetching}
             />
           </label>
@@ -848,7 +873,7 @@ const OiHistory: React.FC = () => {
             className="app-btn app-btn--primary"
             onClick={handleFetch}
             disabled={fetching}
-            title={`Fetch ${scrip} data for ${selectedMonth} from Kite`}
+            title={`Fetch ${scrip} data for ${selectedExpiryMonth} expiry month from Kite`}
           >
             {fetching ? 'Fetching…' : 'Fetch'}
           </button>
@@ -857,7 +882,7 @@ const OiHistory: React.FC = () => {
             className="app-btn app-btn--danger app-btn--icon"
             onClick={() => setConfirmDelete(true)}
             disabled={fetching}
-            title={`Delete all data for ${selectedMonth}`}
+            title={`Delete all data for ${selectedExpiryMonth}`}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -1106,7 +1131,7 @@ const OiHistory: React.FC = () => {
               const safeMaxPrice = maxCePrice || 1;
 
               // Build price lines per expiry
-              const priceLines = expiries.map((exp) => {
+              const priceLines = tableExpiries.map((exp) => {
                 const pts: { x: number; y: number; price: number; date: string }[] = [];
                 dates.forEach((d, i) => {
                   const x = PAD_L + (i + 0.5) * (plotW / n);
@@ -1133,7 +1158,7 @@ const OiHistory: React.FC = () => {
                     {/* OI bars (stacked per expiry) */}
                     {dates.map((d, i) => {
                       const x = PAD_L + (i + 0.5) * (plotW / n);
-                      const expiryBars = expiries
+                      const expiryBars = tableExpiries
                         .map((exp) => ({ exp, oi: dateMap.get(d)?.get(exp)?.ceOi || 0 }))
                         .filter((b) => b.oi > 0);
                       const totalBarW = barW * expiryBars.length;
@@ -1274,7 +1299,7 @@ const OiHistory: React.FC = () => {
               const barW = Math.min(plotW / n * 0.4, 10);
               const safeMaxPrice = maxPePrice || 1;
 
-              const priceLines = expiries.map((exp) => {
+              const priceLines = tableExpiries.map((exp) => {
                 const pts: { x: number; y: number; price: number; date: string }[] = [];
                 dates.forEach((d, i) => {
                   const x = PAD_L + (i + 0.5) * (plotW / n);
@@ -1299,7 +1324,7 @@ const OiHistory: React.FC = () => {
 
                     {dates.map((d, i) => {
                       const x = PAD_L + (i + 0.5) * (plotW / n);
-                      const expiryBars = expiries
+                      const expiryBars = tableExpiries
                         .map((exp) => ({ exp, oi: dateMap.get(d)?.get(exp)?.peOi || 0 }))
                         .filter((b) => b.oi > 0);
                       const totalBarW = barW * expiryBars.length;
@@ -1429,7 +1454,7 @@ const OiHistory: React.FC = () => {
 
           {/* Legend */}
           <div className="oi-history__chart-legend">
-            {expiries.map((exp) => (
+            {tableExpiries.map((exp) => (
               <span key={exp} className="oi-history__chart-legend-item">
                 <span className="oi-history__chart-legend-swatch" style={{ background: expiryColors.get(exp) }} />
                 {expiryLabel(exp, isMonthlyExpiry(exp))}
@@ -1444,8 +1469,8 @@ const OiHistory: React.FC = () => {
 
       {data.length === 0 && !loading && !fetching && (
         <div className="oi-history__empty card">
-          Select a month and click <strong>Fetch</strong> to download multi-expiry OI data.
-          Already-fetched days are skipped automatically.
+          Select an expiry month and click <strong>Fetch</strong> to download OI history up to today.
+          Already-fetched trading days for that expiry month are skipped automatically.
         </div>
       )}
 
@@ -1453,9 +1478,9 @@ const OiHistory: React.FC = () => {
       {confirmDelete && (
         <div className="oi-confirm-overlay" onClick={() => setConfirmDelete(false)}>
           <div className="oi-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h4 className="oi-confirm-modal__title">Delete Month Data</h4>
+            <h4 className="oi-confirm-modal__title">Delete Expiry Month Data</h4>
             <p className="oi-confirm-modal__text">
-              Delete ALL OI history data for <strong>{monthOptions.find((m) => m.value === selectedMonth)?.label || selectedMonth}</strong>? This cannot be undone.
+              Delete ALL OI history data for <strong>{expiryMonthOptions.find((m) => m.value === selectedExpiryMonth)?.label || selectedExpiryMonth}</strong>? This cannot be undone.
             </p>
             <div className="oi-confirm-modal__actions">
               <button className="app-btn app-btn--secondary" onClick={() => setConfirmDelete(false)}>Cancel</button>
