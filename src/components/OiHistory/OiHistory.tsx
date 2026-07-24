@@ -319,32 +319,115 @@ const OiHistory: React.FC = () => {
       .catch(() => { /* keep defaults */ });
   }, []);
 
-  /** Load stored data from server */
+  /** Expiry months to include: from the current month up to and including the
+   * selected one (e.g. select Aug → [Jul, Aug]; select Sep → [Jul, Aug, Sep]). */
+  const includedExpiryMonths = useMemo(() => {
+    return expiryMonthOptions
+      .map((o) => o.value)
+      .filter((m) => m <= selectedExpiryMonth)
+      .sort();
+  }, [expiryMonthOptions, selectedExpiryMonth]);
+
+  /** Load stored data from server — loads all expiry months up to the selected one */
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({
-        scrip,
-        expiryMonth: selectedExpiryMonth,
-        from: `${todayIST().slice(0, 7)}-01`,
-      });
-      const res = await fetch(`/api/oi-history?${params}`, { credentials: 'include' });
-      const json = await res.json();
-      if (json.status === 'ok') {
-        setData(json.data);
-        if (json.data.length > 0) {
-          const dates = [...new Set(json.data.map((r: OiHistoryRow) => r.date))].sort();
-          setFilterDate(dates[dates.length - 1] as string);
-        }
+      const from = `${todayIST().slice(0, 7)}-01`;
+      const results = await Promise.all(
+        includedExpiryMonths.map(async (month) => {
+          const params = new URLSearchParams({ scrip, expiryMonth: month, from });
+          const res = await fetch(`/api/oi-history?${params}`, { credentials: 'include' });
+          const json = await res.json();
+          return json.status === 'ok' ? (json.data as OiHistoryRow[]) : [];
+        }),
+      );
+      const merged = results.flat();
+      setData(merged);
+      if (merged.length > 0) {
+        const dates = [...new Set(merged.map((r) => r.date))].sort();
+        setFilterDate(dates[dates.length - 1] as string);
       }
     } catch (err) {
       console.error('[OiHistory] Load error:', err);
     } finally {
       setLoading(false);
     }
-  }, [scrip, selectedExpiryMonth]);
+  }, [scrip, includedExpiryMonths]);
 
-  /** Fetch historical OI from Kite via SSE stream */
+  /** Stream a single expiry-month fetch from Kite via SSE. Returns on stream end. */
+  const fetchExpiryMonth = useCallback(async (month: string, monthLabel: string) => {
+    const res = await fetch('/api/oi-history/fetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ scrip, expiryMonth: month }),
+    });
+
+    if (!res.ok || !res.body) {
+      throw new Error(`Server error (${res.status})`);
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    const handleEvent = (eventType: string, dataStr: string) => {
+      if (!eventType || !dataStr) return;
+      let payload: any;
+      try {
+        payload = JSON.parse(dataStr);
+      } catch {
+        return; // ignore malformed SSE data
+      }
+      switch (eventType) {
+        case 'step':
+          setProgress({ step: `${monthLabel}: ${payload.message}`, pct: 0, detail: '' });
+          break;
+        case 'progress':
+          setProgress((prev) => {
+            if (prev && payload.pct < prev.pct && prev.step.startsWith(monthLabel)) return prev;
+            return {
+              step: `${monthLabel}: Fetching OI data...`,
+              pct: payload.pct,
+              detail: `${payload.done}/${payload.total} instruments (batch ${payload.batch}/${payload.totalBatches})`,
+            };
+          });
+          break;
+        case 'error':
+          throw new Error(payload.message);
+      }
+    };
+
+    // Parse complete SSE event blocks (separated by a blank line). Robust to
+    // network chunks splitting anywhere, including between "event:"/"data:".
+    const processBlock = (block: string) => {
+      let eventType = '';
+      let dataStr = '';
+      for (const line of block.split('\n')) {
+        if (line.startsWith('event:')) {
+          eventType = line.slice(6).trim();
+        } else if (line.startsWith('data:')) {
+          dataStr += line.slice(5).replace(/^ /, '');
+        }
+      }
+      handleEvent(eventType, dataStr);
+    };
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      let sep: number;
+      while ((sep = buffer.indexOf('\n\n')) !== -1) {
+        const block = buffer.slice(0, sep);
+        buffer = buffer.slice(sep + 2);
+        if (block.trim()) processBlock(block);
+      }
+    }
+    if (buffer.trim()) processBlock(buffer);
+  }, [scrip]);
+
+  /** Fetch all included expiry months (current month up to selected) from Kite */
   const handleFetch = useCallback(async () => {
     setFetching(true);
     setProgress({ step: 'Connecting...', pct: 0, detail: '' });
@@ -352,92 +435,11 @@ const OiHistory: React.FC = () => {
     setFetchError(null);
 
     try {
-      const res = await fetch('/api/oi-history/fetch', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({
-          scrip,
-          expiryMonth: selectedExpiryMonth,
-        }),
-      });
-
-      if (!res.ok || !res.body) {
-        setFetchError(`Server error (${res.status})`);
-        setProgress(null);
-        setFetching(false);
-        return;
+      for (const month of includedExpiryMonths) {
+        const label = formatMonthShortLabel(month);
+        await fetchExpiryMonth(month, label);
       }
-
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      const handleEvent = (eventType: string, dataStr: string) => {
-        if (!eventType || !dataStr) return;
-        let payload: any;
-        try {
-          payload = JSON.parse(dataStr);
-        } catch {
-          return; // ignore malformed SSE data
-        }
-        switch (eventType) {
-          case 'step':
-            setProgress({ step: payload.message, pct: 0, detail: '' });
-            break;
-          case 'progress':
-            setProgress((prev) => {
-              // Only move forward — prevent flickering from interleaved events
-              if (prev && payload.pct < prev.pct) return prev;
-              return {
-                step: 'Fetching OI data...',
-                pct: payload.pct,
-                detail: `${payload.done}/${payload.total} instruments (batch ${payload.batch}/${payload.totalBatches})`,
-              };
-            });
-            break;
-          case 'done':
-            setProgress(null);
-            break;
-          case 'error':
-            setFetchError(payload.message);
-            setProgress(null);
-            break;
-        }
-      };
-
-      // Parse complete SSE event blocks (separated by a blank line). This is
-      // robust to network chunks splitting anywhere, including between the
-      // "event:" and "data:" lines of a single message.
-      const processBlock = (block: string) => {
-        let eventType = '';
-        let dataStr = '';
-        for (const line of block.split('\n')) {
-          if (line.startsWith('event:')) {
-            eventType = line.slice(6).trim();
-          } else if (line.startsWith('data:')) {
-            dataStr += line.slice(5).replace(/^ /, '');
-          }
-        }
-        handleEvent(eventType, dataStr);
-      };
-
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-
-        let sep: number;
-        while ((sep = buffer.indexOf('\n\n')) !== -1) {
-          const block = buffer.slice(0, sep);
-          buffer = buffer.slice(sep + 2);
-          if (block.trim()) processBlock(block);
-        }
-      }
-
-      // Flush any trailing complete block left without a terminating blank line
-      if (buffer.trim()) processBlock(buffer);
+      setProgress(null);
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Network error');
       setProgress(null);
@@ -445,7 +447,7 @@ const OiHistory: React.FC = () => {
       setFetching(false);
       loadData();
     }
-  }, [scrip, selectedExpiryMonth, loadData]);
+  }, [includedExpiryMonths, fetchExpiryMonth, loadData]);
 
   // When scrip or expiry month changes, load existing data from the DB only.
   // Fetching fresh data from Kite is an explicit action via the Fetch button.
@@ -891,7 +893,10 @@ const OiHistory: React.FC = () => {
           <label className="oi-history__label">
             <AppSelect
               value={selectedExpiryMonth}
-              options={expiryMonthOptions}
+              options={expiryMonthOptions.map((o) => ({
+                value: o.value,
+                label: o.value === includedExpiryMonths[0] ? o.label : `up to ${o.label}`,
+              }))}
               onChange={(v) => setSelectedExpiryMonth(String(v))}
               disabled={fetching}
             />
@@ -911,7 +916,7 @@ const OiHistory: React.FC = () => {
             className="app-btn app-btn--primary"
             onClick={handleFetch}
             disabled={fetching}
-            title={`Fetch ${scrip} data for ${selectedExpiryMonth} expiry month from Kite`}
+            title={`Fetch ${scrip} data for ${includedExpiryMonths.length} expiry month(s) (${includedExpiryMonths.join(', ')}) from Kite`}
           >
             {fetching ? 'Fetching…' : 'Fetch'}
           </button>
@@ -1246,65 +1251,6 @@ const OiHistory: React.FC = () => {
                       );
                     })()}
 
-                    {/* Deviation lines for days with >20% move from average */}
-                    {(() => {
-                      const allPts = priceLines.flatMap((l) => l.pts);
-                      if (allPts.length === 0) return null;
-                      const avg = allPts.reduce((s, p) => s + p.price, 0) / allPts.length;
-                      const avgY = PAD_T + plotH - (avg / safeMaxPrice) * plotH;
-
-                      // Group points by date, find max deviation per date
-                      const byDate = new Map<string, { above: typeof allPts[0] | null; below: typeof allPts[0] | null; abovePct: number; belowPct: number }>();
-                      for (const p of allPts) {
-                        const dev = p.price - avg;
-                        const pct = avg > 0 ? Math.abs((dev / avg) * 100) : 0;
-                        if (!byDate.has(p.date)) {
-                          byDate.set(p.date, { above: null, below: null, abovePct: 0, belowPct: 0 });
-                        }
-                        const entry = byDate.get(p.date)!;
-                        if (dev > 0 && pct > entry.abovePct) {
-                          entry.above = p;
-                          entry.abovePct = pct;
-                        }
-                        if (dev < 0 && pct > entry.belowPct) {
-                          entry.below = p;
-                          entry.belowPct = pct;
-                        }
-                      }
-
-                      // Filter to only days with >= 10% deviation
-                      const significantDays = [...byDate.entries()].filter(([, v]) => v.abovePct >= 10 || v.belowPct >= 10);
-
-                      return (
-                        <g>
-                          {significantDays.map(([date, v]) => (
-                            <g key={date}>
-                              {v.above && v.abovePct >= 10 && (
-                                <>
-                                  <line x1={v.above.x} y1={avgY} x2={v.above.x} y2={v.above.y} stroke="var(--accent)" strokeWidth="0.8" opacity="0.6" />
-                                  <text x={v.above.x + 3} y={(avgY + v.above.y) / 2 + 2} fontSize="5" fill="var(--accent)" opacity="0.8">+{Math.round(v.abovePct)}%</text>
-                                </>
-                              )}
-                              {v.below && v.belowPct >= 10 && (
-                                <>
-                                  <line x1={v.below.x} y1={avgY} x2={v.below.x} y2={v.below.y} stroke="var(--accent)" strokeWidth="0.8" opacity="0.6" />
-                                  <text x={v.below.x + 3} y={(avgY + v.below.y) / 2 + 2} fontSize="5" fill="var(--accent)" opacity="0.8">-{Math.round(v.belowPct)}%</text>
-                                </>
-                              )}
-                            </g>
-                          ))}
-                        </g>
-                      );
-                    })()}
-
-                    {/* Selected date vertical highlight */}
-                    {(() => {
-                      const dateIdx = dates.indexOf(filterDate);
-                      if (dateIdx < 0) return null;
-                      const x = PAD_L + (dateIdx + 0.5) * (plotW / n);
-                      return <line x1={x} y1={PAD_T} x2={x} y2={PAD_T + plotH} stroke="var(--accent)" strokeWidth="0.7" strokeDasharray="2,2" opacity="0.5" />;
-                    })()}
-
                     {/* Left axis labels (price) */}
                     {[0, 0.5, 1].map((frac) => (
                       <text key={frac} x={PAD_L - 4} y={PAD_T + plotH * (1 - frac) + 3} textAnchor="end" fontSize="6" fill="var(--text-secondary)">
@@ -1410,65 +1356,6 @@ const OiHistory: React.FC = () => {
                           <text x={PAD_L - 4} y={avgY + 2} textAnchor="end" fontSize="5" fill="var(--text-secondary)" opacity="0.7">avg</text>
                         </g>
                       );
-                    })()}
-
-                    {/* Deviation lines for days with >20% move from average */}
-                    {(() => {
-                      const allPts = priceLines.flatMap((l) => l.pts);
-                      if (allPts.length === 0) return null;
-                      const avg = allPts.reduce((s, p) => s + p.price, 0) / allPts.length;
-                      const avgY = PAD_T + plotH - (avg / safeMaxPrice) * plotH;
-
-                      // Group points by date, find max deviation per date
-                      const byDate = new Map<string, { above: typeof allPts[0] | null; below: typeof allPts[0] | null; abovePct: number; belowPct: number }>();
-                      for (const p of allPts) {
-                        const dev = p.price - avg;
-                        const pct = avg > 0 ? Math.abs((dev / avg) * 100) : 0;
-                        if (!byDate.has(p.date)) {
-                          byDate.set(p.date, { above: null, below: null, abovePct: 0, belowPct: 0 });
-                        }
-                        const entry = byDate.get(p.date)!;
-                        if (dev > 0 && pct > entry.abovePct) {
-                          entry.above = p;
-                          entry.abovePct = pct;
-                        }
-                        if (dev < 0 && pct > entry.belowPct) {
-                          entry.below = p;
-                          entry.belowPct = pct;
-                        }
-                      }
-
-                      // Filter to only days with >= 10% deviation
-                      const significantDays = [...byDate.entries()].filter(([, v]) => v.abovePct >= 10 || v.belowPct >= 10);
-
-                      return (
-                        <g>
-                          {significantDays.map(([date, v]) => (
-                            <g key={date}>
-                              {v.above && v.abovePct >= 10 && (
-                                <>
-                                  <line x1={v.above.x} y1={avgY} x2={v.above.x} y2={v.above.y} stroke="var(--accent)" strokeWidth="0.8" opacity="0.6" />
-                                  <text x={v.above.x + 3} y={(avgY + v.above.y) / 2 + 2} fontSize="5" fill="var(--accent)" opacity="0.8">+{Math.round(v.abovePct)}%</text>
-                                </>
-                              )}
-                              {v.below && v.belowPct >= 10 && (
-                                <>
-                                  <line x1={v.below.x} y1={avgY} x2={v.below.x} y2={v.below.y} stroke="var(--accent)" strokeWidth="0.8" opacity="0.6" />
-                                  <text x={v.below.x + 3} y={(avgY + v.below.y) / 2 + 2} fontSize="5" fill="var(--accent)" opacity="0.8">-{Math.round(v.belowPct)}%</text>
-                                </>
-                              )}
-                            </g>
-                          ))}
-                        </g>
-                      );
-                    })()}
-
-                    {/* Selected date vertical highlight */}
-                    {(() => {
-                      const dateIdx = dates.indexOf(filterDate);
-                      if (dateIdx < 0) return null;
-                      const x = PAD_L + (dateIdx + 0.5) * (plotW / n);
-                      return <line x1={x} y1={PAD_T} x2={x} y2={PAD_T + plotH} stroke="var(--accent)" strokeWidth="0.7" strokeDasharray="2,2" opacity="0.5" />;
                     })()}
 
                     {[0, 0.5, 1].map((frac) => (

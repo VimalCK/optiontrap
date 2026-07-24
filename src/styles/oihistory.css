@@ -137,6 +137,24 @@
   overflow-x: auto;
   padding-bottom: 2px;
   scrollbar-width: thin;
+  scrollbar-color: var(--card-border) transparent;
+}
+
+.oi-history__date-group-days::-webkit-scrollbar {
+  height: 8px;
+}
+
+.oi-history__date-group-days::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.oi-history__date-group-days::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 4px;
+}
+
+.oi-history__date-group-days::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
 }
 
 .oi-history__date-btn {
@@ -225,6 +243,25 @@
 
 .oi-history__table-scroll {
   overflow-x: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--card-border) transparent;
+}
+
+.oi-history__table-scroll::-webkit-scrollbar {
+  height: 8px;
+}
+
+.oi-history__table-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.oi-history__table-scroll::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 4px;
+}
+
+.oi-history__table-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
 }
 
 .oi-history__table {
