@@ -1325,6 +1325,20 @@ export function deleteOiHistoryByMonth(month) {
 }
 
 /**
+ * Delete all OI history rows for a given scrip.
+ * @param {string} scrip - Scrip name (e.g., 'NIFTY50')
+ * @returns {number} Number of rows deleted
+ */
+export function deleteOiHistoryByScrip(scrip) {
+  if (!db) throw new Error('Database not initialised');
+
+  db.run('DELETE FROM oi_history WHERE scrip = ?', [scrip]);
+  const changes = db.getRowsModified();
+  if (changes > 0) persist();
+  return changes;
+}
+
+/**
  * Delete all OI history rows for a given expiry month.
  * @param {string} scrip - Scrip name (e.g., 'NIFTY50')
  * @param {string} expiryMonth - Format 'YYYY-MM'

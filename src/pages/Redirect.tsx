@@ -3,9 +3,6 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { exchangeToken } from '@/services/kiteAuth';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 
-// Module-level guard — survives React StrictMode unmount-remount cycle
-let exchangedToken: string | null = null;
-
 const Redirect: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -13,11 +10,6 @@ const Redirect: React.FC = () => {
 
   useEffect(() => {
     const requestToken = searchParams.get('request_token');
-
-    // Prevent double execution: skip if we already exchanged this exact token
-    if (exchangedToken === requestToken) return;
-    exchangedToken = requestToken;
-
     const status = searchParams.get('status');
 
     if (status === 'error' || !requestToken) {

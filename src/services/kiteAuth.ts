@@ -28,6 +28,10 @@ export interface AuthStatus {
 // In-memory cache of session (avoids /auth/me on every render)
 let cachedSession: KiteSession | null = null;
 
+// Kite request_tokens are single-use. React StrictMode/remounts can re-enter the
+// callback path, so dedupe concurrent exchanges by token before hitting Kite.
+const pendingTokenExchanges = new Map<string, Promise<KiteSession>>();
+
 /**
  * Check full auth status: credentials configured (localStorage) + session valid (server)
  */
@@ -161,37 +165,54 @@ export async function getLoginUrl(): Promise<string> {
  * Credentials are sent from localStorage — server uses them once and discards.
  */
 export async function exchangeToken(requestToken: string): Promise<KiteSession> {
+  const pendingExchange = pendingTokenExchanges.get(requestToken);
+  if (pendingExchange) return pendingExchange;
+
   const creds = getCredentials();
-  if (!creds) throw new Error('No credentials configured');
-
-  const res = await fetch('/auth/token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({
-      request_token: requestToken,
-      apiKey: creds.apiKey,
-      apiSecret: creds.apiSecret,
-    }),
-  });
-
-  if (!res.ok) {
-    const text = await res.text();
-    console.error('[kiteAuth] Token exchange failed:', res.status, text);
-    let message = `Token exchange failed (${res.status})`;
-    try {
-      const parsed = JSON.parse(text);
-      if (parsed.message) message = parsed.message;
-    } catch { /* response wasn't JSON */ }
-    throw new Error(message);
+  if (!creds) {
+    throw new Error(
+      'No Kite API credentials were found in this browser. Open OptionTrap using the same URL you used before login, then try again.',
+    );
   }
 
-  const { data } = await res.json();
-  cachedSession = data;
-  if (data.avatarUrl) {
-    localStorage.setItem(AVATAR_STORAGE_KEY, data.avatarUrl);
+  const exchange = (async () => {
+    const res = await fetch('/auth/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({
+        request_token: requestToken,
+        apiKey: creds.apiKey,
+        apiSecret: creds.apiSecret,
+      }),
+    });
+
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('[kiteAuth] Token exchange failed:', res.status, text);
+      let message = `Token exchange failed (${res.status})`;
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed.message) message = parsed.message;
+      } catch { /* response wasn't JSON */ }
+      throw new Error(message);
+    }
+
+    const { data } = await res.json();
+    cachedSession = data;
+    if (data.avatarUrl) {
+      localStorage.setItem(AVATAR_STORAGE_KEY, data.avatarUrl);
+    }
+    return data;
+  })();
+
+  pendingTokenExchanges.set(requestToken, exchange);
+
+  try {
+    return await exchange;
+  } finally {
+    pendingTokenExchanges.delete(requestToken);
   }
-  return data;
 }
 
 /**

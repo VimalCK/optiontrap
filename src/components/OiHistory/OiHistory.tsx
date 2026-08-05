@@ -466,14 +466,14 @@ const OiHistory: React.FC = () => {
     loadData();
   }, [scrip, selectedExpiryMonth, loadData]);
 
-  /** Delete all OI history for the selected scrip and expiry month */
+  /** Delete all OI history for the selected scrip */
   const [confirmDelete, setConfirmDelete] = useState(false);
 
   const handleDeleteMonth = useCallback(async () => {
     setConfirmDelete(false);
 
     try {
-      const params = new URLSearchParams({ scrip, expiryMonth: selectedExpiryMonth });
+      const params = new URLSearchParams({ scrip });
       const res = await fetch(`/api/oi-history?${params}`, {
         method: 'DELETE',
         credentials: 'include',
@@ -490,7 +490,7 @@ const OiHistory: React.FC = () => {
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Network error');
     }
-  }, [scrip, selectedExpiryMonth]);
+  }, [scrip]);
 
   // Toast notifications for trade feedback
   const [toasts, setToasts] = useState<{ id: number; text: string; color: 'green' | 'red' }[]>([]);
@@ -925,7 +925,7 @@ const OiHistory: React.FC = () => {
             className="app-btn app-btn--danger app-btn--icon"
             onClick={() => setConfirmDelete(true)}
             disabled={fetching}
-            title={`Delete all data for ${selectedExpiryMonth}`}
+            title={`Delete all OI history data for ${scrip}`}
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
@@ -1410,9 +1410,9 @@ const OiHistory: React.FC = () => {
       {confirmDelete && (
         <div className="oi-confirm-overlay" onClick={() => setConfirmDelete(false)}>
           <div className="oi-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h4 className="oi-confirm-modal__title">Delete Expiry Month Data</h4>
+            <h4 className="oi-confirm-modal__title">Delete Script Data</h4>
             <p className="oi-confirm-modal__text">
-              Delete ALL OI history data for <strong>{expiryMonthOptions.find((m) => m.value === selectedExpiryMonth)?.label || selectedExpiryMonth}</strong>? This cannot be undone.
+              Delete ALL OI history data for <strong>{scripOptions.find((o) => o.value === scrip)?.label || scrip}</strong>? This cannot be undone.
             </p>
             <div className="oi-confirm-modal__actions">
               <button className="app-btn app-btn--secondary" onClick={() => setConfirmDelete(false)}>Cancel</button>

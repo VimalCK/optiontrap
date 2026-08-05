@@ -66,6 +66,7 @@ import {
   getFnoSymbols,
   getSpotToken,
   getStrikeStepSize,
+  deleteOiHistoryByScrip,
 } from './db.js';
 import { SqliteSessionStore } from './sessionStore.js';
 import { createRateLimiter } from './rateLimit.js';
@@ -839,12 +840,19 @@ app.get('/api/oi-history', requireAuth, (req, res) => {
 });
 
 /**
- * DELETE /api/oi-history?scrip=NIFTY50&expiryMonth=YYYY-MM
- * Deletes all OI history rows for the given scrip and expiry month.
+ * DELETE /api/oi-history?scrip=NIFTY50
+ * Deletes all OI history rows for the given scrip.
  */
 app.delete('/api/oi-history', requireAuth, (req, res) => {
   try {
     const { scrip, month, expiryMonth } = req.query;
+
+    if (scrip && !expiryMonth) {
+      const deleted = deleteOiHistoryByScrip(scrip);
+      console.log(`[OI History] Deleted ${deleted} rows for ${scrip}`);
+      return res.json({ status: 'ok', deleted });
+    }
+
     if (expiryMonth) {
       if (!scrip) {
         return res.status(400).json({ status: 'error', message: 'scrip is required' });
