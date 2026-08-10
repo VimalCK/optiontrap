@@ -240,6 +240,12 @@ app.post('/auth/token', async (req, res) => {
     });
   }
 
+  // Clear any stale session before exchanging a new token
+  if (req.session?.kiteSession) {
+    delete req.session.kiteSession;
+    await new Promise((resolve) => req.session.save(resolve));
+  }
+
   try {
     console.log(`${ts()} ${CYAN}AUTH${RESET} token exchange for ${apiKey.slice(0, 4)}...`);
 

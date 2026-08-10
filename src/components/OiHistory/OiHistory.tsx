@@ -260,6 +260,7 @@ const OiHistory: React.FC = () => {
   const [filterDate, setFilterDate] = useState('');
   const [showPatternInfo, setShowPatternInfo] = useState(false);
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
+  const [hiddenPriceLineExpiries, setHiddenPriceLineExpiries] = useState<Set<string>>(() => new Set());
   const [scripOptions, setScripOptions] = useState(DEFAULT_SCRIP_OPTIONS);
   const [expiryMonthOptions, setExpiryMonthOptions] = useState<{ value: string; label: string }[]>(() => {
     const current = currentMonthIST();
@@ -867,6 +868,18 @@ const OiHistory: React.FC = () => {
     return map;
   }, [expiries]);
 
+  const togglePriceLine = (expiry: string) => {
+    setHiddenPriceLineExpiries((prev) => {
+      const next = new Set(prev);
+      if (next.has(expiry)) {
+        next.delete(expiry);
+      } else {
+        next.add(expiry);
+      }
+      return next;
+    });
+  };
+
   return (
     <div className="oi-history">
       {toasts.length > 0 && (
@@ -895,7 +908,7 @@ const OiHistory: React.FC = () => {
               value={selectedExpiryMonth}
               options={expiryMonthOptions.map((o) => ({
                 value: o.value,
-                label: o.value === includedExpiryMonths[0] ? o.label : `up to ${o.label}`,
+                label: o.label,
               }))}
               onChange={(v) => setSelectedExpiryMonth(String(v))}
               disabled={fetching}
@@ -1181,7 +1194,7 @@ const OiHistory: React.FC = () => {
               const safeMaxPrice = maxCePrice || 1;
 
               // Build price lines per expiry
-              const priceLines = tableExpiries.map((exp) => {
+              const priceLines = tableExpiries.filter((exp) => !hiddenPriceLineExpiries.has(exp)).map((exp) => {
                 const pts: { x: number; y: number; price: number; date: string }[] = [];
                 dates.forEach((d, i) => {
                   const x = PAD_L + (i + 0.5) * (plotW / n);
@@ -1228,7 +1241,7 @@ const OiHistory: React.FC = () => {
                         <polyline points={points} fill="none" stroke={expiryColors.get(exp)} strokeWidth="1.2" strokeLinejoin="round" />
                         {pts.map((p, k) => (
                           <g key={k}>
-                            <circle cx={p.x} cy={p.y} r={p.date === filterDate ? 3.5 : 1.5} fill={expiryColors.get(exp)} stroke={p.date === filterDate ? '#fff' : 'none'} strokeWidth={p.date === filterDate ? 0.8 : 0} />
+                            <circle cx={p.x} cy={p.y} r={1.5} fill={expiryColors.get(exp)} />
                             <text x={p.x} y={p.y - 4} textAnchor="middle" fontSize="4" fill={expiryColors.get(exp)}>
                               ₹{p.price < 10 ? p.price.toFixed(1) : Math.round(p.price)}
                             </text>
@@ -1290,7 +1303,7 @@ const OiHistory: React.FC = () => {
               const barW = Math.min(plotW / n * 0.4, 10);
               const safeMaxPrice = maxPePrice || 1;
 
-              const priceLines = tableExpiries.map((exp) => {
+              const priceLines = tableExpiries.filter((exp) => !hiddenPriceLineExpiries.has(exp)).map((exp) => {
                 const pts: { x: number; y: number; price: number; date: string }[] = [];
                 dates.forEach((d, i) => {
                   const x = PAD_L + (i + 0.5) * (plotW / n);
@@ -1335,7 +1348,7 @@ const OiHistory: React.FC = () => {
                         <polyline points={points} fill="none" stroke={expiryColors.get(exp)} strokeWidth="1.2" strokeLinejoin="round" />
                         {pts.map((p, k) => (
                           <g key={k}>
-                            <circle cx={p.x} cy={p.y} r={p.date === filterDate ? 3.5 : 1.5} fill={expiryColors.get(exp)} stroke={p.date === filterDate ? '#fff' : 'none'} strokeWidth={p.date === filterDate ? 0.8 : 0} />
+                            <circle cx={p.x} cy={p.y} r={1.5} fill={expiryColors.get(exp)} />
                             <text x={p.x} y={p.y - 4} textAnchor="middle" fontSize="4" fill={expiryColors.get(exp)}>
                               ₹{p.price < 10 ? p.price.toFixed(1) : Math.round(p.price)}
                             </text>
@@ -1386,12 +1399,22 @@ const OiHistory: React.FC = () => {
 
           {/* Legend */}
           <div className="oi-history__chart-legend">
-            {tableExpiries.map((exp) => (
-              <span key={exp} className="oi-history__chart-legend-item">
+            {tableExpiries.map((exp) => {
+              const isHidden = hiddenPriceLineExpiries.has(exp);
+              return (
+              <button
+                key={exp}
+                type="button"
+                className={`oi-history__chart-legend-item ${isHidden ? 'oi-history__chart-legend-item--hidden' : ''}`}
+                onClick={() => togglePriceLine(exp)}
+                aria-pressed={!isHidden}
+                title={`${isHidden ? 'Show' : 'Hide'} ${expiryLabel(exp, isMonthlyExpiry(exp))} price line`}
+              >
                 <span className="oi-history__chart-legend-swatch" style={{ background: expiryColors.get(exp) }} />
                 {expiryLabel(exp, isMonthlyExpiry(exp))}
-              </span>
-            ))}
+              </button>
+              );
+            })}
             <span className="oi-history__chart-legend-item">
               <span className="oi-history__chart-legend-bar" /> OI
             </span>

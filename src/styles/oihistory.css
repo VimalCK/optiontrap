@@ -478,6 +478,30 @@
   display: flex;
   align-items: center;
   gap: 4px;
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.oi-history__chart-legend-item:hover {
+  background: var(--card-border);
+}
+
+.oi-history__chart-legend-item--hidden {
+  opacity: 0.35;
+  text-decoration: line-through;
+}
+
+span.oi-history__chart-legend-item {
+  cursor: default;
+}
+
+span.oi-history__chart-legend-item:hover {
+  background: transparent;
 }
 
 .oi-history__chart-legend-swatch {

@@ -23,8 +23,19 @@ const Redirect: React.FC = () => {
         navigate('/portfolio', { replace: true });
       })
       .catch((err) => {
-        console.error('[Redirect] Token exchange error:', err);
-        setError(err.message || 'Failed to complete authentication.');
+        console.error('[Redirect] Token exchange error, retrying...', err);
+        // Retry once after a short delay (handles stale session race)
+        setTimeout(() => {
+          exchangeToken(requestToken)
+            .then(() => {
+              notifySessionChange();
+              navigate('/portfolio', { replace: true });
+            })
+            .catch((retryErr) => {
+              console.error('[Redirect] Retry failed:', retryErr);
+              setError(retryErr.message || 'Failed to complete authentication.');
+            });
+        }, 1000);
       });
   }, [searchParams, navigate]);
 
