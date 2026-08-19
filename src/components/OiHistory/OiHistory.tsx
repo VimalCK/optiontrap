@@ -47,6 +47,25 @@ type RolloverPattern =
   | 'Stable'
   | '-';
 
+type StrikeBias = 'Upward' | 'Downward' | 'Neutral';
+
+interface StrikeBiasSummary {
+  bias: StrikeBias;
+  strength: 'Strong' | 'Moderate' | 'Mild' | 'Mixed';
+  confidence: number;
+  score: number;
+  bullishDays: number;
+  bearishDays: number;
+  neutralDays: number;
+  totalDays: number;
+  ceOiChangePct: number | null;
+  peOiChangePct: number | null;
+  pcrStart: number | null;
+  pcrEnd: number | null;
+  spotChangePct: number | null;
+  reason: string;
+}
+
 /** Default scrip options shown before dynamic list loads */
 const DEFAULT_SCRIP_OPTIONS = [
   { value: 'NIFTY50', label: 'NIFTY 50' },
@@ -133,6 +152,162 @@ function priceDirection(
   return null;
 }
 
+function classifyOptionMove(oi: number, prevOi: number | undefined, close: number, prevClose: number | undefined): RolloverPattern {
+  if (prevOi === undefined || prevOi === 0) return '-';
+
+  const oiChg = (oi - prevOi) / prevOi;
+  const priceChg = prevClose !== undefined && prevClose > 0
+    ? (close - prevClose) / prevClose
+    : 0;
+
+  const oiRising = oiChg > 0.02;
+  const oiFalling = oiChg < -0.02;
+  const priceUp = priceChg > 0.005;
+  const priceDown = priceChg < -0.005;
+
+  if (oiRising && priceUp) return 'Long Buildup';
+  if (oiRising && priceDown) return 'Short Buildup';
+  if (oiFalling && priceDown) return 'Long Unwinding';
+  if (oiFalling && priceUp) return 'Short Covering';
+  return 'Stable';
+}
+
+function patternBiasScore(pattern: RolloverPattern, optionType: 'CE' | 'PE'): number {
+  if (optionType === 'CE') {
+    if (pattern === 'Long Buildup') return 2;
+    if (pattern === 'Short Covering') return 1;
+    if (pattern === 'Short Buildup') return -2;
+    if (pattern === 'Long Unwinding') return -1;
+    return 0;
+  }
+
+  if (pattern === 'Short Buildup') return 2;
+  if (pattern === 'Long Unwinding') return 1;
+  if (pattern === 'Long Buildup') return -2;
+  if (pattern === 'Short Covering') return -1;
+  return 0;
+}
+
+function pctChange(start: number, end: number): number | null {
+  if (start <= 0) return null;
+  return ((end - start) / start) * 100;
+}
+
+function formatPct(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return '-';
+  const sign = value > 0 ? '+' : '';
+  return `${sign}${value.toFixed(0)}%`;
+}
+
+function formatPcr(value: number | null): string {
+  if (value === null || !Number.isFinite(value)) return '-';
+  return value.toFixed(2);
+}
+
+function summarizeStrikeBias(
+  dates: string[],
+  dateMap: Map<string, Map<string, { ceOi: number; peOi: number; ceClose: number; peClose: number }>>,
+  expiries: string[],
+  spotByDate: Map<string, number>,
+): StrikeBiasSummary {
+  let score = 0;
+  let bullishDays = 0;
+  let bearishDays = 0;
+  let neutralDays = 0;
+  let previousTotals: { ceOi: number; peOi: number; ceClose: number; peClose: number } | null = null;
+
+  const totalsByDate = dates.map((date) => {
+    const expMap = dateMap.get(date);
+    const totals = { date, ceOi: 0, peOi: 0, ceClose: 0, peClose: 0, cePriceCount: 0, pePriceCount: 0 };
+
+    for (const exp of expiries) {
+      const entry = expMap?.get(exp);
+      if (!entry) continue;
+      totals.ceOi += entry.ceOi;
+      totals.peOi += entry.peOi;
+      if (entry.ceClose > 0) {
+        totals.ceClose += entry.ceClose;
+        totals.cePriceCount++;
+      }
+      if (entry.peClose > 0) {
+        totals.peClose += entry.peClose;
+        totals.pePriceCount++;
+      }
+    }
+
+    return {
+      date,
+      ceOi: totals.ceOi,
+      peOi: totals.peOi,
+      ceClose: totals.cePriceCount > 0 ? totals.ceClose / totals.cePriceCount : 0,
+      peClose: totals.pePriceCount > 0 ? totals.peClose / totals.pePriceCount : 0,
+    };
+  });
+
+  for (const totals of totalsByDate) {
+    if (!previousTotals) {
+      previousTotals = totals;
+      continue;
+    }
+
+    const cePattern = classifyOptionMove(totals.ceOi, previousTotals.ceOi, totals.ceClose, previousTotals.ceClose);
+    const pePattern = classifyOptionMove(totals.peOi, previousTotals.peOi, totals.peClose, previousTotals.peClose);
+    const dayScore = patternBiasScore(cePattern, 'CE') + patternBiasScore(pePattern, 'PE');
+    score += dayScore;
+
+    if (dayScore > 0) bullishDays++;
+    else if (dayScore < 0) bearishDays++;
+    else neutralDays++;
+
+    previousTotals = totals;
+  }
+
+  const first = totalsByDate.find((v) => v.ceOi > 0 || v.peOi > 0);
+  const last = [...totalsByDate].reverse().find((v) => v.ceOi > 0 || v.peOi > 0);
+  const totalSignalDays = bullishDays + bearishDays + neutralDays;
+  const decisiveDays = bullishDays + bearishDays;
+  const confidence = totalSignalDays > 0 ? Math.round((Math.max(bullishDays, bearishDays) / totalSignalDays) * 100) : 0;
+  const bias: StrikeBias = score > 1 ? 'Upward' : score < -1 ? 'Downward' : 'Neutral';
+  const absScore = Math.abs(score);
+  const strength = bias === 'Neutral'
+    ? decisiveDays > 0 ? 'Mixed' : 'Mild'
+    : absScore >= 8 ? 'Strong' : absScore >= 4 ? 'Moderate' : 'Mild';
+  const ceOiChangePct = first && last ? pctChange(first.ceOi, last.ceOi) : null;
+  const peOiChangePct = first && last ? pctChange(first.peOi, last.peOi) : null;
+  const pcrStart = first && first.ceOi > 0 ? first.peOi / first.ceOi : null;
+  const pcrEnd = last && last.ceOi > 0 ? last.peOi / last.ceOi : null;
+  const firstSpotDate = dates.find((date) => (spotByDate.get(date) || 0) > 0);
+  const lastSpotDate = [...dates].reverse().find((date) => (spotByDate.get(date) || 0) > 0);
+  const spotChangePct = firstSpotDate && lastSpotDate
+    ? pctChange(spotByDate.get(firstSpotDate) || 0, spotByDate.get(lastSpotDate) || 0)
+    : null;
+  const pcrDirection = pcrStart !== null && pcrEnd !== null
+    ? pcrEnd > pcrStart ? 'rising strike PCR' : pcrEnd < pcrStart ? 'falling strike PCR' : 'flat strike PCR'
+    : 'limited PCR data';
+  const reason = bias === 'Upward'
+    ? `Bullish days lead bearish days with ${pcrDirection}.`
+    : bias === 'Downward'
+      ? `Bearish days lead bullish days with ${pcrDirection}.`
+      : `Bullish and bearish activity is balanced with ${pcrDirection}.`;
+
+  return {
+    bias,
+    strength,
+    confidence,
+    score,
+    bullishDays,
+    bearishDays,
+    neutralDays,
+    totalDays: totalSignalDays,
+    ceOiChangePct,
+    peOiChangePct,
+    pcrStart,
+    pcrEnd,
+    spotChangePct,
+    reason,
+  };
+}
+
 /** Classify rollover pattern for a strike+optionType across expiries */
 function classifyPattern(
   oiByExpiry: Map<string, { oi: number; prevOi: number | undefined; close: number; prevClose: number | undefined }>,
@@ -145,23 +320,8 @@ function classifyPattern(
     for (const exp of expiries) {
       if (oiByExpiry.has(exp)) { entry = oiByExpiry.get(exp); break; }
     }
-    if (!entry || entry.prevOi === undefined || entry.prevOi === 0) return '-';
-
-    const oiChg = (entry.oi - entry.prevOi) / entry.prevOi;
-    const priceChg = entry.prevClose !== undefined && entry.prevClose > 0
-      ? (entry.close - entry.prevClose) / entry.prevClose
-      : 0;
-
-    const oiRising = oiChg > 0.02;
-    const oiFalling = oiChg < -0.02;
-    const priceUp = priceChg > 0.005;
-    const priceDown = priceChg < -0.005;
-
-    if (oiRising && priceUp) return 'Long Buildup';
-    if (oiRising && priceDown) return 'Short Buildup';
-    if (oiFalling && priceDown) return 'Long Unwinding';
-    if (oiFalling && priceUp) return 'Short Covering';
-    return 'Stable';
+    if (!entry) return '-';
+    return classifyOptionMove(entry.oi, entry.prevOi, entry.close, entry.prevClose);
   }
 
   // Find the nearest expiry with data
@@ -824,10 +984,12 @@ const OiHistory: React.FC = () => {
 
     // Group data by date+expiry for the selected strike
     const dateMap = new Map<string, Map<string, { ceOi: number; peOi: number; ceClose: number; peClose: number }>>();
+    const spotByDate = new Map<string, number>();
     const tableExpirySet = new Set(tableExpiries);
 
     for (const r of data) {
       if (r.strike !== selectedStrike || !r.expiry || !tableExpirySet.has(r.expiry)) continue;
+      if (r.spotClose > 0) spotByDate.set(r.date, r.spotClose);
       if (!dateMap.has(r.date)) dateMap.set(r.date, new Map());
       const expMap = dateMap.get(r.date)!;
       if (!expMap.has(r.expiry)) expMap.set(r.expiry, { ceOi: 0, peOi: 0, ceClose: 0, peClose: 0 });
@@ -843,6 +1005,7 @@ const OiHistory: React.FC = () => {
 
     const dates = availableDates.filter((d) => dateMap.has(d));
     if (dates.length === 0) return null;
+    const biasSummary = summarizeStrikeBias(dates, dateMap, tableExpiries, spotByDate);
 
     // Find max values for axis scaling
     let maxOi = 0;
@@ -857,7 +1020,7 @@ const OiHistory: React.FC = () => {
       }
     }
 
-    return { dates, dateMap, maxOi, maxCePrice, maxPePrice };
+    return { dates, dateMap, maxOi, maxCePrice, maxPePrice, biasSummary };
   }, [data, selectedStrike, availableDates, tableExpiries]);
 
   /** Expiry colors for chart lines */
@@ -1179,6 +1342,48 @@ const OiHistory: React.FC = () => {
         <div className="oi-history__chart-wrap card">
           <div className="oi-history__chart-header">
             <span className="oi-history__chart-title">Strike {selectedStrike} — Price &amp; OI History</span>
+          </div>
+
+          <div className={`oi-history__bias-card oi-history__bias-card--${chartData.biasSummary.bias.toLowerCase()}`}>
+            <div className="oi-history__bias-main">
+              <span className="oi-history__bias-kicker">Cumulative strike bias</span>
+              <span className="oi-history__bias-title">
+                {chartData.biasSummary.bias} - {chartData.biasSummary.strength}
+              </span>
+              <span className="oi-history__bias-reason">{chartData.biasSummary.reason}</span>
+            </div>
+            <div className="oi-history__bias-stats">
+              <div className="oi-history__bias-stat">
+                <span>Confidence</span>
+                <strong>{chartData.biasSummary.confidence}%</strong>
+              </div>
+              <div className="oi-history__bias-stat">
+                <span>Days</span>
+                <strong>
+                  <span className="oi-history__bias-up">{chartData.biasSummary.bullishDays}</span>
+                  <span className="oi-history__bias-sep">/</span>
+                  <span className="oi-history__bias-down">{chartData.biasSummary.bearishDays}</span>
+                  <span className="oi-history__bias-sep">/</span>
+                  <span>{chartData.biasSummary.neutralDays}</span>
+                </strong>
+              </div>
+              <div className="oi-history__bias-stat">
+                <span>CE OI</span>
+                <strong>{formatPct(chartData.biasSummary.ceOiChangePct)}</strong>
+              </div>
+              <div className="oi-history__bias-stat">
+                <span>PE OI</span>
+                <strong>{formatPct(chartData.biasSummary.peOiChangePct)}</strong>
+              </div>
+              <div className="oi-history__bias-stat">
+                <span>PCR</span>
+                <strong>{formatPcr(chartData.biasSummary.pcrStart)} -&gt; {formatPcr(chartData.biasSummary.pcrEnd)}</strong>
+              </div>
+              <div className="oi-history__bias-stat">
+                <span>Spot</span>
+                <strong>{formatPct(chartData.biasSummary.spotChangePct)}</strong>
+              </div>
+            </div>
           </div>
 
           <div className="oi-history__chart-pair">
