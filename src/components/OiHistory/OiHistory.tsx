@@ -88,6 +88,26 @@ const DEFAULT_SCRIP_OPTIONS = [
   { value: 'BANKNIFTY', label: 'BANK NIFTY' },
 ];
 
+const RECENT_SCRIPS_KEY = 'optiontrap_oi_history_recent_scrips';
+const MAX_RECENT_SCRIPS = 5;
+
+function loadRecentScrips(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_SCRIPS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === 'string' && value.length > 0).slice(0, MAX_RECENT_SCRIPS)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentScrips(scrips: string[]): void {
+  localStorage.setItem(RECENT_SCRIPS_KEY, JSON.stringify(scrips.slice(0, MAX_RECENT_SCRIPS)));
+}
+
 /** Compact OI display: 11,400,000 → 11.4M, 850,000 → 850K */
 function formatOiCompact(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -471,11 +491,28 @@ const OiHistory: React.FC = () => {
   const [showBiasDetails, setShowBiasDetails] = useState(false);
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [hiddenPriceLineExpiries, setHiddenPriceLineExpiries] = useState<Set<string>>(() => new Set());
+  const [recentScrips, setRecentScrips] = useState<string[]>(() => loadRecentScrips());
   const [scripOptions, setScripOptions] = useState(DEFAULT_SCRIP_OPTIONS);
   const [expiryMonthOptions, setExpiryMonthOptions] = useState<{ value: string; label: string }[]>(() => {
     const current = currentMonthIST();
     return [{ value: current, label: formatMonthLabel(current) }];
   });
+
+  const selectScrip = useCallback((nextScrip: string) => {
+    setScrip(nextScrip);
+    setRecentScrips((prev) => {
+      const next = [nextScrip, ...prev.filter((value) => value !== nextScrip)].slice(0, MAX_RECENT_SCRIPS);
+      saveRecentScrips(next);
+      return next;
+    });
+  }, []);
+
+  const recentScripOptions = useMemo(() => {
+    const labels = new Map(scripOptions.map((option) => [option.value, option.label]));
+    return recentScrips
+      .filter((value) => value !== scrip)
+      .map((value) => ({ value, label: labels.get(value) || value }));
+  }, [recentScrips, scrip, scripOptions]);
   const [strikeRange, setStrikeRange] = useState<number>(() => {
     const stored = localStorage.getItem('optiontrap_strike_range');
     const val = stored ? parseInt(stored, 10) : 10;
@@ -1114,7 +1151,7 @@ const OiHistory: React.FC = () => {
             <AppSelect
               value={scrip}
               options={scripOptions}
-              onChange={(v) => setScrip(String(v))}
+              onChange={(v) => selectScrip(String(v))}
               searchable
               disabled={fetching}
             />
@@ -1173,6 +1210,24 @@ const OiHistory: React.FC = () => {
             </svg>
           </button>
         </div>
+
+        {recentScripOptions.length > 0 && (
+          <div className="oi-history__recent-scrips" aria-label="Recently visited scripts">
+            <span className="oi-history__recent-scrips-label">Recent</span>
+            {recentScripOptions.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className="oi-history__recent-scrip"
+                onClick={() => selectScrip(option.value)}
+                disabled={fetching}
+                title={`Switch to ${option.label}`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* Progress bar */}
         {progress && (
