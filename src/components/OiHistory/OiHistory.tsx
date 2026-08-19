@@ -49,6 +49,17 @@ type RolloverPattern =
 
 type StrikeBias = 'Upward' | 'Downward' | 'Neutral';
 
+type DailyBias = 'Bullish' | 'Bearish' | 'Neutral';
+
+interface StrikeBiasDay {
+  date: string;
+  cePattern: RolloverPattern;
+  pePattern: RolloverPattern;
+  bias: DailyBias;
+  score: number;
+  cumulativeScore: number;
+}
+
 interface StrikeBiasSummary {
   bias: StrikeBias;
   strength: 'Strong' | 'Moderate' | 'Mild' | 'Mixed';
@@ -63,6 +74,11 @@ interface StrikeBiasSummary {
   pcrStart: number | null;
   pcrEnd: number | null;
   spotChangePct: number | null;
+  recentBias: DailyBias;
+  recentScore: number;
+  recentDays: StrikeBiasDay[];
+  driver: string;
+  warning: string | null;
   reason: string;
 }
 
@@ -215,6 +231,7 @@ function summarizeStrikeBias(
   let bearishDays = 0;
   let neutralDays = 0;
   let previousTotals: { ceOi: number; peOi: number; ceClose: number; peClose: number } | null = null;
+  const dailyBreakdown: StrikeBiasDay[] = [];
 
   const totalsByDate = dates.map((date) => {
     const expMap = dateMap.get(date);
@@ -255,9 +272,19 @@ function summarizeStrikeBias(
     const dayScore = patternBiasScore(cePattern, 'CE') + patternBiasScore(pePattern, 'PE');
     score += dayScore;
 
+    const dayBias: DailyBias = dayScore > 0 ? 'Bullish' : dayScore < 0 ? 'Bearish' : 'Neutral';
     if (dayScore > 0) bullishDays++;
     else if (dayScore < 0) bearishDays++;
     else neutralDays++;
+
+    dailyBreakdown.push({
+      date: totals.date,
+      cePattern,
+      pePattern,
+      bias: dayBias,
+      score: dayScore,
+      cumulativeScore: score,
+    });
 
     previousTotals = totals;
   }
@@ -281,6 +308,23 @@ function summarizeStrikeBias(
   const spotChangePct = firstSpotDate && lastSpotDate
     ? pctChange(spotByDate.get(firstSpotDate) || 0, spotByDate.get(lastSpotDate) || 0)
     : null;
+  const recentDays = dailyBreakdown.slice(-3);
+  const recentScore = recentDays.reduce((sum, day) => sum + day.score, 0);
+  const recentBias: DailyBias = recentScore > 1 ? 'Bullish' : recentScore < -1 ? 'Bearish' : 'Neutral';
+  const driver = ceOiChangePct !== null && peOiChangePct !== null
+    ? Math.abs(peOiChangePct) > Math.abs(ceOiChangePct)
+      ? `PE OI moved more than CE OI (${formatPct(peOiChangePct)} vs ${formatPct(ceOiChangePct)}).`
+      : Math.abs(ceOiChangePct) > Math.abs(peOiChangePct)
+        ? `CE OI moved more than PE OI (${formatPct(ceOiChangePct)} vs ${formatPct(peOiChangePct)}).`
+        : 'CE and PE OI changed at a similar pace.'
+    : 'OI change driver is limited because start OI is missing.';
+  const warning = bias === 'Upward' && recentBias === 'Bearish'
+    ? 'Overall bias is upward, but recent sessions show bearish pressure.'
+    : bias === 'Downward' && recentBias === 'Bullish'
+      ? 'Overall bias is downward, but recent sessions show bullish recovery.'
+      : bias === 'Neutral' && recentBias !== 'Neutral'
+        ? `Overall bias is neutral, but recent sessions lean ${recentBias.toLowerCase()}.`
+        : null;
   const pcrDirection = pcrStart !== null && pcrEnd !== null
     ? pcrEnd > pcrStart ? 'rising strike PCR' : pcrEnd < pcrStart ? 'falling strike PCR' : 'flat strike PCR'
     : 'limited PCR data';
@@ -304,6 +348,11 @@ function summarizeStrikeBias(
     pcrStart,
     pcrEnd,
     spotChangePct,
+    recentBias,
+    recentScore,
+    recentDays,
+    driver,
+    warning,
     reason,
   };
 }
@@ -419,6 +468,7 @@ const OiHistory: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [filterDate, setFilterDate] = useState('');
   const [showPatternInfo, setShowPatternInfo] = useState(false);
+  const [showBiasDetails, setShowBiasDetails] = useState(false);
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [hiddenPriceLineExpiries, setHiddenPriceLineExpiries] = useState<Set<string>>(() => new Set());
   const [scripOptions, setScripOptions] = useState(DEFAULT_SCRIP_OPTIONS);
@@ -814,6 +864,10 @@ const OiHistory: React.FC = () => {
       setSelectedStrike(atmStrike);
     }
   }, [atmStrike]);
+
+  useEffect(() => {
+    setShowBiasDetails(false);
+  }, [selectedStrike]);
 
   /** Build table data: rows = strikes, columns = expiries */
   const tableData = useMemo(() => {
@@ -1344,46 +1398,94 @@ const OiHistory: React.FC = () => {
             <span className="oi-history__chart-title">Strike {selectedStrike} — Price &amp; OI History</span>
           </div>
 
-          <div className={`oi-history__bias-card oi-history__bias-card--${chartData.biasSummary.bias.toLowerCase()}`}>
-            <div className="oi-history__bias-main">
-              <span className="oi-history__bias-kicker">Cumulative strike bias</span>
-              <span className="oi-history__bias-title">
-                {chartData.biasSummary.bias} - {chartData.biasSummary.strength}
-              </span>
-              <span className="oi-history__bias-reason">{chartData.biasSummary.reason}</span>
-            </div>
-            <div className="oi-history__bias-stats">
-              <div className="oi-history__bias-stat">
-                <span>Confidence</span>
-                <strong>{chartData.biasSummary.confidence}%</strong>
+          <div className={`oi-history__bias-card oi-history__bias-card--${chartData.biasSummary.bias.toLowerCase()} ${showBiasDetails ? 'oi-history__bias-card--expanded' : ''}`}>
+            <button
+              type="button"
+              className="oi-history__bias-toggle"
+              onClick={() => setShowBiasDetails((prev) => !prev)}
+              aria-expanded={showBiasDetails}
+            >
+              <div className="oi-history__bias-main">
+                <span className="oi-history__bias-kicker">Cumulative strike bias</span>
+                <span className="oi-history__bias-title">
+                  {chartData.biasSummary.bias} - {chartData.biasSummary.strength}
+                </span>
+                <span className="oi-history__bias-reason">{chartData.biasSummary.reason}</span>
               </div>
-              <div className="oi-history__bias-stat">
-                <span>Days</span>
-                <strong>
-                  <span className="oi-history__bias-up">{chartData.biasSummary.bullishDays}</span>
-                  <span className="oi-history__bias-sep">/</span>
-                  <span className="oi-history__bias-down">{chartData.biasSummary.bearishDays}</span>
-                  <span className="oi-history__bias-sep">/</span>
-                  <span>{chartData.biasSummary.neutralDays}</span>
-                </strong>
+              <div className="oi-history__bias-stats">
+                <div className="oi-history__bias-stat">
+                  <span>Confidence</span>
+                  <strong>{chartData.biasSummary.confidence}%</strong>
+                </div>
+                <div className="oi-history__bias-stat">
+                  <span>Days</span>
+                  <strong>
+                    <span className="oi-history__bias-up">{chartData.biasSummary.bullishDays}</span>
+                    <span className="oi-history__bias-sep">/</span>
+                    <span className="oi-history__bias-down">{chartData.biasSummary.bearishDays}</span>
+                    <span className="oi-history__bias-sep">/</span>
+                    <span>{chartData.biasSummary.neutralDays}</span>
+                  </strong>
+                </div>
+                <div className="oi-history__bias-stat">
+                  <span>CE OI</span>
+                  <strong>{formatPct(chartData.biasSummary.ceOiChangePct)}</strong>
+                </div>
+                <div className="oi-history__bias-stat">
+                  <span>PE OI</span>
+                  <strong>{formatPct(chartData.biasSummary.peOiChangePct)}</strong>
+                </div>
+                <div className="oi-history__bias-stat">
+                  <span>PCR</span>
+                  <strong>{formatPcr(chartData.biasSummary.pcrStart)} -&gt; {formatPcr(chartData.biasSummary.pcrEnd)}</strong>
+                </div>
+                <div className="oi-history__bias-stat">
+                  <span>Spot</span>
+                  <strong>{formatPct(chartData.biasSummary.spotChangePct)}</strong>
+                </div>
               </div>
-              <div className="oi-history__bias-stat">
-                <span>CE OI</span>
-                <strong>{formatPct(chartData.biasSummary.ceOiChangePct)}</strong>
+            </button>
+
+            {showBiasDetails && (
+              <div className="oi-history__bias-details">
+                <div className="oi-history__bias-insights">
+                  <div>
+                    <span>Recent 3-session lean</span>
+                    <strong className={`oi-history__bias-text--${chartData.biasSummary.recentBias.toLowerCase()}`}>
+                      {chartData.biasSummary.recentBias} ({chartData.biasSummary.recentScore > 0 ? '+' : ''}{chartData.biasSummary.recentScore})
+                    </strong>
+                  </div>
+                  <div>
+                    <span>Main driver</span>
+                    <strong>{chartData.biasSummary.driver}</strong>
+                  </div>
+                  {chartData.biasSummary.warning && (
+                    <div className="oi-history__bias-warning">
+                      <span>Watch</span>
+                      <strong>{chartData.biasSummary.warning}</strong>
+                    </div>
+                  )}
+                </div>
+
+                {chartData.biasSummary.recentDays.length > 0 && (
+                  <div className="oi-history__bias-recent">
+                    <span className="oi-history__bias-detail-title">Recent daily breakdown</span>
+                    <div className="oi-history__bias-recent-grid">
+                      {chartData.biasSummary.recentDays.map((day) => (
+                        <div key={day.date} className="oi-history__bias-recent-row">
+                          <span>{day.date.slice(5)}</span>
+                          <span>{day.cePattern}</span>
+                          <span>{day.pePattern}</span>
+                          <strong className={`oi-history__bias-text--${day.bias.toLowerCase()}`}>
+                            {day.bias} ({day.score > 0 ? '+' : ''}{day.score})
+                          </strong>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="oi-history__bias-stat">
-                <span>PE OI</span>
-                <strong>{formatPct(chartData.biasSummary.peOiChangePct)}</strong>
-              </div>
-              <div className="oi-history__bias-stat">
-                <span>PCR</span>
-                <strong>{formatPcr(chartData.biasSummary.pcrStart)} -&gt; {formatPcr(chartData.biasSummary.pcrEnd)}</strong>
-              </div>
-              <div className="oi-history__bias-stat">
-                <span>Spot</span>
-                <strong>{formatPct(chartData.biasSummary.spotChangePct)}</strong>
-              </div>
-            </div>
+            )}
           </div>
 
           <div className="oi-history__chart-pair">
