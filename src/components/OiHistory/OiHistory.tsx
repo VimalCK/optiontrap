@@ -490,7 +490,7 @@ const OiHistory: React.FC = () => {
   const [showPatternInfo, setShowPatternInfo] = useState(false);
   const [showBiasDetails, setShowBiasDetails] = useState(false);
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
-  const [hiddenPriceLineExpiries, setHiddenPriceLineExpiries] = useState<Set<string>>(() => new Set());
+  const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(() => new Set());
   const [recentScrips, setRecentScrips] = useState<string[]>(() => loadRecentScrips());
   const [scripOptions, setScripOptions] = useState(DEFAULT_SCRIP_OPTIONS);
   const [expiryMonthOptions, setExpiryMonthOptions] = useState<{ value: string; label: string }[]>(() => {
@@ -851,6 +851,10 @@ const OiHistory: React.FC = () => {
     return [...set].sort();
   }, [filteredRows]);
 
+  const visibleTableExpiries = useMemo(() => {
+    return tableExpiries.filter((exp) => !hiddenExpiries.has(exp));
+  }, [tableExpiries, hiddenExpiries]);
+
   /** Rows for the previous date (for OI change computation) */
   const prevDateRows = useMemo(() => {
     if (!filterDate || availableDates.length < 2) return [];
@@ -908,7 +912,7 @@ const OiHistory: React.FC = () => {
 
   /** Build table data: rows = strikes, columns = expiries */
   const tableData = useMemo(() => {
-    if (filteredRows.length === 0 || tableExpiries.length === 0) return [];
+    if (filteredRows.length === 0 || visibleTableExpiries.length === 0) return [];
 
     // Index: strike → expiry → { ce, pe }
     type CellData = {
@@ -930,8 +934,11 @@ const OiHistory: React.FC = () => {
 
     const grid = new Map<number, Map<string, CellData>>();
 
+    const visibleExpirySet = new Set(visibleTableExpiries);
+
     for (const r of filteredRows) {
       if (!r.strike || !r.optionType || !r.expiry) continue;
+      if (!visibleExpirySet.has(r.expiry)) continue;
 
       if (!grid.has(r.strike)) grid.set(r.strike, new Map());
       const strikeMap = grid.get(r.strike)!;
@@ -1000,10 +1007,10 @@ const OiHistory: React.FC = () => {
           if (cell.peOi > 0) peByExpiry.set(exp, { oi: cell.peOi, prevOi: cell.pePrevOi, close: cell.peClose, prevClose: cell.pePrevClose });
         }
 
-        const cePattern = classifyPattern(ceByExpiry, tableExpiries);
-        const pePattern = classifyPattern(peByExpiry, tableExpiries);
-        const weeklyExpiries = tableExpiries.filter((exp) => !isMonthlyExpiry(exp) && expiryMap.has(exp));
-        const consolidatedExpiries = weeklyExpiries.length > 0 ? weeklyExpiries : tableExpiries;
+        const cePattern = classifyPattern(ceByExpiry, visibleTableExpiries);
+        const pePattern = classifyPattern(peByExpiry, visibleTableExpiries);
+        const weeklyExpiries = visibleTableExpiries.filter((exp) => !isMonthlyExpiry(exp) && expiryMap.has(exp));
+        const consolidatedExpiries = weeklyExpiries.length > 0 ? weeklyExpiries : visibleTableExpiries;
         const consolidatedOi = consolidatedExpiries.reduce(
           (total, exp) => {
             const cell = expiryMap.get(exp);
@@ -1045,7 +1052,7 @@ const OiHistory: React.FC = () => {
     }
 
     return rows;
-  }, [filteredRows, tableExpiries, prevDayOi, prevDayClose, scrip, atmStrike, strikeRange]);
+  }, [filteredRows, visibleTableExpiries, prevDayOi, prevDayClose, scrip, atmStrike, strikeRange]);
 
   const maxConsolidatedOi = useMemo(() => {
     let max = 0;
@@ -1071,12 +1078,12 @@ const OiHistory: React.FC = () => {
 
   /** Chart data for selected strike across all dates */
   const chartData = useMemo(() => {
-    if (!selectedStrike || availableDates.length === 0 || tableExpiries.length === 0) return null;
+    if (!selectedStrike || availableDates.length === 0 || visibleTableExpiries.length === 0) return null;
 
     // Group data by date+expiry for the selected strike
     const dateMap = new Map<string, Map<string, { ceOi: number; peOi: number; ceClose: number; peClose: number }>>();
     const spotByDate = new Map<string, number>();
-    const tableExpirySet = new Set(tableExpiries);
+    const tableExpirySet = new Set(visibleTableExpiries);
 
     for (const r of data) {
       if (r.strike !== selectedStrike || !r.expiry || !tableExpirySet.has(r.expiry)) continue;
@@ -1096,7 +1103,7 @@ const OiHistory: React.FC = () => {
 
     const dates = availableDates.filter((d) => dateMap.has(d));
     if (dates.length === 0) return null;
-    const biasSummary = summarizeStrikeBias(dates, dateMap, tableExpiries, spotByDate);
+    const biasSummary = summarizeStrikeBias(dates, dateMap, visibleTableExpiries, spotByDate);
 
     // Find max values for axis scaling
     let maxOi = 0;
@@ -1112,7 +1119,7 @@ const OiHistory: React.FC = () => {
     }
 
     return { dates, dateMap, maxOi, maxCePrice, maxPePrice, biasSummary };
-  }, [data, selectedStrike, availableDates, tableExpiries]);
+  }, [data, selectedStrike, availableDates, visibleTableExpiries]);
 
   /** Expiry colors for chart lines */
   const expiryColors = useMemo(() => {
@@ -1122,10 +1129,14 @@ const OiHistory: React.FC = () => {
     return map;
   }, [expiries]);
 
-  const togglePriceLine = (expiry: string) => {
-    setHiddenPriceLineExpiries((prev) => {
+  const toggleExpiryVisibility = (expiry: string) => {
+    setHiddenExpiries((prev) => {
+      const isHidden = prev.has(expiry);
+      const visibleCount = tableExpiries.filter((exp) => !prev.has(exp)).length;
+      if (!isHidden && visibleCount <= 1) return prev;
+
       const next = new Set(prev);
-      if (next.has(expiry)) {
+      if (isHidden) {
         next.delete(expiry);
       } else {
         next.add(expiry);
@@ -1335,7 +1346,7 @@ const OiHistory: React.FC = () => {
         <div className="oi-history__table-wrap card">
           <div className="oi-history__table-header">
             <div className="oi-history__table-count">
-              {tableData.length} strikes &middot; {tableExpiries.length} expiries
+              {tableData.length} strikes &middot; {visibleTableExpiries.length} expiries
             </div>
           </div>
 
@@ -1344,13 +1355,13 @@ const OiHistory: React.FC = () => {
               <thead>
                 <tr>
                   <th className="oi-history__th-pattern">CE Pattern</th>
-                  {tableExpiries.map((exp) => (
+                  {visibleTableExpiries.map((exp) => (
                     <th key={`ce-${exp}`} className="oi-history__th-group oi-history__th-group--ce">
                       {expiryLabel(exp, isMonthlyExpiry(exp))}
                     </th>
                   ))}
                   <th className="oi-history__th-strike">Strike</th>
-                  {tableExpiries.map((exp) => (
+                  {visibleTableExpiries.map((exp) => (
                     <th key={`pe-${exp}`} className="oi-history__th-group oi-history__th-group--pe">
                       {expiryLabel(exp, isMonthlyExpiry(exp))}
                     </th>
@@ -1380,7 +1391,7 @@ const OiHistory: React.FC = () => {
                       </td>
 
                       {/* CE data per expiry */}
-                      {tableExpiries.map((exp) => {
+                      {visibleTableExpiries.map((exp) => {
                         const cell = cells.get(exp);
                         const { text, chgCls } = formatOiWithChg(cell?.ceOi || 0, cell?.cePrevOi);
                         const closePrice = cell?.ceClose || 0;
@@ -1402,7 +1413,7 @@ const OiHistory: React.FC = () => {
 
                       {/* Strike */}
                       <td className={`oi-history__cell--strike ${isAtm ? 'oi-history__cell--strike-atm' : ''}`}>
-                        <div className="oi-history__strike-bars" style={{ '--oi-history-expiry-count': tableExpiries.length } as React.CSSProperties}>
+                        <div className="oi-history__strike-bars" style={{ '--oi-history-expiry-count': visibleTableExpiries.length } as React.CSSProperties}>
                           <div className="oi-history__oi-bar oi-history__oi-bar--ce" style={{ width: `${ceBarWidth}%` }} />
                           <div className="oi-history__oi-bar oi-history__oi-bar--pe" style={{ width: `${peBarWidth}%` }} />
                         </div>
@@ -1410,7 +1421,7 @@ const OiHistory: React.FC = () => {
                       </td>
 
                       {/* PE data per expiry */}
-                      {tableExpiries.map((exp) => {
+                      {visibleTableExpiries.map((exp) => {
                         const cell = cells.get(exp);
                         const { text, chgCls } = formatOiWithChg(cell?.peOi || 0, cell?.pePrevOi);
                         const closePrice = cell?.peClose || 0;
@@ -1556,7 +1567,7 @@ const OiHistory: React.FC = () => {
               const safeMaxPrice = maxCePrice || 1;
 
               // Build price lines per expiry
-              const priceLines = tableExpiries.filter((exp) => !hiddenPriceLineExpiries.has(exp)).map((exp) => {
+              const priceLines = visibleTableExpiries.map((exp) => {
                 const pts: { x: number; y: number; price: number; date: string }[] = [];
                 dates.forEach((d, i) => {
                   const x = PAD_L + (i + 0.5) * (plotW / n);
@@ -1583,7 +1594,7 @@ const OiHistory: React.FC = () => {
                     {/* OI bars (stacked per expiry) */}
                     {dates.map((d, i) => {
                       const x = PAD_L + (i + 0.5) * (plotW / n);
-                      const expiryBars = tableExpiries
+                      const expiryBars = visibleTableExpiries
                         .map((exp) => ({ exp, oi: dateMap.get(d)?.get(exp)?.ceOi || 0 }))
                         .filter((b) => b.oi > 0);
                       const totalBarW = barW * expiryBars.length;
@@ -1665,7 +1676,7 @@ const OiHistory: React.FC = () => {
               const barW = Math.min(plotW / n * 0.4, 10);
               const safeMaxPrice = maxPePrice || 1;
 
-              const priceLines = tableExpiries.filter((exp) => !hiddenPriceLineExpiries.has(exp)).map((exp) => {
+              const priceLines = visibleTableExpiries.map((exp) => {
                 const pts: { x: number; y: number; price: number; date: string }[] = [];
                 dates.forEach((d, i) => {
                   const x = PAD_L + (i + 0.5) * (plotW / n);
@@ -1690,7 +1701,7 @@ const OiHistory: React.FC = () => {
 
                     {dates.map((d, i) => {
                       const x = PAD_L + (i + 0.5) * (plotW / n);
-                      const expiryBars = tableExpiries
+                      const expiryBars = visibleTableExpiries
                         .map((exp) => ({ exp, oi: dateMap.get(d)?.get(exp)?.peOi || 0 }))
                         .filter((b) => b.oi > 0);
                       const totalBarW = barW * expiryBars.length;
@@ -1762,15 +1773,15 @@ const OiHistory: React.FC = () => {
           {/* Legend */}
           <div className="oi-history__chart-legend">
             {tableExpiries.map((exp) => {
-              const isHidden = hiddenPriceLineExpiries.has(exp);
+              const isHidden = hiddenExpiries.has(exp);
               return (
               <button
                 key={exp}
                 type="button"
                 className={`oi-history__chart-legend-item ${isHidden ? 'oi-history__chart-legend-item--hidden' : ''}`}
-                onClick={() => togglePriceLine(exp)}
+                onClick={() => toggleExpiryVisibility(exp)}
                 aria-pressed={!isHidden}
-                title={`${isHidden ? 'Show' : 'Hide'} ${expiryLabel(exp, isMonthlyExpiry(exp))} price line`}
+                title={`${isHidden ? 'Show' : 'Hide'} ${expiryLabel(exp, isMonthlyExpiry(exp))} in table and chart`}
               >
                 <span className="oi-history__chart-legend-swatch" style={{ background: expiryColors.get(exp) }} />
                 {expiryLabel(exp, isMonthlyExpiry(exp))}
