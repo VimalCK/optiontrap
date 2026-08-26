@@ -4,7 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "node --watch index.js",
+    "dev": "node --watch-path=index.js --watch-path=db.js --watch-path=sessionStore.js --watch-path=rateLimit.js --watch-path=instruments.js index.js",
     "start": "node index.js"
   },
   "dependencies": {

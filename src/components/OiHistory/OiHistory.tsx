@@ -51,6 +51,10 @@ type StrikeBias = 'Upward' | 'Downward' | 'Neutral';
 
 type DailyBias = 'Bullish' | 'Bearish' | 'Neutral';
 
+type PriceTrendDirection = 'Upward' | 'Downward' | 'Sideways' | 'Unknown';
+
+type TradeBias = 'Bullish' | 'Bearish' | 'Conflict' | 'Neutral';
+
 interface StrikeBiasDay {
   date: string;
   cePattern: RolloverPattern;
@@ -80,6 +84,65 @@ interface StrikeBiasSummary {
   driver: string;
   warning: string | null;
   reason: string;
+}
+
+interface PriceTrendSummary {
+  direction: PriceTrendDirection;
+  strength: 'Strong' | 'Moderate' | 'Mild' | 'Flat' | 'Unknown';
+  startPrice: number | null;
+  endPrice: number | null;
+  changePct: number | null;
+  recentChangePct: number | null;
+  sessions: number;
+  reason: string;
+}
+
+interface TradeBiasSummary {
+  bias: TradeBias;
+  title: string;
+  action: string;
+  reason: string;
+}
+
+type TradeSetupStatus = 'Confirmed' | 'Watch' | 'Avoid';
+
+type ChecklistStatus = 'pass' | 'warn' | 'fail';
+
+interface TradeSetupChecklistItem {
+  label: string;
+  status: ChecklistStatus;
+  answer: string;
+}
+
+interface TradeLevelRow {
+  strike: number;
+  ceConsolidatedOi: number;
+  peConsolidatedOi: number;
+}
+
+interface TradeLevelContext {
+  spot: number | null;
+  supportStrike: number | null;
+  resistanceStrike: number | null;
+  maxOiStrike: number | null;
+  selectedDistancePct: number | null;
+  locationStatus: ChecklistStatus;
+  riskRewardStatus: ChecklistStatus;
+  locationAnswer: string;
+  riskRewardAnswer: string;
+}
+
+interface TradeSetupSummary {
+  status: TradeSetupStatus;
+  direction: 'Bullish' | 'Bearish' | 'Neutral';
+  title: string;
+  action: string;
+  strategy: string;
+  trigger: string;
+  invalidation: string;
+  target: string;
+  sizing: string;
+  checklist: TradeSetupChecklistItem[];
 }
 
 /** Default scrip options shown before dynamic list loads */
@@ -238,6 +301,299 @@ function formatPct(value: number | null): string {
 function formatPcr(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return '-';
   return value.toFixed(2);
+}
+
+function summarizePriceTrend(dates: string[], spotByDate: Map<string, number>): PriceTrendSummary {
+  const values = dates
+    .map((date) => ({ date, price: spotByDate.get(date) || 0 }))
+    .filter((value) => value.price > 0);
+
+  if (values.length < 2) {
+    return {
+      direction: 'Unknown',
+      strength: 'Unknown',
+      startPrice: values[0]?.price ?? null,
+      endPrice: values[0]?.price ?? null,
+      changePct: null,
+      recentChangePct: null,
+      sessions: values.length,
+      reason: 'Not enough spot/future price history for trend confirmation.',
+    };
+  }
+
+  const startPrice = values[0].price;
+  const endPrice = values[values.length - 1].price;
+  const changePct = pctChange(startPrice, endPrice);
+  const recentWindow = values.slice(-4);
+  const recentChangePct = recentWindow.length >= 2
+    ? pctChange(recentWindow[0].price, recentWindow[recentWindow.length - 1].price)
+    : null;
+  const absChange = Math.abs(changePct || 0);
+  const direction: PriceTrendDirection = changePct === null
+    ? 'Unknown'
+    : changePct > 0.5
+      ? 'Upward'
+      : changePct < -0.5
+        ? 'Downward'
+        : 'Sideways';
+  const strength = direction === 'Unknown'
+    ? 'Unknown'
+    : direction === 'Sideways'
+      ? 'Flat'
+      : absChange >= 2
+        ? 'Strong'
+        : absChange >= 1
+          ? 'Moderate'
+          : 'Mild';
+  const reason = direction === 'Upward'
+    ? `Underlying moved higher from ${startPrice.toFixed(2)} to ${endPrice.toFixed(2)}.`
+    : direction === 'Downward'
+      ? `Underlying moved lower from ${startPrice.toFixed(2)} to ${endPrice.toFixed(2)}.`
+      : direction === 'Sideways'
+        ? `Underlying stayed rangebound from ${startPrice.toFixed(2)} to ${endPrice.toFixed(2)}.`
+        : 'Price trend could not be determined.';
+
+  return {
+    direction,
+    strength,
+    startPrice,
+    endPrice,
+    changePct,
+    recentChangePct,
+    sessions: values.length,
+    reason,
+  };
+}
+
+function summarizeTradeBias(priceTrend: PriceTrendSummary, optionFlow: StrikeBiasSummary): TradeBiasSummary {
+  const priceBullish = priceTrend.direction === 'Upward';
+  const priceBearish = priceTrend.direction === 'Downward';
+  const flowBullish = optionFlow.bias === 'Upward';
+  const flowBearish = optionFlow.bias === 'Downward';
+
+  if (priceBullish && flowBullish) {
+    return {
+      bias: 'Bullish',
+      title: 'Bullish - Price and OI agree',
+      action: 'Long bias. Prefer buy/hold on pullbacks while price holds trend.',
+      reason: `Price trend is ${priceTrend.strength.toLowerCase()} upward and option flow is ${optionFlow.strength.toLowerCase()} upward.`,
+    };
+  }
+
+  if (priceBearish && flowBearish) {
+    return {
+      bias: 'Bearish',
+      title: 'Bearish - Price and OI agree',
+      action: 'Short/avoid-long bias. Prefer confirmation on failed bounces.',
+      reason: `Price trend is ${priceTrend.strength.toLowerCase()} downward and option flow is ${optionFlow.strength.toLowerCase()} downward.`,
+    };
+  }
+
+  if ((priceBullish && flowBearish) || (priceBearish && flowBullish)) {
+    return {
+      bias: 'Conflict',
+      title: 'Conflict - Price and OI disagree',
+      action: 'Avoid blind directional entry. Wait for price confirmation or reversal failure.',
+      reason: `Price is ${priceTrend.direction.toLowerCase()}, but option flow is ${optionFlow.bias.toLowerCase()}.`,
+    };
+  }
+
+  if (priceBullish) {
+    return {
+      bias: 'Bullish',
+      title: 'Bullish price trend, OI neutral',
+      action: 'Cautious long bias. Size smaller until option flow confirms.',
+      reason: `Price trend is ${priceTrend.strength.toLowerCase()} upward while option flow is neutral.`,
+    };
+  }
+
+  if (priceBearish) {
+    return {
+      bias: 'Bearish',
+      title: 'Bearish price trend, OI neutral',
+      action: 'Cautious short/avoid-long bias until option flow confirms.',
+      reason: `Price trend is ${priceTrend.strength.toLowerCase()} downward while option flow is neutral.`,
+    };
+  }
+
+  return {
+    bias: 'Neutral',
+    title: 'Neutral - No clear trade edge',
+    action: 'Wait. Price is not directional enough or option flow is mixed.',
+    reason: `Price trend is ${priceTrend.direction.toLowerCase()} and option flow is ${optionFlow.bias.toLowerCase()}.`,
+  };
+}
+
+function checklistStatusText(status: ChecklistStatus): string {
+  if (status === 'pass') return 'Yes';
+  if (status === 'warn') return 'Wait';
+  return 'No';
+}
+
+function distancePct(from: number | null, to: number | null): number | null {
+  if (!from || !to) return null;
+  return ((to - from) / from) * 100;
+}
+
+function summarizeTradeLevels(rows: TradeLevelRow[], spot: number | null, selectedStrike: number): TradeLevelContext {
+  if (!spot || rows.length === 0) {
+    return {
+      spot,
+      supportStrike: null,
+      resistanceStrike: null,
+      maxOiStrike: null,
+      selectedDistancePct: null,
+      locationStatus: 'warn',
+      riskRewardStatus: 'warn',
+      locationAnswer: 'Spot/level data unavailable',
+      riskRewardAnswer: 'Cannot estimate reward/risk from current data',
+    };
+  }
+
+  const support = rows
+    .filter((row) => row.strike <= spot && row.peConsolidatedOi > 0)
+    .sort((a, b) => b.peConsolidatedOi - a.peConsolidatedOi)[0]?.strike ?? null;
+  const resistance = rows
+    .filter((row) => row.strike >= spot && row.ceConsolidatedOi > 0)
+    .sort((a, b) => b.ceConsolidatedOi - a.ceConsolidatedOi)[0]?.strike ?? null;
+  const maxOiStrike = [...rows]
+    .sort((a, b) => (b.ceConsolidatedOi + b.peConsolidatedOi) - (a.ceConsolidatedOi + a.peConsolidatedOi))[0]?.strike ?? null;
+  const selectedDistancePct = distancePct(spot, selectedStrike);
+  const absSelectedDistance = Math.abs(selectedDistancePct ?? 999);
+  const locationStatus: ChecklistStatus = absSelectedDistance <= 0.35 ? 'pass' : absSelectedDistance <= 0.8 ? 'warn' : 'fail';
+  const supportDistance = support !== null ? Math.abs(distancePct(spot, support) ?? 999) : null;
+  const resistanceDistance = resistance !== null ? Math.abs(distancePct(spot, resistance) ?? 999) : null;
+  const hasNearbyBoundary = (supportDistance !== null && supportDistance <= 0.8) || (resistanceDistance !== null && resistanceDistance <= 0.8);
+  const riskRewardStatus: ChecklistStatus = hasNearbyBoundary && absSelectedDistance <= 0.8 ? 'pass' : absSelectedDistance <= 1.2 ? 'warn' : 'fail';
+
+  return {
+    spot,
+    supportStrike: support,
+    resistanceStrike: resistance,
+    maxOiStrike,
+    selectedDistancePct,
+    locationStatus,
+    riskRewardStatus,
+    locationAnswer: `Spot ${spot.toFixed(2)} is ${formatPct(selectedDistancePct)} from selected strike ${selectedStrike.toFixed(0)}`,
+    riskRewardAnswer: `Support ${support ?? '-'}, resistance ${resistance ?? '-'}, max-OI magnet ${maxOiStrike ?? '-'}`,
+  };
+}
+
+function summarizeTradeSetup(
+  priceTrend: PriceTrendSummary,
+  optionFlow: StrikeBiasSummary,
+  selectedStrike: number,
+  levels: TradeLevelContext,
+): TradeSetupSummary {
+  const flowBullish = optionFlow.bias === 'Upward';
+  const flowBearish = optionFlow.bias === 'Downward';
+  const priceBullish = priceTrend.direction === 'Upward';
+  const priceBearish = priceTrend.direction === 'Downward';
+  const directionalFlow = flowBullish || flowBearish;
+  const direction = flowBullish ? 'Bullish' : flowBearish ? 'Bearish' : 'Neutral';
+  const priceAligned = (flowBullish && priceBullish) || (flowBearish && priceBearish);
+  const priceConflicts = (flowBullish && priceBearish) || (flowBearish && priceBullish);
+  const recentAligned = (flowBullish && optionFlow.recentBias === 'Bullish') || (flowBearish && optionFlow.recentBias === 'Bearish');
+  const recentConflicts = (flowBullish && optionFlow.recentBias === 'Bearish') || (flowBearish && optionFlow.recentBias === 'Bullish');
+  const confidenceStatus: ChecklistStatus = optionFlow.confidence >= 65 ? 'pass' : optionFlow.confidence >= 55 ? 'warn' : 'fail';
+  const strengthStatus: ChecklistStatus = optionFlow.strength === 'Strong' || optionFlow.strength === 'Moderate'
+    ? 'pass'
+    : optionFlow.strength === 'Mild'
+      ? 'warn'
+      : 'fail';
+  const priceStatus: ChecklistStatus = priceAligned ? 'pass' : priceConflicts ? 'fail' : 'warn';
+  const recentStatus: ChecklistStatus = recentAligned ? 'pass' : recentConflicts ? 'fail' : 'warn';
+  const flowStatus: ChecklistStatus = directionalFlow ? 'pass' : 'fail';
+  const ready = directionalFlow && priceAligned && optionFlow.confidence >= 60 && !recentConflicts && strengthStatus === 'pass' && levels.riskRewardStatus !== 'fail';
+  const watch = directionalFlow && !ready && !priceConflicts && optionFlow.confidence >= 55 && levels.locationStatus !== 'fail';
+  const status: TradeSetupStatus = ready ? 'Confirmed' : watch ? 'Watch' : 'Avoid';
+  const strikeLabel = selectedStrike.toFixed(0);
+  const sideLabel = direction === 'Bullish' ? 'upside' : direction === 'Bearish' ? 'downside' : 'range';
+  const oppositeLabel = direction === 'Bullish' ? 'below' : direction === 'Bearish' ? 'above' : 'outside';
+
+  const checklist: TradeSetupChecklistItem[] = [
+    {
+      label: 'Directional flow',
+      status: flowStatus,
+      answer: directionalFlow ? `${optionFlow.bias} ${optionFlow.strength.toLowerCase()} flow` : 'Flow is neutral or mixed',
+    },
+    {
+      label: 'Confidence',
+      status: confidenceStatus,
+      answer: `${optionFlow.confidence}% ${optionFlow.confidence >= 65 ? 'is tradeable' : optionFlow.confidence >= 55 ? 'needs confirmation' : 'is too low'}`,
+    },
+    {
+      label: 'Price confirms',
+      status: priceStatus,
+      answer: priceAligned
+        ? `Price trend agrees: ${priceTrend.direction}`
+        : priceConflicts
+          ? `Conflict: price is ${priceTrend.direction}`
+          : `Price is ${priceTrend.direction.toLowerCase()}, wait for break`,
+    },
+    {
+      label: 'Recent sessions',
+      status: recentStatus,
+      answer: recentAligned
+        ? `Recent 3 sessions support ${direction.toLowerCase()}`
+        : recentConflicts
+          ? `Recent flow opposes ${direction.toLowerCase()}`
+          : 'Recent flow is not decisive',
+    },
+    {
+      label: 'Risk location',
+      status: levels.locationStatus,
+      answer: levels.locationAnswer,
+    },
+    {
+      label: 'Reward/risk proxy',
+      status: levels.riskRewardStatus,
+      answer: levels.riskRewardAnswer,
+    },
+  ];
+
+  if (status === 'Confirmed') {
+    return {
+      status,
+      direction,
+      title: `${direction} setup confirmed`,
+      action: `Directional ${sideLabel} trade is allowed if live price holds confirmation.`,
+      strategy: direction === 'Bullish' ? 'Prefer call debit spread or long futures on pullback.' : 'Prefer put debit spread or short futures on failed bounce.',
+      trigger: direction === 'Bullish' ? `Enter only above/holding ${strikeLabel}; stronger if price clears CE wall ${levels.resistanceStrike ?? '-'}.` : `Enter only below/rejecting ${strikeLabel}; stronger if PE support ${levels.supportStrike ?? '-'} weakens.`,
+      invalidation: `Exit if price closes back ${oppositeLabel} ${strikeLabel}; also respect VWAP/previous-day levels if live chart provides them.`,
+      target: direction === 'Bullish' ? `Book near next resistance/max-OI zone ${levels.resistanceStrike ?? levels.maxOiStrike ?? '-'}.` : `Book near next support/max-OI zone ${levels.supportStrike ?? levels.maxOiStrike ?? '-'}.`,
+      sizing: 'Normal risk only. Keep max loss predefined before entry.',
+      checklist,
+    };
+  }
+
+  if (status === 'Watch') {
+    return {
+      status,
+      direction,
+      title: `${direction} watchlist, not entry yet`,
+      action: `Bias exists, but the checklist is not clean enough for a fresh trade.`,
+      strategy: direction === 'Bullish' ? 'Wait for breakout/hold before call spread.' : 'Wait for breakdown/rejection before put spread.',
+      trigger: direction === 'Bullish' ? `Need price acceptance above ${strikeLabel}, VWAP, or CE resistance ${levels.resistanceStrike ?? '-'}.` : `Need price acceptance below ${strikeLabel}, VWAP, or failed bounce from CE resistance ${levels.resistanceStrike ?? '-'}.`,
+      invalidation: 'No trade until invalidation is close and obvious.',
+      target: `Plan target around support/resistance/max-OI zones: ${levels.supportStrike ?? '-'} / ${levels.resistanceStrike ?? '-'} / ${levels.maxOiStrike ?? '-'}.`,
+      sizing: 'Half size or no trade until confirmation improves.',
+      checklist,
+    };
+  }
+
+  return {
+    status,
+    direction: 'Neutral',
+    title: 'No clean trade setup',
+    action: 'Skip fresh directional entry. Signals are neutral, weak, or conflicting.',
+    strategy: 'Avoid naked option buying. If trading, use only clearly defined range strategies.',
+    trigger: 'Wait for price and option flow to align in the same direction.',
+    invalidation: 'No valid invalidation because there is no confirmed setup.',
+    target: 'No target until a directional setup appears.',
+    sizing: 'No directional risk.',
+    checklist,
+  };
 }
 
 function summarizeStrikeBias(
@@ -488,7 +844,7 @@ const OiHistory: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [filterDate, setFilterDate] = useState('');
   const [showPatternInfo, setShowPatternInfo] = useState(false);
-  const [showBiasDetails, setShowBiasDetails] = useState(false);
+  const [analysisTab, setAnalysisTab] = useState<'history' | 'setup'>('history');
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(() => new Set());
   const [recentScrips, setRecentScrips] = useState<string[]>(() => loadRecentScrips());
@@ -906,10 +1262,6 @@ const OiHistory: React.FC = () => {
     }
   }, [atmStrike]);
 
-  useEffect(() => {
-    setShowBiasDetails(false);
-  }, [selectedStrike]);
-
   /** Build table data: rows = strikes, columns = expiries */
   const tableData = useMemo(() => {
     if (filteredRows.length === 0 || visibleTableExpiries.length === 0) return [];
@@ -1104,6 +1456,11 @@ const OiHistory: React.FC = () => {
     const dates = availableDates.filter((d) => dateMap.has(d));
     if (dates.length === 0) return null;
     const biasSummary = summarizeStrikeBias(dates, dateMap, visibleTableExpiries, spotByDate);
+    const priceTrend = summarizePriceTrend(dates, spotByDate);
+    const tradeBias = summarizeTradeBias(priceTrend, biasSummary);
+    const latestSpot = priceTrend.endPrice ?? selectedSpotClose;
+    const tradeLevels = summarizeTradeLevels(tableData, latestSpot, selectedStrike);
+    const tradeSetup = summarizeTradeSetup(priceTrend, biasSummary, selectedStrike, tradeLevels);
 
     // Find max values for axis scaling
     let maxOi = 0;
@@ -1118,8 +1475,8 @@ const OiHistory: React.FC = () => {
       }
     }
 
-    return { dates, dateMap, maxOi, maxCePrice, maxPePrice, biasSummary };
-  }, [data, selectedStrike, availableDates, visibleTableExpiries]);
+    return { dates, dateMap, maxOi, maxCePrice, maxPePrice, biasSummary, priceTrend, tradeBias, tradeSetup, tradeLevels };
+  }, [data, selectedStrike, availableDates, visibleTableExpiries, selectedSpotClose, tableData]);
 
   /** Expiry colors for chart lines */
   const expiryColors = useMemo(() => {
@@ -1461,99 +1818,31 @@ const OiHistory: React.FC = () => {
       {chartData && selectedStrike && (
         <div className="oi-history__chart-wrap card">
           <div className="oi-history__chart-header">
-            <span className="oi-history__chart-title">Strike {selectedStrike} — Price &amp; OI History</span>
+            <span className="oi-history__chart-title">Strike {selectedStrike}</span>
+            <div className="oi-history__analysis-tabs" role="tablist" aria-label="OI analysis view">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={analysisTab === 'history'}
+                className={`oi-history__analysis-tab ${analysisTab === 'history' ? 'oi-history__analysis-tab--active' : ''}`}
+                onClick={() => setAnalysisTab('history')}
+              >
+                OI Price History
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={analysisTab === 'setup'}
+                className={`oi-history__analysis-tab ${analysisTab === 'setup' ? 'oi-history__analysis-tab--active' : ''}`}
+                onClick={() => setAnalysisTab('setup')}
+              >
+                Trade Setup
+              </button>
+            </div>
           </div>
 
-          <div className={`oi-history__bias-card oi-history__bias-card--${chartData.biasSummary.bias.toLowerCase()} ${showBiasDetails ? 'oi-history__bias-card--expanded' : ''}`}>
-            <button
-              type="button"
-              className="oi-history__bias-toggle"
-              onClick={() => setShowBiasDetails((prev) => !prev)}
-              aria-expanded={showBiasDetails}
-            >
-              <div className="oi-history__bias-main">
-                <span className="oi-history__bias-kicker">Cumulative strike bias</span>
-                <span className="oi-history__bias-title">
-                  {chartData.biasSummary.bias} - {chartData.biasSummary.strength}
-                </span>
-                <span className="oi-history__bias-reason">{chartData.biasSummary.reason}</span>
-              </div>
-              <div className="oi-history__bias-stats">
-                <div className="oi-history__bias-stat">
-                  <span>Confidence</span>
-                  <strong>{chartData.biasSummary.confidence}%</strong>
-                </div>
-                <div className="oi-history__bias-stat">
-                  <span>Days</span>
-                  <strong>
-                    <span className="oi-history__bias-up">{chartData.biasSummary.bullishDays}</span>
-                    <span className="oi-history__bias-sep">/</span>
-                    <span className="oi-history__bias-down">{chartData.biasSummary.bearishDays}</span>
-                    <span className="oi-history__bias-sep">/</span>
-                    <span>{chartData.biasSummary.neutralDays}</span>
-                  </strong>
-                </div>
-                <div className="oi-history__bias-stat">
-                  <span>CE OI</span>
-                  <strong>{formatPct(chartData.biasSummary.ceOiChangePct)}</strong>
-                </div>
-                <div className="oi-history__bias-stat">
-                  <span>PE OI</span>
-                  <strong>{formatPct(chartData.biasSummary.peOiChangePct)}</strong>
-                </div>
-                <div className="oi-history__bias-stat">
-                  <span>PCR</span>
-                  <strong>{formatPcr(chartData.biasSummary.pcrStart)} -&gt; {formatPcr(chartData.biasSummary.pcrEnd)}</strong>
-                </div>
-                <div className="oi-history__bias-stat">
-                  <span>Spot</span>
-                  <strong>{formatPct(chartData.biasSummary.spotChangePct)}</strong>
-                </div>
-              </div>
-            </button>
-
-            {showBiasDetails && (
-              <div className="oi-history__bias-details">
-                <div className="oi-history__bias-insights">
-                  <div>
-                    <span>Recent 3-session lean</span>
-                    <strong className={`oi-history__bias-text--${chartData.biasSummary.recentBias.toLowerCase()}`}>
-                      {chartData.biasSummary.recentBias} ({chartData.biasSummary.recentScore > 0 ? '+' : ''}{chartData.biasSummary.recentScore})
-                    </strong>
-                  </div>
-                  <div>
-                    <span>Main driver</span>
-                    <strong>{chartData.biasSummary.driver}</strong>
-                  </div>
-                  {chartData.biasSummary.warning && (
-                    <div className="oi-history__bias-warning">
-                      <span>Watch</span>
-                      <strong>{chartData.biasSummary.warning}</strong>
-                    </div>
-                  )}
-                </div>
-
-                {chartData.biasSummary.recentDays.length > 0 && (
-                  <div className="oi-history__bias-recent">
-                    <span className="oi-history__bias-detail-title">Recent daily breakdown</span>
-                    <div className="oi-history__bias-recent-grid">
-                      {chartData.biasSummary.recentDays.map((day) => (
-                        <div key={day.date} className="oi-history__bias-recent-row">
-                          <span>{day.date.slice(5)}</span>
-                          <span>{day.cePattern}</span>
-                          <span>{day.pePattern}</span>
-                          <strong className={`oi-history__bias-text--${day.bias.toLowerCase()}`}>
-                            {day.bias} ({day.score > 0 ? '+' : ''}{day.score})
-                          </strong>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
+          {analysisTab === 'history' && (
+            <>
           <div className="oi-history__chart-pair">
             {/* CE Chart */}
             {(() => {
@@ -1792,6 +2081,123 @@ const OiHistory: React.FC = () => {
               <span className="oi-history__chart-legend-bar" /> OI
             </span>
           </div>
+            </>
+          )}
+
+          {analysisTab === 'setup' && (
+        <div className={`oi-history__setup-card oi-history__setup-card--${chartData.tradeSetup.status.toLowerCase()}`}>
+          <div className="oi-history__setup-header">
+            <div>
+              <span className="oi-history__bias-kicker">Trade setup engine</span>
+              <strong className="oi-history__decision-title">{chartData.tradeSetup.title}</strong>
+              <span className="oi-history__bias-reason">Direction: {chartData.tradeSetup.direction}</span>
+            </div>
+            <span className={`oi-history__setup-pill oi-history__setup-pill--${chartData.tradeSetup.status.toLowerCase()}`}>
+              {chartData.tradeSetup.status}
+            </span>
+          </div>
+
+          <div className="oi-history__setup-context">
+            <div className={`oi-history__setup-context-item oi-history__setup-context-item--${chartData.tradeBias.bias.toLowerCase()}`}>
+              <span>Trade bias</span>
+              <strong>{chartData.tradeBias.title}</strong>
+              <em>{chartData.tradeBias.action} {chartData.tradeBias.reason}</em>
+            </div>
+            <div className={`oi-history__setup-context-item oi-history__setup-context-item--${chartData.priceTrend.direction.toLowerCase()}`}>
+              <span>Price trend</span>
+              <strong>{chartData.priceTrend.direction} - {chartData.priceTrend.strength}</strong>
+              <em>
+                {chartData.priceTrend.reason} Start {chartData.priceTrend.startPrice !== null ? chartData.priceTrend.startPrice.toFixed(2) : '-'} | End {chartData.priceTrend.endPrice !== null ? chartData.priceTrend.endPrice.toFixed(2) : '-'} | Change {formatPct(chartData.priceTrend.changePct)} | Recent {formatPct(chartData.priceTrend.recentChangePct)} | Sessions {chartData.priceTrend.sessions}
+              </em>
+            </div>
+            <div className={`oi-history__setup-context-item oi-history__setup-context-item--${chartData.biasSummary.bias.toLowerCase()}`}>
+              <span>Option flow</span>
+              <strong>{chartData.biasSummary.bias} - {chartData.biasSummary.strength}</strong>
+              <em>
+                {chartData.biasSummary.reason} Confidence {chartData.biasSummary.confidence}% | Days {chartData.biasSummary.bullishDays}/{chartData.biasSummary.bearishDays}/{chartData.biasSummary.neutralDays} | CE OI {formatPct(chartData.biasSummary.ceOiChangePct)} | PE OI {formatPct(chartData.biasSummary.peOiChangePct)} | PCR {formatPcr(chartData.biasSummary.pcrStart)} -&gt; {formatPcr(chartData.biasSummary.pcrEnd)} | Score {chartData.biasSummary.score}
+              </em>
+            </div>
+          </div>
+
+          <div className="oi-history__setup-details">
+            <div>
+              <span>Recent 3-session lean</span>
+              <strong className={`oi-history__bias-text--${chartData.biasSummary.recentBias.toLowerCase()}`}>
+                {chartData.biasSummary.recentBias} ({chartData.biasSummary.recentScore > 0 ? '+' : ''}{chartData.biasSummary.recentScore})
+              </strong>
+            </div>
+            <div>
+              <span>Main driver</span>
+              <strong>{chartData.biasSummary.driver}</strong>
+            </div>
+            <div>
+              <span>Visible expiries</span>
+              <strong>{visibleTableExpiries.map((exp) => expiryLabel(exp, isMonthlyExpiry(exp))).join(', ')}</strong>
+            </div>
+            {chartData.biasSummary.warning && (
+              <div className="oi-history__bias-warning">
+                <span>Watch</span>
+                <strong>{chartData.biasSummary.warning}</strong>
+              </div>
+            )}
+          </div>
+
+          {chartData.biasSummary.recentDays.length > 0 && (
+            <div className="oi-history__bias-recent">
+              <span className="oi-history__bias-detail-title">Recent daily breakdown</span>
+              <div className="oi-history__bias-recent-grid">
+                {chartData.biasSummary.recentDays.map((day) => (
+                  <div key={day.date} className="oi-history__bias-recent-row">
+                    <span>{day.date.slice(5)}</span>
+                    <span>{day.cePattern}</span>
+                    <span>{day.pePattern}</span>
+                    <strong className={`oi-history__bias-text--${day.bias.toLowerCase()}`}>
+                      {day.bias} ({day.score > 0 ? '+' : ''}{day.score})
+                    </strong>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="oi-history__setup-checklist">
+            {chartData.tradeSetup.checklist.map((item) => (
+              <div key={item.label} className={`oi-history__setup-check oi-history__setup-check--${item.status}`}>
+                <span>{item.label}</span>
+                <strong>{checklistStatusText(item.status)}</strong>
+                <em>{item.answer}</em>
+              </div>
+            ))}
+          </div>
+
+          <div className="oi-history__setup-plan">
+            <div>
+              <span>Action</span>
+              <strong>{chartData.tradeSetup.action}</strong>
+            </div>
+            <div>
+              <span>Strategy</span>
+              <strong>{chartData.tradeSetup.strategy}</strong>
+            </div>
+            <div>
+              <span>Trigger</span>
+              <strong>{chartData.tradeSetup.trigger}</strong>
+            </div>
+            <div>
+              <span>Invalidation</span>
+              <strong>{chartData.tradeSetup.invalidation}</strong>
+            </div>
+            <div>
+              <span>Target</span>
+              <strong>{chartData.tradeSetup.target}</strong>
+            </div>
+            <div>
+              <span>Sizing</span>
+              <strong>{chartData.tradeSetup.sizing}</strong>
+            </div>
+          </div>
+        </div>
+          )}
         </div>
       )}
 

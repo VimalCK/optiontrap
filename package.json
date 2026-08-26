@@ -4,9 +4,9 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently -n server,client -c blue,green \"node --watch server/index.js\" \"vite\"",
+    "dev": "concurrently -n server,client -c blue,green \"node --watch-path=server/index.js --watch-path=server/db.js --watch-path=server/sessionStore.js --watch-path=server/rateLimit.js --watch-path=server/instruments.js server/index.js\" \"vite\"",
     "dev:client": "vite",
-    "dev:server": "node --watch server/index.js",
+    "dev:server": "node --watch-path=server/index.js --watch-path=server/db.js --watch-path=server/sessionStore.js --watch-path=server/rateLimit.js --watch-path=server/instruments.js server/index.js",
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",

@@ -72,8 +72,29 @@ import { tickerSubscribe, tickerUpdateTokens } from '@/services/tickerSingleton'
 import { isMarketLive } from '@/utils/marketStatus';
 import '@/styles/optionchain.css';
 
+const RECENT_OPTION_SYMBOLS_KEY = 'optiontrap_option_analyzer_recent_symbols';
+const MAX_RECENT_OPTION_SYMBOLS = 5;
+
+function loadRecentOptionSymbols(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_OPTION_SYMBOLS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === 'string' && value.length > 0).slice(0, MAX_RECENT_OPTION_SYMBOLS)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRecentOptionSymbols(symbols: string[]): void {
+  localStorage.setItem(RECENT_OPTION_SYMBOLS_KEY, JSON.stringify(symbols.slice(0, MAX_RECENT_OPTION_SYMBOLS)));
+}
+
 const OptionChain: React.FC = () => {
   const [selectedSymbol, setSelectedSymbol] = useState<string>('NIFTY');
+  const [recentSymbols, setRecentSymbols] = useState<string[]>(() => loadRecentOptionSymbols());
   const [symbolOptions, setSymbolOptions] = useState<{ value: string | number; label: string }[]>([
     { value: 'NIFTY', label: 'NIFTY 50' },
     { value: 'BANKNIFTY', label: 'BANK NIFTY' },
@@ -108,6 +129,22 @@ const OptionChain: React.FC = () => {
   const toastIdRef = useRef(0);
   const chainCardRef = useRef<HTMLDivElement>(null);
   const chainCardLockedHeight = useRef<number | null>(null);
+
+  const selectSymbol = useCallback((nextSymbol: string) => {
+    setSelectedSymbol(nextSymbol);
+    setRecentSymbols((prev) => {
+      const next = [nextSymbol, ...prev.filter((value) => value !== nextSymbol)].slice(0, MAX_RECENT_OPTION_SYMBOLS);
+      saveRecentOptionSymbols(next);
+      return next;
+    });
+  }, []);
+
+  const recentSymbolOptions = useMemo(() => {
+    const labels = new Map(symbolOptions.map((option) => [String(option.value), option.label]));
+    return recentSymbols
+      .filter((value) => value !== selectedSymbol)
+      .map((value) => ({ value, label: labels.get(value) || value }));
+  }, [recentSymbols, selectedSymbol, symbolOptions]);
 
   const showToast = useCallback((text: string, color: 'green' | 'red') => {
     const id = ++toastIdRef.current;
@@ -537,25 +574,44 @@ const OptionChain: React.FC = () => {
       )}
       {/* Global Expiry Selector */}
       {expiries.length > 0 && (
-        <div className="oc-expiry-bar">
-          <AppSelect
-            value={selectedSymbol}
-            options={symbolOptions}
-            onChange={(v) => setSelectedSymbol(String(v))}
-            searchable
-          />
-          <span className="oc-expiry-bar__label">Expiry</span>
-          <AppSelect
-            value={selectedExpiry}
-            options={expiries.map((exp) => ({
-              value: exp,
-              label: new Date(exp).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
-            }))}
-            onChange={(v) => setSelectedExpiry(String(v))}
-            className="oc-expiry-select"
-          />
-          {daysToExpiry !== undefined && (
-            <span className="oc-expiry-bar__days">{daysToExpiry === 0 ? 'Expiry today' : `${daysToExpiry}d to expiry`}</span>
+        <div className="oc-expiry-panel">
+          <div className="oc-expiry-bar">
+            <AppSelect
+              value={selectedSymbol}
+              options={symbolOptions}
+              onChange={(v) => selectSymbol(String(v))}
+              searchable
+            />
+            <span className="oc-expiry-bar__label">Expiry</span>
+            <AppSelect
+              value={selectedExpiry}
+              options={expiries.map((exp) => ({
+                value: exp,
+                label: new Date(exp).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+              }))}
+              onChange={(v) => setSelectedExpiry(String(v))}
+              className="oc-expiry-select"
+            />
+            {daysToExpiry !== undefined && (
+              <span className="oc-expiry-bar__days">{daysToExpiry === 0 ? 'Expiry today' : `${daysToExpiry}d to expiry`}</span>
+            )}
+          </div>
+
+          {recentSymbolOptions.length > 0 && (
+            <div className="oc-recent-symbols" aria-label="Recently visited stocks">
+              <span className="oc-recent-symbols__label">Recent</span>
+              {recentSymbolOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  className="oc-recent-symbols__chip"
+                  onClick={() => selectSymbol(option.value)}
+                  title={`Switch to ${option.label}`}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
           )}
         </div>
       )}

@@ -1,12 +1,52 @@
 /* Expiry Bar */
-.oc-expiry-bar {
-  display: flex;
-  align-items: center;
-  gap: 12px;
+.oc-expiry-panel {
   margin-bottom: 20px;
   padding: 10px 16px;
   background: var(--sidebar-hover);
   border-radius: 8px;
+}
+
+.oc-expiry-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.oc-recent-symbols {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+
+.oc-recent-symbols__label {
+  margin-right: 2px;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.oc-recent-symbols__chip {
+  min-height: 26px;
+  padding: 4px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.12s, border-color 0.12s, background 0.12s;
+}
+
+.oc-recent-symbols__chip:hover {
+  color: var(--text-primary);
+  border-color: var(--accent);
+  background: rgba(99, 102, 241, 0.08);
 }
 
 .oc-expiry-bar__label {

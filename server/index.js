@@ -59,6 +59,7 @@ import {
   insertOiHistoryRows,
   getOiHistoryData,
   getOiHistoryDataByExpiryMonth,
+  getOiHistoryDatesForExpiryMonth,
   getOiHistoryExpiryMonths,
   getOptionsForAtm,
   deleteOiHistoryByMonth,
@@ -577,7 +578,7 @@ app.delete('/api/oi-snapshots/old', requireAuth, (req, res) => {
 
 /**
  * POST /api/oi-history/fetch — Fetch historical daily OI candles from Kite.
- * Skips dates already stored in the database.
+ * Fetches missing dates from the current month and always refreshes today.
  * Streams progress via Server-Sent Events (SSE).
  * Body: { scrip: 'NIFTY50', expiryMonth: 'YYYY-MM' }
  *
@@ -643,7 +644,10 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
     const stepSize = getStrikeStepSize(scripName);
     const range = 20;
 
-    // Step 1: Fetch spot index daily candles for spot close
+    createOiHistoryTable();
+
+    // Step 1: Fetch spot index daily candles for spot close. This is cheap and
+    // gives the trading-day calendar, so cache skipping can avoid option calls.
     send('step', { step: 1, message: `Fetching ${scrip} spot data...` });
 
     const spotUrl = `https://api.kite.trade/instruments/historical/${spotToken}/day?from=${from}&to=${to}&oi=1`;
@@ -663,19 +667,28 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
       return res.end();
     }
 
-    createOiHistoryTable();
-
-    // Step 2: For each trading day, compute ATM. Always process ALL trading
-    // days in the window — every fetch hits Kite and upserts (no cache skip).
+    // Step 2: For each trading day, compute ATM. Past stored dates are skipped;
+    // today is always refreshed because intraday OI can change until close.
+    const existingDates = getOiHistoryDatesForExpiryMonth(scrip, expiryMonth, from, to);
     send('step', { step: 2, message: `Found ${spotCandles.length} trading days.` });
 
     const allDays = []; // all trading days from Kite
     for (const candle of spotCandles) {
       const date = candle[0].slice(0, 10);
+      if (date !== today && existingDates.has(date)) continue;
       const spotClose = candle[4];
       const atm = Math.round(spotClose / stepSize) * stepSize;
       allDays.push({ date, spotClose, atm });
     }
+
+    const skippedDays = spotCandles.length - allDays.length;
+    if (allDays.length === 0) {
+      send('done', { rowCount: 0, tradingDays: spotCandles.length, skippedDays, fetchedDays: 0, uniqueTokens: 0 });
+      return res.end();
+    }
+
+    const fetchFrom = allDays[0].date;
+    const fetchTo = allDays[allDays.length - 1].date;
 
     // Collect unique tokens needed across all days
     const uniqueTokens = new Map();
@@ -695,7 +708,7 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
     }
 
     if (uniqueTokens.size === 0) {
-      send('done', { rowCount: 0, tradingDays: allDays.length, skippedDays: 0, fetchedDays: 0, uniqueTokens: 0, message: 'No option instruments found. Ensure the server has loaded instruments today.' });
+      send('done', { rowCount: 0, tradingDays: spotCandles.length, skippedDays, fetchedDays: 0, uniqueTokens: 0, message: 'No option instruments found. Ensure the server has loaded instruments today.' });
       return res.end();
     }
 
@@ -712,7 +725,7 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
       const batchNum = Math.floor(i / batchSize) + 1;
       const promises = batch.map(async (token) => {
         try {
-          const url = `https://api.kite.trade/instruments/historical/${token}/day?from=${from}&to=${to}&oi=1`;
+          const url = `https://api.kite.trade/instruments/historical/${token}/day?from=${fetchFrom}&to=${fetchTo}&oi=1`;
           const response = await fetch(url, {
             headers: { Authorization: authHeader, 'X-Kite-Version': '3' },
           });
@@ -784,12 +797,12 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
     // Upsert: insertOiHistoryRows uses INSERT OR REPLACE keyed on
     // (scrip, date, instrument_token), so existing rows are overwritten.
     const rowCount = insertOiHistoryRows(scrip, rows);
-    console.log(`[OI History] Fetched ${rowCount} rows for ${scrip} ${expiryMonth} (${allDays.length} days, ${uniqueTokens.size} tokens)`);
+    console.log(`[OI History] Fetched ${rowCount} rows for ${scrip} ${expiryMonth} (${allDays.length} fetched days, ${skippedDays} skipped days, ${uniqueTokens.size} tokens)`);
 
     send('done', {
       rowCount,
-      tradingDays: allDays.length,
-      skippedDays: 0,
+      tradingDays: spotCandles.length,
+      skippedDays,
       fetchedDays: allDays.length,
       uniqueTokens: uniqueTokens.size,
     });
