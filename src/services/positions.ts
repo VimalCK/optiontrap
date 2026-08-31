@@ -19,6 +19,11 @@ export interface Position {
   exited?: boolean;
   exitPrice?: number;
   exitTime?: string;
+  note?: string;
+  targetPrice?: number | null;
+  stopLossPrice?: number | null;
+  strategyTag?: string;
+  confidence?: number | null;
 }
 
 async function request<T>(url: string, options: RequestInit = {}): Promise<T> {

@@ -507,6 +507,34 @@
   font-size: 11px;
 }
 
+.tj-trade-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+
+.tj-trade-meta span {
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tj-trade-meta__tag {
+  color: var(--accent);
+  background: var(--sidebar-active) !important;
+}
+
+.tj-trade-meta__note {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .tj-badge {
   display: inline-block;
   font-size: 10px;

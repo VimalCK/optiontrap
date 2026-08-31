@@ -21,6 +21,11 @@ export interface TradeEntry {
   entryPrice: number;
   exitPrice: number;
   pnl: number;
+  note?: string;
+  targetPrice?: number | null;
+  stopLossPrice?: number | null;
+  strategyTag?: string;
+  confidence?: number | null;
 }
 
 /**
@@ -57,6 +62,11 @@ function positionToEntry(pos: Position): TradeEntry {
     entryPrice: pos.entryPrice,
     exitPrice,
     pnl: Number(pnl.toFixed(2)),
+    note: pos.note,
+    targetPrice: pos.targetPrice,
+    stopLossPrice: pos.stopLossPrice,
+    strategyTag: pos.strategyTag,
+    confidence: pos.confidence,
   };
 }
 

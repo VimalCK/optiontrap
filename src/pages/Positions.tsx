@@ -129,6 +129,15 @@ const PaperPositions: React.FC = () => {
                       <span className={`positions-table__type positions-table__type--${pos.optionType.toLowerCase()}`}>{pos.optionType}</span>
                       <span className="positions-table__expiry">{new Date(pos.expiry).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
                     </span>
+                    {(pos.strategyTag || pos.confidence != null || pos.targetPrice != null || pos.stopLossPrice != null || pos.note) && (
+                      <div className="positions-table__meta">
+                        {pos.strategyTag && <span className="positions-table__tag">{pos.strategyTag}</span>}
+                        {pos.confidence != null && <span>Conf {pos.confidence}%</span>}
+                        {pos.targetPrice != null && <span>Tgt {pos.targetPrice.toFixed(2)}</span>}
+                        {pos.stopLossPrice != null && <span>SL {pos.stopLossPrice.toFixed(2)}</span>}
+                        {pos.note && <span className="positions-table__note">{pos.note}</span>}
+                      </div>
+                    )}
                   </td>
                   <td><span className={`positions-table__side positions-table__side--${pos.side.toLowerCase()}`}>{pos.side}</span></td>
                   <td>{pos.quantity}</td>

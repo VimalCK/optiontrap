@@ -149,6 +149,9 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
 
     const side = mode === 'sell' ? 'SELL' : 'BUY';
     const verb = mode === 'sell' ? 'SELL' : 'BUY';
+    const strategyTag = `${mode === 'sell' ? sellBadgeLabel((rec as SellRecommendation).type) : buyBadgeLabel((rec as BuyRecommendation).type)} Strategy`;
+    const note = rec.reasons.slice(0, 3).join(' | ');
+    const confidence = Math.max(0, Math.min(100, Math.round(rec.score)));
 
     try {
       const type = rec.type;
@@ -167,6 +170,9 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           quantity: instrument.lotSize,
           entryPrice: ltp,
           expiry,
+          strategyTag,
+          note,
+          confidence,
         });
         onToast(`${verb} ${rec.strikes[0]}${optionType} @ ${ltp.toFixed(2)}`, 'green');
       } else if (type === 'sell-straddle' || type === 'buy-straddle') {
@@ -183,6 +189,9 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           quantity: row.ce.lotSize,
           entryPrice: ceLtp,
           expiry,
+          strategyTag,
+          note,
+          confidence,
         });
         await addPosition({
           tradingsymbol: row.pe.tradingsymbol,
@@ -193,6 +202,9 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           quantity: row.pe.lotSize,
           entryPrice: peLtp,
           expiry,
+          strategyTag,
+          note,
+          confidence,
         });
         onToast(`${verb} Straddle ${rec.strikes[0]} CE@${ceLtp.toFixed(0)} PE@${peLtp.toFixed(0)}`, 'green');
       } else if (type === 'sell-strangle' || type === 'buy-strangle') {
@@ -210,6 +222,9 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           quantity: ceRow.ce.lotSize,
           entryPrice: ceLtp,
           expiry,
+          strategyTag,
+          note,
+          confidence,
         });
         await addPosition({
           tradingsymbol: peRow.pe.tradingsymbol,
@@ -220,6 +235,9 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           quantity: peRow.pe.lotSize,
           entryPrice: peLtp,
           expiry,
+          strategyTag,
+          note,
+          confidence,
         });
         onToast(`${verb} Strangle ${rec.strikes[0]}CE@${ceLtp.toFixed(0)} ${rec.strikes[1]}PE@${peLtp.toFixed(0)}`, 'green');
       }

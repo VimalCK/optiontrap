@@ -106,6 +106,33 @@
   white-space: nowrap;
 }
 
+.positions-table__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 6px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  white-space: normal;
+}
+
+.positions-table__meta span {
+  padding: 2px 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.positions-table__meta .positions-table__tag {
+  color: var(--accent);
+  background: var(--sidebar-active);
+}
+
+.positions-table__note {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .positions-table__strike {
   font-weight: 600;
 }

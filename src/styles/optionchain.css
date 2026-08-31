@@ -907,7 +907,9 @@
   background: var(--content-bg);
   border: 1px solid var(--card-border);
   border-radius: var(--radius);
-  width: 280px;
+  width: min(420px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
   box-shadow: 0 16px 48px rgba(0, 0, 0, 0.4);
   animation: modalFadeIn 0.12s ease;
 }
@@ -1007,7 +1009,8 @@
   color: var(--text-secondary);
 }
 
-.oc-order-modal__field input {
+.oc-order-modal__field input,
+.oc-order-modal__field textarea {
   width: 100%;
   padding: 8px 10px;
   font-size: 13px;
@@ -1019,6 +1022,34 @@
   outline: none;
   -moz-appearance: textfield;
   flex: 1;
+}
+
+.oc-order-modal__field textarea {
+  min-height: 72px;
+  resize: vertical;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  line-height: 1.4;
+}
+
+.oc-order-modal__field input[type="text"],
+.oc-order-modal__field input[type="range"] {
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+}
+
+.oc-order-modal__field input[type="range"] {
+  padding: 8px 0;
+  accent-color: var(--accent);
+}
+
+.oc-order-modal__meta {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--card-border);
 }
 
 .oc-order-modal__field input::-webkit-outer-spin-button,

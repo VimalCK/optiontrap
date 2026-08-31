@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
-import { useTheme, ACCENT_THEMES, AccentTheme } from '@/context/ThemeContext';
-import AppSelect from '@/components/AppSelect/AppSelect';
+import { useTheme, ACCENT_THEMES } from '@/context/ThemeContext';
 import { SettingsIcon } from '@/components/icons/Icons';
 import '@/styles/settings.css';
 

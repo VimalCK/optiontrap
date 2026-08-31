@@ -473,7 +473,22 @@ app.get('/api/positions', requireAuth, (req, res) => {
 
 app.post('/api/positions', requireAuth, (req, res) => {
   const userId = req.session.kiteSession.userId;
-  const { tradingsymbol, instrumentToken, strike, optionType, side, quantity, entryPrice, expiry, mode } = req.body;
+  const {
+    tradingsymbol,
+    instrumentToken,
+    strike,
+    optionType,
+    side,
+    quantity,
+    entryPrice,
+    expiry,
+    mode,
+    note,
+    targetPrice,
+    stopLossPrice,
+    strategyTag,
+    confidence,
+  } = req.body;
 
   if (!tradingsymbol || !instrumentToken || strike == null || !optionType || !side || !quantity || !entryPrice || !expiry) {
     return res.status(400).json({ status: 'error', message: 'Missing required fields' });
@@ -489,6 +504,11 @@ app.post('/api/positions', requireAuth, (req, res) => {
     entryPrice: Number(entryPrice),
     expiry,
     mode: mode || 'paper',
+    note,
+    targetPrice,
+    stopLossPrice,
+    strategyTag,
+    confidence,
   });
 
   res.json({ status: 'ok', data: position });

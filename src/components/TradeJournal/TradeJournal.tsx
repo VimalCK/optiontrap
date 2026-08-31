@@ -243,7 +243,18 @@ const TradeJournal: React.FC = () => {
                           {/* Individual trades — only shown when expanded */}
                           {isExpanded && trades.map((t) => (
                             <tr key={t.id} className="tj-trade-row">
-                              <td className="tj-symbol">{t.symbol}</td>
+                              <td className="tj-symbol">
+                                {t.symbol}
+                                {(t.strategyTag || t.confidence != null || t.targetPrice != null || t.stopLossPrice != null || t.note) && (
+                                  <div className="tj-trade-meta">
+                                    {t.strategyTag && <span className="tj-trade-meta__tag">{t.strategyTag}</span>}
+                                    {t.confidence != null && <span>Conf {t.confidence}%</span>}
+                                    {t.targetPrice != null && <span>Tgt {t.targetPrice.toFixed(2)}</span>}
+                                    {t.stopLossPrice != null && <span>SL {t.stopLossPrice.toFixed(2)}</span>}
+                                    {t.note && <span className="tj-trade-meta__note">{t.note}</span>}
+                                  </div>
+                                )}
+                              </td>
                               <td><span className={`tj-badge tj-badge--${t.segment}`}>{t.segment}</span></td>
                               <td><span className={`tj-side tj-side--${t.side.toLowerCase()}`}>{t.side}</span></td>
                               <td>{t.quantity}</td>

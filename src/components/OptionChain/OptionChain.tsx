@@ -6,6 +6,8 @@ import { saveOiSnapshot, getTodaySnapshots, calculateVelocity, shouldTakeSnapsho
 import { computeStrikeSignals } from '@/services/combinedSignal';
 import { addPosition } from '@/services/positions';
 
+type PaperTradeSide = 'BUY' | 'SELL';
+
 const TrapInfoDetail: React.FC = () => (
   <div className="trap-info-detail">
     <h4>How Position Analyzer Works</h4>
@@ -118,6 +120,11 @@ const OptionChain: React.FC = () => {
   const [orderForm, setOrderForm] = useState<{ strike: number; optionType: 'CE' | 'PE' } | null>(null);
   const [orderQty, setOrderQty] = useState(50);
   const [orderPrice, setOrderPrice] = useState(0);
+  const [orderNote, setOrderNote] = useState('');
+  const [orderTargetPrice, setOrderTargetPrice] = useState('');
+  const [orderStopLossPrice, setOrderStopLossPrice] = useState('');
+  const [orderStrategyTag, setOrderStrategyTag] = useState('Manual');
+  const [orderConfidence, setOrderConfidence] = useState(70);
   const [orderMode, setOrderMode] = useState<'paper' | 'live'>(() => {
     return (localStorage.getItem('optiontrap_order_mode') as 'paper' | 'live') || 'paper';
   });
@@ -151,6 +158,65 @@ const OptionChain: React.FC = () => {
     setToasts((prev) => [...prev, { id, text, color }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 2000);
   }, []);
+
+  const resetOrderMeta = useCallback(() => {
+    setOrderNote('');
+    setOrderTargetPrice('');
+    setOrderStopLossPrice('');
+    setOrderStrategyTag('Manual');
+    setOrderConfidence(70);
+  }, []);
+
+  const buildOrderMeta = useCallback((fallbackStrategyTag = 'Manual') => ({
+    note: orderNote.trim(),
+    targetPrice: orderTargetPrice ? Number(orderTargetPrice) : null,
+    stopLossPrice: orderStopLossPrice ? Number(orderStopLossPrice) : null,
+    strategyTag: orderStrategyTag.trim() || fallbackStrategyTag,
+    confidence: orderConfidence,
+  }), [orderConfidence, orderNote, orderStopLossPrice, orderStrategyTag, orderTargetPrice]);
+
+  const placePaperTrade = useCallback(async ({
+    instrument,
+    strike,
+    optionType,
+    side,
+    quantity,
+    entryPrice,
+    strategyTag = 'Manual',
+    note,
+    targetPrice,
+    stopLossPrice,
+    confidence,
+  }: {
+    instrument: OptionInstrument;
+    strike: number;
+    optionType: 'CE' | 'PE';
+    side: PaperTradeSide;
+    quantity: number;
+    entryPrice: number;
+    strategyTag?: string;
+    note?: string;
+    targetPrice?: number | null;
+    stopLossPrice?: number | null;
+    confidence?: number | null;
+  }) => {
+    await addPosition({
+      tradingsymbol: instrument.tradingsymbol,
+      instrumentToken: instrument.instrumentToken,
+      strike,
+      optionType,
+      side,
+      quantity,
+      entryPrice,
+      expiry: selectedExpiry,
+      note,
+      targetPrice,
+      stopLossPrice,
+      strategyTag,
+      confidence,
+    });
+    showToast(`${side} ${strike}${optionType} @ ${entryPrice.toFixed(2)}`, 'green');
+  }, [selectedExpiry, showToast]);
 
   const handleTicks = useCallback((ticks: Tick[]) => {
     // Update spot price eagerly (not a Map, no clone needed)
@@ -681,13 +747,13 @@ const OptionChain: React.FC = () => {
                           {ceOiChg && <span className={`oc-cell-chg ${ceOiChg.color}`}>{ceOiChg.pct >= 0 ? '+' : ''}{ceOiChg.pct.toFixed(2)}%</span>}
                         </span>
                       </td>
-                      <td className={`oc-cell-ltp oc-cell-ltp--clickable oc-cell-ltp--hover-btns ${ceItm ? 'oc-cell--itm-ce' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === 'CE' ? null : { strike: row.strike, optionType: 'CE' }); if (cePrice) setOrderPrice(cePrice); if (row.ce) setOrderQty(row.ce.lotSize); }}>
-                        <button className="oc-ltp-action-btn oc-ltp-action-btn--buy" onClick={async (e) => { e.stopPropagation(); if (!row.ce || cePrice === null || orderMode !== 'paper') return; try { await addPosition({ tradingsymbol: row.ce.tradingsymbol, instrumentToken: row.ce.instrumentToken, strike: row.strike, optionType: 'CE', side: 'BUY', quantity: row.ce.lotSize, entryPrice: cePrice, expiry: selectedExpiry }); showToast(`BUY ${row.strike}CE @ ${cePrice.toFixed(2)}`, 'green'); } catch { showToast('Failed to add position', 'red'); } }}>B</button>
+                      <td className={`oc-cell-ltp oc-cell-ltp--clickable oc-cell-ltp--hover-btns ${ceItm ? 'oc-cell--itm-ce' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === 'CE' ? null : { strike: row.strike, optionType: 'CE' }); if (cePrice) setOrderPrice(cePrice); if (row.ce) setOrderQty(row.ce.lotSize); if (!(isOrderOpen && orderForm?.optionType === 'CE')) resetOrderMeta(); }}>
+                        <button className="oc-ltp-action-btn oc-ltp-action-btn--buy" onClick={async (e) => { e.stopPropagation(); if (!row.ce || cePrice === null || orderMode !== 'paper') return; try { await placePaperTrade({ instrument: row.ce, strike: row.strike, optionType: 'CE', side: 'BUY', quantity: row.ce.lotSize, entryPrice: cePrice, strategyTag: 'Quick Trade' }); } catch { showToast('Failed to add position', 'red'); } }}>B</button>
                         <span className="oc-ltp-price">
                           {cePrice !== null ? cePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                           {ceChg && <span className={`oc-cell-chg ${ceChg.color}`}>{ceChg.pct >= 0 ? '+' : ''}{ceChg.pct.toFixed(2)}%</span>}
                         </span>
-                        <button className="oc-ltp-action-btn oc-ltp-action-btn--sell" onClick={async (e) => { e.stopPropagation(); if (!row.ce || cePrice === null || orderMode !== 'paper') return; try { await addPosition({ tradingsymbol: row.ce.tradingsymbol, instrumentToken: row.ce.instrumentToken, strike: row.strike, optionType: 'CE', side: 'SELL', quantity: row.ce.lotSize, entryPrice: cePrice, expiry: selectedExpiry }); showToast(`SELL ${row.strike}CE @ ${cePrice.toFixed(2)}`, 'green'); } catch { showToast('Failed to add position', 'red'); } }}>S</button>
+                        <button className="oc-ltp-action-btn oc-ltp-action-btn--sell" onClick={async (e) => { e.stopPropagation(); if (!row.ce || cePrice === null || orderMode !== 'paper') return; try { await placePaperTrade({ instrument: row.ce, strike: row.strike, optionType: 'CE', side: 'SELL', quantity: row.ce.lotSize, entryPrice: cePrice, strategyTag: 'Quick Trade' }); } catch { showToast('Failed to add position', 'red'); } }}>S</button>
                       </td>
                       <td className="oc-cell-strike">
                         <div className="oc-strike-bars">
@@ -696,13 +762,13 @@ const OptionChain: React.FC = () => {
                         </div>
                         {row.strike}
                       </td>
-                      <td className={`oc-cell-ltp oc-cell-ltp--clickable oc-cell-ltp--hover-btns ${peItm ? 'oc-cell--itm-pe' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === 'PE' ? null : { strike: row.strike, optionType: 'PE' }); if (pePrice) setOrderPrice(pePrice); if (row.pe) setOrderQty(row.pe.lotSize); }}>
-                        <button className="oc-ltp-action-btn oc-ltp-action-btn--buy" onClick={async (e) => { e.stopPropagation(); if (!row.pe || pePrice === null || orderMode !== 'paper') return; try { await addPosition({ tradingsymbol: row.pe.tradingsymbol, instrumentToken: row.pe.instrumentToken, strike: row.strike, optionType: 'PE', side: 'BUY', quantity: row.pe.lotSize, entryPrice: pePrice, expiry: selectedExpiry }); showToast(`BUY ${row.strike}PE @ ${pePrice.toFixed(2)}`, 'green'); } catch { showToast('Failed to add position', 'red'); } }}>B</button>
+                      <td className={`oc-cell-ltp oc-cell-ltp--clickable oc-cell-ltp--hover-btns ${peItm ? 'oc-cell--itm-pe' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === 'PE' ? null : { strike: row.strike, optionType: 'PE' }); if (pePrice) setOrderPrice(pePrice); if (row.pe) setOrderQty(row.pe.lotSize); if (!(isOrderOpen && orderForm?.optionType === 'PE')) resetOrderMeta(); }}>
+                        <button className="oc-ltp-action-btn oc-ltp-action-btn--buy" onClick={async (e) => { e.stopPropagation(); if (!row.pe || pePrice === null || orderMode !== 'paper') return; try { await placePaperTrade({ instrument: row.pe, strike: row.strike, optionType: 'PE', side: 'BUY', quantity: row.pe.lotSize, entryPrice: pePrice, strategyTag: 'Quick Trade' }); } catch { showToast('Failed to add position', 'red'); } }}>B</button>
                         <span className="oc-ltp-price">
                           {pePrice !== null ? pePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                           {peChg && <span className={`oc-cell-chg ${peChg.color}`}>{peChg.pct >= 0 ? '+' : ''}{peChg.pct.toFixed(2)}%</span>}
                         </span>
-                        <button className="oc-ltp-action-btn oc-ltp-action-btn--sell" onClick={async (e) => { e.stopPropagation(); if (!row.pe || pePrice === null || orderMode !== 'paper') return; try { await addPosition({ tradingsymbol: row.pe.tradingsymbol, instrumentToken: row.pe.instrumentToken, strike: row.strike, optionType: 'PE', side: 'SELL', quantity: row.pe.lotSize, entryPrice: pePrice, expiry: selectedExpiry }); showToast(`SELL ${row.strike}PE @ ${pePrice.toFixed(2)}`, 'green'); } catch { showToast('Failed to add position', 'red'); } }}>S</button>
+                        <button className="oc-ltp-action-btn oc-ltp-action-btn--sell" onClick={async (e) => { e.stopPropagation(); if (!row.pe || pePrice === null || orderMode !== 'paper') return; try { await placePaperTrade({ instrument: row.pe, strike: row.strike, optionType: 'PE', side: 'SELL', quantity: row.pe.lotSize, entryPrice: pePrice, strategyTag: 'Quick Trade' }); } catch { showToast('Failed to add position', 'red'); } }}>S</button>
                       </td>
                       <td className={`oc-cell-oi oc-cell-oi--pe ${peItm ? 'oc-cell--itm-pe' : ''}`}>
                         <span className="oc-oi-content">
@@ -765,6 +831,34 @@ const OptionChain: React.FC = () => {
                     </div>
                   </div>
                 </div>
+                {orderMode === 'paper' && (
+                  <div className="oc-order-modal__meta">
+                    <div className="oc-order-modal__fields">
+                      <label className="oc-order-modal__field">
+                        <span>Target</span>
+                        <input type="number" value={orderTargetPrice} onChange={(e) => setOrderTargetPrice(e.target.value)} min={0} step={0.05} placeholder="Optional" />
+                      </label>
+                      <label className="oc-order-modal__field">
+                        <span>Stop-loss</span>
+                        <input type="number" value={orderStopLossPrice} onChange={(e) => setOrderStopLossPrice(e.target.value)} min={0} step={0.05} placeholder="Optional" />
+                      </label>
+                    </div>
+                    <div className="oc-order-modal__fields">
+                      <label className="oc-order-modal__field">
+                        <span>Strategy</span>
+                        <input type="text" value={orderStrategyTag} onChange={(e) => setOrderStrategyTag(e.target.value)} maxLength={32} placeholder="Manual" />
+                      </label>
+                      <label className="oc-order-modal__field">
+                        <span>Confidence: {orderConfidence}%</span>
+                        <input type="range" value={orderConfidence} onChange={(e) => setOrderConfidence(Number(e.target.value))} min={0} max={100} step={5} />
+                      </label>
+                    </div>
+                    <label className="oc-order-modal__field">
+                      <span>Trade Note</span>
+                      <textarea value={orderNote} onChange={(e) => setOrderNote(e.target.value)} rows={3} maxLength={240} placeholder="Why are you taking this trade?" />
+                    </label>
+                  </div>
+                )}
               </div>
               <div className="oc-order-modal__footer">
                 {orderMode === 'live' && (
@@ -773,11 +867,11 @@ const OptionChain: React.FC = () => {
                 {orderMode === 'paper' && (
                   <>
                     <button className="oc-order-panel__btn oc-order-panel__btn--buy" onClick={async () => {
-                      try { await addPosition({ tradingsymbol: instrument.tradingsymbol, instrumentToken: instrument.instrumentToken, strike: orderForm.strike, optionType: orderForm.optionType, side: 'BUY', quantity: orderQty, entryPrice: orderPrice, expiry: selectedExpiry }); showToast(`BUY ${orderForm.strike}${orderForm.optionType} @ ${orderPrice.toFixed(2)}`, 'green'); } catch { showToast('Failed to add position', 'red'); }
+                      try { await placePaperTrade({ instrument, strike: orderForm.strike, optionType: orderForm.optionType, side: 'BUY', quantity: orderQty, entryPrice: orderPrice, ...buildOrderMeta() }); resetOrderMeta(); } catch { showToast('Failed to add position', 'red'); }
                       setOrderForm(null);
                     }}>Buy</button>
                     <button className="oc-order-panel__btn oc-order-panel__btn--sell" onClick={async () => {
-                      try { await addPosition({ tradingsymbol: instrument.tradingsymbol, instrumentToken: instrument.instrumentToken, strike: orderForm.strike, optionType: orderForm.optionType, side: 'SELL', quantity: orderQty, entryPrice: orderPrice, expiry: selectedExpiry }); showToast(`SELL ${orderForm.strike}${orderForm.optionType} @ ${orderPrice.toFixed(2)}`, 'green'); } catch { showToast('Failed to add position', 'red'); }
+                      try { await placePaperTrade({ instrument, strike: orderForm.strike, optionType: orderForm.optionType, side: 'SELL', quantity: orderQty, entryPrice: orderPrice, ...buildOrderMeta() }); resetOrderMeta(); } catch { showToast('Failed to add position', 'red'); }
                       setOrderForm(null);
                     }}>Sell</button>
                   </>
@@ -1053,8 +1147,7 @@ const OptionChain: React.FC = () => {
                                 e.stopPropagation();
                                 if (!row.pe || peLtp === null) return;
                                 try {
-                                  await addPosition({ tradingsymbol: row.pe.tradingsymbol, instrumentToken: row.pe.instrumentToken, strike: row.strike, optionType: 'PE', side: 'SELL', quantity: row.pe.lotSize, entryPrice: peLtp, expiry: selectedExpiry });
-                                  showToast(`SELL ${row.strike}PE @ ${peLtp.toFixed(2)}`, 'green');
+                                  await placePaperTrade({ instrument: row.pe, strike: row.strike, optionType: 'PE', side: 'SELL', quantity: row.pe.lotSize, entryPrice: peLtp, strategyTag: 'OI Chart' });
                                   setSelectedChartStrike(null);
                                 } catch { showToast('Failed to add position', 'red'); }
                               }}
@@ -1066,8 +1159,7 @@ const OptionChain: React.FC = () => {
                                 e.stopPropagation();
                                 if (!row.ce || ceLtp === null) return;
                                 try {
-                                  await addPosition({ tradingsymbol: row.ce.tradingsymbol, instrumentToken: row.ce.instrumentToken, strike: row.strike, optionType: 'CE', side: 'SELL', quantity: row.ce.lotSize, entryPrice: ceLtp, expiry: selectedExpiry });
-                                  showToast(`SELL ${row.strike}CE @ ${ceLtp.toFixed(2)}`, 'green');
+                                  await placePaperTrade({ instrument: row.ce, strike: row.strike, optionType: 'CE', side: 'SELL', quantity: row.ce.lotSize, entryPrice: ceLtp, strategyTag: 'OI Chart' });
                                   setSelectedChartStrike(null);
                                 } catch { showToast('Failed to add position', 'red'); }
                               }}

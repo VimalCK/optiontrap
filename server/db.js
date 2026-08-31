@@ -143,9 +143,20 @@ export async function initDb() {
       expiry            TEXT NOT NULL,
       exited            INTEGER NOT NULL DEFAULT 0,
       exit_price        REAL,
-      exit_time         TEXT
+      exit_time         TEXT,
+      note              TEXT,
+      target_price      REAL,
+      stop_loss_price   REAL,
+      strategy_tag      TEXT,
+      confidence        INTEGER
     )
   `);
+
+  ensureColumn('positions', 'note', 'TEXT');
+  ensureColumn('positions', 'target_price', 'REAL');
+  ensureColumn('positions', 'stop_loss_price', 'REAL');
+  ensureColumn('positions', 'strategy_tag', 'TEXT');
+  ensureColumn('positions', 'confidence', 'INTEGER');
 
   db.run(`
     CREATE TABLE IF NOT EXISTS oi_snapshots (
@@ -201,6 +212,12 @@ function persist() {
   if (!db) return;
   const data = db.export();
   fs.writeFileSync(DB_PATH, Buffer.from(data));
+}
+
+function ensureColumn(table, column, definition) {
+  const result = db.exec(`PRAGMA table_info(${table})`);
+  const hasColumn = result[0]?.values.some((row) => row[1] === column);
+  if (!hasColumn) db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
 }
 
 /**
@@ -669,7 +686,22 @@ function mapPositionRow(row) {
     exited: row.exited === 1,
     exitPrice: row.exit_price,
     exitTime: row.exit_time,
+    note: row.note || '',
+    targetPrice: row.target_price,
+    stopLossPrice: row.stop_loss_price,
+    strategyTag: row.strategy_tag || '',
+    confidence: row.confidence,
   };
+}
+
+function positionMetaValues(position) {
+  return [
+    position.note?.trim() || null,
+    position.targetPrice === undefined || position.targetPrice === null || position.targetPrice === '' ? null : Number(position.targetPrice),
+    position.stopLossPrice === undefined || position.stopLossPrice === null || position.stopLossPrice === '' ? null : Number(position.stopLossPrice),
+    position.strategyTag?.trim() || null,
+    position.confidence === undefined || position.confidence === null || position.confidence === '' ? null : Number(position.confidence),
+  ];
 }
 
 /**
@@ -695,11 +727,24 @@ export function addPosition(userId, position) {
     const avgPrice = (sameSide.entry_price * sameSide.quantity + position.entryPrice * position.quantity) / totalQty;
 
     db.run(
-      'UPDATE positions SET quantity = ?, entry_price = ? WHERE id = ?',
-      [totalQty, Number(avgPrice.toFixed(2)), sameSide.id],
+      `UPDATE positions SET
+         quantity = ?, entry_price = ?, note = COALESCE(?, note), target_price = COALESCE(?, target_price),
+         stop_loss_price = COALESCE(?, stop_loss_price), strategy_tag = COALESCE(?, strategy_tag), confidence = COALESCE(?, confidence)
+       WHERE id = ?`,
+      [totalQty, Number(avgPrice.toFixed(2)), ...positionMetaValues(position), sameSide.id],
     );
     persist();
-    return mapPositionRow({ ...sameSide, quantity: totalQty, entry_price: Number(avgPrice.toFixed(2)) });
+    const [note, targetPrice, stopLossPrice, strategyTag, confidence] = positionMetaValues(position);
+    return mapPositionRow({
+      ...sameSide,
+      quantity: totalQty,
+      entry_price: Number(avgPrice.toFixed(2)),
+      note: note ?? sameSide.note,
+      target_price: targetPrice ?? sameSide.target_price,
+      stop_loss_price: stopLossPrice ?? sameSide.stop_loss_price,
+      strategy_tag: strategyTag ?? sameSide.strategy_tag,
+      confidence: confidence ?? sameSide.confidence,
+    });
   }
 
   // Look for open opposite-side position
@@ -738,10 +783,11 @@ export function addPosition(userId, position) {
 
     const remainderId = crypto.randomUUID();
     db.run(
-      `INSERT INTO positions (id, user_id, mode, tradingsymbol, instrument_token, strike, option_type, side, quantity, entry_price, entry_time, expiry)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO positions (id, user_id, mode, tradingsymbol, instrument_token, strike, option_type, side, quantity, entry_price, entry_time, expiry, note, target_price, stop_loss_price, strategy_tag, confidence)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [remainderId, userId, mode, position.tradingsymbol, position.instrumentToken, position.strike,
-       position.optionType, position.side, position.quantity - opposite.quantity, position.entryPrice, now, position.expiry],
+       position.optionType, position.side, position.quantity - opposite.quantity, position.entryPrice, now, position.expiry,
+       ...positionMetaValues(position)],
     );
     persist();
     return mapPositionRow({
@@ -749,16 +795,19 @@ export function addPosition(userId, position) {
       instrument_token: position.instrumentToken, strike: position.strike, option_type: position.optionType,
       side: position.side, quantity: position.quantity - opposite.quantity, entry_price: position.entryPrice,
       entry_time: now, expiry: position.expiry, exited: 0, exit_price: null, exit_time: null,
+      note: position.note || null, target_price: position.targetPrice ?? null, stop_loss_price: position.stopLossPrice ?? null,
+      strategy_tag: position.strategyTag || null, confidence: position.confidence ?? null,
     });
   }
 
   // No existing — open fresh
   const id = crypto.randomUUID();
   db.run(
-    `INSERT INTO positions (id, user_id, mode, tradingsymbol, instrument_token, strike, option_type, side, quantity, entry_price, entry_time, expiry)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO positions (id, user_id, mode, tradingsymbol, instrument_token, strike, option_type, side, quantity, entry_price, entry_time, expiry, note, target_price, stop_loss_price, strategy_tag, confidence)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [id, userId, mode, position.tradingsymbol, position.instrumentToken, position.strike,
-     position.optionType, position.side, position.quantity, position.entryPrice, now, position.expiry],
+     position.optionType, position.side, position.quantity, position.entryPrice, now, position.expiry,
+     ...positionMetaValues(position)],
   );
   persist();
   return mapPositionRow({
@@ -766,6 +815,8 @@ export function addPosition(userId, position) {
     instrument_token: position.instrumentToken, strike: position.strike, option_type: position.optionType,
     side: position.side, quantity: position.quantity, entry_price: position.entryPrice,
     entry_time: now, expiry: position.expiry, exited: 0, exit_price: null, exit_time: null,
+    note: position.note || null, target_price: position.targetPrice ?? null, stop_loss_price: position.stopLossPrice ?? null,
+    strategy_tag: position.strategyTag || null, confidence: position.confidence ?? null,
   });
 }
 
