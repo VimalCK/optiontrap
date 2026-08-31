@@ -8,6 +8,7 @@ import React, { useState } from 'react';
 import HoldingsView from './HoldingsView';
 import PositionsView from './Positions';
 import '@/styles/analytics.css'; // reuse same tab-bar CSS
+import '@/styles/portfolio.css';
 
 type Tab = 'holdings' | 'positions';
 
@@ -20,13 +21,12 @@ const Holdings: React.FC = () => {
   ];
 
   return (
-    <div>
-      {/* Tab bar */}
-      <div className="analytics-tabs">
+    <div className="portfolio">
+      <div className="portfolio-tabs">
         {TABS.map((t) => (
           <button
             key={t.id}
-            className={`analytics-tab ${tab === t.id ? 'analytics-tab--active' : ''}`}
+            className={`portfolio-tab ${tab === t.id ? 'portfolio-tab--active' : ''}`}
             onClick={() => setTab(t.id)}
           >
             {t.label}
@@ -34,8 +34,7 @@ const Holdings: React.FC = () => {
         ))}
       </div>
 
-      {/* Tab content — no page-header inside children since we already have one */}
-      <div className="analytics-content">
+      <div className="portfolio-content">
         {tab === 'holdings'  && <HoldingsView />}
         {tab === 'positions' && <PositionsView hideHeader />}
       </div>
