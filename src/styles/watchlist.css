@@ -833,3 +833,238 @@
   flex: 1;
   min-height: 0;
 }
+
+/* ── Premium Watchlist Skin ── */
+
+.wl {
+  gap: 18px;
+}
+
+.wl-tabs,
+.wl-content,
+.wl-alerts {
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.12);
+}
+
+.wl-tabs {
+  align-self: flex-start;
+  margin-bottom: 0;
+  padding: 5px;
+  border-bottom: 1px solid var(--card-border);
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at top right, rgba(99, 102, 241, 0.08), transparent 36%),
+    var(--card-bg);
+}
+
+.wl-tab {
+  margin-bottom: 0;
+}
+
+.wl-tab__label {
+  padding: 10px 16px;
+  border-bottom: none;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 750;
+}
+
+.wl-tab--active .wl-tab__label {
+  background: var(--sidebar-active);
+  border-bottom-color: transparent;
+}
+
+.wl-tab__count,
+.wl-search__result-exchange,
+.wl-exchange,
+.wl-alerts-table__exchange {
+  border-radius: 999px;
+  padding-inline: 7px;
+}
+
+.wl-tab__delete {
+  border-radius: 999px;
+}
+
+.wl-tab--add {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+}
+
+.wl-tab--add:hover {
+  background: var(--sidebar-active);
+}
+
+.wl-content {
+  padding: 20px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(99, 102, 241, 0.08), transparent 34%),
+    var(--card-bg);
+}
+
+.wl-search {
+  margin-bottom: 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.wl-search__input {
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.wl-search__count {
+  padding: 6px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  font-weight: 700;
+}
+
+.wl-search__dropdown {
+  border-radius: 14px;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.36);
+}
+
+.wl-search__result {
+  padding: 10px 14px;
+}
+
+.wl-table-wrap {
+  max-height: calc(100vh - 280px);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.wl-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.wl-table__th {
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.wl-table__row {
+  transition: background 0.15s;
+}
+
+.wl-table__row:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.wl-symbol,
+.wl-alerts-table__symbol {
+  font-weight: 850;
+}
+
+.wl-alert-btn,
+.wl-remove-btn,
+.wl-alert-action {
+  border-radius: 999px;
+}
+
+.wl-alert-btn {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.wl-alerts {
+  border-radius: 18px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01)),
+    var(--card-bg);
+}
+
+.wl-alerts__header {
+  padding: 16px 18px;
+  background:
+    radial-gradient(circle at top right, rgba(99, 102, 241, 0.1), transparent 32%),
+    rgba(255, 255, 255, 0.025);
+}
+
+.wl-alerts__title {
+  font-size: 15px;
+  font-weight: 850;
+  letter-spacing: -0.2px;
+}
+
+.wl-alerts__count,
+.wl-alert-group-row__count,
+.wl-alert-status {
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.wl-alerts-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.wl-alerts-table th {
+  background: rgba(255, 255, 255, 0.035);
+  font-weight: 800;
+}
+
+.wl-alert-group-row td {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.wl-alert-modal {
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(99, 102, 241, 0.12), transparent 32%),
+    var(--content-bg);
+}
+
+.wl-alert-modal__header h3 {
+  font-weight: 850;
+}
+
+.wl-alert-field input,
+.wl-alert-field textarea,
+.wl-alert-number {
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.wl-alert-modal__primary,
+.wl-alert-modal__secondary {
+  border-radius: 999px;
+}
+
+.wl-empty {
+  border: 1px dashed var(--card-border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+@media (max-width: 700px) {
+  .wl-tabs {
+    width: 100%;
+    border-radius: 16px;
+  }
+
+  .wl-content {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  .wl-search,
+  .wl-alerts__header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

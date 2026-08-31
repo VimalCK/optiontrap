@@ -1,42 +1,185 @@
-/* ── Analytics tab bar ── */
-.analytics-tabs {
+.analytics {
   display: flex;
-  gap: 2px;
-  border-bottom: 1px solid var(--card-border);
-  margin-bottom: 24px;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.analytics-tabs,
+.analytics-content {
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.12);
+}
+
+.analytics-tabs {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 5px;
+  border-radius: 999px;
+  overflow-x: auto;
+  max-width: 100%;
 }
 
 .analytics-tab {
-  padding: 12px 22px;
-  font-size: 14px;
-  font-weight: 500;
-  font-family: inherit;
-  color: var(--text-secondary);
-  background: none;
+  min-width: max-content;
+  padding: 10px 18px;
   border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;   /* overlap the container border */
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition: background 0.15s, color 0.15s;
   white-space: nowrap;
 }
 
 .analytics-tab:hover {
   color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .analytics-tab--active {
   color: var(--accent);
-  border-bottom-color: var(--accent);
-  font-weight: 600;
+  background: var(--sidebar-active);
 }
 
-/* ── Tab content ── */
 .analytics-content {
-  /* no extra wrapper styles needed — child components handle their own layout */
+  padding: 20px;
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(99, 102, 241, 0.08), transparent 34%),
+    var(--card-bg);
 }
 
-/* ── Coming soon card inside analytics ── */
-.analytics-coming-soon {
-  max-width: 400px;
+.analytics-content .card {
+  border-radius: 16px;
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01)),
+    var(--card-bg);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.12);
+}
+
+.analytics-content .card__title,
+.analytics-content .tj-section-title {
+  font-weight: 850;
+  letter-spacing: -0.2px;
+}
+
+.analytics-content .oc-toolbar,
+.analytics-content .tj-controls,
+.analytics-content .oi-history__toolbar {
+  padding: 10px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.analytics-content .tj-mode-tabs,
+.analytics-content .tj-presets,
+.analytics-content .oc-mode-toggle,
+.analytics-content .oc-index-tabs {
+  border-radius: 999px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.analytics-content .tj-mode-tab,
+.analytics-content .tj-preset-btn,
+.analytics-content .oc-mode-toggle__btn,
+.analytics-content .oc-index-tab {
+  border-radius: 999px;
+}
+
+.analytics-content .tj-heatmap-card {
+  overflow: hidden;
+  border: 1px solid var(--card-border);
+}
+
+.analytics-content .heatmap-stats {
+  padding: 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.analytics-content .heatmap-stat__label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.7px;
+}
+
+.analytics-content .heatmap-stat__value {
+  font-size: 18px;
+  font-weight: 850;
+}
+
+.analytics-content .tj-table,
+.analytics-content .oc-table,
+.analytics-content .oi-history__table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.analytics-content .tj-table th,
+.analytics-content .oc-table th,
+.analytics-content .oi-history__table th {
+  background: rgba(255, 255, 255, 0.035);
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.analytics-content .tj-table tbody tr,
+.analytics-content .oc-table tbody tr,
+.analytics-content .oi-history__table tbody tr {
+  transition: background 0.15s;
+}
+
+.analytics-content .tj-table tbody tr:hover,
+.analytics-content .oc-table tbody tr:hover,
+.analytics-content .oi-history__table tbody tr:hover {
+  background: rgba(255, 255, 255, 0.045);
+}
+
+.analytics-content .tj-badge,
+.analytics-content .tj-side,
+.analytics-content .tj-trade-meta span,
+.analytics-content .oc-badge,
+.analytics-content .oc-order-mode-badge {
+  border-radius: 999px;
+  padding-inline: 7px;
+}
+
+.analytics-content .analytics-coming-soon {
+  max-width: 460px;
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+@media (max-width: 700px) {
+  .analytics-tabs {
+    width: 100%;
+    border-radius: 16px;
+  }
+
+  .analytics-tab {
+    flex: 1;
+    text-align: center;
+  }
+
+  .analytics-content {
+    padding: 14px;
+    border-radius: 14px;
+  }
+
+  .analytics-content .tj-controls,
+  .analytics-content .oc-toolbar,
+  .analytics-content .oi-history__toolbar {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }

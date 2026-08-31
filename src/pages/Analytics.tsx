@@ -18,8 +18,7 @@ const Analytics: React.FC = () => {
   const [tab, setTab] = useState<AnalyticsTab>('analyzer');
 
   return (
-    <div>
-      {/* Tab bar */}
+    <div className="analytics">
       <div className="analytics-tabs">
         {TABS.map((t) => (
           <button
@@ -32,7 +31,6 @@ const Analytics: React.FC = () => {
         ))}
       </div>
 
-      {/* Tab content */}
       <div className="analytics-content">
         {tab === 'analyzer' && <OptionChain />}
         {tab === 'journal'  && <TradeJournal />}
