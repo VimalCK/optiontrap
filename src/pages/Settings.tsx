@@ -89,32 +89,6 @@ const Settings: React.FC = () => {
         </div>
       </div>
 
-      <div className="settings-section">
-        <h2 className="settings-section__title">Data & Privacy</h2>
-        <p className="settings-section__description">
-          Manage data exports, privacy settings, and account deletion
-        </p>
-        <div className="card-grid">
-          <div className="card">
-            <div className="card__icon">
-              <SettingsIcon />
-            </div>
-            <h3 className="card__title">Export Data</h3>
-            <p className="card__description">
-              Download all your trading data and account information.
-            </p>
-          </div>
-          <div className="card">
-            <div className="card__icon">
-              <SettingsIcon />
-            </div>
-            <h3 className="card__title">Privacy Controls</h3>
-            <p className="card__description">
-              Manage visibility, data sharing, and tracking preferences.
-            </p>
-          </div>
-        </div>
-      </div>
     </div>
   );
 };
