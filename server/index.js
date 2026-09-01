@@ -110,6 +110,10 @@ function todayIST() {
 const app = express();
 const server = createServer(app);
 
+if (IS_PROD) {
+  app.set('trust proxy', 1);
+}
+
 const sessionStore = new SqliteSessionStore();
 
 const sessionMiddleware = session({
@@ -295,6 +299,12 @@ app.post('/auth/token', async (req, res) => {
     };
 
     const { accessToken: _tok, apiKey: _key, ...safe } = req.session.kiteSession;
+    await new Promise((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) reject(err);
+        else resolve();
+      });
+    });
     console.log(`${ts()} ${GREEN}AUTH${RESET} logged in: ${data.user_id} (${data.user_name})`);
     res.json({ status: 'ok', data: safe });
   } catch (err) {
