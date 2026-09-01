@@ -111,7 +111,7 @@ const app = express();
 const server = createServer(app);
 
 if (IS_PROD) {
-  app.set('trust proxy', 1);
+  app.set('trust proxy', true);
 }
 
 const sessionStore = new SqliteSessionStore();
@@ -122,6 +122,7 @@ const sessionMiddleware = session({
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
+  proxy: IS_PROD,
   cookie: {
     httpOnly: true,
     secure: IS_PROD,
@@ -185,6 +186,13 @@ app.use((req, res, next) => {
     );
   });
 
+  next();
+});
+
+app.use(['/auth', '/api'], (_req, res, next) => {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
   next();
 });
 
