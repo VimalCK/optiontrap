@@ -18,8 +18,8 @@ const Redirect: React.FC = () => {
     }
 
     exchangeToken(requestToken)
-      .then((session) => {
-        notifySessionChange(session);
+      .then(() => {
+        notifySessionChange();
         navigate('/portfolio', { replace: true });
       })
       .catch((err) => {
@@ -27,8 +27,8 @@ const Redirect: React.FC = () => {
         // Retry once after a short delay (handles stale session race)
         setTimeout(() => {
           exchangeToken(requestToken)
-            .then((session) => {
-              notifySessionChange(session);
+            .then(() => {
+              notifySessionChange();
               navigate('/portfolio', { replace: true });
             })
             .catch((retryErr) => {

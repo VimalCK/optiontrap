@@ -28,7 +28,7 @@ async function kiteRequest<T>(endpoint: string, options: RequestOptions = {}): P
     const errorBody = await response.json().catch(() => null);
 
     // Expired / invalid session — clear locally so the auth guard redirects to login
-    if (response.status === 401) {
+    if (response.status === 401 || response.status === 403) {
       clearSession();
       notifySessionChange();
       throw new Error('Session expired. Please login again.');

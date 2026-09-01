@@ -81,7 +81,6 @@ const PORT = parseInt(process.env.PORT || '3001', 10);
 const SESSION_SECRET = process.env.SESSION_SECRET || 'insecure-dev-secret';
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
 const IS_PROD = process.env.NODE_ENV === 'production';
-const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 // ---------- Log colours ----------
 
@@ -106,25 +105,10 @@ function todayIST() {
   return `${y}-${m}-${d}`;
 }
 
-const clearCookieOptions = () => ({
-  secure: IS_PROD,
-  sameSite: 'lax',
-  path: '/',
-});
-
-function clearAuthCookies(res) {
-  res.clearCookie('optiontrap_sid', clearCookieOptions());
-  res.clearCookie('optiontrap_auth', clearCookieOptions());
-}
-
 // ---------- Express App ----------
 
 const app = express();
 const server = createServer(app);
-
-if (IS_PROD) {
-  app.set('trust proxy', true);
-}
 
 const sessionStore = new SqliteSessionStore();
 
@@ -134,12 +118,11 @@ const sessionMiddleware = session({
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  proxy: IS_PROD,
   cookie: {
     httpOnly: true,
     secure: IS_PROD,
     sameSite: 'lax',
-    maxAge: SESSION_MAX_AGE_MS,
+    maxAge: 24 * 60 * 60 * 1000,
   },
 });
 
@@ -181,10 +164,7 @@ const generalLimiter = createRateLimiter({
 });
 
 app.use(generalLimiter);
-app.use('/auth/login-url', authLimiter);
-app.use('/auth/token', authLimiter);
-app.use('/auth/logout', authLimiter);
-app.use('/auth/account', authLimiter);
+app.use('/auth', authLimiter);
 
 // Request logger
 app.use((req, res, next) => {
@@ -201,13 +181,6 @@ app.use((req, res, next) => {
     );
   });
 
-  next();
-});
-
-app.use(['/auth', '/api'], (_req, res, next) => {
-  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-  res.set('Pragma', 'no-cache');
-  res.set('Expires', '0');
   next();
 });
 
@@ -250,10 +223,8 @@ app.get('/auth/login-url', (req, res) => {
 
 // Check session (backward compat with useKiteSession)
 app.get('/auth/me', (req, res) => {
-  const activeSession = req.session?.kiteSession || null;
-
-  if (activeSession) {
-    const { accessToken, apiKey, ...safe } = activeSession;
+  if (req.session?.kiteSession) {
+    const { accessToken, apiKey, ...safe } = req.session.kiteSession;
     res.json({ status: 'ok', data: safe });
   } else {
     res.status(401).json({ status: 'error', message: 'Not authenticated' });
@@ -324,12 +295,6 @@ app.post('/auth/token', async (req, res) => {
     };
 
     const { accessToken: _tok, apiKey: _key, ...safe } = req.session.kiteSession;
-    await new Promise((resolve, reject) => {
-      req.session.save((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
     console.log(`${ts()} ${GREEN}AUTH${RESET} logged in: ${data.user_id} (${data.user_name})`);
     res.json({ status: 'ok', data: safe });
   } catch (err) {
@@ -358,7 +323,7 @@ app.post('/auth/logout', async (req, res) => {
   }
 
   req.session.destroy(() => {
-    clearAuthCookies(res);
+    res.clearCookie('optiontrap_sid');
     res.json({ status: 'ok' });
   });
 });
@@ -388,7 +353,7 @@ app.delete('/auth/account', (req, res) => {
 
   // Destroy session
   req.session.destroy(() => {
-    clearAuthCookies(res);
+    res.clearCookie('optiontrap_sid');
     console.log(`${ts()} ${RED}AUTH${RESET} account deleted: ${userId}`);
     res.json({ status: 'ok' });
   });
@@ -1039,15 +1004,10 @@ app.use('/api', requireAuth, apiLimiter, createProxyMiddleware({
     },
     proxyRes: (proxyRes, req) => {
       if (proxyRes.statusCode === 403) {
-        const kitePath = req.originalUrl.replace(/^\/api/, '') || '/';
-        const tokenEndpoints = new Set(['/portfolio/holdings', '/portfolio/positions', '/orders']);
-        if (!tokenEndpoints.has(kitePath)) {
-          // Quote/instrument endpoints often return 403 for expired tokens.
-          // For account endpoints like holdings, keep the session so the UI can
-          // show Kite's upstream error instead of forcing a relogin loop.
-          delete req.session.kiteSession;
-          req.session.save(() => {});
-        }
+        // Clear expired Kite session but keep the session itself intact
+        // so the remember cookie + pending credentials still work
+        delete req.session.kiteSession;
+        req.session.save(() => {});
       }
     },
   },
