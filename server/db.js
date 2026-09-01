@@ -2,8 +2,8 @@
  * SQLite Database Manager
  *
  * Manages persistent storage for OptionTrap using sql.js (pure-JS SQLite).
- * The database lives at server/data/optiontrap.db and is auto-created on
- * first run.
+ * The database lives at process.env.DATABASE_PATH when configured, otherwise
+ * server/data/optiontrap.db, and is auto-created on first run.
  *
  * Currently handles:
  *   - users: lightweight user registry (user_id + user_name from Kite OAuth)
@@ -15,13 +15,15 @@
  */
 
 import initSqlJs from 'sql.js';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DATA_DIR = path.join(__dirname, 'data');
-const DB_PATH = path.join(DATA_DIR, 'optiontrap.db');
+export const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'data', 'optiontrap.db');
+const DATA_DIR = path.dirname(DB_PATH);
+const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
 
 // ---------------------------------------------------------------------------
 // Database lifecycle
@@ -197,6 +199,8 @@ export async function initDb() {
   `);
   db.run(`CREATE INDEX IF NOT EXISTS idx_oi_history_scrip_date ON oi_history(scrip, date)`);
 
+  applySqlMigrations();
+
   // Clean expired sessions on startup
   db.run('DELETE FROM sessions WHERE expires < ?', [Date.now()]);
 
@@ -218,6 +222,125 @@ function ensureColumn(table, column, definition) {
   const result = db.exec(`PRAGMA table_info(${table})`);
   const hasColumn = result[0]?.values.some((row) => row[1] === column);
   if (!hasColumn) db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+}
+
+function ensureMigrationsTable() {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      name       TEXT PRIMARY KEY,
+      checksum   TEXT NOT NULL,
+      applied_at TEXT DEFAULT (datetime('now'))
+    )
+  `);
+}
+
+function appliedMigration(name) {
+  const result = db.exec('SELECT checksum FROM schema_migrations WHERE name = ?', [name]);
+  return result[0]?.values[0]?.[0] || null;
+}
+
+function checksumSql(sql) {
+  return crypto.createHash('sha256').update(sql).digest('hex');
+}
+
+function splitSqlStatements(sql) {
+  const statements = [];
+  let current = '';
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inLineComment = false;
+
+  for (let i = 0; i < sql.length; i++) {
+    const char = sql[i];
+    const next = sql[i + 1];
+
+    if (inLineComment) {
+      current += char;
+      if (char === '\n') inLineComment = false;
+      continue;
+    }
+
+    if (!inSingleQuote && !inDoubleQuote && char === '-' && next === '-') {
+      inLineComment = true;
+      current += char;
+      continue;
+    }
+
+    if (!inDoubleQuote && char === "'") {
+      current += char;
+      if (inSingleQuote && next === "'") {
+        current += next;
+        i++;
+        continue;
+      }
+      inSingleQuote = !inSingleQuote;
+      continue;
+    }
+
+    if (!inSingleQuote && char === '"') {
+      current += char;
+      if (inDoubleQuote && next === '"') {
+        current += next;
+        i++;
+        continue;
+      }
+      inDoubleQuote = !inDoubleQuote;
+      continue;
+    }
+
+    if (!inSingleQuote && !inDoubleQuote && char === ';') {
+      const statement = current.trim();
+      if (statement) statements.push(statement);
+      current = '';
+      continue;
+    }
+
+    current += char;
+  }
+
+  const statement = current.trim();
+  if (statement) statements.push(statement);
+  return statements;
+}
+
+function applySqlMigrations() {
+  ensureMigrationsTable();
+
+  if (!fs.existsSync(MIGRATIONS_DIR)) return;
+
+  const files = fs.readdirSync(MIGRATIONS_DIR)
+    .filter((file) => /^\d+.*\.sql$/.test(file))
+    .sort();
+
+  for (const file of files) {
+    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8').trim();
+    if (!sql) continue;
+
+    const checksum = checksumSql(sql);
+    const appliedChecksum = appliedMigration(file);
+    if (appliedChecksum) {
+      if (appliedChecksum !== checksum) {
+        throw new Error(`Migration already applied but file changed: ${file}`);
+      }
+      continue;
+    }
+
+    db.run('BEGIN TRANSACTION');
+    try {
+      for (const statement of splitSqlStatements(sql)) {
+        db.run(statement);
+      }
+      db.run(
+        'INSERT INTO schema_migrations (name, checksum, applied_at) VALUES (?, ?, datetime(\'now\'))',
+        [file, checksum],
+      );
+      db.run('COMMIT');
+      console.log(`[DB] Applied migration ${file}`);
+    } catch (err) {
+      db.run('ROLLBACK');
+      throw err;
+    }
+  }
 }
 
 /**
