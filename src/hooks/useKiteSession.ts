@@ -6,8 +6,8 @@ const SESSION_EVENT = 'optiontrap_session_change';
 /**
  * Dispatch this after login/logout to notify all listeners
  */
-export function notifySessionChange(): void {
-  window.dispatchEvent(new Event(SESSION_EVENT));
+export function notifySessionChange(session?: KiteSession | null): void {
+  window.dispatchEvent(new CustomEvent<KiteSession | null | undefined>(SESSION_EVENT, { detail: session }));
 }
 
 /**
@@ -31,11 +31,18 @@ export function useKiteSession(): { session: KiteSession | null; loading: boolea
   useEffect(() => {
     refresh();
 
-    const handleChange = () => { refresh(); };
-    window.addEventListener(SESSION_EVENT, handleChange);
+    const handleChange = (event: Event) => {
+      if (event instanceof CustomEvent && event.detail !== undefined) {
+        setSession(event.detail);
+        setCredentialsConfigured(true);
+        setLoading(false);
+      }
+      refresh();
+    };
+    window.addEventListener(SESSION_EVENT, handleChange as EventListener);
     window.addEventListener('storage', handleChange);
     return () => {
-      window.removeEventListener(SESSION_EVENT, handleChange);
+      window.removeEventListener(SESSION_EVENT, handleChange as EventListener);
       window.removeEventListener('storage', handleChange);
     };
   }, [refresh]);
