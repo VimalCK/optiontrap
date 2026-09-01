@@ -450,6 +450,16 @@ function readinessScore(items: TradeSetupChecklistItem[]): number {
   return Math.round((score / items.length) * 100);
 }
 
+function setupReadinessLabel(status: TradeSetupStatus, score: number): string {
+  if (status === 'Avoid') return 'No setup';
+  return `${score}%`;
+}
+
+function setupReadinessWidth(status: TradeSetupStatus, score: number): string {
+  if (status === 'Avoid') return '0%';
+  return `${score}%`;
+}
+
 function distancePct(from: number | null, to: number | null): number | null {
   if (!from || !to) return null;
   return ((to - from) / from) * 100;
@@ -533,14 +543,14 @@ function summarizeTradeSetup(
 
   const checklist: TradeSetupChecklistItem[] = [
     {
-      label: 'Directional flow',
+      label: 'Buying flow',
       status: flowStatus,
       answer: directionalFlow ? `${optionFlow.bias} ${optionFlow.strength.toLowerCase()} flow` : 'Flow is neutral or mixed',
     },
     {
       label: 'Confidence',
       status: confidenceStatus,
-      answer: `${optionFlow.confidence}% ${optionFlow.confidence >= 65 ? 'is tradeable' : optionFlow.confidence >= 55 ? 'needs confirmation' : 'is too low'}`,
+      answer: `${optionFlow.confidence}% buying flow agreement ${optionFlow.confidence >= 65 ? 'is tradeable' : optionFlow.confidence >= 55 ? 'needs confirmation' : 'is too low'}`,
     },
     {
       label: 'Price confirms',
@@ -577,7 +587,7 @@ function summarizeTradeSetup(
       status,
       direction,
       title: `${direction} setup confirmed`,
-      action: `Directional ${sideLabel} trade is allowed if live price holds confirmation.`,
+      action: `Option buying ${sideLabel} trade is allowed if live price holds confirmation.`,
       strategy: direction === 'Bullish' ? 'Prefer call debit spread or long futures on pullback.' : 'Prefer put debit spread or short futures on failed bounce.',
       trigger: direction === 'Bullish' ? `Enter only above/holding ${strikeLabel}; stronger if price clears CE wall ${levels.resistanceStrike ?? '-'}.` : `Enter only below/rejecting ${strikeLabel}; stronger if PE support ${levels.supportStrike ?? '-'} weakens.`,
       invalidation: `Exit if price closes back ${oppositeLabel} ${strikeLabel}; also respect VWAP/previous-day levels if live chart provides them.`,
@@ -606,12 +616,12 @@ function summarizeTradeSetup(
     status,
     direction: 'Neutral',
     title: 'No clean trade setup',
-    action: 'Skip fresh directional entry. Signals are neutral, weak, or conflicting.',
+    action: 'Skip fresh option buying entry. Signals are neutral, weak, or conflicting.',
     strategy: 'Avoid naked option buying. If trading, use only clearly defined range strategies.',
     trigger: 'Wait for price and option flow to align in the same direction.',
     invalidation: 'No valid invalidation because there is no confirmed setup.',
-    target: 'No target until a directional setup appears.',
-    sizing: 'No directional risk.',
+    target: 'No target until an option buying setup appears.',
+    sizing: 'No option buying risk.',
     checklist,
   };
 }
@@ -672,7 +682,7 @@ function summarizeSellingSetup(
     {
       label: 'Confidence',
       status: optionFlow.confidence >= 65 ? 'pass' : optionFlow.confidence >= 55 ? 'warn' : 'fail',
-      answer: `${optionFlow.confidence}% flow consistency`,
+      answer: `${optionFlow.confidence}% selling flow support`,
     },
     {
       label: 'Risk location',
@@ -1239,8 +1249,32 @@ const OiHistory: React.FC = () => {
   /** Delete all OI history for the selected scrip */
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmCleanOld, setConfirmCleanOld] = useState(false);
+  const [isDataMenuOpen, setIsDataMenuOpen] = useState(false);
+  const dataMenuRef = useRef<HTMLDivElement | null>(null);
   const cleanupCutoffMonth = addMonths(currentMonthIST(), -1);
   const cleanupCutoffLabel = formatMonthLabel(cleanupCutoffMonth);
+
+  useEffect(() => {
+    if (!isDataMenuOpen) return;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (!dataMenuRef.current?.contains(event.target as Node)) {
+        setIsDataMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setIsDataMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', handlePointerDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('pointerdown', handlePointerDown);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isDataMenuOpen]);
 
   const handleDeleteMonth = useCallback(async () => {
     setConfirmDelete(false);
@@ -1760,15 +1794,24 @@ const OiHistory: React.FC = () => {
               {fetching ? 'Fetching...' : 'Fetch'}
             </button>
 
-            <details className="oi-history__data-menu">
-              <summary className="app-btn app-btn--secondary oi-history__data-menu-trigger" title="Manage stored OI history data">
+            <div className="oi-history__data-menu" ref={dataMenuRef}>
+              <button
+                type="button"
+                className="app-btn app-btn--secondary oi-history__data-menu-trigger"
+                onClick={() => setIsDataMenuOpen((open) => !open)}
+                aria-expanded={isDataMenuOpen}
+                aria-haspopup="menu"
+                title="Manage stored OI history data"
+              >
                 Data
-              </summary>
-              <div className="oi-history__data-menu-panel">
+              </button>
+              {isDataMenuOpen && (
+              <div className="oi-history__data-menu-panel" role="menu">
                 <button
                   className="oi-history__data-menu-item"
-                  onClick={() => setConfirmCleanOld(true)}
+                  onClick={() => { setIsDataMenuOpen(false); setConfirmCleanOld(true); }}
                   disabled={fetching}
+                  role="menuitem"
                   title={`Delete ${scrip} OI history older than ${cleanupCutoffLabel}. Keeps ${cleanupCutoffLabel} and newer.`}
                 >
                   <strong>Clean Old</strong>
@@ -1776,15 +1819,17 @@ const OiHistory: React.FC = () => {
                 </button>
                 <button
                   className="oi-history__data-menu-item oi-history__data-menu-item--danger"
-                  onClick={() => setConfirmDelete(true)}
+                  onClick={() => { setIsDataMenuOpen(false); setConfirmDelete(true); }}
                   disabled={fetching}
+                  role="menuitem"
                   title={`Delete all OI history data for ${scrip}`}
                 >
                   <strong>Delete All</strong>
                   <span>Remove all stored months for {scrip}</span>
                 </button>
               </div>
-            </details>
+              )}
+            </div>
           </div>
 
           <button
@@ -2306,31 +2351,16 @@ const OiHistory: React.FC = () => {
 
           {analysisTab === 'setup' && (
             <div className={`oi-history__setup-dashboard oi-history__setup-dashboard--${chartData.tradeSetup.status.toLowerCase()}`}>
-              <div className="oi-history__setup-simple-header">
-                <div>
-                  <span className="oi-history__bias-kicker">Trade setup engine</span>
-                  <strong>Choose the trade type first</strong>
-                  <em>Directional buying and option selling are evaluated separately.</em>
-                </div>
-                <div className="oi-history__setup-confidence">
-                  <span>Flow consistency</span>
-                  <strong>{chartData.biasSummary.confidence}%</strong>
-                  <div className="oi-history__confidence-track">
-                    <div style={{ width: `${chartData.biasSummary.confidence}%` }} />
-                  </div>
-                </div>
-              </div>
-
               <div className="oi-history__setup-choice-grid">
                 <div className={`oi-history__setup-mode-card oi-history__setup-mode-card--${chartData.tradeSetup.status.toLowerCase()}`}>
                   <div className="oi-history__setup-mode-card-head">
-                    <span>Directional Trade</span>
+                    <span>Option Buying Trade</span>
                     <strong>{chartData.tradeSetup.direction} {chartData.tradeSetup.status === 'Avoid' ? 'No Trade' : chartData.tradeSetup.status}</strong>
                   </div>
                   <div className="oi-history__readiness-meter">
-                    <span>Directional readiness</span>
-                    <strong>{readinessScore(chartData.tradeSetup.checklist)}%</strong>
-                    <div><span style={{ width: `${readinessScore(chartData.tradeSetup.checklist)}%` }} /></div>
+                    <span>Buying setup</span>
+                    <strong>{setupReadinessLabel(chartData.tradeSetup.status, readinessScore(chartData.tradeSetup.checklist))}</strong>
+                    <div><span style={{ width: setupReadinessWidth(chartData.tradeSetup.status, readinessScore(chartData.tradeSetup.checklist)) }} /></div>
                   </div>
                   <p>{chartData.tradeSetup.action}</p>
                   <div className="oi-history__setup-primary-action">
@@ -2359,9 +2389,9 @@ const OiHistory: React.FC = () => {
                     <strong>{chartData.sellingSetup.type} {chartData.sellingSetup.status === 'Avoid' ? 'No Trade' : chartData.sellingSetup.status}</strong>
                   </div>
                   <div className="oi-history__readiness-meter">
-                    <span>Selling readiness</span>
-                    <strong>{readinessScore(chartData.sellingSetup.checklist)}%</strong>
-                    <div><span style={{ width: `${readinessScore(chartData.sellingSetup.checklist)}%` }} /></div>
+                    <span>Selling setup</span>
+                    <strong>{setupReadinessLabel(chartData.sellingSetup.status, readinessScore(chartData.sellingSetup.checklist))}</strong>
+                    <div><span style={{ width: setupReadinessWidth(chartData.sellingSetup.status, readinessScore(chartData.sellingSetup.checklist)) }} /></div>
                   </div>
                   <p>{chartData.sellingSetup.action}</p>
                   <div className="oi-history__setup-primary-action">
@@ -2472,7 +2502,7 @@ const OiHistory: React.FC = () => {
               <details className="oi-history__setup-detail-drawer">
                 <summary>Show checklists and detailed reasoning</summary>
                 <div className="oi-history__setup-detail-section">
-                  <div className="oi-history__setup-section-title">Directional Checklist</div>
+                  <div className="oi-history__setup-section-title">Option Buying Checklist</div>
                   <div className="oi-history__setup-signal-strip">
                     {chartData.tradeSetup.checklist.map((item) => (
                       <div key={item.label} className={`oi-history__signal-tile oi-history__signal-tile--${item.status}`}>
@@ -2551,6 +2581,22 @@ const OiHistory: React.FC = () => {
         </div>
       )}
 
+      {/* Delete confirmation modal */}
+      {confirmDelete && (
+        <div className="oi-confirm-overlay" onClick={() => setConfirmDelete(false)}>
+          <div className="oi-confirm-modal" onClick={(e) => e.stopPropagation()}>
+            <h4 className="oi-confirm-modal__title">Delete Script Data</h4>
+            <p className="oi-confirm-modal__text">
+              Delete ALL OI history data for <strong>{scripOptions.find((o) => o.value === scrip)?.label || scrip}</strong>? This cannot be undone.
+            </p>
+            <div className="oi-confirm-modal__actions">
+              <button className="app-btn app-btn--secondary" onClick={() => setConfirmDelete(false)}>Cancel</button>
+              <button className="app-btn app-btn--danger" onClick={handleDeleteMonth}>Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Clean old confirmation modal */}
       {confirmCleanOld && (
         <div className="oi-confirm-overlay" onClick={() => setConfirmCleanOld(false)}>
@@ -2565,22 +2611,6 @@ const OiHistory: React.FC = () => {
             <div className="oi-confirm-modal__actions">
               <button className="app-btn app-btn--secondary" onClick={() => setConfirmCleanOld(false)}>Cancel</button>
               <button className="app-btn app-btn--danger" onClick={handleCleanOld}>Clean Old Data</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete confirmation modal */}
-      {confirmDelete && (
-        <div className="oi-confirm-overlay" onClick={() => setConfirmDelete(false)}>
-          <div className="oi-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h4 className="oi-confirm-modal__title">Delete Script Data</h4>
-            <p className="oi-confirm-modal__text">
-              Delete ALL OI history data for <strong>{scripOptions.find((o) => o.value === scrip)?.label || scrip}</strong>? This cannot be undone.
-            </p>
-            <div className="oi-confirm-modal__actions">
-              <button className="app-btn app-btn--secondary" onClick={() => setConfirmDelete(false)}>Cancel</button>
-              <button className="app-btn app-btn--danger" onClick={handleDeleteMonth}>Delete</button>
             </div>
           </div>
         </div>
