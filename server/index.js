@@ -1085,9 +1085,27 @@ app.use('/api', requireAuth, apiLimiter, createProxyMiddleware({
   pathRewrite: { '^/api': '' },
   on: {
     proxyReq: (proxyReq, req) => {
+      [
+        'cookie',
+        'cf-connecting-ip',
+        'cf-ipcountry',
+        'cf-ray',
+        'cf-visitor',
+        'cdn-loop',
+        'forwarded',
+        'origin',
+        'referer',
+        'x-forwarded-for',
+        'x-forwarded-host',
+        'x-forwarded-port',
+        'x-forwarded-proto',
+        'x-real-ip',
+      ].forEach((header) => proxyReq.removeHeader(header));
+
       const { apiKey, accessToken } = req.session.kiteSession;
       proxyReq.setHeader('Authorization', `token ${apiKey}:${accessToken}`);
       proxyReq.setHeader('X-Kite-Version', '3');
+      proxyReq.setHeader('Accept', 'application/json');
     },
     proxyRes: (proxyRes, req) => {
       if (proxyRes.statusCode === 403) {
