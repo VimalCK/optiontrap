@@ -1091,10 +1091,15 @@ app.use('/api', requireAuth, apiLimiter, createProxyMiddleware({
     },
     proxyRes: (proxyRes, req) => {
       if (proxyRes.statusCode === 403) {
-        // Clear expired Kite session but keep the session itself intact
-        // so the remember cookie + pending credentials still work
-        delete req.session.kiteSession;
-        req.session.save(() => {});
+        const kitePath = req.originalUrl.replace(/^\/api/, '') || '/';
+        const tokenEndpoints = new Set(['/portfolio/holdings', '/portfolio/positions', '/orders']);
+        if (!tokenEndpoints.has(kitePath)) {
+          // Quote/instrument endpoints often return 403 for expired tokens.
+          // For account endpoints like holdings, keep the session so the UI can
+          // show Kite's upstream error instead of forcing a relogin loop.
+          delete req.session.kiteSession;
+          req.session.save(() => {});
+        }
       }
     },
   },
