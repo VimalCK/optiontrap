@@ -81,6 +81,8 @@ const PORT = parseInt(process.env.PORT || '3001', 10);
 const SESSION_SECRET = process.env.SESSION_SECRET || 'insecure-dev-secret';
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
 const IS_PROD = process.env.NODE_ENV === 'production';
+const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+const AUTH_COOKIE_NAME = 'optiontrap_auth';
 
 // ---------- Log colours ----------
 
@@ -105,6 +107,83 @@ function todayIST() {
   return `${y}-${m}-${d}`;
 }
 
+const authCookieOptions = () => ({
+  httpOnly: true,
+  secure: IS_PROD,
+  sameSite: 'lax',
+  maxAge: SESSION_MAX_AGE_MS,
+  path: '/',
+});
+
+const clearCookieOptions = () => ({
+  secure: IS_PROD,
+  sameSite: 'lax',
+  path: '/',
+});
+
+function authCookieKey() {
+  return crypto.createHash('sha256').update(SESSION_SECRET).digest();
+}
+
+function encodeAuthSession(kiteSession) {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', authCookieKey(), iv);
+  const payload = Buffer.from(JSON.stringify({
+    v: 1,
+    exp: Date.now() + SESSION_MAX_AGE_MS,
+    session: kiteSession,
+  }));
+  const encrypted = Buffer.concat([cipher.update(payload), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return [iv, tag, encrypted].map((part) => part.toString('base64url')).join('.');
+}
+
+function decodeAuthSession(raw) {
+  try {
+    if (!raw) return null;
+    const [ivRaw, tagRaw, encryptedRaw] = raw.split('.');
+    if (!ivRaw || !tagRaw || !encryptedRaw) return null;
+
+    const decipher = crypto.createDecipheriv(
+      'aes-256-gcm',
+      authCookieKey(),
+      Buffer.from(ivRaw, 'base64url'),
+    );
+    decipher.setAuthTag(Buffer.from(tagRaw, 'base64url'));
+    const decrypted = Buffer.concat([
+      decipher.update(Buffer.from(encryptedRaw, 'base64url')),
+      decipher.final(),
+    ]);
+    const payload = JSON.parse(decrypted.toString('utf8'));
+    if (!payload?.session?.apiKey || !payload?.session?.accessToken || payload.exp < Date.now()) {
+      return null;
+    }
+    return payload.session;
+  } catch {
+    return null;
+  }
+}
+
+function setAuthCookie(res, kiteSession) {
+  res.cookie(AUTH_COOKIE_NAME, encodeAuthSession(kiteSession), authCookieOptions());
+}
+
+function clearAuthCookies(res) {
+  res.clearCookie('optiontrap_sid', clearCookieOptions());
+  res.clearCookie(AUTH_COOKIE_NAME, clearCookieOptions());
+}
+
+function getActiveKiteSession(req) {
+  if (req.session?.kiteSession) return req.session.kiteSession;
+
+  const cookieSession = decodeAuthSession(req.cookies?.[AUTH_COOKIE_NAME]);
+  if (cookieSession && req.session) {
+    req.session.kiteSession = cookieSession;
+    req.session.save(() => {});
+  }
+  return cookieSession;
+}
+
 // ---------- Express App ----------
 
 const app = express();
@@ -127,7 +206,7 @@ const sessionMiddleware = session({
     httpOnly: true,
     secure: IS_PROD,
     sameSite: 'lax',
-    maxAge: 24 * 60 * 60 * 1000,
+    maxAge: SESSION_MAX_AGE_MS,
   },
 });
 
@@ -200,7 +279,7 @@ app.use(['/auth', '/api'], (_req, res, next) => {
 
 // Session status check
 app.get('/auth/status', (req, res) => {
-  const activeSession = req.session?.kiteSession || null;
+  const activeSession = getActiveKiteSession(req);
 
   if (activeSession) {
     const { accessToken, apiKey, ...safe } = activeSession;
@@ -235,8 +314,10 @@ app.get('/auth/login-url', (req, res) => {
 
 // Check session (backward compat with useKiteSession)
 app.get('/auth/me', (req, res) => {
-  if (req.session?.kiteSession) {
-    const { accessToken, apiKey, ...safe } = req.session.kiteSession;
+  const activeSession = getActiveKiteSession(req);
+
+  if (activeSession) {
+    const { accessToken, apiKey, ...safe } = activeSession;
     res.json({ status: 'ok', data: safe });
   } else {
     res.status(401).json({ status: 'error', message: 'Not authenticated' });
@@ -305,6 +386,7 @@ app.post('/auth/token', async (req, res) => {
       loginTime: data.login_time,
       avatarUrl: data.avatar_url || null,
     };
+    setAuthCookie(res, req.session.kiteSession);
 
     const { accessToken: _tok, apiKey: _key, ...safe } = req.session.kiteSession;
     await new Promise((resolve, reject) => {
@@ -324,7 +406,7 @@ app.post('/auth/token', async (req, res) => {
 
 // Logout — destroy session (credentials remain in browser localStorage)
 app.post('/auth/logout', async (req, res) => {
-  const kiteSession = req.session?.kiteSession;
+  const kiteSession = getActiveKiteSession(req);
 
   if (kiteSession?.apiKey && kiteSession?.accessToken) {
     try {
@@ -341,14 +423,14 @@ app.post('/auth/logout', async (req, res) => {
   }
 
   req.session.destroy(() => {
-    res.clearCookie('optiontrap_sid');
+    clearAuthCookies(res);
     res.json({ status: 'ok' });
   });
 });
 
 // Delete account — remove user from SQLite, destroy session
 app.delete('/auth/account', (req, res) => {
-  const kiteSession = req.session?.kiteSession;
+  const kiteSession = getActiveKiteSession(req);
   const userId = kiteSession?.userId;
 
   if (!userId) {
@@ -371,7 +453,7 @@ app.delete('/auth/account', (req, res) => {
 
   // Destroy session
   req.session.destroy(() => {
-    res.clearCookie('optiontrap_sid');
+    clearAuthCookies(res);
     console.log(`${ts()} ${RED}AUTH${RESET} account deleted: ${userId}`);
     res.json({ status: 'ok' });
   });
@@ -380,9 +462,11 @@ app.delete('/auth/account', (req, res) => {
 // ---------- Auth guard ----------
 
 const requireAuth = (req, res, next) => {
-  if (!req.session?.kiteSession?.apiKey) {
+  const activeSession = getActiveKiteSession(req);
+  if (!activeSession?.apiKey) {
     return res.status(401).json({ status: 'error', message: 'Not authenticated' });
   }
+  req.session.kiteSession = activeSession;
   next();
 };
 
