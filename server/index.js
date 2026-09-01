@@ -248,7 +248,10 @@ const generalLimiter = createRateLimiter({
 });
 
 app.use(generalLimiter);
-app.use('/auth', authLimiter);
+app.use('/auth/login-url', authLimiter);
+app.use('/auth/token', authLimiter);
+app.use('/auth/logout', authLimiter);
+app.use('/auth/account', authLimiter);
 
 // Request logger
 app.use((req, res, next) => {
