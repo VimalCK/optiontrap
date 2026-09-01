@@ -61,9 +61,11 @@ import {
   getOiHistoryDataByExpiryMonth,
   getOiHistoryDatesForExpiryMonth,
   getOiHistoryExpiryMonths,
+  getStoredOiHistoryExpiryMonths,
   getOptionsForAtm,
   deleteOiHistoryByMonth,
   deleteOiHistoryByExpiryMonth,
+  deleteOiHistoryBeforeExpiryMonth,
   getFnoSymbols,
   getSpotToken,
   getStrikeStepSize,
@@ -848,7 +850,10 @@ app.get('/api/oi-history/expiry-months', requireAuth, async (req, res) => {
     const { apiKey, accessToken } = req.session.kiteSession;
     await getOrFetchInstruments(apiKey, accessToken);
 
-    const months = getOiHistoryExpiryMonths(scrip, todayIST());
+    const months = [...new Set([
+      ...getStoredOiHistoryExpiryMonths(scrip),
+      ...getOiHistoryExpiryMonths(scrip, todayIST()),
+    ])].sort();
     res.json({ status: 'ok', months });
   } catch (err) {
     console.error('[OI History] Expiry months error:', err.message);
@@ -913,6 +918,30 @@ app.delete('/api/oi-history', requireAuth, (req, res) => {
     res.json({ status: 'ok', deleted });
   } catch (err) {
     console.error('[OI History] DELETE error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+/**
+ * DELETE /api/oi-history/old?scrip=NIFTY50&beforeExpiryMonth=2026-09
+ * Deletes OI history rows for the scrip with expiry months older than cutoff.
+ */
+app.delete('/api/oi-history/old', requireAuth, (req, res) => {
+  try {
+    const { scrip, beforeExpiryMonth } = req.query;
+
+    if (!scrip) {
+      return res.status(400).json({ status: 'error', message: 'scrip is required' });
+    }
+    if (!beforeExpiryMonth || !/^\d{4}-\d{2}$/.test(beforeExpiryMonth)) {
+      return res.status(400).json({ status: 'error', message: 'beforeExpiryMonth is required (format: YYYY-MM)' });
+    }
+
+    const deleted = deleteOiHistoryBeforeExpiryMonth(scrip, beforeExpiryMonth);
+    console.log(`[OI History] Deleted ${deleted} old rows for ${scrip} before expiry month ${beforeExpiryMonth}`);
+    res.json({ status: 'ok', deleted });
+  } catch (err) {
+    console.error('[OI History] DELETE old error:', err.message);
     res.status(500).json({ status: 'error', message: err.message });
   }
 });

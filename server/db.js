@@ -1335,6 +1335,26 @@ export function getOiHistoryMonths(scrip) {
 }
 
 /**
+ * Get distinct expiry months that already have stored OI history for a scrip.
+ * Returns sorted array of 'YYYY-MM' strings.
+ */
+export function getStoredOiHistoryExpiryMonths(scrip) {
+  if (!db) throw new Error('Database not initialised');
+
+  const sql = `
+    SELECT DISTINCT substr(expiry, 1, 7) as month
+    FROM oi_history
+    WHERE scrip = ?
+      AND expiry IS NOT NULL
+      AND expiry != ''
+    ORDER BY month
+  `;
+  const results = db.exec(sql, [scrip]);
+  if (!results.length) return [];
+  return results[0].values.map(([m]) => m);
+}
+
+/**
  * Get the nearest future expiry months from the current instruments cache.
  * NSE lists 3 monthly expiries per F&O underlying, so we cap the result to
  * the nearest `limit` months and drop far-dated (semi-annual) contracts.
@@ -1399,6 +1419,21 @@ export function deleteOiHistoryByExpiryMonth(scrip, expiryMonth) {
   if (!db) throw new Error('Database not initialised');
 
   db.run("DELETE FROM oi_history WHERE scrip = ? AND expiry LIKE ? || '%'", [scrip, expiryMonth]);
+  const changes = db.getRowsModified();
+  if (changes > 0) persist();
+  return changes;
+}
+
+/**
+ * Delete OI history rows for a scrip with expiry months older than cutoff.
+ * @param {string} scrip - Scrip name (e.g., 'NIFTY50')
+ * @param {string} cutoffExpiryMonth - Keep this expiry month and newer. Format 'YYYY-MM'
+ * @returns {number} Number of rows deleted
+ */
+export function deleteOiHistoryBeforeExpiryMonth(scrip, cutoffExpiryMonth) {
+  if (!db) throw new Error('Database not initialised');
+
+  db.run("DELETE FROM oi_history WHERE scrip = ? AND substr(expiry, 1, 7) < ?", [scrip, cutoffExpiryMonth]);
   const changes = db.getRowsModified();
   if (changes > 0) persist();
   return changes;
