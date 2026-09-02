@@ -39,6 +39,9 @@ import {
   closeDb,
   upsertUser,
   deleteUser,
+  getActiveSubscriptionPlans,
+  getUserSubscription,
+  activateSubscription,
   createWatchlist,
   getWatchlists,
   getWatchlistItems,
@@ -110,6 +113,30 @@ function todayIST() {
 
 const app = express();
 const server = createServer(app);
+
+const inactiveSubscription = {
+  status: 'inactive',
+  active: false,
+  planId: null,
+  plan: null,
+  startsAt: null,
+  expiresAt: null,
+};
+
+async function getSubscriptionSummary(userId) {
+  const subscription = await getUserSubscription(userId);
+
+  return subscription || inactiveSubscription;
+}
+
+async function getSafeSession(kiteSession) {
+  if (!kiteSession) return null;
+
+  const { accessToken, apiKey, ...safe } = kiteSession;
+  safe.subscription = await getSubscriptionSummary(kiteSession.userId);
+
+  return safe;
+}
 
 if (IS_PROD) {
   app.set('trust proxy', 1);
@@ -196,12 +223,16 @@ app.get('/auth/status', (req, res) => {
   const activeSession = req.session?.kiteSession || null;
 
   if (activeSession) {
-    const { accessToken, apiKey, ...safe } = activeSession;
-    res.json({
-      status: 'ok',
-      authenticated: true,
-      data: safe,
-    });
+    getSafeSession(activeSession)
+      .then((safe) => res.json({
+        status: 'ok',
+        authenticated: true,
+        data: safe,
+      }))
+      .catch((err) => {
+        console.error(`${ts()} ${RED}AUTH${RESET} status error:`, err);
+        res.status(500).json({ status: 'error', message: 'Failed to load auth status' });
+      });
   } else {
     res.json({
       status: 'ok',
@@ -229,8 +260,12 @@ app.get('/auth/login-url', (req, res) => {
 // Check session (backward compat with useKiteSession)
 app.get('/auth/me', (req, res) => {
   if (req.session?.kiteSession) {
-    const { accessToken, apiKey, ...safe } = req.session.kiteSession;
-    res.json({ status: 'ok', data: safe });
+    getSafeSession(req.session.kiteSession)
+      .then((safe) => res.json({ status: 'ok', data: safe }))
+      .catch((err) => {
+        console.error(`${ts()} ${RED}AUTH${RESET} me error:`, err);
+        res.status(500).json({ status: 'error', message: 'Failed to load session' });
+      });
   } else {
     res.status(401).json({ status: 'error', message: 'Not authenticated' });
   }
@@ -299,7 +334,7 @@ app.post('/auth/token', async (req, res) => {
       avatarUrl: data.avatar_url || null,
     };
 
-    const { accessToken: _tok, apiKey: _key, ...safe } = req.session.kiteSession;
+    const safe = await getSafeSession(req.session.kiteSession);
     await new Promise((resolve, reject) => {
       req.session.save((err) => {
         if (err) reject(err);
@@ -379,15 +414,63 @@ const requireAuth = (req, res, next) => {
   next();
 };
 
+const requireSubscription = async (req, res, next) => {
+  const userId = req.session?.kiteSession?.userId;
+
+  if (!userId) {
+    return res.status(401).json({ status: 'error', message: 'Not authenticated' });
+  }
+
+  try {
+    const subscription = await getSubscriptionSummary(userId);
+
+    if (!subscription.active) {
+      return res.status(402).json({
+        status: 'error',
+        code: 'SUBSCRIPTION_REQUIRED',
+        message: 'An active subscription is required',
+        data: subscription,
+      });
+    }
+
+    req.subscription = subscription;
+    next();
+  } catch (err) {
+    console.error(`${ts()} ${RED}SUBSCRIPTION${RESET} gate error:`, err);
+    res.status(500).json({ status: 'error', message: 'Failed to verify subscription' });
+  }
+};
+
+app.get('/api/subscription/plans', requireAuth, async (_req, res) => {
+  const plans = await getActiveSubscriptionPlans();
+  res.json({ status: 'ok', data: plans });
+});
+
+app.get('/api/subscription/status', requireAuth, async (req, res) => {
+  const subscription = await getSubscriptionSummary(req.session.kiteSession.userId);
+  res.json({ status: 'ok', data: subscription });
+});
+
+app.post('/api/subscription/activate', requireAuth, async (req, res) => {
+  const { planId = 'one_month' } = req.body || {};
+
+  try {
+    const subscription = await activateSubscription(req.session.kiteSession.userId, planId, 'internal');
+    res.json({ status: 'ok', data: subscription });
+  } catch (err) {
+    res.status(400).json({ status: 'error', message: err.message || 'Failed to activate subscription' });
+  }
+});
+
 // ---------- Watchlist Routes ----------
 
-app.get('/api/watchlist', requireAuth, async (req, res) => {
+app.get('/api/watchlist', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const lists = await getWatchlists(userId);
   res.json({ status: 'ok', data: lists });
 });
 
-app.get('/api/watchlist/:id', requireAuth, async (req, res) => {
+app.get('/api/watchlist/:id', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const list = await getWatchlistItems(req.params.id, userId);
 
@@ -398,7 +481,7 @@ app.get('/api/watchlist/:id', requireAuth, async (req, res) => {
   res.json({ status: 'ok', data: list });
 });
 
-app.post('/api/watchlist', requireAuth, async (req, res) => {
+app.post('/api/watchlist', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { name } = req.body;
 
@@ -410,7 +493,7 @@ app.post('/api/watchlist', requireAuth, async (req, res) => {
   res.json({ status: 'ok', data: list });
 });
 
-app.put('/api/watchlist/:id', requireAuth, async (req, res) => {
+app.put('/api/watchlist/:id', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { name } = req.body;
 
@@ -426,7 +509,7 @@ app.put('/api/watchlist/:id', requireAuth, async (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.delete('/api/watchlist/:id', requireAuth, async (req, res) => {
+app.delete('/api/watchlist/:id', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const deleted = await deleteWatchlist(req.params.id, userId);
 
@@ -437,7 +520,7 @@ app.delete('/api/watchlist/:id', requireAuth, async (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.post('/api/watchlist/:id/items', requireAuth, async (req, res) => {
+app.post('/api/watchlist/:id/items', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { instrumentToken, tradingsymbol, exchange } = req.body;
 
@@ -464,7 +547,7 @@ app.post('/api/watchlist/:id/items', requireAuth, async (req, res) => {
   res.json({ status: 'ok', data: item });
 });
 
-app.delete('/api/watchlist/:id/items/:itemId', requireAuth, async (req, res) => {
+app.delete('/api/watchlist/:id/items/:itemId', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const removed = await removeWatchlistItem(req.params.itemId, userId);
 
@@ -477,14 +560,14 @@ app.delete('/api/watchlist/:id/items/:itemId', requireAuth, async (req, res) => 
 
 // ---------- Positions ----------
 
-app.get('/api/positions', requireAuth, async (req, res) => {
+app.get('/api/positions', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const mode = req.query.mode || null;
   const positions = await getPositions(userId, mode);
   res.json({ status: 'ok', data: positions });
 });
 
-app.post('/api/positions', requireAuth, async (req, res) => {
+app.post('/api/positions', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const {
     tradingsymbol,
@@ -527,7 +610,7 @@ app.post('/api/positions', requireAuth, async (req, res) => {
   res.json({ status: 'ok', data: position });
 });
 
-app.put('/api/positions/:id/exit', requireAuth, async (req, res) => {
+app.put('/api/positions/:id/exit', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { exitPrice } = req.body;
 
@@ -543,7 +626,7 @@ app.put('/api/positions/:id/exit', requireAuth, async (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.delete('/api/positions/:id', requireAuth, async (req, res) => {
+app.delete('/api/positions/:id', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const removed = await removePositionById(req.params.id, userId);
 
@@ -554,7 +637,7 @@ app.delete('/api/positions/:id', requireAuth, async (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.delete('/api/positions', requireAuth, async (req, res) => {
+app.delete('/api/positions', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const mode = req.query.mode || null;
   await clearPositions(userId, mode);
@@ -563,7 +646,7 @@ app.delete('/api/positions', requireAuth, async (req, res) => {
 
 // ---------- OI Snapshots (shared) ----------
 
-app.get('/api/oi-snapshots', requireAuth, async (req, res) => {
+app.get('/api/oi-snapshots', requireAuth, requireSubscription, async (req, res) => {
   try {
     const snapshots = await getTodayOiSnapshots();
     res.json({ status: 'ok', data: snapshots });
@@ -573,7 +656,7 @@ app.get('/api/oi-snapshots', requireAuth, async (req, res) => {
   }
 });
 
-app.get('/api/oi-snapshots/latest', requireAuth, async (req, res) => {
+app.get('/api/oi-snapshots/latest', requireAuth, requireSubscription, async (req, res) => {
   try {
     const timestamp = await getLatestOiSnapshotTimestamp();
     res.json({ status: 'ok', data: { timestamp } });
@@ -583,7 +666,7 @@ app.get('/api/oi-snapshots/latest', requireAuth, async (req, res) => {
   }
 });
 
-app.post('/api/oi-snapshots', requireAuth, async (req, res) => {
+app.post('/api/oi-snapshots', requireAuth, requireSubscription, async (req, res) => {
   try {
     const { timestamp, timeLabel, data, prices, close, spot, volumes } = req.body;
     if (!timestamp || !timeLabel || !data) {
@@ -597,7 +680,7 @@ app.post('/api/oi-snapshots', requireAuth, async (req, res) => {
   }
 });
 
-app.delete('/api/oi-snapshots/old', requireAuth, async (req, res) => {
+app.delete('/api/oi-snapshots/old', requireAuth, requireSubscription, async (req, res) => {
   try {
     const deleted = await cleanOldOiSnapshots();
     res.json({ status: 'ok', deleted });
@@ -621,7 +704,7 @@ app.delete('/api/oi-snapshots/old', requireAuth, async (req, res) => {
  *   done     — { rowCount, tradingDays, skippedDays, fetchedDays, uniqueTokens }
  *   error    — { message }
  */
-app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
+app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, res) => {
   // Set up SSE headers
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -857,7 +940,7 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
  * GET /api/oi-history/expiry-months?scrip=NIFTY50
  * Returns list of future expiry months available in current instruments.
  */
-app.get('/api/oi-history/expiry-months', requireAuth, async (req, res) => {
+app.get('/api/oi-history/expiry-months', requireAuth, requireSubscription, async (req, res) => {
   try {
     const { scrip } = req.query;
     if (!scrip) {
@@ -882,7 +965,7 @@ app.get('/api/oi-history/expiry-months', requireAuth, async (req, res) => {
  * GET /api/oi-history?scrip=NIFTY50&expiryMonth=YYYY-MM
  * Returns stored OI history data for the selected expiry month.
  */
-app.get('/api/oi-history', requireAuth, async (req, res) => {
+app.get('/api/oi-history', requireAuth, requireSubscription, async (req, res) => {
   try {
     const { scrip, from, to, expiryMonth } = req.query;
     if (!scrip) {
@@ -904,7 +987,7 @@ app.get('/api/oi-history', requireAuth, async (req, res) => {
  * DELETE /api/oi-history?scrip=NIFTY50
  * Deletes all OI history rows for the given scrip.
  */
-app.delete('/api/oi-history', requireAuth, async (req, res) => {
+app.delete('/api/oi-history', requireAuth, requireSubscription, async (req, res) => {
   try {
     const { scrip, month, expiryMonth } = req.query;
 
@@ -943,7 +1026,7 @@ app.delete('/api/oi-history', requireAuth, async (req, res) => {
  * DELETE /api/oi-history/old?scrip=NIFTY50&beforeExpiryMonth=2026-09
  * Deletes OI history rows for the scrip with expiry months older than cutoff.
  */
-app.delete('/api/oi-history/old', requireAuth, async (req, res) => {
+app.delete('/api/oi-history/old', requireAuth, requireSubscription, async (req, res) => {
   try {
     const { scrip, beforeExpiryMonth } = req.query;
 
@@ -965,7 +1048,7 @@ app.delete('/api/oi-history/old', requireAuth, async (req, res) => {
 
 // ---------- F&O Symbols ----------
 
-app.get('/api/fno-symbols', requireAuth, async (req, res) => {
+app.get('/api/fno-symbols', requireAuth, requireSubscription, async (req, res) => {
   try {
     const symbols = await getFnoSymbols();
     res.json({ status: 'ok', data: symbols });
@@ -977,7 +1060,7 @@ app.get('/api/fno-symbols', requireAuth, async (req, res) => {
 
 // ---------- Instruments (shared cache) ----------
 
-app.get('/instruments', requireAuth, async (req, res) => {
+app.get('/instruments', requireAuth, requireSubscription, async (req, res) => {
   try {
     const { apiKey, accessToken } = req.session.kiteSession;
     const instruments = await getOrFetchInstruments(apiKey, accessToken);
@@ -990,7 +1073,7 @@ app.get('/instruments', requireAuth, async (req, res) => {
 
 // ---------- API Proxy ----------
 
-app.use('/api', requireAuth, apiLimiter, createProxyMiddleware({
+app.use('/api', requireAuth, requireSubscription, apiLimiter, createProxyMiddleware({
   target: 'https://api.kite.trade',
   changeOrigin: true,
   secure: false,
@@ -1068,10 +1151,24 @@ server.on('upgrade', (request, socket, head) => {
       return;
     }
 
-    wss.handleUpgrade(request, socket, head, (ws) => {
-      ws._kiteSession = sessionData.kiteSession;
-      wss.emit('connection', ws, request);
-    });
+    getSubscriptionSummary(sessionData.kiteSession.userId)
+      .then((subscription) => {
+        if (!subscription.active) {
+          socket.write('HTTP/1.1 402 Payment Required\r\n\r\n');
+          socket.destroy();
+          return;
+        }
+
+        wss.handleUpgrade(request, socket, head, (ws) => {
+          ws._kiteSession = sessionData.kiteSession;
+          wss.emit('connection', ws, request);
+        });
+      })
+      .catch((err) => {
+        console.error(`${ts()} ${RED}WS${RESET} subscription check failed:`, err);
+        socket.write('HTTP/1.1 500 Internal Server Error\r\n\r\n');
+        socket.destroy();
+      });
   });
 });
 

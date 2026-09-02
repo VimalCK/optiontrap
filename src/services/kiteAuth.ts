@@ -17,6 +17,31 @@ export interface KiteSession {
   broker: string;
   loginTime: string;
   avatarUrl: string | null;
+  subscription: SubscriptionStatus;
+}
+
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  description: string | null;
+  currency: string;
+  interval: string;
+  isActive: boolean;
+}
+
+export interface SubscriptionStatus {
+  id?: string;
+  userId?: string;
+  planId: string | null;
+  status: 'active' | 'inactive' | 'expired' | 'cancelled' | string;
+  active: boolean;
+  startsAt: string | null;
+  expiresAt: string | null;
+  provider?: string | null;
+  providerSubscriptionId?: string | null;
+  providerPaymentId?: string | null;
+  updatedAt?: string;
+  plan: SubscriptionPlan | null;
 }
 
 export interface AuthStatus {

@@ -221,6 +221,114 @@ export async function deleteUser(userId) {
 }
 
 // ---------------------------------------------------------------------------
+// Subscription CRUD
+// ---------------------------------------------------------------------------
+
+function mapPlan(row) {
+  if (!row) return null;
+  return {
+    id: row.plan_id || row.id,
+    name: row.plan_name || row.name,
+    description: row.plan_description || row.description,
+    currency: row.plan_currency || row.currency,
+    interval: row.plan_interval || row.interval,
+    isActive: Boolean(row.plan_is_active ?? row.is_active),
+  };
+}
+
+function mapSubscription(row) {
+  if (!row) return null;
+
+  const expiresAt = row.expires_at || null;
+  const expired = expiresAt ? new Date(expiresAt).getTime() <= Date.now() : false;
+
+  return {
+    id: row.id,
+    userId: row.user_id,
+    planId: row.plan_id,
+    status: expired && row.status === 'active' ? 'expired' : row.status,
+    active: row.status === 'active' && !expired,
+    startsAt: row.starts_at || null,
+    expiresAt,
+    provider: row.provider || null,
+    providerSubscriptionId: row.provider_subscription_id || null,
+    providerPaymentId: row.provider_payment_id || null,
+    updatedAt: row.updated_at,
+    plan: mapPlan(row),
+  };
+}
+
+export async function getActiveSubscriptionPlans() {
+  const result = await rows(
+    'SELECT * FROM subscription_plans WHERE is_active = 1 ORDER BY price ASC, id ASC',
+  );
+
+  return result.map(mapPlan);
+}
+
+export async function getUserSubscription(userId) {
+  const row = await firstRow(
+    `SELECT
+       s.*,
+       p.id AS plan_id,
+       p.name AS plan_name,
+       p.description AS plan_description,
+       p.price AS plan_price,
+       p.currency AS plan_currency,
+       p.interval AS plan_interval,
+       p.is_active AS plan_is_active
+     FROM subscriptions s
+     JOIN subscription_plans p ON p.id = s.plan_id
+     WHERE s.user_id = $1
+     ORDER BY s.updated_at DESC
+     LIMIT 1`,
+    [userId],
+  );
+
+  return mapSubscription(row);
+}
+
+export async function activateSubscription(userId, planId = 'one_month', provider = 'internal') {
+  const plan = await firstRow('SELECT id FROM subscription_plans WHERE id = $1 AND is_active = 1', [planId]);
+
+  if (!plan) {
+    throw new Error('Subscription plan not found');
+  }
+
+  const id = crypto.randomUUID();
+
+  await query(
+    `INSERT INTO subscriptions (id, user_id, plan_id, status, starts_at, provider, updated_at)
+     VALUES ($1, $2, $3, 'active', to_char(now(), 'YYYY-MM-DD HH24:MI:SS'), $4, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))
+     ON CONFLICT (id) DO NOTHING`,
+    [id, userId, planId, provider],
+  );
+
+  const existing = await firstRow(
+    'SELECT id FROM subscriptions WHERE user_id = $1 AND id <> $2 ORDER BY updated_at DESC LIMIT 1',
+    [userId, id],
+  );
+
+  if (existing) {
+    await query(
+      `UPDATE subscriptions SET
+        plan_id = $1,
+        status = 'active',
+        starts_at = COALESCE(starts_at, to_char(now(), 'YYYY-MM-DD HH24:MI:SS')),
+        expires_at = NULL,
+        provider = $2,
+        updated_at = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+       WHERE id = $3`,
+      [planId, provider, existing.id],
+    );
+    await query('DELETE FROM subscriptions WHERE id = $1', [id]);
+    return getUserSubscription(userId);
+  }
+
+  return getUserSubscription(userId);
+}
+
+// ---------------------------------------------------------------------------
 // Session CRUD (for express-session store)
 // ---------------------------------------------------------------------------
 

@@ -20,7 +20,7 @@ const Redirect: React.FC = () => {
     exchangeToken(requestToken)
       .then(() => {
         notifySessionChange();
-        navigate('/portfolio', { replace: true });
+        navigate('/subscribe', { replace: true });
       })
       .catch((err) => {
         console.error('[Redirect] Token exchange error, retrying...', err);
@@ -29,7 +29,7 @@ const Redirect: React.FC = () => {
           exchangeToken(requestToken)
             .then(() => {
               notifySessionChange();
-              navigate('/portfolio', { replace: true });
+              navigate('/subscribe', { replace: true });
             })
             .catch((retryErr) => {
               console.error('[Redirect] Retry failed:', retryErr);
