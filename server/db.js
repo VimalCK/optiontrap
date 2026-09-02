@@ -172,10 +172,10 @@ async function ensureBaseSchema() {
       prices     TEXT,
       close      TEXT,
       spot       DOUBLE PRECISION,
-      volumes    TEXT
+      volumes    TEXT,
+      UNIQUE(timestamp)
     )
   `);
-  await query('CREATE INDEX IF NOT EXISTS idx_oi_snapshots_timestamp ON oi_snapshots(timestamp)');
 
   await query(`
     CREATE TABLE IF NOT EXISTS oi_history (
@@ -728,39 +728,51 @@ export async function saveOiSnapshot(snapshot) {
     ? (typeof snapshot.volumes === 'string' ? JSON.parse(snapshot.volumes) : snapshot.volumes)
     : null;
 
-  const existing = await firstRow(
-    'SELECT id, data, prices, close, spot, volumes FROM oi_snapshots WHERE timestamp = $1',
-    [rounded],
-  );
-
-  if (existing) {
-    const existingData = JSON.parse(existing.data);
-    Object.assign(existingData, newData);
-
-    const mergedPrices = existing.prices ? JSON.parse(existing.prices) : {};
-    if (newPrices) Object.assign(mergedPrices, newPrices);
-    const pricesStr = Object.keys(mergedPrices).length > 0 ? JSON.stringify(mergedPrices) : null;
-
-    const mergedClose = existing.close ? JSON.parse(existing.close) : {};
-    if (newClose) Object.assign(mergedClose, newClose);
-    const closeStr = Object.keys(mergedClose).length > 0 ? JSON.stringify(mergedClose) : null;
-
-    const mergedVolumes = existing.volumes ? JSON.parse(existing.volumes) : {};
-    if (newVolumes) Object.assign(mergedVolumes, newVolumes);
-    const volumesStr = Object.keys(mergedVolumes).length > 0 ? JSON.stringify(mergedVolumes) : null;
-
-    const spot = newSpot || existing.spot || null;
-
-    await query(
-      'UPDATE oi_snapshots SET data = $1, prices = $2, close = $3, spot = $4, volumes = $5 WHERE id = $6',
-      [JSON.stringify(existingData), pricesStr, closeStr, spot, volumesStr, existing.id],
+  // All users' snapshots for a given 10-min slot merge into ONE shared row.
+  // Serialize the read-modify-write per slot (cross-process) so concurrent
+  // watchers on the same/different scrips can't lose each other's tokens.
+  await withNamedAdvisoryLock(`oi-snapshot:${rounded}`, async () => {
+    const existing = await firstRow(
+      'SELECT id, data, prices, close, spot, volumes FROM oi_snapshots WHERE timestamp = $1',
+      [rounded],
     );
-  } else {
-    await query(
-      'INSERT INTO oi_snapshots (timestamp, time_label, data, prices, close, spot, volumes) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-      [rounded, timeLabel, JSON.stringify(newData), newPrices ? JSON.stringify(newPrices) : null, newClose ? JSON.stringify(newClose) : null, newSpot, newVolumes ? JSON.stringify(newVolumes) : null],
-    );
-  }
+
+    if (existing) {
+      const existingData = JSON.parse(existing.data);
+      Object.assign(existingData, newData);
+
+      const mergedPrices = existing.prices ? JSON.parse(existing.prices) : {};
+      if (newPrices) Object.assign(mergedPrices, newPrices);
+      const pricesStr = Object.keys(mergedPrices).length > 0 ? JSON.stringify(mergedPrices) : null;
+
+      const mergedClose = existing.close ? JSON.parse(existing.close) : {};
+      if (newClose) Object.assign(mergedClose, newClose);
+      const closeStr = Object.keys(mergedClose).length > 0 ? JSON.stringify(mergedClose) : null;
+
+      const mergedVolumes = existing.volumes ? JSON.parse(existing.volumes) : {};
+      if (newVolumes) Object.assign(mergedVolumes, newVolumes);
+      const volumesStr = Object.keys(mergedVolumes).length > 0 ? JSON.stringify(mergedVolumes) : null;
+
+      const spot = newSpot || existing.spot || null;
+
+      await query(
+        'UPDATE oi_snapshots SET data = $1, prices = $2, close = $3, spot = $4, volumes = $5 WHERE id = $6',
+        [JSON.stringify(existingData), pricesStr, closeStr, spot, volumesStr, existing.id],
+      );
+    } else {
+      await query(
+        `INSERT INTO oi_snapshots (timestamp, time_label, data, prices, close, spot, volumes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (timestamp) DO UPDATE SET
+           data    = EXCLUDED.data,
+           prices  = EXCLUDED.prices,
+           close   = EXCLUDED.close,
+           spot    = EXCLUDED.spot,
+           volumes = EXCLUDED.volumes`,
+        [rounded, timeLabel, JSON.stringify(newData), newPrices ? JSON.stringify(newPrices) : null, newClose ? JSON.stringify(newClose) : null, newSpot, newVolumes ? JSON.stringify(newVolumes) : null],
+      );
+    }
+  });
 
   await query('DELETE FROM oi_snapshots WHERE timestamp < $1', [getTodayMidnight()]);
 }
