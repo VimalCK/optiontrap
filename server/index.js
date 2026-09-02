@@ -81,6 +81,7 @@ import {
 } from './db.js';
 import { PostgresSessionStore } from './sessionStore.js';
 import { createRateLimiter } from './rateLimit.js';
+import { cached } from './cache.js';
 import { getOrFetchInstruments } from './instruments.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -482,6 +483,21 @@ const requireSubscription = async (req, res, next) => {
     res.status(500).json({ status: 'error', message: 'Failed to verify subscription' });
   }
 };
+
+// Public: active plans for the pre-login landing page (no auth, no secrets).
+// Cached in memory for 30 minutes — plans change rarely, and this shields the
+// DB from unauthenticated traffic floods (single-flight prevents stampedes).
+const getCachedPlans = cached(getActiveSubscriptionPlans, 30 * 60_000);
+
+app.get('/api/public/plans', async (_req, res) => {
+  try {
+    const plans = await getCachedPlans();
+    res.json({ status: 'ok', data: plans });
+  } catch (err) {
+    console.error(`${ts()} ${RED}PLANS${RESET} public plans error:`, err);
+    res.status(500).json({ status: 'error', message: 'Failed to load plans' });
+  }
+});
 
 app.get('/api/subscription/plans', requireAuth, async (_req, res) => {
   const plans = await getActiveSubscriptionPlans();

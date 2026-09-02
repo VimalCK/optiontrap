@@ -244,6 +244,7 @@ function mapPlan(row) {
     name: row.plan_name || row.name,
     description: row.plan_description || row.description,
     currency: row.plan_currency || row.currency,
+    price: Number(row.plan_price ?? row.price ?? 0),
     durationCount: Number(row.plan_duration_count ?? row.duration_count ?? 1),
     durationUnit: row.plan_duration_unit || row.duration_unit || 'month',
     isActive: Boolean(row.plan_is_active ?? row.is_active),

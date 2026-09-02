@@ -24,6 +24,12 @@ export async function getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
   return readJson<SubscriptionPlan[]>(res);
 }
 
+/** Public plans for the pre-login landing page (no auth required). */
+export async function getPublicPlans(): Promise<SubscriptionPlan[]> {
+  const res = await fetch('/api/public/plans');
+  return readJson<SubscriptionPlan[]>(res);
+}
+
 export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
   const res = await fetch('/api/subscription/status', { credentials: 'include' });
   return readJson<SubscriptionStatus>(res);

@@ -6,7 +6,9 @@ import { SubscriptionPlan, SubscriptionStatus } from '@/services/kiteAuth';
 import { activateSubscription, formatDuration, getSubscriptionPlans, getSubscriptionStatus } from '@/services/subscription';
 import '@/styles/subscribe.css';
 
-const getPlanPriceLabel = (plan: SubscriptionPlan) => `${plan.currency} ****/${formatDuration(plan.durationCount, plan.durationUnit)}`;
+const currencySymbol = (code: string) => (code === 'INR' ? '₹' : `${code} `);
+const getPlanPriceLabel = (plan: SubscriptionPlan) =>
+  `${currencySymbol(plan.currency)}${plan.price.toLocaleString('en-IN')} / ${formatDuration(plan.durationCount, plan.durationUnit)}`;
 
 const planMeta: Record<string, { badge?: string; extraFeatures?: string[] }> = {
   one_month: {
@@ -93,7 +95,7 @@ const Subscribe: React.FC = () => {
                   <h2>{plan.name}</h2>
                   <p>{plan.description || 'OptionTrap access plan.'}</p>
                 </div>
-                <div className="subscribe-plan__price subscribe-plan__price--blurred">{getPlanPriceLabel(plan)}</div>
+                <div className="subscribe-plan__price">{getPlanPriceLabel(plan)}</div>
                 <ul className="subscribe-plan__features">
                   {[...planCapabilityChips, ...(planMeta[plan.id]?.extraFeatures || [])].map((feature) => (
                     <li key={feature}>{feature}</li>
