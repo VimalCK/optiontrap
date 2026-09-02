@@ -26,7 +26,8 @@
 
 .subscribe-shell {
   position: relative;
-  width: min(1040px, 100%);
+  z-index: 2;
+  width: min(1080px, 100%);
   padding: 34px;
   border: 1px solid var(--card-border);
   border-radius: 28px;
@@ -36,7 +37,7 @@
 }
 
 .subscribe-hero {
-  max-width: 720px;
+  max-width: 860px;
 }
 
 .subscribe-card__eyebrow {
@@ -56,10 +57,11 @@
 }
 
 .subscribe-hero h1 {
-  max-width: 660px;
+  max-width: none;
   font-size: clamp(34px, 6vw, 58px);
   line-height: 0.95;
   letter-spacing: -1.6px;
+  white-space: nowrap;
 }
 
 .subscribe-card__intro,
@@ -71,7 +73,7 @@
 }
 
 .subscribe-card__intro {
-  max-width: 620px;
+  max-width: 920px;
   margin: 16px 0 24px;
   font-size: 15px;
 }
@@ -250,6 +252,7 @@
 .subscribe-card__note {
   margin: 16px 0 0;
   font-size: 12px;
+  text-align: center;
 }
 
 @media (max-width: 640px) {
@@ -260,4 +263,9 @@
   .subscribe-plans {
     grid-template-columns: 1fr;
   }
+
+  .subscribe-hero h1 {
+    white-space: normal;
+  }
+
 }

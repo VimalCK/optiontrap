@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import ParticleNetwork from '@/components/ParticleNetwork/ParticleNetwork';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import { SubscriptionPlan, SubscriptionStatus } from '@/services/kiteAuth';
 import { activateSubscription, getSubscriptionPlans, getSubscriptionStatus } from '@/services/subscription';
@@ -7,19 +8,20 @@ import '@/styles/subscribe.css';
 
 const getPlanPriceLabel = (plan: SubscriptionPlan) => `${plan.currency} ****/${plan.interval}`;
 
-const planMeta: Record<string, { badge?: string; features: string[] }> = {
+const planMeta: Record<string, { badge?: string; extraFeatures?: string[] }> = {
   one_month: {
-    features: ['Full platform access', 'Live Kite data', 'Paper trading journal'],
   },
   six_months: {
     badge: 'Recommended',
-    features: ['Everything in 1 Month', 'Longer access window', 'Priority for upcoming features'],
+    extraFeatures: ['Longer strategy review window', 'Priority access to new analytics'],
   },
   twelve_months: {
     badge: 'Best Value',
-    features: ['Everything in 6 Months', 'Annual access', 'Ready for future premium benefits'],
+    extraFeatures: ['Annual trading performance view', 'Priority roadmap access'],
   },
 };
+
+const planCapabilityChips = ['Live Greeks', 'OI History', 'Smart Watchlists', 'Paper + Live P&L'];
 
 const Subscribe: React.FC = () => {
   const navigate = useNavigate();
@@ -62,6 +64,7 @@ const Subscribe: React.FC = () => {
 
   return (
     <div className="subscribe-page">
+      <ParticleNetwork />
       <section className="subscribe-shell">
         <div className="subscribe-hero">
           <span className="subscribe-card__eyebrow">OptionTrap Membership</span>
@@ -92,7 +95,7 @@ const Subscribe: React.FC = () => {
                 </div>
                 <div className="subscribe-plan__price subscribe-plan__price--blurred">{getPlanPriceLabel(plan)}</div>
                 <ul className="subscribe-plan__features">
-                  {(planMeta[plan.id]?.features || ['Full OptionTrap access']).map((feature) => (
+                  {[...planCapabilityChips, ...(planMeta[plan.id]?.extraFeatures || [])].map((feature) => (
                     <li key={feature}>{feature}</li>
                   ))}
                 </ul>

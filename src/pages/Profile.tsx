@@ -6,6 +6,31 @@ import { fetchMargins, Margins } from '@/services/kiteApi';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import '@/styles/settings.css';
 
+const formatSubscriptionDate = (value: string | null | undefined) => {
+  if (!value) return 'No expiry';
+
+  const date = new Date(value.replace(' ', 'T'));
+  if (Number.isNaN(date.getTime())) return value;
+
+  return date.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  });
+};
+
+const formatSubscriptionStatus = (value: string | undefined) =>
+  value ? value.charAt(0).toUpperCase() + value.slice(1) : 'Inactive';
+
+const getDaysRemaining = (value: string | null | undefined) => {
+  if (!value) return null;
+
+  const expiresAt = new Date(value.replace(' ', 'T')).getTime();
+  if (Number.isNaN(expiresAt)) return null;
+
+  return Math.max(0, Math.ceil((expiresAt - Date.now()) / (1000 * 60 * 60 * 24)));
+};
+
 interface UserProfile {
   userId: string;
   userName: string;
@@ -28,6 +53,8 @@ const Profile: React.FC = () => {
   const [margins, setMargins] = useState<Margins | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const subscription = session?.subscription;
+  const daysRemaining = getDaysRemaining(subscription?.expiresAt);
 
   useEffect(() => {
     const currentSession = getSession();
@@ -203,14 +230,54 @@ const Profile: React.FC = () => {
         </div>
       </div>
 
+      <div className="card profile-subscription-card">
+        <div className="profile-subscription-card__header">
+          <div>
+            <span className="profile-subscription-card__eyebrow">Membership</span>
+            <h3 className="profile-subscription-card__title">{subscription?.plan?.name || 'No active plan'}</h3>
+            <p className="profile-subscription-card__subtitle">
+              {subscription?.active
+                ? 'Your OptionTrap access is active.'
+                : 'Activate a plan to unlock OptionTrap features.'}
+            </p>
+          </div>
+          <div className="profile-subscription-card__status">
+            <span className={`profile-subscription-badge ${subscription?.active ? 'profile-subscription-badge--active' : 'profile-subscription-badge--inactive'}`}>
+              {formatSubscriptionStatus(subscription?.status)}
+            </span>
+            <strong>{daysRemaining === null ? '-' : `${daysRemaining} days`}</strong>
+            <small>remaining</small>
+          </div>
+        </div>
+
+        <div className="profile-subscription-grid">
+          <div className="profile-subscription-stat">
+            <span>Plan</span>
+            <strong>{subscription?.plan?.name || 'No active plan'}</strong>
+          </div>
+          <div className="profile-subscription-stat">
+            <span>Billing Cycle</span>
+            <strong>{subscription?.plan?.interval || '-'}</strong>
+          </div>
+          <div className="profile-subscription-stat">
+            <span>Started</span>
+            <strong>{formatSubscriptionDate(subscription?.startsAt)}</strong>
+          </div>
+          <div className="profile-subscription-stat">
+            <span>Expires</span>
+            <strong>{formatSubscriptionDate(subscription?.expiresAt)}</strong>
+          </div>
+        </div>
+      </div>
+
       {/* Danger Zone */}
       <div className="card profile-danger-zone" style={{ marginTop: 24 }}>
         <div className="profile-danger-zone__content">
           <div>
-            <h3 className="profile-danger-zone__title">Delete Account</h3>
             <p className="profile-danger-zone__desc">
-              Permanently remove your API credentials from our server.
-              You can always re-register later with the same or different credentials.
+              Permanently delete your profile from OptionTrap. You will no longer be able to access your watchlists,
+              paper trades, analytics data, and other data saved for option analytics. You can re-register later with the same
+              or different Kite credentials.
             </p>
           </div>
           {!showDeleteConfirm ? (

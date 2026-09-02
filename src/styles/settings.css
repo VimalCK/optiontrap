@@ -368,6 +368,135 @@
   box-shadow: 0 2px 8px var(--accent-glow);
 }
 
+/* Profile Subscription */
+.profile-subscription-card {
+  margin-top: 24px;
+  position: relative;
+  overflow: hidden;
+  border-color: rgba(99, 102, 241, 0.22);
+  background:
+    radial-gradient(circle at top right, rgba(99, 102, 241, 0.16), transparent 34%),
+    var(--card-bg);
+}
+
+.profile-subscription-card::before {
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.55), rgba(168, 85, 247, 0.45), transparent);
+  content: '';
+}
+
+.profile-subscription-card__header {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.profile-subscription-card__eyebrow {
+  display: inline-flex;
+  margin-bottom: 8px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.profile-subscription-card__title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 28px;
+  font-weight: 850;
+  letter-spacing: -0.8px;
+}
+
+.profile-subscription-card__subtitle {
+  margin: 6px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.profile-subscription-card__status {
+  display: grid;
+  min-width: 128px;
+  justify-items: end;
+  gap: 4px;
+}
+
+.profile-subscription-card__status strong {
+  color: var(--text-primary);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.profile-subscription-card__status small {
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.45px;
+  text-transform: uppercase;
+}
+
+.profile-subscription-badge {
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.profile-subscription-badge--active {
+  border: 1px solid rgba(34, 197, 94, 0.28);
+  background: rgba(34, 197, 94, 0.12);
+  color: #22c55e;
+}
+
+.profile-subscription-badge--inactive {
+  border: 1px solid rgba(239, 68, 68, 0.28);
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+}
+
+.profile-subscription-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.profile-subscription-stat {
+  padding: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.075);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.045);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.profile-subscription-stat span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.45px;
+  text-transform: uppercase;
+}
+
+.profile-subscription-stat strong {
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 750;
+}
+
 /* Profile Funds */
 .profile-funds {
   margin-top: 16px;
@@ -416,23 +545,21 @@
 
 .profile-danger-zone__content {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 24px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 16px;
 }
 
-.profile-danger-zone__title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #ef4444;
-  margin-bottom: 4px;
+.profile-danger-zone__content > .btn--danger {
+  align-self: flex-end;
 }
 
 .profile-danger-zone__desc {
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.5;
-  max-width: 420px;
+  max-width: none;
+  margin: 0;
 }
 
 .profile-danger-zone__confirm {
@@ -456,6 +583,18 @@
 }
 
 @media (max-width: 600px) {
+  .profile-subscription-card__header {
+    flex-direction: column;
+  }
+
+  .profile-subscription-card__status {
+    justify-items: start;
+  }
+
+  .profile-subscription-grid {
+    grid-template-columns: 1fr;
+  }
+
   .profile-danger-zone__content {
     flex-direction: column;
   }

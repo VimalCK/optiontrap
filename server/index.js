@@ -42,6 +42,7 @@ import {
   getActiveSubscriptionPlans,
   getUserSubscription,
   activateSubscription,
+  createFeedback,
   createWatchlist,
   getWatchlists,
   getWatchlistItems,
@@ -460,6 +461,29 @@ app.post('/api/subscription/activate', requireAuth, async (req, res) => {
   } catch (err) {
     res.status(400).json({ status: 'error', message: err.message || 'Failed to activate subscription' });
   }
+});
+
+app.post('/api/feedback', requireAuth, async (req, res) => {
+  const { type, message, pageUrl, userAgent } = req.body || {};
+  const allowedTypes = new Set(['bug', 'feature', 'general', 'subscription']);
+
+  if (!allowedTypes.has(type)) {
+    return res.status(400).json({ status: 'error', message: 'Valid feedback type is required' });
+  }
+
+  if (!message || typeof message !== 'string' || message.trim().length < 5) {
+    return res.status(400).json({ status: 'error', message: 'Feedback message must be at least 5 characters' });
+  }
+
+  const feedback = await createFeedback({
+    userId: req.session.kiteSession.userId,
+    type,
+    message: message.trim().slice(0, 4000),
+    pageUrl: typeof pageUrl === 'string' ? pageUrl.slice(0, 1000) : null,
+    userAgent: typeof userAgent === 'string' ? userAgent.slice(0, 1000) : req.get('user-agent'),
+  });
+
+  res.json({ status: 'ok', data: feedback });
 });
 
 // ---------- Watchlist Routes ----------

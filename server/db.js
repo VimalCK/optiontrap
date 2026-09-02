@@ -258,6 +258,33 @@ function mapSubscription(row) {
   };
 }
 
+function formatDbTimestamp(date) {
+  const pad = (value) => String(value).padStart(2, '0');
+
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+}
+
+function getPlanExpiryDate(interval) {
+  const expiresAt = new Date();
+
+  switch (interval) {
+    case 'month':
+      expiresAt.setMonth(expiresAt.getMonth() + 1);
+      break;
+    case '6 months':
+      expiresAt.setMonth(expiresAt.getMonth() + 6);
+      break;
+    case 'year':
+      expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+      break;
+    default:
+      expiresAt.setMonth(expiresAt.getMonth() + 1);
+      break;
+  }
+
+  return expiresAt;
+}
+
 export async function getActiveSubscriptionPlans() {
   const result = await rows(
     'SELECT * FROM subscription_plans WHERE is_active = 1 ORDER BY price ASC, id ASC',
@@ -289,19 +316,21 @@ export async function getUserSubscription(userId) {
 }
 
 export async function activateSubscription(userId, planId = 'one_month', provider = 'internal') {
-  const plan = await firstRow('SELECT id FROM subscription_plans WHERE id = $1 AND is_active = 1', [planId]);
+  const plan = await firstRow('SELECT id, interval FROM subscription_plans WHERE id = $1 AND is_active = 1', [planId]);
 
   if (!plan) {
     throw new Error('Subscription plan not found');
   }
 
   const id = crypto.randomUUID();
+  const startsAt = formatDbTimestamp(new Date());
+  const expiresAt = formatDbTimestamp(getPlanExpiryDate(plan.interval));
 
   await query(
-    `INSERT INTO subscriptions (id, user_id, plan_id, status, starts_at, provider, updated_at)
-     VALUES ($1, $2, $3, 'active', to_char(now(), 'YYYY-MM-DD HH24:MI:SS'), $4, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))
+    `INSERT INTO subscriptions (id, user_id, plan_id, status, starts_at, expires_at, provider, updated_at)
+     VALUES ($1, $2, $3, 'active', $4, $5, $6, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))
      ON CONFLICT (id) DO NOTHING`,
-    [id, userId, planId, provider],
+    [id, userId, planId, startsAt, expiresAt, provider],
   );
 
   const existing = await firstRow(
@@ -314,18 +343,41 @@ export async function activateSubscription(userId, planId = 'one_month', provide
       `UPDATE subscriptions SET
         plan_id = $1,
         status = 'active',
-        starts_at = COALESCE(starts_at, to_char(now(), 'YYYY-MM-DD HH24:MI:SS')),
-        expires_at = NULL,
-        provider = $2,
+        starts_at = $2,
+        expires_at = $3,
+        provider = $4,
         updated_at = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
-       WHERE id = $3`,
-      [planId, provider, existing.id],
+       WHERE id = $5`,
+      [planId, startsAt, expiresAt, provider, existing.id],
     );
     await query('DELETE FROM subscriptions WHERE id = $1', [id]);
     return getUserSubscription(userId);
   }
 
   return getUserSubscription(userId);
+}
+
+// ---------------------------------------------------------------------------
+// Feedback
+// ---------------------------------------------------------------------------
+
+export async function createFeedback({ userId, type, message, pageUrl, userAgent }) {
+  const id = crypto.randomUUID();
+
+  await query(
+    `INSERT INTO feedback (id, user_id, type, message, page_url, user_agent, status, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, 'open', to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))`,
+    [id, userId, type, message, pageUrl || null, userAgent || null],
+  );
+
+  return {
+    id,
+    userId,
+    type,
+    message,
+    pageUrl: pageUrl || null,
+    status: 'open',
+  };
 }
 
 // ---------------------------------------------------------------------------
