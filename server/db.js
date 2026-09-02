@@ -12,7 +12,13 @@
  */
 
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import pg from 'pg';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
 
 const DATABASE_URL = process.env.DATABASE_URL
   || 'postgres://optiontrap:optiontrap@localhost:5433/optiontrap';
@@ -49,8 +55,8 @@ async function firstRow(text, params = []) {
 }
 
 /**
- * Initialise the database: create the connection pool, ensure base schema,
- * and apply pending SQL migrations. Safe to call multiple times.
+ * Initialise the database: create the connection pool and apply pending SQL
+ * migrations. Safe to call multiple times.
  */
 export async function initDb() {
   if (pool) return;
@@ -66,7 +72,7 @@ export async function initDb() {
     console.error('[DB] Unexpected pool error:', err.message);
   });
 
-  await ensureBaseSchema();
+  await runMigrations();
 
   // Clean expired sessions on startup
   await query('DELETE FROM sessions WHERE expires < $1', [Date.now()]);
@@ -75,129 +81,57 @@ export async function initDb() {
 }
 
 /**
- * Create all base tables/indexes if they don't exist.
+ * Apply pending SQL migrations from server/migrations/.
+ *
+ * Each *.sql file (e.g. 001_init_schema.sql, 004_add_column.sql) runs exactly
+ * once, in filename order. Applied files are recorded in schema_migrations by
+ * name + checksum, so restarts skip them. To change the schema, add a NEW
+ * numbered file — never edit an already-applied one.
  */
-async function ensureBaseSchema() {
+async function runMigrations() {
   await query(`
-    CREATE TABLE IF NOT EXISTS users (
-      user_id    TEXT PRIMARY KEY,
-      user_name  TEXT,
-      updated_at TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      name       TEXT PRIMARY KEY,
+      checksum   TEXT NOT NULL,
+      applied_at TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
     )
   `);
 
-  await query(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      sid     TEXT PRIMARY KEY,
-      data    TEXT NOT NULL,
-      expires BIGINT NOT NULL
-    )
-  `);
+  if (!fs.existsSync(MIGRATIONS_DIR)) return;
 
-  await query(`
-    CREATE TABLE IF NOT EXISTS watchlists (
-      id         TEXT PRIMARY KEY,
-      user_id    TEXT NOT NULL,
-      name       TEXT NOT NULL,
-      sort_order BIGINT NOT NULL DEFAULT 0,
-      created_at TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
-    )
-  `);
+  const files = fs.readdirSync(MIGRATIONS_DIR)
+    .filter((f) => f.endsWith('.sql'))
+    .sort();
 
-  await query(`
-    CREATE TABLE IF NOT EXISTS watchlist_items (
-      id               TEXT PRIMARY KEY,
-      watchlist_id     TEXT NOT NULL,
-      instrument_token BIGINT NOT NULL,
-      tradingsymbol    TEXT NOT NULL,
-      exchange         TEXT NOT NULL DEFAULT 'NSE',
-      sort_order       BIGINT NOT NULL DEFAULT 0,
-      added_at         TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
-      FOREIGN KEY (watchlist_id) REFERENCES watchlists(id) ON DELETE CASCADE
-    )
-  `);
+  for (const file of files) {
+    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
+    const checksum = crypto.createHash('sha256').update(sql).digest('hex');
 
-  await query(`
-    CREATE TABLE IF NOT EXISTS instruments (
-      instrument_token BIGINT PRIMARY KEY,
-      exchange_token   BIGINT NOT NULL,
-      tradingsymbol    TEXT NOT NULL,
-      name             TEXT NOT NULL,
-      exchange         TEXT NOT NULL DEFAULT 'NSE',
-      instrument_type  TEXT NOT NULL DEFAULT 'EQ',
-      strike           DOUBLE PRECISION,
-      expiry           TEXT,
-      lot_size         BIGINT
-    )
-  `);
+    const existing = await firstRow('SELECT checksum FROM schema_migrations WHERE name = $1', [file]);
+    if (existing) {
+      if (existing.checksum !== checksum) {
+        throw new Error(`Migration ${file} was modified after being applied. Add a new migration instead of editing it.`);
+      }
+      continue; // already applied
+    }
 
-  await query(`
-    CREATE TABLE IF NOT EXISTS instruments_meta (
-      key   TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    )
-  `);
-
-  await query(`
-    CREATE TABLE IF NOT EXISTS positions (
-      id                TEXT PRIMARY KEY,
-      user_id           TEXT NOT NULL,
-      mode              TEXT NOT NULL DEFAULT 'paper',
-      tradingsymbol     TEXT NOT NULL,
-      instrument_token  BIGINT NOT NULL,
-      strike            DOUBLE PRECISION NOT NULL,
-      option_type       TEXT NOT NULL,
-      side              TEXT NOT NULL,
-      quantity          BIGINT NOT NULL,
-      entry_price       DOUBLE PRECISION NOT NULL,
-      entry_time        TEXT NOT NULL,
-      expiry            TEXT NOT NULL,
-      exited            INTEGER NOT NULL DEFAULT 0,
-      exit_price        DOUBLE PRECISION,
-      exit_time         TEXT,
-      note              TEXT,
-      target_price      DOUBLE PRECISION,
-      stop_loss_price   DOUBLE PRECISION,
-      strategy_tag      TEXT,
-      confidence        BIGINT
-    )
-  `);
-
-  await query(`
-    CREATE TABLE IF NOT EXISTS oi_snapshots (
-      id         BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-      timestamp  BIGINT NOT NULL,
-      time_label TEXT NOT NULL,
-      data       TEXT NOT NULL,
-      prices     TEXT,
-      close      TEXT,
-      spot       DOUBLE PRECISION,
-      volumes    TEXT,
-      UNIQUE(timestamp)
-    )
-  `);
-
-  await query(`
-    CREATE TABLE IF NOT EXISTS oi_history (
-      id               BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
-      scrip            TEXT NOT NULL,
-      date             TEXT NOT NULL,
-      instrument_token BIGINT NOT NULL,
-      tradingsymbol    TEXT NOT NULL,
-      strike           DOUBLE PRECISION,
-      option_type      TEXT,
-      expiry           TEXT,
-      open             DOUBLE PRECISION,
-      high             DOUBLE PRECISION,
-      low              DOUBLE PRECISION,
-      close            DOUBLE PRECISION,
-      volume           BIGINT,
-      oi               BIGINT,
-      spot_close       DOUBLE PRECISION,
-      UNIQUE(scrip, date, instrument_token)
-    )
-  `);
-  await query('CREATE INDEX IF NOT EXISTS idx_oi_history_scrip_date ON oi_history(scrip, date)');
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query(sql);
+      await client.query(
+        'INSERT INTO schema_migrations (name, checksum) VALUES ($1, $2)',
+        [file, checksum],
+      );
+      await client.query('COMMIT');
+      console.log(`[DB] Applied migration ${file}`);
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw new Error(`Migration ${file} failed: ${err.message}`);
+    } finally {
+      client.release();
+    }
+  }
 }
 
 /**

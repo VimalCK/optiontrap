@@ -21,9 +21,9 @@ On the OptionTrap **app** service in Railway, set an environment variable:
 DATABASE_URL = <the Postgres DATABASE_URL from step 1>
 ```
 
-The app reads `DATABASE_URL` (see `server/db.js`). On boot it auto-creates the
-schema via `ensureBaseSchema`, so a fresh DB needs no manual schema step — but
-we still load the data below.
+The app reads `DATABASE_URL` (see `server/db.js`). On boot it applies pending
+SQL migrations from `server/migrations/`, so a fresh DB gets its schema created
+automatically — but we still load the data below.
 
 ## 3. Dump local data
 
