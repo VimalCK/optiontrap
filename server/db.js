@@ -210,6 +210,37 @@ export async function closeDb() {
   }
 }
 
+/**
+ * Run `fn` while holding a transaction-scoped Postgres advisory lock.
+ *
+ * The lock is cross-process (works across multiple app replicas), so only one
+ * caller anywhere runs the critical section at a time; others block until it is
+ * released, then proceed. The lock is released automatically when the
+ * transaction ends (commit/rollback), even if the process crashes.
+ *
+ * @param {number} lockKey - Arbitrary constant identifying the lock.
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ * @template T
+ */
+export async function withAdvisoryLock(lockKey, fn) {
+  if (!pool) throw new Error('Database not initialised');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [lockKey]);
+    const result = await fn();
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 // ---------------------------------------------------------------------------
 // User CRUD
 // ---------------------------------------------------------------------------
