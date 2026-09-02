@@ -15,7 +15,6 @@
     "express-session": "^1.18.0",
     "http-proxy-middleware": "^3.0.0",
     "pg": "^8.23.0",
-    "pg-copy-streams": "^7.0.0",
     "ws": "^8.16.0"
   }
 }

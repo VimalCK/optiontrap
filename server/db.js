@@ -15,14 +15,10 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { pipeline } from 'stream/promises';
-import { Readable } from 'stream';
 import pg from 'pg';
-import { from as copyFrom } from 'pg-copy-streams';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
-const SEED_DIR = path.join(__dirname, 'seed');
 
 const DATABASE_URL = process.env.DATABASE_URL
   || 'postgres://optiontrap:optiontrap@localhost:5433/optiontrap';
@@ -77,7 +73,6 @@ export async function initDb() {
   });
 
   await runMigrations();
-  await runSeeds();
 
   // Clean expired sessions on startup
   await query('DELETE FROM sessions WHERE expires < $1', [Date.now()]);
@@ -136,74 +131,6 @@ async function runMigrations() {
     } finally {
       client.release();
     }
-  }
-}
-
-/**
- * Seed baseline data from CSV files in server/seed/ (one-time).
- *
- * Each table's CSV is loaded via COPY only if the table is currently empty and
- * the seed has not been recorded before. Tracked in seed_runs so it never
- * re-runs. This lets a fresh production database come up pre-populated with the
- * instruments/OI-history baseline without any manual restore step.
- */
-async function runSeeds() {
-  await query(`
-    CREATE TABLE IF NOT EXISTS seed_runs (
-      name       TEXT PRIMARY KEY,
-      applied_at TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
-    )
-  `);
-
-  if (!fs.existsSync(SEED_DIR)) return;
-
-  // Load order respects FK dependencies (watchlists before watchlist_items).
-  const order = [
-    'users',
-    'watchlists',
-    'watchlist_items',
-    'instruments_meta',
-    'instruments',
-    'positions',
-    'oi_history',
-  ];
-
-  for (const table of order) {
-    const file = path.join(SEED_DIR, `${table}.csv`);
-    if (!fs.existsSync(file)) continue;
-
-    const seedName = `seed:${table}`;
-    const already = await firstRow('SELECT name FROM seed_runs WHERE name = $1', [seedName]);
-    if (already) continue;
-
-    // Only seed when the table is empty — never clobber existing data.
-    const countRow = await firstRow(`SELECT COUNT(*)::int AS c FROM "${table}"`);
-    if (countRow && countRow.c > 0) {
-      await query('INSERT INTO seed_runs (name) VALUES ($1) ON CONFLICT DO NOTHING', [seedName]);
-      continue;
-    }
-
-    const client = await pool.connect();
-    try {
-      const stream = client.query(copyFrom(`COPY "${table}" FROM STDIN WITH (FORMAT csv, HEADER true)`));
-      await pipeline(fs.createReadStream(file), stream);
-      await client.query('INSERT INTO seed_runs (name) VALUES ($1) ON CONFLICT DO NOTHING', [seedName]);
-      console.log(`[DB] Seeded ${table}`);
-    } catch (err) {
-      throw new Error(`Seed ${table} failed: ${err.message}`);
-    } finally {
-      client.release();
-    }
-  }
-
-  // Keep identity sequences ahead of the max id we just inserted.
-  for (const table of ['oi_history', 'oi_snapshots']) {
-    await query(
-      `SELECT setval(pg_get_serial_sequence($1, 'id'),
-         GREATEST((SELECT COALESCE(MAX(id), 0) FROM "${table}"), 1),
-         (SELECT COUNT(*) FROM "${table}") > 0)`,
-      [table],
-    ).catch(() => {});
   }
 }
 
