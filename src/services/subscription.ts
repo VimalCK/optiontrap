@@ -10,6 +10,15 @@ async function readJson<T>(res: Response): Promise<T> {
   return json.data;
 }
 
+/**
+ * Human-readable duration label from the generic count + unit model.
+ * e.g. (1, 'month') -> "month", (6, 'month') -> "6 months", (7, 'day') -> "7 days".
+ */
+export function formatDuration(count: number, unit: string): string {
+  const n = count || 1;
+  return n === 1 ? unit : `${n} ${unit}s`;
+}
+
 export async function getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
   const res = await fetch('/api/subscription/plans', { credentials: 'include' });
   return readJson<SubscriptionPlan[]>(res);

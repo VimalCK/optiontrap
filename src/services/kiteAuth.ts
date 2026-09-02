@@ -26,7 +26,8 @@ export interface SubscriptionPlan {
   name: string;
   description: string | null;
   currency: string;
-  interval: string;
+  durationCount: number;
+  durationUnit: string;
   isActive: boolean;
 }
 

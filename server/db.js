@@ -244,7 +244,8 @@ function mapPlan(row) {
     name: row.plan_name || row.name,
     description: row.plan_description || row.description,
     currency: row.plan_currency || row.currency,
-    interval: row.plan_interval || row.interval,
+    durationCount: Number(row.plan_duration_count ?? row.duration_count ?? 1),
+    durationUnit: row.plan_duration_unit || row.duration_unit || 'month',
     isActive: Boolean(row.plan_is_active ?? row.is_active),
   };
 }
@@ -277,21 +278,25 @@ function formatDbTimestamp(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-function getPlanExpiryDate(interval) {
+function getPlanExpiryDate(durationCount, durationUnit) {
   const expiresAt = new Date();
+  const count = Math.max(1, parseInt(durationCount, 10) || 1);
 
-  switch (interval) {
-    case 'month':
-      expiresAt.setMonth(expiresAt.getMonth() + 1);
+  switch (durationUnit) {
+    case 'day':
+      expiresAt.setDate(expiresAt.getDate() + count);
       break;
-    case '6 months':
-      expiresAt.setMonth(expiresAt.getMonth() + 6);
+    case 'week':
+      expiresAt.setDate(expiresAt.getDate() + count * 7);
+      break;
+    case 'month':
+      expiresAt.setMonth(expiresAt.getMonth() + count);
       break;
     case 'year':
-      expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+      expiresAt.setFullYear(expiresAt.getFullYear() + count);
       break;
     default:
-      expiresAt.setMonth(expiresAt.getMonth() + 1);
+      expiresAt.setMonth(expiresAt.getMonth() + count);
       break;
   }
 
@@ -315,7 +320,8 @@ export async function getUserSubscription(userId) {
        p.description AS plan_description,
        p.price AS plan_price,
        p.currency AS plan_currency,
-       p.interval AS plan_interval,
+       p.duration_count AS plan_duration_count,
+       p.duration_unit AS plan_duration_unit,
        p.is_active AS plan_is_active
      FROM subscriptions s
      JOIN subscription_plans p ON p.id = s.plan_id
@@ -329,7 +335,7 @@ export async function getUserSubscription(userId) {
 }
 
 export async function activateSubscription(userId, planId = 'one_month', provider = 'internal') {
-  const plan = await firstRow('SELECT id, interval FROM subscription_plans WHERE id = $1 AND is_active = 1', [planId]);
+  const plan = await firstRow('SELECT id, duration_count, duration_unit FROM subscription_plans WHERE id = $1 AND is_active = 1', [planId]);
 
   if (!plan) {
     throw new Error('Subscription plan not found');
@@ -337,7 +343,7 @@ export async function activateSubscription(userId, planId = 'one_month', provide
 
   const id = crypto.randomUUID();
   const startsAt = formatDbTimestamp(new Date());
-  const expiresAt = formatDbTimestamp(getPlanExpiryDate(plan.interval));
+  const expiresAt = formatDbTimestamp(getPlanExpiryDate(plan.duration_count, plan.duration_unit));
 
   await query(
     `INSERT INTO subscriptions (id, user_id, plan_id, status, starts_at, expires_at, provider, updated_at)

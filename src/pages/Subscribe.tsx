@@ -3,10 +3,10 @@ import { useNavigate } from 'react-router-dom';
 import ParticleNetwork from '@/components/ParticleNetwork/ParticleNetwork';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import { SubscriptionPlan, SubscriptionStatus } from '@/services/kiteAuth';
-import { activateSubscription, getSubscriptionPlans, getSubscriptionStatus } from '@/services/subscription';
+import { activateSubscription, formatDuration, getSubscriptionPlans, getSubscriptionStatus } from '@/services/subscription';
 import '@/styles/subscribe.css';
 
-const getPlanPriceLabel = (plan: SubscriptionPlan) => `${plan.currency} ****/${plan.interval}`;
+const getPlanPriceLabel = (plan: SubscriptionPlan) => `${plan.currency} ****/${formatDuration(plan.durationCount, plan.durationUnit)}`;
 
 const planMeta: Record<string, { badge?: string; extraFeatures?: string[] }> = {
   one_month: {

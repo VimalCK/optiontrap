@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ConnectionIcon, PowerIcon } from '@/components/icons/Icons';
 import { getSession, logout, deleteAccount, KiteSession } from '@/services/kiteAuth';
 import { fetchMargins, Margins } from '@/services/kiteApi';
+import { formatDuration } from '@/services/subscription';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import '@/styles/settings.css';
 
@@ -264,7 +265,7 @@ const Profile: React.FC = () => {
           </div>
           <div className="profile-subscription-stat">
             <span>Billing Cycle</span>
-            <strong>{subscription?.plan?.interval || '-'}</strong>
+            <strong>{subscription?.plan ? formatDuration(subscription.plan.durationCount, subscription.plan.durationUnit) : '-'}</strong>
           </div>
           <div className="profile-subscription-stat">
             <span>Started</span>
