@@ -1,416 +1,308 @@
 /**
- * SQLite Database Manager
+ * PostgreSQL Database Manager
  *
- * Manages persistent storage for OptionTrap using sql.js (pure-JS SQLite).
- * The database lives at process.env.DATABASE_PATH when configured, otherwise
- * server/data/optiontrap.db, and is auto-created on first run.
+ * Persistent storage for OptionTrap backed by PostgreSQL (via `pg`).
+ * All exported functions are async.
  *
- * Currently handles:
- *   - users: lightweight user registry (user_id + user_name from Kite OAuth)
- *   - sessions: express-session data persisted across server restarts
+ * Connection is configured via DATABASE_URL, e.g.
+ *   postgres://optiontrap:optiontrap@localhost:5433/optiontrap
  *
  * Credentials (apiKey + apiSecret) are stored ONLY in the client browser's
- * localStorage. The server never persists them — they are sent per-request
- * during OAuth token exchange and immediately discarded.
+ * localStorage. The server never persists them.
  */
 
-import initSqlJs from 'sql.js';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { pipeline } from 'stream/promises';
+import { Readable } from 'stream';
+import pg from 'pg';
+import { from as copyFrom } from 'pg-copy-streams';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, 'data', 'optiontrap.db');
-const DATA_DIR = path.dirname(DB_PATH);
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
+const SEED_DIR = path.join(__dirname, 'seed');
 
-// ---------------------------------------------------------------------------
-// Database lifecycle
-// ---------------------------------------------------------------------------
+const DATABASE_URL = process.env.DATABASE_URL
+  || 'postgres://optiontrap:optiontrap@localhost:5433/optiontrap';
 
-/** @type {import('sql.js').Database | null} */
-let db = null;
+// Return integers as JS numbers (safe for our value ranges) instead of strings.
+pg.types.setTypeParser(20, (val) => (val === null ? null : parseInt(val, 10))); // int8/bigint
+pg.types.setTypeParser(1700, (val) => (val === null ? null : parseFloat(val))); // numeric
+
+/** @type {pg.Pool | null} */
+let pool = null;
 
 /**
- * Initialise the database. Must be called (and awaited) before any other
- * db.js export. Safe to call multiple times — returns immediately after
- * the first successful init.
+ * Run a query against the pool. Returns the pg result.
+ */
+async function query(text, params = []) {
+  if (!pool) throw new Error('Database not initialised');
+  return pool.query(text, params);
+}
+
+/**
+ * Convenience: return all rows for a query.
+ */
+async function rows(text, params = []) {
+  const res = await query(text, params);
+  return res.rows;
+}
+
+/**
+ * Convenience: return the first row (or null).
+ */
+async function firstRow(text, params = []) {
+  const res = await query(text, params);
+  return res.rows[0] || null;
+}
+
+/**
+ * Initialise the database: create the connection pool and apply pending SQL
+ * migrations. Safe to call multiple times.
  */
 export async function initDb() {
-  if (db) return;
+  if (pool) return;
 
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-  }
+  pool = new pg.Pool({
+    connectionString: DATABASE_URL,
+    max: parseInt(process.env.PG_POOL_MAX || '10', 10),
+    idleTimeoutMillis: 30000,
+    connectionTimeoutMillis: 10000,
+  });
 
-  const SQL = await initSqlJs();
+  pool.on('error', (err) => {
+    console.error('[DB] Unexpected pool error:', err.message);
+  });
 
-  if (fs.existsSync(DB_PATH)) {
-    const buffer = fs.readFileSync(DB_PATH);
-    db = new SQL.Database(buffer);
-  } else {
-    db = new SQL.Database();
-  }
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS users (
-      user_id    TEXT PRIMARY KEY,
-      user_name  TEXT,
-      updated_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  // Migrate from old user_credentials table if it exists
-  try {
-    const tables = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='user_credentials'");
-    if (tables.length && tables[0].values.length) {
-      // Copy user identity rows (skip credentials)
-      db.run(`
-        INSERT OR IGNORE INTO users (user_id, user_name, updated_at)
-        SELECT user_id, user_name, updated_at FROM user_credentials WHERE user_id IS NOT NULL
-      `);
-      db.run('DROP TABLE user_credentials');
-      console.log('[DB] Migrated user_credentials → users (credentials removed from server)');
-    }
-  } catch (err) {
-    console.warn('[DB] user_credentials migration warning:', err.message);
-  }
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS sessions (
-      sid     TEXT PRIMARY KEY,
-      data    TEXT NOT NULL,
-      expires INTEGER NOT NULL
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS watchlists (
-      id         TEXT PRIMARY KEY,
-      user_id    TEXT NOT NULL,
-      name       TEXT NOT NULL,
-      sort_order INTEGER NOT NULL DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now'))
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS watchlist_items (
-      id               TEXT PRIMARY KEY,
-      watchlist_id     TEXT NOT NULL,
-      instrument_token INTEGER NOT NULL,
-      tradingsymbol    TEXT NOT NULL,
-      exchange         TEXT NOT NULL DEFAULT 'NSE',
-      sort_order       INTEGER NOT NULL DEFAULT 0,
-      added_at         TEXT DEFAULT (datetime('now')),
-      FOREIGN KEY (watchlist_id) REFERENCES watchlists(id) ON DELETE CASCADE
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS instruments (
-      instrument_token INTEGER PRIMARY KEY,
-      exchange_token   INTEGER NOT NULL,
-      tradingsymbol    TEXT NOT NULL,
-      name             TEXT NOT NULL,
-      exchange         TEXT NOT NULL DEFAULT 'NSE',
-      instrument_type  TEXT NOT NULL DEFAULT 'EQ',
-      strike           REAL,
-      expiry           TEXT,
-      lot_size         INTEGER
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS instruments_meta (
-      key   TEXT PRIMARY KEY,
-      value TEXT NOT NULL
-    )
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS positions (
-      id                TEXT PRIMARY KEY,
-      user_id           TEXT NOT NULL,
-      mode              TEXT NOT NULL DEFAULT 'paper',
-      tradingsymbol     TEXT NOT NULL,
-      instrument_token  INTEGER NOT NULL,
-      strike            REAL NOT NULL,
-      option_type       TEXT NOT NULL,
-      side              TEXT NOT NULL,
-      quantity          INTEGER NOT NULL,
-      entry_price       REAL NOT NULL,
-      entry_time        TEXT NOT NULL,
-      expiry            TEXT NOT NULL,
-      exited            INTEGER NOT NULL DEFAULT 0,
-      exit_price        REAL,
-      exit_time         TEXT,
-      note              TEXT,
-      target_price      REAL,
-      stop_loss_price   REAL,
-      strategy_tag      TEXT,
-      confidence        INTEGER
-    )
-  `);
-
-  ensureColumn('positions', 'note', 'TEXT');
-  ensureColumn('positions', 'target_price', 'REAL');
-  ensureColumn('positions', 'stop_loss_price', 'REAL');
-  ensureColumn('positions', 'strategy_tag', 'TEXT');
-  ensureColumn('positions', 'confidence', 'INTEGER');
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS oi_snapshots (
-      id         INTEGER PRIMARY KEY AUTOINCREMENT,
-      timestamp  INTEGER NOT NULL,
-      time_label TEXT NOT NULL,
-      data       TEXT NOT NULL,
-      prices     TEXT,
-      close      TEXT,
-      spot       REAL,
-      volumes    TEXT
-    )
-  `);
-
-  db.run(`
-    CREATE INDEX IF NOT EXISTS idx_oi_snapshots_timestamp ON oi_snapshots(timestamp)
-  `);
-
-  db.run(`
-    CREATE TABLE IF NOT EXISTS oi_history (
-      id               INTEGER PRIMARY KEY AUTOINCREMENT,
-      scrip            TEXT NOT NULL,
-      date             TEXT NOT NULL,
-      instrument_token INTEGER NOT NULL,
-      tradingsymbol    TEXT NOT NULL,
-      strike           REAL,
-      option_type      TEXT,
-      expiry           TEXT,
-      open             REAL,
-      high             REAL,
-      low              REAL,
-      close            REAL,
-      volume           INTEGER,
-      oi               INTEGER,
-      spot_close       REAL,
-      UNIQUE(scrip, date, instrument_token)
-    )
-  `);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_oi_history_scrip_date ON oi_history(scrip, date)`);
-
-  applySqlMigrations();
+  await runMigrations();
+  await runSeeds();
 
   // Clean expired sessions on startup
-  db.run('DELETE FROM sessions WHERE expires < ?', [Date.now()]);
+  await query('DELETE FROM sessions WHERE expires < $1', [Date.now()]);
 
-  persist();
-  console.log('[DB] SQLite initialised at', DB_PATH);
+  console.log('[DB] PostgreSQL initialised');
 }
 
 /**
- * Flush the in-memory database to disk. Called after every write operation
- * so data survives crashes.
+ * Apply pending SQL migrations from server/migrations/.
+ *
+ * Each *.sql file (e.g. 001_init_schema.sql, 004_add_column.sql) runs exactly
+ * once, in filename order. Applied files are recorded in schema_migrations by
+ * name + checksum, so restarts skip them. To change the schema, add a NEW
+ * numbered file — never edit an already-applied one.
  */
-function persist() {
-  if (!db) return;
-  const data = db.export();
-  fs.writeFileSync(DB_PATH, Buffer.from(data));
-}
-
-function ensureColumn(table, column, definition) {
-  const result = db.exec(`PRAGMA table_info(${table})`);
-  const hasColumn = result[0]?.values.some((row) => row[1] === column);
-  if (!hasColumn) db.run(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
-}
-
-function ensureMigrationsTable() {
-  db.run(`
+async function runMigrations() {
+  await query(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       name       TEXT PRIMARY KEY,
       checksum   TEXT NOT NULL,
-      applied_at TEXT DEFAULT (datetime('now'))
+      applied_at TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
     )
   `);
-}
-
-function appliedMigration(name) {
-  const result = db.exec('SELECT checksum FROM schema_migrations WHERE name = ?', [name]);
-  return result[0]?.values[0]?.[0] || null;
-}
-
-function checksumSql(sql) {
-  return crypto.createHash('sha256').update(sql).digest('hex');
-}
-
-function splitSqlStatements(sql) {
-  const statements = [];
-  let current = '';
-  let inSingleQuote = false;
-  let inDoubleQuote = false;
-  let inLineComment = false;
-
-  for (let i = 0; i < sql.length; i++) {
-    const char = sql[i];
-    const next = sql[i + 1];
-
-    if (inLineComment) {
-      current += char;
-      if (char === '\n') inLineComment = false;
-      continue;
-    }
-
-    if (!inSingleQuote && !inDoubleQuote && char === '-' && next === '-') {
-      inLineComment = true;
-      current += char;
-      continue;
-    }
-
-    if (!inDoubleQuote && char === "'") {
-      current += char;
-      if (inSingleQuote && next === "'") {
-        current += next;
-        i++;
-        continue;
-      }
-      inSingleQuote = !inSingleQuote;
-      continue;
-    }
-
-    if (!inSingleQuote && char === '"') {
-      current += char;
-      if (inDoubleQuote && next === '"') {
-        current += next;
-        i++;
-        continue;
-      }
-      inDoubleQuote = !inDoubleQuote;
-      continue;
-    }
-
-    if (!inSingleQuote && !inDoubleQuote && char === ';') {
-      const statement = current.trim();
-      if (statement) statements.push(statement);
-      current = '';
-      continue;
-    }
-
-    current += char;
-  }
-
-  const statement = current.trim();
-  if (statement) statements.push(statement);
-  return statements;
-}
-
-function applySqlMigrations() {
-  ensureMigrationsTable();
 
   if (!fs.existsSync(MIGRATIONS_DIR)) return;
 
   const files = fs.readdirSync(MIGRATIONS_DIR)
-    .filter((file) => /^\d+.*\.sql$/.test(file))
+    .filter((f) => f.endsWith('.sql'))
     .sort();
 
   for (const file of files) {
-    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8').trim();
-    if (!sql) continue;
+    const sql = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
+    const checksum = crypto.createHash('sha256').update(sql).digest('hex');
 
-    const checksum = checksumSql(sql);
-    const appliedChecksum = appliedMigration(file);
-    if (appliedChecksum) {
-      if (appliedChecksum !== checksum) {
-        throw new Error(`Migration already applied but file changed: ${file}`);
+    const existing = await firstRow('SELECT checksum FROM schema_migrations WHERE name = $1', [file]);
+    if (existing) {
+      if (existing.checksum !== checksum) {
+        throw new Error(`Migration ${file} was modified after being applied. Add a new migration instead of editing it.`);
       }
-      continue;
+      continue; // already applied
     }
 
-    db.run('BEGIN TRANSACTION');
+    const client = await pool.connect();
     try {
-      for (const statement of splitSqlStatements(sql)) {
-        db.run(statement);
-      }
-      db.run(
-        'INSERT INTO schema_migrations (name, checksum, applied_at) VALUES (?, ?, datetime(\'now\'))',
+      await client.query('BEGIN');
+      await client.query(sql);
+      await client.query(
+        'INSERT INTO schema_migrations (name, checksum) VALUES ($1, $2)',
         [file, checksum],
       );
-      db.run('COMMIT');
+      await client.query('COMMIT');
       console.log(`[DB] Applied migration ${file}`);
     } catch (err) {
-      db.run('ROLLBACK');
-      throw err;
+      await client.query('ROLLBACK');
+      throw new Error(`Migration ${file} failed: ${err.message}`);
+    } finally {
+      client.release();
     }
   }
 }
 
 /**
- * Close the database cleanly. Call on process exit.
+ * Seed baseline data from CSV files in server/seed/ (one-time).
+ *
+ * Each table's CSV is loaded via COPY only if the table is currently empty and
+ * the seed has not been recorded before. Tracked in seed_runs so it never
+ * re-runs. This lets a fresh production database come up pre-populated with the
+ * instruments/OI-history baseline without any manual restore step.
  */
-export function closeDb() {
-  if (db) {
-    persist();
-    db.close();
-    db = null;
+async function runSeeds() {
+  await query(`
+    CREATE TABLE IF NOT EXISTS seed_runs (
+      name       TEXT PRIMARY KEY,
+      applied_at TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+    )
+  `);
+
+  if (!fs.existsSync(SEED_DIR)) return;
+
+  // Load order respects FK dependencies (watchlists before watchlist_items).
+  const order = [
+    'users',
+    'watchlists',
+    'watchlist_items',
+    'instruments_meta',
+    'instruments',
+    'positions',
+    'oi_history',
+  ];
+
+  for (const table of order) {
+    const file = path.join(SEED_DIR, `${table}.csv`);
+    if (!fs.existsSync(file)) continue;
+
+    const seedName = `seed:${table}`;
+    const already = await firstRow('SELECT name FROM seed_runs WHERE name = $1', [seedName]);
+    if (already) continue;
+
+    // Only seed when the table is empty — never clobber existing data.
+    const countRow = await firstRow(`SELECT COUNT(*)::int AS c FROM "${table}"`);
+    if (countRow && countRow.c > 0) {
+      await query('INSERT INTO seed_runs (name) VALUES ($1) ON CONFLICT DO NOTHING', [seedName]);
+      continue;
+    }
+
+    const client = await pool.connect();
+    try {
+      const stream = client.query(copyFrom(`COPY "${table}" FROM STDIN WITH (FORMAT csv, HEADER true)`));
+      await pipeline(fs.createReadStream(file), stream);
+      await client.query('INSERT INTO seed_runs (name) VALUES ($1) ON CONFLICT DO NOTHING', [seedName]);
+      console.log(`[DB] Seeded ${table}`);
+    } catch (err) {
+      throw new Error(`Seed ${table} failed: ${err.message}`);
+    } finally {
+      client.release();
+    }
   }
+
+  // Keep identity sequences ahead of the max id we just inserted.
+  for (const table of ['oi_history', 'oi_snapshots']) {
+    await query(
+      `SELECT setval(pg_get_serial_sequence($1, 'id'),
+         GREATEST((SELECT COALESCE(MAX(id), 0) FROM "${table}"), 1),
+         (SELECT COUNT(*) FROM "${table}") > 0)`,
+      [table],
+    ).catch(() => {});
+  }
+}
+
+/**
+ * Close the pool cleanly. Call on process exit.
+ */
+export async function closeDb() {
+  if (pool) {
+    await pool.end();
+    pool = null;
+  }
+}
+
+/**
+ * Run `fn` while holding a transaction-scoped Postgres advisory lock.
+ *
+ * The lock is cross-process (works across multiple app replicas), so only one
+ * caller anywhere runs the critical section at a time; others block until it is
+ * released, then proceed. The lock is released automatically when the
+ * transaction ends (commit/rollback), even if the process crashes.
+ *
+ * @param {number} lockKey - Arbitrary constant identifying the lock.
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ * @template T
+ */
+export async function withAdvisoryLock(lockKey, fn) {
+  if (!pool) throw new Error('Database not initialised');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [lockKey]);
+    const result = await fn();
+    await client.query('COMMIT');
+    return result;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Hash an arbitrary string into a signed 64-bit BigInt suitable for use as a
+ * Postgres advisory-lock key. Uses SHA-256 truncated to 8 bytes.
+ *
+ * @param {string} value
+ * @returns {bigint}
+ */
+export function advisoryLockKey(value) {
+  const hash = crypto.createHash('sha256').update(value).digest();
+  // Read the first 8 bytes as a signed BigInt (pg advisory keys are bigint).
+  return hash.readBigInt64BE(0);
+}
+
+/**
+ * Run `fn` while holding a transaction-scoped advisory lock derived from a
+ * string name. Different names lock independently; the same name serializes.
+ *
+ * @param {string} name
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ * @template T
+ */
+export async function withNamedAdvisoryLock(name, fn) {
+  return withAdvisoryLock(advisoryLockKey(name), fn);
 }
 
 // ---------------------------------------------------------------------------
 // User CRUD
 // ---------------------------------------------------------------------------
 
-/**
- * Upsert a user record. Called after successful Kite OAuth.
- * Only stores identity (user_id + user_name) — no credentials.
- */
-export function upsertUser(userId, userName) {
-  if (!db) throw new Error('Database not initialised');
-
-  db.run(
+export async function upsertUser(userId, userName) {
+  await query(
     `INSERT INTO users (user_id, user_name, updated_at)
-     VALUES (?, ?, datetime('now'))
-     ON CONFLICT(user_id) DO UPDATE SET
-       user_name  = COALESCE(excluded.user_name, users.user_name),
-       updated_at = datetime('now')`,
+     VALUES ($1, $2, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))
+     ON CONFLICT (user_id) DO UPDATE SET
+       user_name  = COALESCE(EXCLUDED.user_name, users.user_name),
+       updated_at = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')`,
     [userId, userName],
   );
-
-  persist();
 }
 
-/**
- * Delete a user by ID.
- */
-export function deleteUser(userId) {
-  if (!db) throw new Error('Database not initialised');
-  db.run('DELETE FROM users WHERE user_id = ?', [userId]);
-  persist();
+export async function deleteUser(userId) {
+  await query('DELETE FROM users WHERE user_id = $1', [userId]);
 }
 
 // ---------------------------------------------------------------------------
 // Session CRUD (for express-session store)
 // ---------------------------------------------------------------------------
 
-/**
- * Retrieve a session by ID. Returns parsed session object or null.
- */
-export function getSessionById(sid) {
-  if (!db) throw new Error('Database not initialised');
+export async function getSessionById(sid) {
+  const row = await firstRow('SELECT data, expires FROM sessions WHERE sid = $1', [sid]);
+  if (!row) return null;
 
-  const stmt = db.prepare('SELECT data, expires FROM sessions WHERE sid = ?');
-  stmt.bind([sid]);
-
-  if (!stmt.step()) {
-    stmt.free();
-    return null;
-  }
-
-  const row = stmt.getAsObject();
-  stmt.free();
-
-  // Expired — clean it up
-  if (row.expires < Date.now()) {
-    db.run('DELETE FROM sessions WHERE sid = ?', [sid]);
-    persist();
+  if (Number(row.expires) < Date.now()) {
+    await query('DELETE FROM sessions WHERE sid = $1', [sid]);
     return null;
   }
 
@@ -421,262 +313,153 @@ export function getSessionById(sid) {
   }
 }
 
-/**
- * Save or update a session. Computes expiry from cookie.maxAge or defaults
- * to 24 hours.
- */
-export function setSessionData(sid, sessionData, maxAge) {
-  if (!db) throw new Error('Database not initialised');
-
+export async function setSessionData(sid, sessionData, maxAge) {
   const expires = Date.now() + (maxAge || 86400000);
   const data = JSON.stringify(sessionData);
 
-  db.run(
-    `INSERT INTO sessions (sid, data, expires) VALUES (?, ?, ?)
-     ON CONFLICT(sid) DO UPDATE SET data = excluded.data, expires = excluded.expires`,
+  await query(
+    `INSERT INTO sessions (sid, data, expires) VALUES ($1, $2, $3)
+     ON CONFLICT (sid) DO UPDATE SET data = EXCLUDED.data, expires = EXCLUDED.expires`,
     [sid, data, expires],
   );
-
-  persist();
 }
 
-/**
- * Delete a session by ID.
- */
-export function deleteSession(sid) {
-  if (!db) throw new Error('Database not initialised');
-  db.run('DELETE FROM sessions WHERE sid = ?', [sid]);
-  persist();
+export async function deleteSession(sid) {
+  await query('DELETE FROM sessions WHERE sid = $1', [sid]);
 }
 
-/**
- * Update a session's expiry without changing its data (keep-alive).
- */
-export function touchSession(sid, maxAge) {
-  if (!db) throw new Error('Database not initialised');
+export async function touchSession(sid, maxAge) {
   const expires = Date.now() + (maxAge || 86400000);
-  db.run('UPDATE sessions SET expires = ? WHERE sid = ?', [expires, sid]);
-  persist();
+  await query('UPDATE sessions SET expires = $1 WHERE sid = $2', [expires, sid]);
 }
 
-/**
- * Remove all expired sessions. Called periodically by the session store.
- */
-export function cleanExpiredSessions() {
-  if (!db) throw new Error('Database not initialised');
-  const result = db.run('DELETE FROM sessions WHERE expires < ?', [Date.now()]);
-  persist();
-  return result;
+export async function cleanExpiredSessions() {
+  const res = await query('DELETE FROM sessions WHERE expires < $1', [Date.now()]);
+  return res.rowCount;
 }
 
 // ---------------------------------------------------------------------------
 // Watchlist CRUD
 // ---------------------------------------------------------------------------
 
-/**
- * Create a new watchlist for a user. Returns the created watchlist object.
- */
-export function createWatchlist(userId, name) {
-  if (!db) throw new Error('Database not initialised');
-
+export async function createWatchlist(userId, name) {
   const id = crypto.randomUUID();
 
-  // Next sort_order = max existing + 1
-  const maxResult = db.exec(
-    'SELECT COALESCE(MAX(sort_order), -1) FROM watchlists WHERE user_id = ?',
+  const maxRow = await firstRow(
+    'SELECT COALESCE(MAX(sort_order), -1) AS max_order FROM watchlists WHERE user_id = $1',
     [userId],
   );
-  const sortOrder = (maxResult[0]?.values[0]?.[0] ?? -1) + 1;
+  const sortOrder = (maxRow?.max_order ?? -1) + 1;
 
-  db.run(
-    'INSERT INTO watchlists (id, user_id, name, sort_order) VALUES (?, ?, ?, ?)',
+  await query(
+    'INSERT INTO watchlists (id, user_id, name, sort_order) VALUES ($1, $2, $3, $4)',
     [id, userId, name.trim(), sortOrder],
   );
 
-  persist();
   return { id, name: name.trim(), sortOrder, itemCount: 0 };
 }
 
-/**
- * Get all watchlists for a user (metadata only — no items).
- * Returns id, name, sortOrder, and itemCount for tab rendering.
- */
-export function getWatchlists(userId) {
-  if (!db) throw new Error('Database not initialised');
-
-  const stmt = db.prepare(
+export async function getWatchlists(userId) {
+  const result = await rows(
     `SELECT w.id, w.name, w.sort_order,
             (SELECT COUNT(*) FROM watchlist_items wi WHERE wi.watchlist_id = w.id) AS item_count
      FROM watchlists w
-     WHERE w.user_id = ?
+     WHERE w.user_id = $1
      ORDER BY w.sort_order`,
+    [userId],
   );
-  stmt.bind([userId]);
 
-  const lists = [];
-  while (stmt.step()) {
-    const row = stmt.getAsObject();
-    lists.push({
-      id: row.id,
-      name: row.name,
-      sortOrder: row.sort_order,
-      itemCount: row.item_count,
-    });
-  }
-  stmt.free();
-
-  return lists;
+  return result.map((row) => ({
+    id: row.id,
+    name: row.name,
+    sortOrder: Number(row.sort_order),
+    itemCount: Number(row.item_count),
+  }));
 }
 
-/**
- * Get a single watchlist with all its items. Validates ownership.
- * Returns null if not found or wrong owner.
- */
-export function getWatchlistItems(id, userId) {
-  if (!db) throw new Error('Database not initialised');
+export async function getWatchlistItems(id, userId) {
+  const listRow = await firstRow(
+    'SELECT id, name, sort_order FROM watchlists WHERE id = $1 AND user_id = $2',
+    [id, userId],
+  );
+  if (!listRow) return null;
 
-  // Verify ownership + get metadata
-  const listStmt = db.prepare('SELECT id, name, sort_order FROM watchlists WHERE id = ? AND user_id = ?');
-  listStmt.bind([id, userId]);
-
-  if (!listStmt.step()) {
-    listStmt.free();
-    return null;
-  }
-
-  const listRow = listStmt.getAsObject();
-  listStmt.free();
-
-  // Fetch items
-  const itemStmt = db.prepare(
+  const items = await rows(
     `SELECT id, instrument_token, tradingsymbol, exchange, sort_order
      FROM watchlist_items
-     WHERE watchlist_id = ?
+     WHERE watchlist_id = $1
      ORDER BY sort_order`,
+    [id],
   );
-  itemStmt.bind([id]);
-
-  const items = [];
-  while (itemStmt.step()) {
-    const row = itemStmt.getAsObject();
-    items.push({
-      id: row.id,
-      instrumentToken: row.instrument_token,
-      tradingsymbol: row.tradingsymbol,
-      exchange: row.exchange,
-      sortOrder: row.sort_order,
-    });
-  }
-  itemStmt.free();
 
   return {
     id: listRow.id,
     name: listRow.name,
-    sortOrder: listRow.sort_order,
-    items,
+    sortOrder: Number(listRow.sort_order),
+    items: items.map((row) => ({
+      id: row.id,
+      instrumentToken: Number(row.instrument_token),
+      tradingsymbol: row.tradingsymbol,
+      exchange: row.exchange,
+      sortOrder: Number(row.sort_order),
+    })),
   };
 }
 
-/**
- * Rename a watchlist. Returns true if updated, false if not found or wrong owner.
- */
-export function renameWatchlist(id, userId, name) {
-  if (!db) throw new Error('Database not initialised');
-
-  db.run(
-    'UPDATE watchlists SET name = ? WHERE id = ? AND user_id = ?',
+export async function renameWatchlist(id, userId, name) {
+  const res = await query(
+    'UPDATE watchlists SET name = $1 WHERE id = $2 AND user_id = $3',
     [name.trim(), id, userId],
   );
-
-  const changes = db.getRowsModified();
-  if (changes > 0) persist();
-  return changes > 0;
+  return res.rowCount > 0;
 }
 
-/**
- * Delete a watchlist and all its items. Returns true if deleted.
- */
-export function deleteWatchlist(id, userId) {
-  if (!db) throw new Error('Database not initialised');
+export async function deleteWatchlist(id, userId) {
+  const owner = await firstRow('SELECT id FROM watchlists WHERE id = $1 AND user_id = $2', [id, userId]);
+  if (!owner) return false;
 
-  // Verify ownership
-  const checkStmt = db.prepare('SELECT id FROM watchlists WHERE id = ? AND user_id = ?');
-  checkStmt.bind([id, userId]);
-  const exists = checkStmt.step();
-  checkStmt.free();
-
-  if (!exists) return false;
-
-  db.run('DELETE FROM watchlist_items WHERE watchlist_id = ?', [id]);
-  db.run('DELETE FROM watchlists WHERE id = ?', [id]);
-  persist();
+  // watchlist_items has ON DELETE CASCADE, but delete explicitly to mirror old behavior.
+  await query('DELETE FROM watchlist_items WHERE watchlist_id = $1', [id]);
+  await query('DELETE FROM watchlists WHERE id = $1', [id]);
   return true;
 }
 
-/**
- * Add an item to a watchlist. Enforces 100-item limit.
- * Returns the created item or null if limit reached / duplicate.
- */
-export function addWatchlistItem(watchlistId, userId, { instrumentToken, tradingsymbol, exchange }) {
-  if (!db) throw new Error('Database not initialised');
+export async function addWatchlistItem(watchlistId, userId, { instrumentToken, tradingsymbol, exchange }) {
+  const owner = await firstRow('SELECT id FROM watchlists WHERE id = $1 AND user_id = $2', [watchlistId, userId]);
+  if (!owner) return null;
 
-  // Verify watchlist ownership
-  const ownerStmt = db.prepare('SELECT id FROM watchlists WHERE id = ? AND user_id = ?');
-  ownerStmt.bind([watchlistId, userId]);
-  const owned = ownerStmt.step();
-  ownerStmt.free();
-  if (!owned) return null;
-
-  // Check item count
-  const countResult = db.exec(
-    'SELECT COUNT(*) FROM watchlist_items WHERE watchlist_id = ?',
-    [watchlistId],
-  );
-  const count = countResult[0]?.values[0]?.[0] ?? 0;
+  const countRow = await firstRow('SELECT COUNT(*) AS c FROM watchlist_items WHERE watchlist_id = $1', [watchlistId]);
+  const count = Number(countRow?.c ?? 0);
   if (count >= 100) return null;
 
-  // Check for duplicate instrument in same watchlist
-  const dupStmt = db.prepare(
-    'SELECT id FROM watchlist_items WHERE watchlist_id = ? AND instrument_token = ?',
+  const dup = await firstRow(
+    'SELECT id FROM watchlist_items WHERE watchlist_id = $1 AND instrument_token = $2',
+    [watchlistId, instrumentToken],
   );
-  dupStmt.bind([watchlistId, instrumentToken]);
-  const isDuplicate = dupStmt.step();
-  dupStmt.free();
-  if (isDuplicate) return null;
+  if (dup) return null;
 
   const id = crypto.randomUUID();
-  const sortOrder = count; // append at end
+  const sortOrder = count;
 
-  db.run(
+  await query(
     `INSERT INTO watchlist_items (id, watchlist_id, instrument_token, tradingsymbol, exchange, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+     VALUES ($1, $2, $3, $4, $5, $6)`,
     [id, watchlistId, instrumentToken, tradingsymbol, exchange || 'NSE', sortOrder],
   );
 
-  persist();
   return { id, instrumentToken, tradingsymbol, exchange: exchange || 'NSE', sortOrder };
 }
 
-/**
- * Remove an item from a watchlist. Validates ownership via join.
- */
-export function removeWatchlistItem(itemId, userId) {
-  if (!db) throw new Error('Database not initialised');
-
-  // Verify ownership through watchlist join
-  const checkStmt = db.prepare(
+export async function removeWatchlistItem(itemId, userId) {
+  const exists = await firstRow(
     `SELECT wi.id FROM watchlist_items wi
      JOIN watchlists w ON wi.watchlist_id = w.id
-     WHERE wi.id = ? AND w.user_id = ?`,
+     WHERE wi.id = $1 AND w.user_id = $2`,
+    [itemId, userId],
   );
-  checkStmt.bind([itemId, userId]);
-  const exists = checkStmt.step();
-  checkStmt.free();
-
   if (!exists) return false;
 
-  db.run('DELETE FROM watchlist_items WHERE id = ?', [itemId]);
-  persist();
+  await query('DELETE FROM watchlist_items WHERE id = $1', [itemId]);
   return true;
 }
 
@@ -684,62 +467,42 @@ export function removeWatchlistItem(itemId, userId) {
 // Instruments (shared across all users)
 // ---------------------------------------------------------------------------
 
-/**
- * Get the date (IST YYYY-MM-DD) when instruments were last fetched.
- * Returns null if never fetched.
- */
-export function getInstrumentsDate() {
-  if (!db) throw new Error('Database not initialised');
-
-  const stmt = db.prepare("SELECT value FROM instruments_meta WHERE key = 'last_fetched_date'");
-  const hasRow = stmt.step();
-  const date = hasRow ? stmt.get()[0] : null;
-  stmt.free();
-  return date;
+export async function getInstrumentsDate() {
+  const row = await firstRow("SELECT value FROM instruments_meta WHERE key = 'last_fetched_date'");
+  return row ? row.value : null;
 }
 
-/**
- * Get all cached instruments. Returns an empty array if none cached.
- */
-export function getInstruments() {
-  if (!db) throw new Error('Database not initialised');
-
-  const results = db.exec(
+export async function getInstruments() {
+  const result = await rows(
     'SELECT instrument_token, exchange_token, tradingsymbol, name, exchange, instrument_type, strike, expiry, lot_size FROM instruments',
   );
-  if (!results.length) return [];
-
-  return results[0].values.map(([instrumentToken, exchangeToken, tradingsymbol, name, exchange, instrumentType, strike, expiry, lotSize]) => ({
-    instrumentToken,
-    exchangeToken,
-    tradingsymbol,
-    name,
-    exchange,
-    instrumentType,
-    strike: strike || null,
-    expiry: expiry || null,
-    lotSize: lotSize || null,
+  return result.map((row) => ({
+    instrumentToken: Number(row.instrument_token),
+    exchangeToken: Number(row.exchange_token),
+    tradingsymbol: row.tradingsymbol,
+    name: row.name,
+    exchange: row.exchange,
+    instrumentType: row.instrument_type,
+    strike: row.strike || null,
+    expiry: row.expiry || null,
+    lotSize: row.lot_size || null,
   }));
 }
 
-/**
- * Replace all instruments with a fresh set and update the fetch date.
- * Runs inside a transaction for atomicity.
- */
-export function saveInstruments(instruments, dateIST) {
-  if (!db) throw new Error('Database not initialised');
-
-  db.run('BEGIN TRANSACTION');
+export async function saveInstruments(instruments, dateIST) {
+  const client = await pool.connect();
   try {
-    db.run('DELETE FROM instruments');
-    db.run("DELETE FROM instruments_meta WHERE key = 'last_fetched_date'");
+    await client.query('BEGIN');
+    await client.query('DELETE FROM instruments');
+    await client.query("DELETE FROM instruments_meta WHERE key = 'last_fetched_date'");
 
-    const stmt = db.prepare(
-      'INSERT INTO instruments (instrument_token, exchange_token, tradingsymbol, name, exchange, instrument_type, strike, expiry, lot_size) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    );
+    const text = `INSERT INTO instruments
+      (instrument_token, exchange_token, tradingsymbol, name, exchange, instrument_type, strike, expiry, lot_size)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      ON CONFLICT (instrument_token) DO NOTHING`;
 
     for (const inst of instruments) {
-      stmt.run([
+      await client.query(text, [
         inst.instrumentToken,
         inst.exchangeToken,
         inst.tradingsymbol,
@@ -751,69 +514,56 @@ export function saveInstruments(instruments, dateIST) {
         inst.lotSize || null,
       ]);
     }
-    stmt.free();
 
-    db.run("INSERT INTO instruments_meta (key, value) VALUES ('last_fetched_date', ?)", [dateIST]);
-    db.run('COMMIT');
+    await client.query(
+      "INSERT INTO instruments_meta (key, value) VALUES ('last_fetched_date', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+      [dateIST],
+    );
+    await client.query('COMMIT');
   } catch (err) {
-    db.run('ROLLBACK');
+    await client.query('ROLLBACK');
     throw err;
+  } finally {
+    client.release();
   }
-
-  persist();
 }
 
 // ---------------------------------------------------------------------------
 // Positions CRUD
 // ---------------------------------------------------------------------------
 
-/**
- * Get all positions for a user, optionally filtered by mode.
- */
-export function getPositions(userId, mode = null) {
-  if (!db) throw new Error('Database not initialised');
-
+export async function getPositions(userId, mode = null) {
   const sql = mode
-    ? 'SELECT * FROM positions WHERE user_id = ? AND mode = ? ORDER BY entry_time DESC'
-    : 'SELECT * FROM positions WHERE user_id = ? ORDER BY entry_time DESC';
+    ? 'SELECT * FROM positions WHERE user_id = $1 AND mode = $2 ORDER BY entry_time DESC'
+    : 'SELECT * FROM positions WHERE user_id = $1 ORDER BY entry_time DESC';
   const params = mode ? [userId, mode] : [userId];
 
-  const results = db.exec(sql, params);
-  if (!results.length) return [];
-
-  const columns = results[0].columns;
-  return results[0].values.map((row) => {
-    const obj = {};
-    columns.forEach((col, i) => { obj[col] = row[i]; });
-    return mapPositionRow(obj);
-  });
+  const result = await rows(sql, params);
+  return result.map(mapPositionRow);
 }
 
-/**
- * Map a raw DB row to a camelCase position object.
- */
 function mapPositionRow(row) {
   return {
     id: row.id,
     userId: row.user_id,
     mode: row.mode,
     tradingsymbol: row.tradingsymbol,
-    instrumentToken: row.instrument_token,
+    instrumentToken: Number(row.instrument_token),
     strike: row.strike,
     optionType: row.option_type,
     side: row.side,
-    quantity: row.quantity,
+    quantity: Number(row.quantity),
     entryPrice: row.entry_price,
     entryTime: row.entry_time,
     expiry: row.expiry,
-    exited: row.exited === 1,
+    exited: Number(row.exited) === 1,
     exitPrice: row.exit_price,
     exitTime: row.exit_time,
     note: row.note || '',
     targetPrice: row.target_price,
     stopLossPrice: row.stop_loss_price,
     strategyTag: row.strategy_tag || '',
-    confidence: row.confidence,
+    confidence: row.confidence === null || row.confidence === undefined ? null : Number(row.confidence),
   };
 }
 
@@ -827,37 +577,30 @@ function positionMetaValues(position) {
   ];
 }
 
-/**
- * Add a position with full netting logic:
- *   - Same-side existing → average in
- *   - Opposite-side existing → net out (exact, partial, or over-close)
- *   - No existing → open fresh
- */
-export function addPosition(userId, position) {
-  if (!db) throw new Error('Database not initialised');
-
+export async function addPosition(userId, position) {
   const mode = position.mode || 'paper';
   const now = new Date().toISOString();
 
-  // Look for open same-side position
-  const sameSide = queryPosition(
-    'SELECT * FROM positions WHERE user_id = ? AND mode = ? AND instrument_token = ? AND side = ? AND exited = 0',
+  // Same-side existing → average in
+  const sameSide = await firstRow(
+    'SELECT * FROM positions WHERE user_id = $1 AND mode = $2 AND instrument_token = $3 AND side = $4 AND exited = 0',
     [userId, mode, position.instrumentToken, position.side],
   );
 
   if (sameSide) {
-    const totalQty = sameSide.quantity + position.quantity;
-    const avgPrice = (sameSide.entry_price * sameSide.quantity + position.entryPrice * position.quantity) / totalQty;
+    const totalQty = Number(sameSide.quantity) + position.quantity;
+    const avgPrice = (sameSide.entry_price * Number(sameSide.quantity) + position.entryPrice * position.quantity) / totalQty;
+    const meta = positionMetaValues(position);
 
-    db.run(
+    await query(
       `UPDATE positions SET
-         quantity = ?, entry_price = ?, note = COALESCE(?, note), target_price = COALESCE(?, target_price),
-         stop_loss_price = COALESCE(?, stop_loss_price), strategy_tag = COALESCE(?, strategy_tag), confidence = COALESCE(?, confidence)
-       WHERE id = ?`,
-      [totalQty, Number(avgPrice.toFixed(2)), ...positionMetaValues(position), sameSide.id],
+         quantity = $1, entry_price = $2, note = COALESCE($3, note), target_price = COALESCE($4, target_price),
+         stop_loss_price = COALESCE($5, stop_loss_price), strategy_tag = COALESCE($6, strategy_tag), confidence = COALESCE($7, confidence)
+       WHERE id = $8`,
+      [totalQty, Number(avgPrice.toFixed(2)), ...meta, sameSide.id],
     );
-    persist();
-    const [note, targetPrice, stopLossPrice, strategyTag, confidence] = positionMetaValues(position);
+
+    const [note, targetPrice, stopLossPrice, strategyTag, confidence] = meta;
     return mapPositionRow({
       ...sameSide,
       quantity: totalQty,
@@ -870,53 +613,49 @@ export function addPosition(userId, position) {
     });
   }
 
-  // Look for open opposite-side position
+  // Opposite-side existing → net out
   const oppSide = position.side === 'BUY' ? 'SELL' : 'BUY';
-  const opposite = queryPosition(
-    'SELECT * FROM positions WHERE user_id = ? AND mode = ? AND instrument_token = ? AND side = ? AND exited = 0',
+  const opposite = await firstRow(
+    'SELECT * FROM positions WHERE user_id = $1 AND mode = $2 AND instrument_token = $3 AND side = $4 AND exited = 0',
     [userId, mode, position.instrumentToken, oppSide],
   );
 
   if (opposite) {
-    if (position.quantity === opposite.quantity) {
-      // Exact close
-      db.run(
-        'UPDATE positions SET exited = 1, exit_price = ?, exit_time = ? WHERE id = ?',
+    const oppQty = Number(opposite.quantity);
+    if (position.quantity === oppQty) {
+      await query(
+        'UPDATE positions SET exited = 1, exit_price = $1, exit_time = $2 WHERE id = $3',
         [position.entryPrice, now, opposite.id],
       );
-      persist();
       return mapPositionRow({ ...opposite, exited: 1, exit_price: position.entryPrice, exit_time: now });
     }
 
-    if (position.quantity < opposite.quantity) {
-      // Partial close — reduce existing qty
-      db.run(
-        'UPDATE positions SET quantity = ? WHERE id = ?',
-        [opposite.quantity - position.quantity, opposite.id],
+    if (position.quantity < oppQty) {
+      await query(
+        'UPDATE positions SET quantity = $1 WHERE id = $2',
+        [oppQty - position.quantity, opposite.id],
       );
-      persist();
-      return mapPositionRow({ ...opposite, quantity: opposite.quantity - position.quantity });
+      return mapPositionRow({ ...opposite, quantity: oppQty - position.quantity });
     }
 
     // Over-close — close existing, open remainder in new side
-    db.run(
-      'UPDATE positions SET exited = 1, exit_price = ?, exit_time = ? WHERE id = ?',
+    await query(
+      'UPDATE positions SET exited = 1, exit_price = $1, exit_time = $2 WHERE id = $3',
       [position.entryPrice, now, opposite.id],
     );
 
     const remainderId = crypto.randomUUID();
-    db.run(
+    await query(
       `INSERT INTO positions (id, user_id, mode, tradingsymbol, instrument_token, strike, option_type, side, quantity, entry_price, entry_time, expiry, note, target_price, stop_loss_price, strategy_tag, confidence)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
       [remainderId, userId, mode, position.tradingsymbol, position.instrumentToken, position.strike,
-       position.optionType, position.side, position.quantity - opposite.quantity, position.entryPrice, now, position.expiry,
+       position.optionType, position.side, position.quantity - oppQty, position.entryPrice, now, position.expiry,
        ...positionMetaValues(position)],
     );
-    persist();
     return mapPositionRow({
       id: remainderId, user_id: userId, mode, tradingsymbol: position.tradingsymbol,
       instrument_token: position.instrumentToken, strike: position.strike, option_type: position.optionType,
-      side: position.side, quantity: position.quantity - opposite.quantity, entry_price: position.entryPrice,
+      side: position.side, quantity: position.quantity - oppQty, entry_price: position.entryPrice,
       entry_time: now, expiry: position.expiry, exited: 0, exit_price: null, exit_time: null,
       note: position.note || null, target_price: position.targetPrice ?? null, stop_loss_price: position.stopLossPrice ?? null,
       strategy_tag: position.strategyTag || null, confidence: position.confidence ?? null,
@@ -925,14 +664,13 @@ export function addPosition(userId, position) {
 
   // No existing — open fresh
   const id = crypto.randomUUID();
-  db.run(
+  await query(
     `INSERT INTO positions (id, user_id, mode, tradingsymbol, instrument_token, strike, option_type, side, quantity, entry_price, entry_time, expiry, note, target_price, stop_loss_price, strategy_tag, confidence)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
     [id, userId, mode, position.tradingsymbol, position.instrumentToken, position.strike,
      position.optionType, position.side, position.quantity, position.entryPrice, now, position.expiry,
      ...positionMetaValues(position)],
   );
-  persist();
   return mapPositionRow({
     id, user_id: userId, mode, tradingsymbol: position.tradingsymbol,
     instrument_token: position.instrumentToken, strike: position.strike, option_type: position.optionType,
@@ -943,93 +681,46 @@ export function addPosition(userId, position) {
   });
 }
 
-/**
- * Exit a position by ID. Validates ownership.
- */
-export function exitPositionById(id, userId, exitPrice) {
-  if (!db) throw new Error('Database not initialised');
-
+export async function exitPositionById(id, userId, exitPrice) {
   const now = new Date().toISOString();
-  db.run(
-    'UPDATE positions SET exited = 1, exit_price = ?, exit_time = ? WHERE id = ? AND user_id = ? AND exited = 0',
+  const res = await query(
+    'UPDATE positions SET exited = 1, exit_price = $1, exit_time = $2 WHERE id = $3 AND user_id = $4 AND exited = 0',
     [exitPrice, now, id, userId],
   );
-
-  const changes = db.getRowsModified();
-  if (changes > 0) persist();
-  return changes > 0;
+  return res.rowCount > 0;
 }
 
-/**
- * Remove a position by ID. Validates ownership.
- */
-export function removePositionById(id, userId) {
-  if (!db) throw new Error('Database not initialised');
-
-  db.run('DELETE FROM positions WHERE id = ? AND user_id = ?', [id, userId]);
-  const changes = db.getRowsModified();
-  if (changes > 0) persist();
-  return changes > 0;
+export async function removePositionById(id, userId) {
+  const res = await query('DELETE FROM positions WHERE id = $1 AND user_id = $2', [id, userId]);
+  return res.rowCount > 0;
 }
 
-/**
- * Clear all positions for a user, optionally filtered by mode.
- */
-export function clearPositions(userId, mode = null) {
-  if (!db) throw new Error('Database not initialised');
-
+export async function clearPositions(userId, mode = null) {
   if (mode) {
-    db.run('DELETE FROM positions WHERE user_id = ? AND mode = ?', [userId, mode]);
+    await query('DELETE FROM positions WHERE user_id = $1 AND mode = $2', [userId, mode]);
   } else {
-    db.run('DELETE FROM positions WHERE user_id = ?', [userId]);
+    await query('DELETE FROM positions WHERE user_id = $1', [userId]);
   }
-  persist();
-}
-
-/**
- * Helper: query a single position row.
- */
-function queryPosition(sql, params) {
-  const results = db.exec(sql, params);
-  if (!results.length || !results[0].values.length) return null;
-
-  const columns = results[0].columns;
-  const row = {};
-  columns.forEach((col, i) => { row[col] = results[0].values[0][i]; });
-  return row;
 }
 
 // ---------------------------------------------------------------------------
 // OI Snapshots (shared across all users)
 // ---------------------------------------------------------------------------
 
-/**
- * Helper: get today's midnight timestamp (IST-based, since market is NSE).
- */
 function getTodayMidnight() {
   const now = new Date();
-  // IST = UTC+5:30. Compute IST midnight in UTC ms.
   const istOffset = 5.5 * 60 * 60 * 1000;
   const istNow = now.getTime() + istOffset;
   const istMidnight = Math.floor(istNow / (24 * 60 * 60 * 1000)) * (24 * 60 * 60 * 1000);
-  return istMidnight - istOffset; // convert back to UTC ms
+  return istMidnight - istOffset;
 }
 
-/**
- * Round a timestamp down to the nearest 10-minute mark.
- */
 function roundTo10Min(timestamp) {
   const TEN_MIN = 10 * 60 * 1000;
   return Math.floor(timestamp / TEN_MIN) * TEN_MIN;
 }
 
-/**
- * Save an OI snapshot (shared). Merges tokens into existing row if one exists
- * for the same 10-minute slot. Silently cleans old-day rows.
- */
-export function saveOiSnapshot(snapshot) {
-  if (!db) throw new Error('Database not initialised');
-
+export async function saveOiSnapshot(snapshot) {
   const rounded = roundTo10Min(snapshot.timestamp);
   const timeLabel = snapshot.timeLabel;
   const newData = typeof snapshot.data === 'string' ? JSON.parse(snapshot.data) : snapshot.data;
@@ -1044,606 +735,410 @@ export function saveOiSnapshot(snapshot) {
     ? (typeof snapshot.volumes === 'string' ? JSON.parse(snapshot.volumes) : snapshot.volumes)
     : null;
 
-  // Check if a row exists for this 10-min slot
-  const results = db.exec('SELECT id, data, prices, close, spot, volumes FROM oi_snapshots WHERE timestamp = ?', [rounded]);
-
-  if (results.length && results[0].values.length) {
-    const columns = results[0].columns;
-    const row = {};
-    columns.forEach((col, i) => { row[col] = results[0].values[0][i]; });
-
-    // Merge tokens into existing data
-    const existingData = JSON.parse(row.data);
-    Object.assign(existingData, newData);
-
-    let mergedPrices = row.prices ? JSON.parse(row.prices) : {};
-    if (newPrices) Object.assign(mergedPrices, newPrices);
-    const pricesStr = Object.keys(mergedPrices).length > 0 ? JSON.stringify(mergedPrices) : null;
-
-    let mergedClose = row.close ? JSON.parse(row.close) : {};
-    if (newClose) Object.assign(mergedClose, newClose);
-    const closeStr = Object.keys(mergedClose).length > 0 ? JSON.stringify(mergedClose) : null;
-
-    let mergedVolumes = row.volumes ? JSON.parse(row.volumes) : {};
-    if (newVolumes) Object.assign(mergedVolumes, newVolumes);
-    const volumesStr = Object.keys(mergedVolumes).length > 0 ? JSON.stringify(mergedVolumes) : null;
-
-    const spot = newSpot || row.spot || null;
-
-    db.run(
-      'UPDATE oi_snapshots SET data = ?, prices = ?, close = ?, spot = ?, volumes = ? WHERE id = ?',
-      [JSON.stringify(existingData), pricesStr, closeStr, spot, volumesStr, row.id],
+  // All users' snapshots for a given 10-min slot merge into ONE shared row.
+  // Serialize the read-modify-write per slot (cross-process) so concurrent
+  // watchers on the same/different scrips can't lose each other's tokens.
+  await withNamedAdvisoryLock(`oi-snapshot:${rounded}`, async () => {
+    const existing = await firstRow(
+      'SELECT id, data, prices, close, spot, volumes FROM oi_snapshots WHERE timestamp = $1',
+      [rounded],
     );
-  } else {
-    db.run(
-      'INSERT INTO oi_snapshots (timestamp, time_label, data, prices, close, spot, volumes) VALUES (?, ?, ?, ?, ?, ?, ?)',
-      [rounded, timeLabel, JSON.stringify(newData), newPrices ? JSON.stringify(newPrices) : null, newClose ? JSON.stringify(newClose) : null, newSpot, newVolumes ? JSON.stringify(newVolumes) : null],
-    );
-  }
 
-  // Silent cleanup: remove rows older than today
-  const todayMidnight = getTodayMidnight();
-  db.run('DELETE FROM oi_snapshots WHERE timestamp < ?', [todayMidnight]);
+    if (existing) {
+      const existingData = JSON.parse(existing.data);
+      Object.assign(existingData, newData);
 
-  persist();
+      const mergedPrices = existing.prices ? JSON.parse(existing.prices) : {};
+      if (newPrices) Object.assign(mergedPrices, newPrices);
+      const pricesStr = Object.keys(mergedPrices).length > 0 ? JSON.stringify(mergedPrices) : null;
+
+      const mergedClose = existing.close ? JSON.parse(existing.close) : {};
+      if (newClose) Object.assign(mergedClose, newClose);
+      const closeStr = Object.keys(mergedClose).length > 0 ? JSON.stringify(mergedClose) : null;
+
+      const mergedVolumes = existing.volumes ? JSON.parse(existing.volumes) : {};
+      if (newVolumes) Object.assign(mergedVolumes, newVolumes);
+      const volumesStr = Object.keys(mergedVolumes).length > 0 ? JSON.stringify(mergedVolumes) : null;
+
+      const spot = newSpot || existing.spot || null;
+
+      await query(
+        'UPDATE oi_snapshots SET data = $1, prices = $2, close = $3, spot = $4, volumes = $5 WHERE id = $6',
+        [JSON.stringify(existingData), pricesStr, closeStr, spot, volumesStr, existing.id],
+      );
+    } else {
+      await query(
+        `INSERT INTO oi_snapshots (timestamp, time_label, data, prices, close, spot, volumes)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (timestamp) DO UPDATE SET
+           data    = EXCLUDED.data,
+           prices  = EXCLUDED.prices,
+           close   = EXCLUDED.close,
+           spot    = EXCLUDED.spot,
+           volumes = EXCLUDED.volumes`,
+        [rounded, timeLabel, JSON.stringify(newData), newPrices ? JSON.stringify(newPrices) : null, newClose ? JSON.stringify(newClose) : null, newSpot, newVolumes ? JSON.stringify(newVolumes) : null],
+      );
+    }
+  });
+
+  await query('DELETE FROM oi_snapshots WHERE timestamp < $1', [getTodayMidnight()]);
 }
 
-/**
- * Get OI snapshots from the most recent date available, ordered by timestamp.
- * When market is closed, this returns yesterday's snapshots (until a new one is saved today).
- */
-export function getTodayOiSnapshots() {
-  if (!db) throw new Error('Database not initialised');
+export async function getTodayOiSnapshots() {
+  const maxRow = await firstRow('SELECT MAX(timestamp) AS max_ts FROM oi_snapshots');
+  if (!maxRow || maxRow.max_ts === null) return [];
 
-  // Find the most recent date's midnight boundary
-  const maxResult = db.exec('SELECT MAX(timestamp) as maxTs FROM oi_snapshots');
-  if (!maxResult.length || !maxResult[0].values[0][0]) return [];
-
-  const maxTs = maxResult[0].values[0][0];
-  // Get IST midnight of that date
+  const maxTs = Number(maxRow.max_ts);
   const maxDate = new Date(maxTs);
   const istDate = new Date(maxDate.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
   istDate.setHours(0, 0, 0, 0);
   const midnightMs = istDate.getTime();
 
-  const results = db.exec(
-    'SELECT timestamp, time_label, data, prices, close, spot, volumes FROM oi_snapshots WHERE timestamp >= ? ORDER BY timestamp',
+  const result = await rows(
+    'SELECT timestamp, time_label, data, prices, close, spot, volumes FROM oi_snapshots WHERE timestamp >= $1 ORDER BY timestamp',
     [midnightMs],
   );
 
-  if (!results.length) return [];
-
-  const columns = results[0].columns;
-  return results[0].values.map((row) => {
-    const obj = {};
-    columns.forEach((col, i) => { obj[col] = row[i]; });
-    return {
-      timestamp: obj.timestamp,
-      timeLabel: obj.time_label,
-      data: JSON.parse(obj.data),
-      prices: obj.prices ? JSON.parse(obj.prices) : undefined,
-      close: obj.close ? JSON.parse(obj.close) : undefined,
-      spot: obj.spot || undefined,
-      volumes: obj.volumes ? JSON.parse(obj.volumes) : undefined,
-    };
-  });
+  return result.map((obj) => ({
+    timestamp: Number(obj.timestamp),
+    timeLabel: obj.time_label,
+    data: JSON.parse(obj.data),
+    prices: obj.prices ? JSON.parse(obj.prices) : undefined,
+    close: obj.close ? JSON.parse(obj.close) : undefined,
+    spot: obj.spot || undefined,
+    volumes: obj.volumes ? JSON.parse(obj.volumes) : undefined,
+  }));
 }
 
-/**
- * Clean OI snapshots older than today.
- */
-export function cleanOldOiSnapshots() {
-  if (!db) throw new Error('Database not initialised');
-
-  const todayMidnight = getTodayMidnight();
-  db.run('DELETE FROM oi_snapshots WHERE timestamp < ?', [todayMidnight]);
-  const changes = db.getRowsModified();
-  if (changes > 0) persist();
-  return changes;
+export async function cleanOldOiSnapshots() {
+  const res = await query('DELETE FROM oi_snapshots WHERE timestamp < $1', [getTodayMidnight()]);
+  return res.rowCount;
 }
 
-/**
- * Get the timestamp of the most recent OI snapshot, or null if none today.
- */
-export function getLatestOiSnapshotTimestamp() {
-  if (!db) throw new Error('Database not initialised');
-
-  const todayMidnight = getTodayMidnight();
-  const results = db.exec(
-    'SELECT MAX(timestamp) as ts FROM oi_snapshots WHERE timestamp >= ?',
-    [todayMidnight],
+export async function getLatestOiSnapshotTimestamp() {
+  const row = await firstRow(
+    'SELECT MAX(timestamp) AS ts FROM oi_snapshots WHERE timestamp >= $1',
+    [getTodayMidnight()],
   );
-
-  if (!results.length || !results[0].values.length) return null;
-  return results[0].values[0][0] || null;
+  return row && row.ts !== null ? Number(row.ts) : null;
 }
 
 // ===========================================================================
-// OI History — single unified table for historical daily OI data
+// OI History
 // ===========================================================================
 
-/**
- * Create the unified OI history table if it doesn't exist.
- */
-export function createOiHistoryTable() {
-  if (!db) throw new Error('Database not initialised');
-
-  db.run(`
+export async function createOiHistoryTable() {
+  await query(`
     CREATE TABLE IF NOT EXISTS oi_history (
-      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      id               BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
       scrip            TEXT NOT NULL,
       date             TEXT NOT NULL,
-      instrument_token INTEGER NOT NULL,
+      instrument_token BIGINT NOT NULL,
       tradingsymbol    TEXT NOT NULL,
-      strike           REAL,
+      strike           DOUBLE PRECISION,
       option_type      TEXT,
       expiry           TEXT,
-      open             REAL,
-      high             REAL,
-      low              REAL,
-      close            REAL,
-      volume           INTEGER,
-      oi               INTEGER,
-      spot_close       REAL,
+      open             DOUBLE PRECISION,
+      high             DOUBLE PRECISION,
+      low              DOUBLE PRECISION,
+      close            DOUBLE PRECISION,
+      volume           BIGINT,
+      oi               BIGINT,
+      spot_close       DOUBLE PRECISION,
       UNIQUE(scrip, date, instrument_token)
     )
   `);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_oi_history_scrip_date ON oi_history(scrip, date)`);
-  persist();
+  await query('CREATE INDEX IF NOT EXISTS idx_oi_history_scrip_date ON oi_history(scrip, date)');
 }
 
-/**
- * Insert or update OI history rows in bulk.
- * Uses INSERT OR REPLACE for upsert.
- */
-export function insertOiHistoryRows(scrip, rows) {
-  if (!db) throw new Error('Database not initialised');
-  if (!rows.length) return 0;
+export async function insertOiHistoryRows(scrip, rowsToInsert) {
+  if (!rowsToInsert.length) return 0;
 
-  db.run('BEGIN TRANSACTION');
+  const client = await pool.connect();
   try {
-    const stmt = db.prepare(`
-      INSERT OR REPLACE INTO oi_history
+    await client.query('BEGIN');
+    const text = `
+      INSERT INTO oi_history
         (scrip, date, instrument_token, tradingsymbol, strike, option_type, expiry, open, high, low, close, volume, oi, spot_close)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+      ON CONFLICT (scrip, date, instrument_token) DO UPDATE SET
+        tradingsymbol = EXCLUDED.tradingsymbol,
+        strike        = EXCLUDED.strike,
+        option_type   = EXCLUDED.option_type,
+        expiry        = EXCLUDED.expiry,
+        open          = EXCLUDED.open,
+        high          = EXCLUDED.high,
+        low           = EXCLUDED.low,
+        close         = EXCLUDED.close,
+        volume        = EXCLUDED.volume,
+        oi            = EXCLUDED.oi,
+        spot_close    = EXCLUDED.spot_close
+    `;
 
-    for (const r of rows) {
-      stmt.run([
-        scrip, r.date, r.instrumentToken, r.tradingsymbol, r.strike || null,
-        r.optionType || null, r.expiry || null,
+    for (const r of rowsToInsert) {
+      await client.query(text, [
+        scrip, r.date, r.instrumentToken, r.tradingsymbol, r.strike ?? null,
+        r.optionType ?? null, r.expiry ?? null,
         r.open, r.high, r.low, r.close, r.volume, r.oi, r.spotClose,
       ]);
     }
-    stmt.free();
-    db.run('COMMIT');
-    persist();
-    return rows.length;
+    await client.query('COMMIT');
+    return rowsToInsert.length;
   } catch (err) {
-    db.run('ROLLBACK');
+    await client.query('ROLLBACK');
     throw err;
+  } finally {
+    client.release();
   }
 }
 
-/**
- * Get OI history data for a scrip, optionally filtered by date range.
- */
-export function getOiHistoryData(scrip, fromDate, toDate) {
-  if (!db) throw new Error('Database not initialised');
+function mapOiHistoryRow(obj) {
+  return {
+    date: obj.date,
+    instrumentToken: Number(obj.instrument_token),
+    tradingsymbol: obj.tradingsymbol,
+    strike: obj.strike,
+    optionType: obj.option_type,
+    expiry: obj.expiry,
+    open: obj.open,
+    high: obj.high,
+    low: obj.low,
+    close: obj.close,
+    volume: obj.volume === null || obj.volume === undefined ? obj.volume : Number(obj.volume),
+    oi: obj.oi === null || obj.oi === undefined ? obj.oi : Number(obj.oi),
+    spotClose: obj.spot_close,
+  };
+}
 
+export async function getOiHistoryData(scrip, fromDate, toDate) {
   let sql = `SELECT date, instrument_token, tradingsymbol, strike, option_type, expiry,
              open, high, low, close, volume, oi, spot_close
-             FROM oi_history WHERE scrip = ?`;
+             FROM oi_history WHERE scrip = $1`;
   const params = [scrip];
 
   if (fromDate && toDate) {
-    sql += ' AND date >= ? AND date <= ?';
+    sql += ' AND date >= $2 AND date <= $3';
     params.push(fromDate, toDate);
   } else if (fromDate) {
-    sql += ' AND date >= ?';
+    sql += ' AND date >= $2';
     params.push(fromDate);
   } else if (toDate) {
-    sql += ' AND date <= ?';
+    sql += ' AND date <= $2';
     params.push(toDate);
   }
 
   sql += ' ORDER BY date, strike, option_type';
 
-  const results = db.exec(sql, params);
-  if (!results.length) return [];
-
-  const columns = results[0].columns;
-  return results[0].values.map((row) => {
-    const obj = {};
-    columns.forEach((col, i) => { obj[col] = row[i]; });
-    return {
-      date: obj.date,
-      instrumentToken: obj.instrument_token,
-      tradingsymbol: obj.tradingsymbol,
-      strike: obj.strike,
-      optionType: obj.option_type,
-      expiry: obj.expiry,
-      open: obj.open,
-      high: obj.high,
-      low: obj.low,
-      close: obj.close,
-      volume: obj.volume,
-      oi: obj.oi,
-      spotClose: obj.spot_close,
-    };
-  });
+  const result = await rows(sql, params);
+  return result.map(mapOiHistoryRow);
 }
 
-/**
- * Get OI history rows for a specific expiry month, optionally from a start date.
- * expiryMonth format: 'YYYY-MM'
- */
-export function getOiHistoryDataByExpiryMonth(scrip, expiryMonth, fromDate = null) {
-  if (!db) throw new Error('Database not initialised');
-
+export async function getOiHistoryDataByExpiryMonth(scrip, expiryMonth, fromDate = null) {
   let sql = `SELECT date, instrument_token, tradingsymbol, strike, option_type, expiry,
              open, high, low, close, volume, oi, spot_close
-             FROM oi_history WHERE scrip = ? AND expiry LIKE ? || '%'`;
+             FROM oi_history WHERE scrip = $1 AND expiry LIKE $2 || '%'`;
   const params = [scrip, expiryMonth];
 
   if (fromDate) {
-    sql += ' AND date >= ?';
+    sql += ' AND date >= $3';
     params.push(fromDate);
   }
 
   sql += ' ORDER BY date, strike, option_type';
 
-  const results = db.exec(sql, params);
-  if (!results.length) return [];
-
-  const columns = results[0].columns;
-  return results[0].values.map((row) => {
-    const obj = {};
-    columns.forEach((col, i) => { obj[col] = row[i]; });
-    return {
-      date: obj.date,
-      instrumentToken: obj.instrument_token,
-      tradingsymbol: obj.tradingsymbol,
-      strike: obj.strike,
-      optionType: obj.option_type,
-      expiry: obj.expiry,
-      open: obj.open,
-      high: obj.high,
-      low: obj.low,
-      close: obj.close,
-      volume: obj.volume,
-      oi: obj.oi,
-      spotClose: obj.spot_close,
-    };
-  });
+  const result = await rows(sql, params);
+  return result.map(mapOiHistoryRow);
 }
 
-/**
- * Get option instruments for a given scrip, ATM, and range from the instruments table.
- * When allExpiries is false (default), returns only the nearest expiry.
- * When allExpiries is true, returns all expiries within the selected month
- * (or all expiries if no targetMonth provided).
- * targetMonth format: 'YYYY-MM'
- *
- * @param {string} scripName - Instrument name in NFO (e.g. 'NIFTY', 'BANKNIFTY', 'RELIANCE')
- * @param {number} atmStrike - At-the-money strike price
- * @param {number} stepSize - Strike step size (50 for NIFTY, 100 for BANKNIFTY, varies for stocks)
- * @param {number} range - Number of strikes above/below ATM to include
- * @param {{ allExpiries?: boolean, targetMonth?: string }} options
- */
-export function getOptionsForAtm(scripName, atmStrike, stepSize = 50, range = 15, { allExpiries = false, targetMonth = '' } = {}) {
-  if (!db) throw new Error('Database not initialised');
-
+export async function getOptionsForAtm(scripName, atmStrike, stepSize = 50, range = 15, { allExpiries = false, targetMonth = '' } = {}) {
   const lowerStrike = atmStrike - range * stepSize;
   const upperStrike = atmStrike + range * stepSize;
 
-  const results = db.exec(
+  const result = await rows(
     `SELECT instrument_token, tradingsymbol, strike, instrument_type, expiry
      FROM instruments
-     WHERE name = ?
+     WHERE name = $1
        AND exchange = 'NFO'
        AND instrument_type IN ('CE', 'PE')
-       AND strike >= ? AND strike <= ?
+       AND strike >= $2 AND strike <= $3
      ORDER BY expiry, strike, instrument_type`,
     [scripName, lowerStrike, upperStrike],
   );
 
-  if (!results.length) return [];
-
-  const all = results[0].values.map(([token, symbol, strike, type, expiry]) => ({
-    instrumentToken: token,
-    tradingsymbol: symbol,
-    strike,
-    optionType: type,
-    expiry,
+  const all = result.map((row) => ({
+    instrumentToken: Number(row.instrument_token),
+    tradingsymbol: row.tradingsymbol,
+    strike: row.strike,
+    optionType: row.instrument_type,
+    expiry: row.expiry,
   }));
 
   if (allExpiries) {
-    // Filter to expiries within the target month if provided
     if (targetMonth) {
       return all.filter((r) => r.expiry && r.expiry.startsWith(targetMonth));
     }
     return all;
   }
 
-  // Default: nearest expiry only
   const expiries = [...new Set(all.map((r) => r.expiry))].sort();
   const targetExpiry = expiries[0];
   return all.filter((r) => r.expiry === targetExpiry);
 }
 
-/**
- * Get distinct dates already stored for a scrip (within an optional range).
- * When minExpiries > 0, only returns dates that have data for at least that many
- * distinct expiries (used to detect partially-fetched days).
- * Returns a Set of 'YYYY-MM-DD' strings.
- */
-export function getOiHistoryDates(scrip, fromDate, toDate, minExpiries = 0) {
-  if (!db) throw new Error('Database not initialised');
-
-  let where = ' WHERE scrip = ?';
+export async function getOiHistoryDates(scrip, fromDate, toDate, minExpiries = 0) {
+  let where = ' WHERE scrip = $1';
   const params = [scrip];
+  let n = 2;
 
   if (fromDate && toDate) {
-    where += ' AND date >= ? AND date <= ?';
+    where += ` AND date >= $${n++} AND date <= $${n++}`;
     params.push(fromDate, toDate);
   } else if (fromDate) {
-    where += ' AND date >= ?';
+    where += ` AND date >= $${n++}`;
     params.push(fromDate);
   } else if (toDate) {
-    where += ' AND date <= ?';
+    where += ` AND date <= $${n++}`;
     params.push(toDate);
   }
 
   if (minExpiries > 0) {
-    const sql = `SELECT date, COUNT(DISTINCT expiry) as ec FROM oi_history${where} GROUP BY date HAVING ec >= ?`;
+    const sql = `SELECT date, COUNT(DISTINCT expiry) AS ec FROM oi_history${where} GROUP BY date HAVING COUNT(DISTINCT expiry) >= $${n}`;
     params.push(minExpiries);
-    const results = db.exec(sql, params);
-    if (!results.length) return new Set();
-    return new Set(results[0].values.map(([d]) => d));
+    const result = await rows(sql, params);
+    return new Set(result.map((r) => r.date));
   }
 
   const sql = `SELECT DISTINCT date FROM oi_history${where}`;
-  const results = db.exec(sql, params);
-  if (!results.length) return new Set();
-  return new Set(results[0].values.map(([d]) => d));
+  const result = await rows(sql, params);
+  return new Set(result.map((r) => r.date));
 }
 
-/**
- * Get distinct dates already stored for a scrip and expiry month.
- * Used to avoid skipping a day just because a different expiry month exists.
- */
-export function getOiHistoryDatesForExpiryMonth(scrip, expiryMonth, fromDate, toDate, minExpiries = 0) {
-  if (!db) throw new Error('Database not initialised');
-
-  let where = " WHERE scrip = ? AND expiry LIKE ? || '%'";
+export async function getOiHistoryDatesForExpiryMonth(scrip, expiryMonth, fromDate, toDate, minExpiries = 0) {
+  let where = " WHERE scrip = $1 AND expiry LIKE $2 || '%'";
   const params = [scrip, expiryMonth];
+  let n = 3;
 
   if (fromDate && toDate) {
-    where += ' AND date >= ? AND date <= ?';
+    where += ` AND date >= $${n++} AND date <= $${n++}`;
     params.push(fromDate, toDate);
   } else if (fromDate) {
-    where += ' AND date >= ?';
+    where += ` AND date >= $${n++}`;
     params.push(fromDate);
   } else if (toDate) {
-    where += ' AND date <= ?';
+    where += ` AND date <= $${n++}`;
     params.push(toDate);
   }
 
   if (minExpiries > 0) {
-    const sql = `SELECT date, COUNT(DISTINCT expiry) as ec FROM oi_history${where} GROUP BY date HAVING ec >= ?`;
+    const sql = `SELECT date, COUNT(DISTINCT expiry) AS ec FROM oi_history${where} GROUP BY date HAVING COUNT(DISTINCT expiry) >= $${n}`;
     params.push(minExpiries);
-    const results = db.exec(sql, params);
-    if (!results.length) return new Set();
-    return new Set(results[0].values.map(([d]) => d));
+    const result = await rows(sql, params);
+    return new Set(result.map((r) => r.date));
   }
 
   const sql = `SELECT DISTINCT date FROM oi_history${where}`;
-  const results = db.exec(sql, params);
-  if (!results.length) return new Set();
-  return new Set(results[0].values.map(([d]) => d));
+  const result = await rows(sql, params);
+  return new Set(result.map((r) => r.date));
 }
 
-/**
- * Get distinct months that have data for a given scrip.
- * Returns sorted array of 'YYYY-MM' strings (newest first).
- */
-export function getOiHistoryMonths(scrip) {
-  if (!db) throw new Error('Database not initialised');
-
-  const sql = `SELECT DISTINCT substr(date, 1, 7) as month FROM oi_history WHERE scrip = ? ORDER BY month DESC`;
-  const results = db.exec(sql, [scrip]);
-  if (!results.length) return [];
-  return results[0].values.map(([m]) => m);
+export async function getOiHistoryMonths(scrip) {
+  const result = await rows(
+    "SELECT DISTINCT substr(date, 1, 7) AS month FROM oi_history WHERE scrip = $1 ORDER BY month DESC",
+    [scrip],
+  );
+  return result.map((r) => r.month);
 }
 
-/**
- * Get distinct expiry months that already have stored OI history for a scrip.
- * Returns sorted array of 'YYYY-MM' strings.
- */
-export function getStoredOiHistoryExpiryMonths(scrip) {
-  if (!db) throw new Error('Database not initialised');
-
-  const sql = `
-    SELECT DISTINCT substr(expiry, 1, 7) as month
-    FROM oi_history
-    WHERE scrip = ?
-      AND expiry IS NOT NULL
-      AND expiry != ''
-    ORDER BY month
-  `;
-  const results = db.exec(sql, [scrip]);
-  if (!results.length) return [];
-  return results[0].values.map(([m]) => m);
+export async function getStoredOiHistoryExpiryMonths(scrip) {
+  const result = await rows(
+    `SELECT DISTINCT substr(expiry, 1, 7) AS month
+     FROM oi_history
+     WHERE scrip = $1 AND expiry IS NOT NULL AND expiry != ''
+     ORDER BY month`,
+    [scrip],
+  );
+  return result.map((r) => r.month);
 }
 
-/**
- * Get the nearest future expiry months from the current instruments cache.
- * NSE lists 3 monthly expiries per F&O underlying, so we cap the result to
- * the nearest `limit` months and drop far-dated (semi-annual) contracts.
- * Returns sorted array of 'YYYY-MM' strings.
- */
-export function getOiHistoryExpiryMonths(scrip, minExpiryDate, limit = 3) {
-  if (!db) throw new Error('Database not initialised');
-
+export async function getOiHistoryExpiryMonths(scrip, minExpiryDate, limit = 3) {
   const scripName = scrip === 'NIFTY50' ? 'NIFTY' : scrip;
-  const sql = `
-    SELECT DISTINCT substr(expiry, 1, 7) as month
-    FROM instruments
-    WHERE name = ?
-      AND exchange = 'NFO'
-      AND instrument_type IN ('CE', 'PE')
-      AND expiry IS NOT NULL
-      AND expiry >= ?
-    ORDER BY month
-    LIMIT ?
-  `;
-  const results = db.exec(sql, [scripName, minExpiryDate, limit]);
-  if (!results.length) return [];
-  return results[0].values.map(([m]) => m);
+  const result = await rows(
+    `SELECT DISTINCT substr(expiry, 1, 7) AS month
+     FROM instruments
+     WHERE name = $1
+       AND exchange = 'NFO'
+       AND instrument_type IN ('CE', 'PE')
+       AND expiry IS NOT NULL
+       AND expiry >= $2
+     ORDER BY month
+     LIMIT $3`,
+    [scripName, minExpiryDate, limit],
+  );
+  return result.map((r) => r.month);
 }
 
-
-/**
- * Delete all OI history rows for a given month (all scrips).
- * @param {string} month - Format 'YYYY-MM'
- * @returns {number} Number of rows deleted
- */
-export function deleteOiHistoryByMonth(month) {
-  if (!db) throw new Error('Database not initialised');
-
-  db.run("DELETE FROM oi_history WHERE date LIKE ? || '%'", [month]);
-  const changes = db.getRowsModified();
-  if (changes > 0) persist();
-  return changes;
+export async function deleteOiHistoryByMonth(month) {
+  const res = await query("DELETE FROM oi_history WHERE date LIKE $1 || '%'", [month]);
+  return res.rowCount;
 }
 
-/**
- * Delete all OI history rows for a given scrip.
- * @param {string} scrip - Scrip name (e.g., 'NIFTY50')
- * @returns {number} Number of rows deleted
- */
-export function deleteOiHistoryByScrip(scrip) {
-  if (!db) throw new Error('Database not initialised');
-
-  db.run('DELETE FROM oi_history WHERE scrip = ?', [scrip]);
-  const changes = db.getRowsModified();
-  if (changes > 0) persist();
-  return changes;
+export async function deleteOiHistoryByScrip(scrip) {
+  const res = await query('DELETE FROM oi_history WHERE scrip = $1', [scrip]);
+  return res.rowCount;
 }
 
-/**
- * Delete all OI history rows for a given expiry month.
- * @param {string} scrip - Scrip name (e.g., 'NIFTY50')
- * @param {string} expiryMonth - Format 'YYYY-MM'
- * @returns {number} Number of rows deleted
- */
-export function deleteOiHistoryByExpiryMonth(scrip, expiryMonth) {
-  if (!db) throw new Error('Database not initialised');
-
-  db.run("DELETE FROM oi_history WHERE scrip = ? AND expiry LIKE ? || '%'", [scrip, expiryMonth]);
-  const changes = db.getRowsModified();
-  if (changes > 0) persist();
-  return changes;
+export async function deleteOiHistoryByExpiryMonth(scrip, expiryMonth) {
+  const res = await query("DELETE FROM oi_history WHERE scrip = $1 AND expiry LIKE $2 || '%'", [scrip, expiryMonth]);
+  return res.rowCount;
 }
 
-/**
- * Delete OI history rows for a scrip with expiry months older than cutoff.
- * @param {string} scrip - Scrip name (e.g., 'NIFTY50')
- * @param {string} cutoffExpiryMonth - Keep this expiry month and newer. Format 'YYYY-MM'
- * @returns {number} Number of rows deleted
- */
-export function deleteOiHistoryBeforeExpiryMonth(scrip, cutoffExpiryMonth) {
-  if (!db) throw new Error('Database not initialised');
-
-  db.run("DELETE FROM oi_history WHERE scrip = ? AND substr(expiry, 1, 7) < ?", [scrip, cutoffExpiryMonth]);
-  const changes = db.getRowsModified();
-  if (changes > 0) persist();
-  return changes;
+export async function deleteOiHistoryBeforeExpiryMonth(scrip, cutoffExpiryMonth) {
+  const res = await query('DELETE FROM oi_history WHERE scrip = $1 AND substr(expiry, 1, 7) < $2', [scrip, cutoffExpiryMonth]);
+  return res.rowCount;
 }
 
-/**
- * Delete OI history rows for specific dates (for a given scrip).
- * Used before re-fetching to ensure clean data for those dates.
- * @param {string} scrip - Scrip name (e.g., 'NIFTY50')
- * @param {string[]} dates - Array of 'YYYY-MM-DD' strings
- * @returns {number} Number of rows deleted
- */
-export function deleteOiHistoryByDates(scrip, dates) {
-  if (!db) throw new Error('Database not initialised');
+export async function deleteOiHistoryByDates(scrip, dates) {
   if (!dates.length) return 0;
-
-  const placeholders = dates.map(() => '?').join(', ');
-  const sql = `DELETE FROM oi_history WHERE scrip = ? AND date IN (${placeholders})`;
-  db.run(sql, [scrip, ...dates]);
-  const changes = db.getRowsModified();
-  if (changes > 0) persist();
-  return changes;
+  const placeholders = dates.map((_, i) => `$${i + 2}`).join(', ');
+  const res = await query(`DELETE FROM oi_history WHERE scrip = $1 AND date IN (${placeholders})`, [scrip, ...dates]);
+  return res.rowCount;
 }
 
-/**
- * Delete OI history rows for specific dates and expiry month.
- */
-export function deleteOiHistoryByDatesForExpiryMonth(scrip, expiryMonth, dates) {
-  if (!db) throw new Error('Database not initialised');
+export async function deleteOiHistoryByDatesForExpiryMonth(scrip, expiryMonth, dates) {
   if (!dates.length) return 0;
-
-  const placeholders = dates.map(() => '?').join(', ');
-  const sql = `DELETE FROM oi_history WHERE scrip = ? AND expiry LIKE ? || '%' AND date IN (${placeholders})`;
-  db.run(sql, [scrip, expiryMonth, ...dates]);
-  const changes = db.getRowsModified();
-  if (changes > 0) persist();
-  return changes;
+  const placeholders = dates.map((_, i) => `$${i + 3}`).join(', ');
+  const res = await query(
+    `DELETE FROM oi_history WHERE scrip = $1 AND expiry LIKE $2 || '%' AND date IN (${placeholders})`,
+    [scrip, expiryMonth, ...dates],
+  );
+  return res.rowCount;
 }
 
-/**
- * Get distinct F&O symbol names from the instruments cache.
- * Returns sorted array of names (e.g. ['BANKNIFTY', 'HDFCBANK', 'NIFTY', 'RELIANCE', ...])
- */
-export function getFnoSymbols() {
-  if (!db) throw new Error('Database not initialised');
-
-  const results = db.exec(
+export async function getFnoSymbols() {
+  const result = await rows(
     "SELECT DISTINCT name FROM instruments WHERE exchange = 'NFO' AND instrument_type IN ('CE', 'PE') ORDER BY name",
   );
-  if (!results.length) return [];
-  return results[0].values.map(([name]) => name);
+  return result.map((r) => r.name);
 }
 
-/**
- * Look up the NSE EQ instrument token for a stock (used as spot token).
- * Matches by tradingsymbol since NSE `name` is the full company name
- * while NFO `name` is the short symbol.
- * Returns the instrument_token or null if not found.
- */
-export function getSpotToken(name) {
-  if (!db) throw new Error('Database not initialised');
-
-  const results = db.exec(
-    "SELECT instrument_token FROM instruments WHERE tradingsymbol = ? AND exchange = 'NSE' AND instrument_type = 'EQ' LIMIT 1",
+export async function getSpotToken(name) {
+  const row = await firstRow(
+    "SELECT instrument_token FROM instruments WHERE tradingsymbol = $1 AND exchange = 'NSE' AND instrument_type = 'EQ' LIMIT 1",
     [name],
   );
-  if (!results.length || !results[0].values.length) return null;
-  return results[0].values[0][0];
+  return row ? Number(row.instrument_token) : null;
 }
 
-/**
- * Get the strike step size for a symbol by looking at the gap between adjacent strikes.
- * Returns the most common step size, or 50 as default.
- */
-export function getStrikeStepSize(scripName) {
-  if (!db) throw new Error('Database not initialised');
-
-  const results = db.exec(
+export async function getStrikeStepSize(scripName) {
+  const result = await rows(
     `SELECT DISTINCT strike FROM instruments
-     WHERE name = ? AND exchange = 'NFO' AND instrument_type = 'CE' AND strike > 0
+     WHERE name = $1 AND exchange = 'NFO' AND instrument_type = 'CE' AND strike > 0
      ORDER BY strike LIMIT 20`,
     [scripName],
   );
-  if (!results.length || results[0].values.length < 2) return 50;
+  if (result.length < 2) return 50;
 
-  const strikes = results[0].values.map(([s]) => s);
-  // Find the most common gap between consecutive strikes
+  const strikes = result.map((r) => r.strike);
   const gaps = new Map();
   for (let i = 1; i < strikes.length; i++) {
     const gap = Math.round(strikes[i] - strikes[i - 1]);

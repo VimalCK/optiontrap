@@ -70,8 +70,9 @@ import {
   getSpotToken,
   getStrikeStepSize,
   deleteOiHistoryByScrip,
+  withNamedAdvisoryLock,
 } from './db.js';
-import { SqliteSessionStore } from './sessionStore.js';
+import { PostgresSessionStore } from './sessionStore.js';
 import { createRateLimiter } from './rateLimit.js';
 import { getOrFetchInstruments } from './instruments.js';
 
@@ -114,7 +115,7 @@ if (IS_PROD) {
   app.set('trust proxy', 1);
 }
 
-const sessionStore = new SqliteSessionStore();
+const sessionStore = new PostgresSessionStore();
 
 const sessionMiddleware = session({
   store: sessionStore,
@@ -282,8 +283,8 @@ app.post('/auth/token', async (req, res) => {
     const result = await response.json();
     const data = result.data;
 
-    // 1. Record user identity in SQLite (no credentials stored)
-    upsertUser(data.user_id, data.user_name);
+    // 1. Record user identity (no credentials stored)
+    await upsertUser(data.user_id, data.user_name);
 
     // 2. Set active session
     req.session.kiteSession = {
@@ -338,8 +339,8 @@ app.post('/auth/logout', async (req, res) => {
   });
 });
 
-// Delete account — remove user from SQLite, destroy session
-app.delete('/auth/account', (req, res) => {
+// Delete account — remove user, destroy session
+app.delete('/auth/account', async (req, res) => {
   const kiteSession = req.session?.kiteSession;
   const userId = kiteSession?.userId;
 
@@ -358,8 +359,8 @@ app.delete('/auth/account', (req, res) => {
     }).catch(() => {});
   }
 
-  // Delete user from SQLite
-  deleteUser(userId);
+  // Delete user
+  await deleteUser(userId);
 
   // Destroy session
   req.session.destroy(() => {
@@ -380,15 +381,15 @@ const requireAuth = (req, res, next) => {
 
 // ---------- Watchlist Routes ----------
 
-app.get('/api/watchlist', requireAuth, (req, res) => {
+app.get('/api/watchlist', requireAuth, async (req, res) => {
   const userId = req.session.kiteSession.userId;
-  const lists = getWatchlists(userId);
+  const lists = await getWatchlists(userId);
   res.json({ status: 'ok', data: lists });
 });
 
-app.get('/api/watchlist/:id', requireAuth, (req, res) => {
+app.get('/api/watchlist/:id', requireAuth, async (req, res) => {
   const userId = req.session.kiteSession.userId;
-  const list = getWatchlistItems(req.params.id, userId);
+  const list = await getWatchlistItems(req.params.id, userId);
 
   if (!list) {
     return res.status(404).json({ status: 'error', message: 'Watchlist not found' });
@@ -397,7 +398,7 @@ app.get('/api/watchlist/:id', requireAuth, (req, res) => {
   res.json({ status: 'ok', data: list });
 });
 
-app.post('/api/watchlist', requireAuth, (req, res) => {
+app.post('/api/watchlist', requireAuth, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { name } = req.body;
 
@@ -405,11 +406,11 @@ app.post('/api/watchlist', requireAuth, (req, res) => {
     return res.status(400).json({ status: 'error', message: 'Watchlist name is required' });
   }
 
-  const list = createWatchlist(userId, name);
+  const list = await createWatchlist(userId, name);
   res.json({ status: 'ok', data: list });
 });
 
-app.put('/api/watchlist/:id', requireAuth, (req, res) => {
+app.put('/api/watchlist/:id', requireAuth, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { name } = req.body;
 
@@ -417,7 +418,7 @@ app.put('/api/watchlist/:id', requireAuth, (req, res) => {
     return res.status(400).json({ status: 'error', message: 'Name is required' });
   }
 
-  const updated = renameWatchlist(req.params.id, userId, name);
+  const updated = await renameWatchlist(req.params.id, userId, name);
   if (!updated) {
     return res.status(404).json({ status: 'error', message: 'Watchlist not found' });
   }
@@ -425,9 +426,9 @@ app.put('/api/watchlist/:id', requireAuth, (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.delete('/api/watchlist/:id', requireAuth, (req, res) => {
+app.delete('/api/watchlist/:id', requireAuth, async (req, res) => {
   const userId = req.session.kiteSession.userId;
-  const deleted = deleteWatchlist(req.params.id, userId);
+  const deleted = await deleteWatchlist(req.params.id, userId);
 
   if (!deleted) {
     return res.status(404).json({ status: 'error', message: 'Watchlist not found' });
@@ -436,7 +437,7 @@ app.delete('/api/watchlist/:id', requireAuth, (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.post('/api/watchlist/:id/items', requireAuth, (req, res) => {
+app.post('/api/watchlist/:id/items', requireAuth, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { instrumentToken, tradingsymbol, exchange } = req.body;
 
@@ -447,7 +448,7 @@ app.post('/api/watchlist/:id/items', requireAuth, (req, res) => {
     });
   }
 
-  const item = addWatchlistItem(req.params.id, userId, {
+  const item = await addWatchlistItem(req.params.id, userId, {
     instrumentToken: Number(instrumentToken),
     tradingsymbol,
     exchange: exchange || 'NSE',
@@ -463,9 +464,9 @@ app.post('/api/watchlist/:id/items', requireAuth, (req, res) => {
   res.json({ status: 'ok', data: item });
 });
 
-app.delete('/api/watchlist/:id/items/:itemId', requireAuth, (req, res) => {
+app.delete('/api/watchlist/:id/items/:itemId', requireAuth, async (req, res) => {
   const userId = req.session.kiteSession.userId;
-  const removed = removeWatchlistItem(req.params.itemId, userId);
+  const removed = await removeWatchlistItem(req.params.itemId, userId);
 
   if (!removed) {
     return res.status(404).json({ status: 'error', message: 'Item not found' });
@@ -476,14 +477,14 @@ app.delete('/api/watchlist/:id/items/:itemId', requireAuth, (req, res) => {
 
 // ---------- Positions ----------
 
-app.get('/api/positions', requireAuth, (req, res) => {
+app.get('/api/positions', requireAuth, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const mode = req.query.mode || null;
-  const positions = getPositions(userId, mode);
+  const positions = await getPositions(userId, mode);
   res.json({ status: 'ok', data: positions });
 });
 
-app.post('/api/positions', requireAuth, (req, res) => {
+app.post('/api/positions', requireAuth, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const {
     tradingsymbol,
@@ -506,7 +507,7 @@ app.post('/api/positions', requireAuth, (req, res) => {
     return res.status(400).json({ status: 'error', message: 'Missing required fields' });
   }
 
-  const position = addPosition(userId, {
+  const position = await addPosition(userId, {
     tradingsymbol,
     instrumentToken: Number(instrumentToken),
     strike: Number(strike),
@@ -526,7 +527,7 @@ app.post('/api/positions', requireAuth, (req, res) => {
   res.json({ status: 'ok', data: position });
 });
 
-app.put('/api/positions/:id/exit', requireAuth, (req, res) => {
+app.put('/api/positions/:id/exit', requireAuth, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { exitPrice } = req.body;
 
@@ -534,7 +535,7 @@ app.put('/api/positions/:id/exit', requireAuth, (req, res) => {
     return res.status(400).json({ status: 'error', message: 'exitPrice is required' });
   }
 
-  const updated = exitPositionById(req.params.id, userId, Number(exitPrice));
+  const updated = await exitPositionById(req.params.id, userId, Number(exitPrice));
   if (!updated) {
     return res.status(404).json({ status: 'error', message: 'Position not found or already exited' });
   }
@@ -542,9 +543,9 @@ app.put('/api/positions/:id/exit', requireAuth, (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.delete('/api/positions/:id', requireAuth, (req, res) => {
+app.delete('/api/positions/:id', requireAuth, async (req, res) => {
   const userId = req.session.kiteSession.userId;
-  const removed = removePositionById(req.params.id, userId);
+  const removed = await removePositionById(req.params.id, userId);
 
   if (!removed) {
     return res.status(404).json({ status: 'error', message: 'Position not found' });
@@ -553,18 +554,18 @@ app.delete('/api/positions/:id', requireAuth, (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.delete('/api/positions', requireAuth, (req, res) => {
+app.delete('/api/positions', requireAuth, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const mode = req.query.mode || null;
-  clearPositions(userId, mode);
+  await clearPositions(userId, mode);
   res.json({ status: 'ok' });
 });
 
 // ---------- OI Snapshots (shared) ----------
 
-app.get('/api/oi-snapshots', requireAuth, (req, res) => {
+app.get('/api/oi-snapshots', requireAuth, async (req, res) => {
   try {
-    const snapshots = getTodayOiSnapshots();
+    const snapshots = await getTodayOiSnapshots();
     res.json({ status: 'ok', data: snapshots });
   } catch (err) {
     console.error('[OI Snapshots] GET error:', err.message);
@@ -572,9 +573,9 @@ app.get('/api/oi-snapshots', requireAuth, (req, res) => {
   }
 });
 
-app.get('/api/oi-snapshots/latest', requireAuth, (req, res) => {
+app.get('/api/oi-snapshots/latest', requireAuth, async (req, res) => {
   try {
-    const timestamp = getLatestOiSnapshotTimestamp();
+    const timestamp = await getLatestOiSnapshotTimestamp();
     res.json({ status: 'ok', data: { timestamp } });
   } catch (err) {
     console.error('[OI Snapshots] GET latest error:', err.message);
@@ -582,13 +583,13 @@ app.get('/api/oi-snapshots/latest', requireAuth, (req, res) => {
   }
 });
 
-app.post('/api/oi-snapshots', requireAuth, (req, res) => {
+app.post('/api/oi-snapshots', requireAuth, async (req, res) => {
   try {
     const { timestamp, timeLabel, data, prices, close, spot, volumes } = req.body;
     if (!timestamp || !timeLabel || !data) {
       return res.status(400).json({ status: 'error', message: 'Missing required fields: timestamp, timeLabel, data' });
     }
-    saveOiSnapshot({ timestamp, timeLabel, data, prices, close, spot, volumes });
+    await saveOiSnapshot({ timestamp, timeLabel, data, prices, close, spot, volumes });
     res.json({ status: 'ok' });
   } catch (err) {
     console.error('[OI Snapshots] POST error:', err.message);
@@ -596,9 +597,9 @@ app.post('/api/oi-snapshots', requireAuth, (req, res) => {
   }
 });
 
-app.delete('/api/oi-snapshots/old', requireAuth, (req, res) => {
+app.delete('/api/oi-snapshots/old', requireAuth, async (req, res) => {
   try {
-    const deleted = cleanOldOiSnapshots();
+    const deleted = await cleanOldOiSnapshots();
     res.json({ status: 'ok', deleted });
   } catch (err) {
     console.error('[OI Snapshots] DELETE error:', err.message);
@@ -667,16 +668,16 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
     // For stocks: scrip="RELIANCE" → scripName="RELIANCE"
     const scripName = scrip === 'NIFTY50' ? 'NIFTY' : scrip;
 
-    const spotToken = INDEX_SPOT_TOKENS[scripName] || getSpotToken(scripName);
+    const spotToken = INDEX_SPOT_TOKENS[scripName] || await getSpotToken(scripName);
     if (!spotToken) {
       send('error', { message: `Cannot find spot token for ${scrip}. Ensure instruments are loaded.` });
       return res.end();
     }
 
-    const stepSize = getStrikeStepSize(scripName);
+    const stepSize = await getStrikeStepSize(scripName);
     const range = 20;
 
-    createOiHistoryTable();
+    await createOiHistoryTable();
 
     // Step 1: Fetch spot index daily candles for spot close. This is cheap and
     // gives the trading-day calendar, so cache skipping can avoid option calls.
@@ -699,145 +700,151 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
       return res.end();
     }
 
-    // Step 2: For each trading day, compute ATM. Past stored dates are skipped;
-    // today is always refreshed because intraday OI can change until close.
-    const existingDates = getOiHistoryDatesForExpiryMonth(scrip, expiryMonth, from, to);
-    send('step', { step: 2, message: `Found ${spotCandles.length} trading days.` });
+    // Serialize fetches for the SAME scrip+expiryMonth across all users/replicas.
+    // Different scrips/months lock independently and run fully in parallel.
+    // A waiting caller re-checks stored dates inside the lock (below) and skips
+    // whatever the previous caller just fetched — avoiding duplicate Kite calls.
+    const summary = await withNamedAdvisoryLock(`oi-history:${scrip}:${expiryMonth}`, async () => {
+      // Step 2: For each trading day, compute ATM. Past stored dates are skipped;
+      // today is always refreshed because intraday OI can change until close.
+      // This runs INSIDE the lock so a waiting caller sees the latest stored dates.
+      const existingDates = await getOiHistoryDatesForExpiryMonth(scrip, expiryMonth, from, to);
+      send('step', { step: 2, message: `Found ${spotCandles.length} trading days.` });
 
-    const allDays = []; // all trading days from Kite
-    for (const candle of spotCandles) {
-      const date = candle[0].slice(0, 10);
-      if (date !== today && existingDates.has(date)) continue;
-      const spotClose = candle[4];
-      const atm = Math.round(spotClose / stepSize) * stepSize;
-      allDays.push({ date, spotClose, atm });
-    }
-
-    const skippedDays = spotCandles.length - allDays.length;
-    if (allDays.length === 0) {
-      send('done', { rowCount: 0, tradingDays: spotCandles.length, skippedDays, fetchedDays: 0, uniqueTokens: 0 });
-      return res.end();
-    }
-
-    const fetchFrom = allDays[0].date;
-    const fetchTo = allDays[allDays.length - 1].date;
-
-    // Collect unique tokens needed across all days
-    const uniqueTokens = new Map();
-    const dayTokenSets = [];
-
-    for (const { date, spotClose, atm } of allDays) {
-      const options = getOptionsForAtm(scripName, atm, stepSize, range, { allExpiries: true, targetMonth: expiryMonth })
-        .filter((opt) => opt.expiry && opt.expiry >= date);
-      const tokenSet = new Set();
-      for (const opt of options) {
-        tokenSet.add(opt.instrumentToken);
-        if (!uniqueTokens.has(opt.instrumentToken)) {
-          uniqueTokens.set(opt.instrumentToken, opt);
-        }
+      const allDays = []; // all trading days from Kite
+      for (const candle of spotCandles) {
+        const date = candle[0].slice(0, 10);
+        if (date !== today && existingDates.has(date)) continue;
+        const spotClose = candle[4];
+        const atm = Math.round(spotClose / stepSize) * stepSize;
+        allDays.push({ date, spotClose, atm });
       }
-      dayTokenSets.push({ date, spotClose, tokens: tokenSet });
-    }
 
-    if (uniqueTokens.size === 0) {
-      send('done', { rowCount: 0, tradingDays: spotCandles.length, skippedDays, fetchedDays: 0, uniqueTokens: 0, message: 'No option instruments found. Ensure the server has loaded instruments today.' });
-      return res.end();
-    }
+      const skippedDays = spotCandles.length - allDays.length;
+      if (allDays.length === 0) {
+        return { rowCount: 0, tradingDays: spotCandles.length, skippedDays, fetchedDays: 0, uniqueTokens: 0 };
+      }
 
-    // Step 3: Fetch daily candles for each unique token (batches of 5, 300ms delay)
-    send('step', { step: 3, message: `Fetching OI candles for ${uniqueTokens.size} instruments...` });
+      const fetchFrom = allDays[0].date;
+      const fetchTo = allDays[allDays.length - 1].date;
 
-    const tokenCandles = new Map();
-    const tokenList = [...uniqueTokens.keys()];
-    const batchSize = 5;
-    const totalBatches = Math.ceil(tokenList.length / batchSize);
+      // Collect unique tokens needed across all days
+      const uniqueTokens = new Map();
+      const dayTokenSets = [];
 
-    for (let i = 0; i < tokenList.length; i += batchSize) {
-      const batch = tokenList.slice(i, i + batchSize);
-      const batchNum = Math.floor(i / batchSize) + 1;
-      const promises = batch.map(async (token) => {
-        try {
-          const url = `https://api.kite.trade/instruments/historical/${token}/day?from=${fetchFrom}&to=${fetchTo}&oi=1`;
-          const response = await fetch(url, {
-            headers: { Authorization: authHeader, 'X-Kite-Version': '3' },
-          });
-          if (!response.ok) return;
-
-          const result = await response.json();
-          const candles = result?.data?.candles;
-          if (!candles?.length) return;
-
-          const dateMap = new Map();
-          for (const c of candles) {
-            dateMap.set(c[0].slice(0, 10), c);
+      for (const { date, spotClose, atm } of allDays) {
+        const options = (await getOptionsForAtm(scripName, atm, stepSize, range, { allExpiries: true, targetMonth: expiryMonth }))
+          .filter((opt) => opt.expiry && opt.expiry >= date);
+        const tokenSet = new Set();
+        for (const opt of options) {
+          tokenSet.add(opt.instrumentToken);
+          if (!uniqueTokens.has(opt.instrumentToken)) {
+            uniqueTokens.set(opt.instrumentToken, opt);
           }
-          tokenCandles.set(token, dateMap);
-        } catch {
-          // Skip failed fetches
         }
-      });
-
-      await Promise.all(promises);
-
-      // Send progress after each batch
-      const done = Math.min(i + batchSize, tokenList.length);
-      const lastToken = batch[batch.length - 1];
-      const lastMeta = uniqueTokens.get(lastToken);
-      send('progress', {
-        done,
-        total: tokenList.length,
-        pct: Math.round((done / tokenList.length) * 100),
-        batch: batchNum,
-        totalBatches,
-        symbol: lastMeta?.tradingsymbol || '',
-      });
-
-      if (i + batchSize < tokenList.length) {
-        await new Promise((r) => setTimeout(r, 300));
+        dayTokenSets.push({ date, spotClose, tokens: tokenSet });
       }
-    }
 
-    // Step 4: Build rows and upsert
-    send('step', { step: 4, message: 'Saving to database...' });
+      if (uniqueTokens.size === 0) {
+        return { rowCount: 0, tradingDays: spotCandles.length, skippedDays, fetchedDays: 0, uniqueTokens: 0, message: 'No option instruments found. Ensure the server has loaded instruments today.' };
+      }
 
-    const rows = [];
-    for (const { date, spotClose, tokens } of dayTokenSets) {
-      for (const token of tokens) {
-        const meta = uniqueTokens.get(token);
-        const dateMap = tokenCandles.get(token);
-        const candle = dateMap?.get(date);
-        if (!candle || !meta) continue;
+      // Step 3: Fetch daily candles for each unique token (batches of 5, 300ms delay)
+      send('step', { step: 3, message: `Fetching OI candles for ${uniqueTokens.size} instruments...` });
 
-        rows.push({
-          date,
-          instrumentToken: token,
-          tradingsymbol: meta.tradingsymbol,
-          strike: meta.strike,
-          optionType: meta.optionType,
-          expiry: meta.expiry,
-          open: candle[1],
-          high: candle[2],
-          low: candle[3],
-          close: candle[4],
-          volume: candle[5],
-          oi: candle[6] ?? 0,
-          spotClose,
+      const tokenCandles = new Map();
+      const tokenList = [...uniqueTokens.keys()];
+      const batchSize = 5;
+      const totalBatches = Math.ceil(tokenList.length / batchSize);
+
+      for (let i = 0; i < tokenList.length; i += batchSize) {
+        const batch = tokenList.slice(i, i + batchSize);
+        const batchNum = Math.floor(i / batchSize) + 1;
+        const promises = batch.map(async (token) => {
+          try {
+            const url = `https://api.kite.trade/instruments/historical/${token}/day?from=${fetchFrom}&to=${fetchTo}&oi=1`;
+            const response = await fetch(url, {
+              headers: { Authorization: authHeader, 'X-Kite-Version': '3' },
+            });
+            if (!response.ok) return;
+
+            const result = await response.json();
+            const candles = result?.data?.candles;
+            if (!candles?.length) return;
+
+            const dateMap = new Map();
+            for (const c of candles) {
+              dateMap.set(c[0].slice(0, 10), c);
+            }
+            tokenCandles.set(token, dateMap);
+          } catch {
+            // Skip failed fetches
+          }
         });
+
+        await Promise.all(promises);
+
+        // Send progress after each batch
+        const done = Math.min(i + batchSize, tokenList.length);
+        const lastToken = batch[batch.length - 1];
+        const lastMeta = uniqueTokens.get(lastToken);
+        send('progress', {
+          done,
+          total: tokenList.length,
+          pct: Math.round((done / tokenList.length) * 100),
+          batch: batchNum,
+          totalBatches,
+          symbol: lastMeta?.tradingsymbol || '',
+        });
+
+        if (i + batchSize < tokenList.length) {
+          await new Promise((r) => setTimeout(r, 300));
+        }
       }
-    }
 
-    // Upsert: insertOiHistoryRows uses INSERT OR REPLACE keyed on
-    // (scrip, date, instrument_token), so existing rows are overwritten.
-    const rowCount = insertOiHistoryRows(scrip, rows);
-    console.log(`[OI History] Fetched ${rowCount} rows for ${scrip} ${expiryMonth} (${allDays.length} fetched days, ${skippedDays} skipped days, ${uniqueTokens.size} tokens)`);
+      // Step 4: Build rows and upsert
+      send('step', { step: 4, message: 'Saving to database...' });
 
-    send('done', {
-      rowCount,
-      tradingDays: spotCandles.length,
-      skippedDays,
-      fetchedDays: allDays.length,
-      uniqueTokens: uniqueTokens.size,
+      const rows = [];
+      for (const { date, spotClose, tokens } of dayTokenSets) {
+        for (const token of tokens) {
+          const meta = uniqueTokens.get(token);
+          const dateMap = tokenCandles.get(token);
+          const candle = dateMap?.get(date);
+          if (!candle || !meta) continue;
+
+          rows.push({
+            date,
+            instrumentToken: token,
+            tradingsymbol: meta.tradingsymbol,
+            strike: meta.strike,
+            optionType: meta.optionType,
+            expiry: meta.expiry,
+            open: candle[1],
+            high: candle[2],
+            low: candle[3],
+            close: candle[4],
+            volume: candle[5],
+            oi: candle[6] ?? 0,
+            spotClose,
+          });
+        }
+      }
+
+      // Upsert keyed on (scrip, date, instrument_token) — existing rows overwritten.
+      const rowCount = await insertOiHistoryRows(scrip, rows);
+      console.log(`[OI History] Fetched ${rowCount} rows for ${scrip} ${expiryMonth} (${allDays.length} fetched days, ${skippedDays} skipped days, ${uniqueTokens.size} tokens)`);
+
+      return {
+        rowCount,
+        tradingDays: spotCandles.length,
+        skippedDays,
+        fetchedDays: allDays.length,
+        uniqueTokens: uniqueTokens.size,
+      };
     });
+
+    send('done', summary);
     res.end();
   } catch (err) {
     console.error('[OI History] Fetch error:', err.message);
@@ -861,8 +868,8 @@ app.get('/api/oi-history/expiry-months', requireAuth, async (req, res) => {
     await getOrFetchInstruments(apiKey, accessToken);
 
     const months = [...new Set([
-      ...getStoredOiHistoryExpiryMonths(scrip),
-      ...getOiHistoryExpiryMonths(scrip, todayIST()),
+      ...await getStoredOiHistoryExpiryMonths(scrip),
+      ...await getOiHistoryExpiryMonths(scrip, todayIST()),
     ])].sort();
     res.json({ status: 'ok', months });
   } catch (err) {
@@ -875,17 +882,17 @@ app.get('/api/oi-history/expiry-months', requireAuth, async (req, res) => {
  * GET /api/oi-history?scrip=NIFTY50&expiryMonth=YYYY-MM
  * Returns stored OI history data for the selected expiry month.
  */
-app.get('/api/oi-history', requireAuth, (req, res) => {
+app.get('/api/oi-history', requireAuth, async (req, res) => {
   try {
     const { scrip, from, to, expiryMonth } = req.query;
     if (!scrip) {
       return res.status(400).json({ status: 'error', message: 'scrip is required' });
     }
     if (expiryMonth) {
-      const data = getOiHistoryDataByExpiryMonth(scrip, expiryMonth, from || null);
+      const data = await getOiHistoryDataByExpiryMonth(scrip, expiryMonth, from || null);
       return res.json({ status: 'ok', data });
     }
-    const data = getOiHistoryData(scrip, from, to);
+    const data = await getOiHistoryData(scrip, from, to);
     res.json({ status: 'ok', data });
   } catch (err) {
     console.error('[OI History] GET error:', err.message);
@@ -897,12 +904,12 @@ app.get('/api/oi-history', requireAuth, (req, res) => {
  * DELETE /api/oi-history?scrip=NIFTY50
  * Deletes all OI history rows for the given scrip.
  */
-app.delete('/api/oi-history', requireAuth, (req, res) => {
+app.delete('/api/oi-history', requireAuth, async (req, res) => {
   try {
     const { scrip, month, expiryMonth } = req.query;
 
     if (scrip && !expiryMonth) {
-      const deleted = deleteOiHistoryByScrip(scrip);
+      const deleted = await deleteOiHistoryByScrip(scrip);
       console.log(`[OI History] Deleted ${deleted} rows for ${scrip}`);
       return res.json({ status: 'ok', deleted });
     }
@@ -914,7 +921,7 @@ app.delete('/api/oi-history', requireAuth, (req, res) => {
       if (!/^\d{4}-\d{2}$/.test(expiryMonth)) {
         return res.status(400).json({ status: 'error', message: 'expiryMonth is required (format: YYYY-MM)' });
       }
-      const deleted = deleteOiHistoryByExpiryMonth(scrip, expiryMonth);
+      const deleted = await deleteOiHistoryByExpiryMonth(scrip, expiryMonth);
       console.log(`[OI History] Deleted ${deleted} rows for ${scrip} expiry month ${expiryMonth}`);
       return res.json({ status: 'ok', deleted });
     }
@@ -923,7 +930,7 @@ app.delete('/api/oi-history', requireAuth, (req, res) => {
       return res.status(400).json({ status: 'error', message: 'expiryMonth is required (format: YYYY-MM)' });
     }
 
-    const deleted = deleteOiHistoryByMonth(month);
+    const deleted = await deleteOiHistoryByMonth(month);
     console.log(`[OI History] Deleted ${deleted} rows for month ${month}`);
     res.json({ status: 'ok', deleted });
   } catch (err) {
@@ -936,7 +943,7 @@ app.delete('/api/oi-history', requireAuth, (req, res) => {
  * DELETE /api/oi-history/old?scrip=NIFTY50&beforeExpiryMonth=2026-09
  * Deletes OI history rows for the scrip with expiry months older than cutoff.
  */
-app.delete('/api/oi-history/old', requireAuth, (req, res) => {
+app.delete('/api/oi-history/old', requireAuth, async (req, res) => {
   try {
     const { scrip, beforeExpiryMonth } = req.query;
 
@@ -947,7 +954,7 @@ app.delete('/api/oi-history/old', requireAuth, (req, res) => {
       return res.status(400).json({ status: 'error', message: 'beforeExpiryMonth is required (format: YYYY-MM)' });
     }
 
-    const deleted = deleteOiHistoryBeforeExpiryMonth(scrip, beforeExpiryMonth);
+    const deleted = await deleteOiHistoryBeforeExpiryMonth(scrip, beforeExpiryMonth);
     console.log(`[OI History] Deleted ${deleted} old rows for ${scrip} before expiry month ${beforeExpiryMonth}`);
     res.json({ status: 'ok', deleted });
   } catch (err) {
@@ -958,9 +965,9 @@ app.delete('/api/oi-history/old', requireAuth, (req, res) => {
 
 // ---------- F&O Symbols ----------
 
-app.get('/api/fno-symbols', requireAuth, (req, res) => {
+app.get('/api/fno-symbols', requireAuth, async (req, res) => {
   try {
-    const symbols = getFnoSymbols();
+    const symbols = await getFnoSymbols();
     res.json({ status: 'ok', data: symbols });
   } catch (err) {
     console.error('[F&O Symbols] Error:', err.message);
@@ -1153,7 +1160,7 @@ if (IS_PROD) {
 // ---------- Start ----------
 
 async function start() {
-  // Initialise SQLite
+  // Initialise PostgreSQL
   await initDb();
 
   server.listen(PORT, () => {
@@ -1164,22 +1171,22 @@ async function start() {
 }
 
 // Graceful shutdown
-function shutdown() {
+async function shutdown() {
   authLimiter.close();
   apiLimiter.close();
   generalLimiter.close();
   sessionStore.close();
-  closeDb();
+  await closeDb();
 }
 
-process.on('SIGINT', () => {
+process.on('SIGINT', async () => {
   console.log(`\n${ts()} ${YELLOW}Server${RESET} shutting down...`);
-  shutdown();
+  await shutdown();
   process.exit(0);
 });
 
-process.on('SIGTERM', () => {
-  shutdown();
+process.on('SIGTERM', async () => {
+  await shutdown();
   process.exit(0);
 });
 

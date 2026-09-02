@@ -1,7 +1,9 @@
 node_modules
 dist
 .vite
+.env
 server/.env
 server/node_modules
 server/credentials.json
 server/data/
+db/optiontrap-dump.sql

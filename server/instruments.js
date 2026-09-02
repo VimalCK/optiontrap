@@ -1,23 +1,20 @@
 /**
- * Instruments Service — shared instrument cache with fetch mutex.
+ * Instruments Service — shared instrument cache with a cross-process fetch lock.
  *
  * Fetches two datasets from Kite:
  *   1. NSE instruments (filtered to EQ — stocks only)
  *   2. NFO instruments (filtered to NIFTY CE/PE/FUT only)
  *
  * Ensures only ONE fetch cycle happens per day, regardless of how many
- * concurrent users request instruments simultaneously. The first request
- * triggers the fetch; all others await the same in-flight promise.
+ * concurrent users (or app replicas) request instruments simultaneously.
+ * A cross-process Postgres advisory lock serializes the fetch; late callers
+ * find the freshly-cached data and skip the Kite call.
  */
 
-import { getInstrumentsDate, getInstruments, saveInstruments } from './db.js';
+import { getInstrumentsDate, getInstruments, saveInstruments, withAdvisoryLock } from './db.js';
 
-// ---------------------------------------------------------------------------
-// Mutex — a single in-flight promise shared by all concurrent callers
-// ---------------------------------------------------------------------------
-
-/** @type {Promise<any[]> | null} */
-let fetchInFlight = null;
+// Arbitrary constant identifying the instruments-fetch advisory lock.
+const INSTRUMENTS_FETCH_LOCK = 573210;
 
 /**
  * Get today's date in IST as YYYY-MM-DD.
@@ -204,7 +201,11 @@ async function fetchFromKite(apiKey, accessToken) {
 // ---------------------------------------------------------------------------
 
 /**
- * Get instruments — from SQLite cache or Kite API (with mutex).
+ * Get instruments — from the database cache or Kite API.
+ *
+ * A cross-process advisory lock ensures only one fetch happens per day even
+ * across multiple app replicas; concurrent callers block on the lock and then
+ * read the freshly-cached rows instead of calling Kite again.
  *
  * @param {string} apiKey - Caller's API key (used only if fetch is needed)
  * @param {string} accessToken - Caller's access token
@@ -213,37 +214,26 @@ async function fetchFromKite(apiKey, accessToken) {
 export async function getOrFetchInstruments(apiKey, accessToken) {
   const today = getTodayIST();
 
-  // 1. Check SQLite cache
-  const cachedDate = getInstrumentsDate();
+  // 1. Fast path — return today's cache without locking.
+  const cachedDate = await getInstrumentsDate();
   if (cachedDate === today) {
-    const cached = getInstruments();
+    const cached = await getInstruments();
     if (cached.length > 0) return cached;
   }
 
-  // 2. If a fetch is already in-flight, await it (no duplicate API call)
-  if (fetchInFlight) {
-    return fetchInFlight;
-  }
-
-  // 3. Acquire mutex — this caller does the actual fetch
-  fetchInFlight = (async () => {
-    try {
-      // Double-check after acquiring (another request may have just finished)
-      const recheckDate = getInstrumentsDate();
-      if (recheckDate === today) {
-        const cached = getInstruments();
-        if (cached.length > 0) return cached;
-      }
-
-      console.log('[Instruments] Fetching NSE + NFO instruments from Kite...');
-      const instruments = await fetchFromKite(apiKey, accessToken);
-      saveInstruments(instruments, today);
-      console.log(`[Instruments] Cached ${instruments.length} instruments (NSE EQ + NFO F&O) for ${today}`);
-      return instruments;
-    } finally {
-      fetchInFlight = null;
+  // 2. Serialize the fetch across all callers/replicas.
+  return withAdvisoryLock(INSTRUMENTS_FETCH_LOCK, async () => {
+    // Re-check inside the lock — another caller may have just fetched.
+    const recheckDate = await getInstrumentsDate();
+    if (recheckDate === today) {
+      const cached = await getInstruments();
+      if (cached.length > 0) return cached;
     }
-  })();
 
-  return fetchInFlight;
+    console.log('[Instruments] Fetching NSE + NFO instruments from Kite...');
+    const instruments = await fetchFromKite(apiKey, accessToken);
+    await saveInstruments(instruments, today);
+    console.log(`[Instruments] Cached ${instruments.length} instruments (NSE EQ + NFO F&O) for ${today}`);
+    return instruments;
+  });
 }
