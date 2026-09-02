@@ -104,7 +104,28 @@
   flex-direction: column;
   border: 1px solid var(--card-border);
   border-radius: 12px;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+  max-height: calc(100vh - 300px);
+  scrollbar-width: thin;
+  scrollbar-color: var(--card-border) transparent;
+}
+
+.admin-table::-webkit-scrollbar {
+  width: 8px;
+}
+
+.admin-table::-webkit-scrollbar-thumb {
+  background: var(--card-border);
+  border-radius: 4px;
+}
+
+.admin-table::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+.admin-table::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .admin-table__head,
@@ -117,7 +138,10 @@
 }
 
 .admin-table__head {
-  background: var(--card-bg);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--card-bg-solid);
   border-bottom: 1px solid var(--card-border);
   font-size: 11px;
   font-weight: 800;
@@ -203,23 +227,42 @@
 .admin-row__detail {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 16px;
-  background: var(--card-bg);
+  gap: 18px;
+  padding: 18px 20px 18px 20px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.02), rgba(255, 255, 255, 0));
   border-top: 1px solid var(--card-border);
+  box-shadow: inset 0 6px 12px -10px rgba(0, 0, 0, 0.6);
+  animation: admin-detail-in 0.16s ease;
+}
+
+@keyframes admin-detail-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .admin-detail__meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 24px;
+  gap: 10px 12px;
 }
 
 .admin-detail__field {
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: 6px;
   min-width: 0;
+}
+
+/* Meta fields render as compact chips */
+.admin-detail__meta .admin-detail__field {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: var(--card-bg);
 }
 
 .admin-detail__label {
@@ -234,12 +277,22 @@
   font-size: 13px;
   color: var(--text-primary);
   word-break: break-all;
+  font-variant-numeric: tabular-nums;
+}
+
+.admin-detail__messagebox {
+  padding: 12px 14px;
+  border: 1px solid var(--card-border);
+  border-left: 3px solid var(--accent);
+  border-radius: 8px;
+  background: var(--card-bg);
 }
 
 .admin-detail__message {
   margin: 0;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.65;
+  color: var(--text-primary);
   white-space: pre-wrap;
   word-break: break-word;
 }
@@ -248,7 +301,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
-  padding-top: 4px;
   justify-content: flex-end;
 }
 

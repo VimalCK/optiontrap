@@ -177,7 +177,9 @@ const Admin: React.FC = () => {
 
                     <div className="admin-detail__field">
                       <span className="admin-detail__label">Message</span>
-                      <p className="admin-detail__message">{item.message}</p>
+                      <div className="admin-detail__messagebox">
+                        <p className="admin-detail__message">{item.message}</p>
+                      </div>
                     </div>
 
                     <div className="admin-detail__actions">
