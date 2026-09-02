@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { AnalyticsIcon } from '@/components/icons/Icons';
 import OptionChain from '@/components/OptionChain/OptionChain';
 import TradeJournal from '@/components/TradeJournal/TradeJournal';
@@ -14,8 +15,27 @@ const TABS: { id: AnalyticsTab; label: string }[] = [
   { id: 'winloss',  label: 'Win/Loss Patterns'},
 ];
 
+const getTabFromParams = (searchParams: URLSearchParams): AnalyticsTab => {
+  const tab = searchParams.get('tab');
+  return TABS.some((item) => item.id === tab) ? tab as AnalyticsTab : 'analyzer';
+};
+
 const Analytics: React.FC = () => {
-  const [tab, setTab] = useState<AnalyticsTab>('analyzer');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [tab, setTab] = useState<AnalyticsTab>(() => getTabFromParams(searchParams));
+  const range = searchParams.get('range');
+  const mode = searchParams.get('mode');
+  const date = searchParams.get('date');
+  const tradeId = searchParams.get('tradeId');
+
+  useEffect(() => {
+    setTab(getTabFromParams(searchParams));
+  }, [searchParams]);
+
+  const handleTabChange = (nextTab: AnalyticsTab) => {
+    setTab(nextTab);
+    setSearchParams({ tab: nextTab });
+  };
 
   return (
     <div className="analytics">
@@ -24,7 +44,7 @@ const Analytics: React.FC = () => {
           <button
             key={t.id}
             className={`analytics-tab ${tab === t.id ? 'analytics-tab--active' : ''}`}
-            onClick={() => setTab(t.id)}
+            onClick={() => handleTabChange(t.id)}
           >
             {t.label}
           </button>
@@ -33,7 +53,14 @@ const Analytics: React.FC = () => {
 
       <div className="analytics-content">
         {tab === 'analyzer' && <OptionChain />}
-        {tab === 'journal'  && <TradeJournal />}
+        {tab === 'journal'  && (
+          <TradeJournal
+            initialRange={range === 'today' ? 'today' : undefined}
+            initialMode={mode === 'paper' || mode === 'live' ? mode : undefined}
+            initialDate={date ?? undefined}
+            initialTradeId={tradeId ?? undefined}
+          />
+        )}
         {tab === 'winloss'  && (
           <div className="card analytics-coming-soon">
             <div className="card__icon"><AnalyticsIcon /></div>

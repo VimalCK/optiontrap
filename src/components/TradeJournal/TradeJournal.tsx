@@ -29,9 +29,22 @@ function subtractMonths(d: Date, n: number): Date {
   return copy;
 }
 
-const TradeJournal: React.FC = () => {
+const isValidDateParam = (value: string | undefined): value is string =>
+  Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+
+const TradeJournal: React.FC<{
+  initialRange?: 'today';
+  initialMode?: TradingMode;
+  initialDate?: string;
+  initialTradeId?: string;
+}> = ({
+  initialRange,
+  initialMode,
+  initialDate,
+  initialTradeId,
+}) => {
   const [mode, setMode] = useState<TradingMode>(() =>
-    (localStorage.getItem('optiontrap_order_mode') as TradingMode) || 'paper'
+    initialMode || (localStorage.getItem('optiontrap_order_mode') as TradingMode) || 'paper'
   );
   const [entries, setEntries] = useState<TradeEntry[]>([]);
   const [segment, setSegment] = useState<SegmentFilter>('all');
@@ -41,6 +54,20 @@ const TradeJournal: React.FC = () => {
   const [rangeEnd, setRangeEnd] = useState<string>(() => toDateStr(new Date()));
   const [loading, setLoading] = useState(true);
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
+
+  useEffect(() => {
+    const targetDate = isValidDateParam(initialDate)
+      ? initialDate
+      : initialRange === 'today'
+        ? toDateStr(new Date())
+        : null;
+
+    if (!targetDate) return;
+
+    setRangeStart(targetDate);
+    setRangeEnd(targetDate);
+    setExpandedDates((prev) => new Set(prev).add(targetDate));
+  }, [initialDate, initialRange]);
 
   const toggleDate = (date: string) => {
     setExpandedDates((prev) => {
@@ -61,6 +88,13 @@ const TradeJournal: React.FC = () => {
   }, []);
 
   useEffect(() => { load(mode); }, [load, mode]);
+
+  useEffect(() => {
+    if (!initialMode) return;
+
+    setMode(initialMode);
+    localStorage.setItem('optiontrap_order_mode', initialMode);
+  }, [initialMode]);
 
   const handleModeSwitch = (m: TradingMode) => {
     setMode(m);
@@ -242,7 +276,7 @@ const TradeJournal: React.FC = () => {
                           </tr>
                           {/* Individual trades — only shown when expanded */}
                           {isExpanded && trades.map((t) => (
-                            <tr key={t.id} className="tj-trade-row">
+                            <tr key={t.id} className={`tj-trade-row ${initialTradeId === t.id ? 'tj-trade-row--highlighted' : ''}`}>
                               <td className="tj-symbol">
                                 {t.symbol}
                                 {(t.strategyTag || t.confidence != null || t.targetPrice != null || t.stopLossPrice != null || t.note) && (

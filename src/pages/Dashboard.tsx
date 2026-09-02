@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { DashboardIcon } from '@/components/icons/Icons';
 import { fetchHoldings, fetchPositions } from '@/services/kiteApi';
 import { getPositions, Position } from '@/services/positions';
-import { getPaperTradeEntries, TradeEntry } from '@/services/tradeJournal';
+import { getLiveTradeEntries, getPaperTradeEntries, TradeEntry } from '@/services/tradeJournal';
 import { loadPriceAlerts } from '@/services/priceAlerts';
 import { fetchWatchlists } from '@/services/watchlist';
 import '@/styles/dashboard.css';
+
+type DashboardTradeEntry = TradeEntry & { mode: 'paper' | 'live' };
 
 interface DashboardMetrics {
   holdingsValue: number;
@@ -28,7 +31,7 @@ interface DashboardMetrics {
   avgLoss: number;
   bestTrade?: TradeEntry;
   worstTrade?: TradeEntry;
-  recentTrades: TradeEntry[];
+  recentTrades: DashboardTradeEntry[];
   topHoldings: Array<{ symbol: string; value: number; pnl: number; weight: number }>;
 }
 
@@ -96,15 +99,50 @@ const MetricCard: React.FC<{
   detail: string;
   tone?: 'positive' | 'negative' | 'neutral' | 'accent';
   loading?: boolean;
-}> = ({ title, value, detail, tone = 'neutral', loading = false }) => (
-  <div className="dashboard-metric">
-    <span className="dashboard-metric__label">{title}</span>
-    <strong className={`dashboard-metric__value dashboard-tone--${tone}`}>{loading ? 'Loading...' : value}</strong>
-    <span className="dashboard-metric__detail">{detail}</span>
-  </div>
-);
+  onClick?: () => void;
+}> = ({ title, value, detail, tone = 'neutral', loading = false, onClick }) => {
+  const content = (
+    <>
+      <span className="dashboard-metric__label">{title}</span>
+      <strong className={`dashboard-metric__value dashboard-tone--${tone}`}>{loading ? 'Loading...' : value}</strong>
+      <span className="dashboard-metric__detail">{detail}</span>
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button type="button" className="dashboard-metric dashboard-metric--clickable" onClick={onClick}>
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <div className="dashboard-metric">
+      {content}
+    </div>
+  );
+};
 
 const Dashboard: React.FC = () => {
+  const navigate = useNavigate();
+
+  const goToHoldings = () => navigate('/portfolio?tab=holdings');
+  const goToPaperPositions = () => {
+    localStorage.setItem('optiontrap_order_mode', 'paper');
+    navigate('/portfolio?tab=positions&mode=paper');
+  };
+  const goToLivePositions = () => {
+    localStorage.setItem('optiontrap_order_mode', 'live');
+    navigate('/portfolio?tab=positions&mode=live');
+  };
+  const goToTodayTrades = () => navigate('/analytics?tab=journal&range=today');
+  const goToWatchlist = () => navigate('/watchlist');
+  const goToJournalTrade = (trade: DashboardTradeEntry) => {
+    localStorage.setItem('optiontrap_order_mode', trade.mode);
+    navigate(`/analytics?tab=journal&mode=${trade.mode}&date=${encodeURIComponent(trade.date)}&tradeId=${encodeURIComponent(trade.id)}`);
+  };
+
   const [metrics, setMetrics] = useState<DashboardMetrics>(emptyMetrics);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -114,18 +152,25 @@ const Dashboard: React.FC = () => {
     setError(null);
 
     try {
-      const [holdingsResult, livePositionsResult, paperPositionsResult, paperTradesResult, watchlistsResult] = await Promise.allSettled([
+      const [holdingsResult, livePositionsResult, paperPositionsResult, paperTradesResult, liveTradesResult, watchlistsResult] = await Promise.allSettled([
         fetchHoldings(),
         fetchPositions(),
         getPositions(),
         getPaperTradeEntries(),
+        getLiveTradeEntries(),
         fetchWatchlists(),
       ]);
 
       const holdings = holdingsResult.status === 'fulfilled' ? holdingsResult.value : [];
       const livePositions = livePositionsResult.status === 'fulfilled' ? livePositionsResult.value : { net: [], day: [] };
       const paperPositions = paperPositionsResult.status === 'fulfilled' ? paperPositionsResult.value : [];
-      const trades = paperTradesResult.status === 'fulfilled' ? paperTradesResult.value : [];
+      const paperTrades = paperTradesResult.status === 'fulfilled' ? paperTradesResult.value : [];
+      const liveTrades = liveTradesResult.status === 'fulfilled' ? liveTradesResult.value : [];
+      const trades = paperTrades;
+      const recentTrades: DashboardTradeEntry[] = [
+        ...paperTrades.map((trade) => ({ ...trade, mode: 'paper' as const })),
+        ...liveTrades.map((trade) => ({ ...trade, mode: 'live' as const })),
+      ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
       const watchlists = watchlistsResult.status === 'fulfilled' ? watchlistsResult.value : [];
       const alerts = loadPriceAlerts();
 
@@ -171,14 +216,14 @@ const Dashboard: React.FC = () => {
         avgLoss,
         bestTrade: sortedByPnl[0],
         worstTrade: sortedByPnl[sortedByPnl.length - 1],
-        recentTrades: trades.slice(0, 5),
+        recentTrades,
         topHoldings: holdingRows
           .sort((a, b) => b.value - a.value)
           .slice(0, 5)
           .map((holding) => ({ ...holding, weight: holdingsValue > 0 ? (holding.value / holdingsValue) * 100 : 0 })),
       });
 
-      const failed = [holdingsResult, livePositionsResult, paperPositionsResult, paperTradesResult, watchlistsResult]
+      const failed = [holdingsResult, livePositionsResult, paperPositionsResult, paperTradesResult, liveTradesResult, watchlistsResult]
         .some((result) => result.status === 'rejected');
       setError(failed ? 'Some dashboard data could not be loaded. Showing available metrics.' : null);
     } catch (err) {
@@ -227,11 +272,11 @@ const Dashboard: React.FC = () => {
       </section>
 
       <section className="dashboard-metrics-row">
-        <MetricCard title="Holdings P&L" value={formatCompactMoney(metrics.holdingsPnl, true)} detail="Equity portfolio mark-to-market" tone={getTone(metrics.holdingsPnl)} loading={loading} />
-        <MetricCard title="Paper P&L" value={formatCompactMoney(metrics.paperPnl, true)} detail="Simulator and journal performance" tone={getTone(metrics.paperPnl)} loading={loading} />
-        <MetricCard title="Live P&L" value={formatCompactMoney(metrics.livePnl, true)} detail="Broker net positions" tone={getTone(metrics.livePnl)} loading={loading} />
-        <MetricCard title="Today Trades" value={String(metrics.todayTrades)} detail="Closed paper trades today" loading={loading} />
-        <MetricCard title="Watchlist" value={String(metrics.watchlistCount)} detail={`${metrics.watchlistLists} watchlist${metrics.watchlistLists === 1 ? '' : 's'}`} loading={loading} />
+        <MetricCard title="Holdings P&L" value={formatCompactMoney(metrics.holdingsPnl, true)} detail="Equity portfolio mark-to-market" tone={getTone(metrics.holdingsPnl)} loading={loading} onClick={goToHoldings} />
+        <MetricCard title="Paper P&L" value={formatCompactMoney(metrics.paperPnl, true)} detail="Simulator and journal performance" tone={getTone(metrics.paperPnl)} loading={loading} onClick={goToPaperPositions} />
+        <MetricCard title="Live P&L" value={formatCompactMoney(metrics.livePnl, true)} detail="Broker net positions" tone={getTone(metrics.livePnl)} loading={loading} onClick={goToLivePositions} />
+        <MetricCard title="Today Trades" value={String(metrics.todayTrades)} detail="Closed paper trades today" loading={loading} onClick={goToTodayTrades} />
+        <MetricCard title="Watchlist" value={String(metrics.watchlistCount)} detail={`${metrics.watchlistLists} watchlist${metrics.watchlistLists === 1 ? '' : 's'}`} loading={loading} onClick={goToWatchlist} />
       </section>
 
       <section className="dashboard-content-grid">
@@ -283,7 +328,7 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        <div className="dashboard-panel">
+        <button type="button" className="dashboard-panel dashboard-panel--clickable" onClick={goToHoldings}>
           <div className="dashboard-panel__header">
             <div>
               <h3>Top Holdings</h3>
@@ -305,25 +350,25 @@ const Dashboard: React.FC = () => {
               </div>
             ))}
           </div>
-        </div>
+        </button>
 
         <div className="dashboard-panel dashboard-panel--wide">
           <div className="dashboard-panel__header">
             <div>
               <h3>Recent Journal</h3>
-              <p>Latest exited paper trades with realised P&L.</p>
+              <p>Latest exited paper and live trades with realised P&L.</p>
             </div>
           </div>
           <div className="dashboard-trades">
-            {metrics.recentTrades.length === 0 && <span className="dashboard-empty">No closed paper trades yet.</span>}
+            {metrics.recentTrades.length === 0 && <span className="dashboard-empty">No closed trades yet.</span>}
             {metrics.recentTrades.map((trade) => (
-              <div className="dashboard-trade" key={trade.id}>
+              <button type="button" className="dashboard-trade dashboard-trade--clickable" key={trade.id} onClick={() => goToJournalTrade(trade)}>
                 <div>
                   <strong>{trade.symbol}</strong>
-                  <span>{trade.side} x {trade.quantity} | {trade.date}</span>
+                  <span>{trade.mode.toUpperCase()} | {trade.side} x {trade.quantity} | {trade.date}</span>
                 </div>
                 <strong className={`dashboard-tone--${getTone(trade.pnl)}`}>{formatMoney(trade.pnl, true)}</strong>
-              </div>
+              </button>
             ))}
           </div>
         </div>

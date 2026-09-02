@@ -502,6 +502,10 @@
   padding-left: 24px;
 }
 
+.tj-trade-row--highlighted td {
+  background: var(--sidebar-active);
+}
+
 .tj-symbol {
   font-weight: 600;
   font-size: 11px;

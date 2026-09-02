@@ -40,6 +40,30 @@
   background: var(--sidebar-active);
 }
 
+.dashboard-metric--clickable,
+.dashboard-panel--clickable,
+.dashboard-trade--clickable {
+  width: 100%;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dashboard-metric--clickable:hover,
+.dashboard-panel--clickable:hover,
+.dashboard-trade--clickable:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.dashboard-metric--clickable:focus-visible,
+.dashboard-panel--clickable:focus-visible,
+.dashboard-trade--clickable:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .dashboard-refresh:disabled {
   cursor: not-allowed;
   opacity: 0.6;
@@ -318,6 +342,13 @@
 .dashboard-trade {
   padding: 10px 0;
   border-bottom: 1px solid var(--card-border);
+}
+
+.dashboard-trade--clickable {
+  border-top: 0;
+  border-right: 0;
+  border-left: 0;
+  background: transparent;
 }
 
 .dashboard-list__item:last-child,
