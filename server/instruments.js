@@ -1,5 +1,5 @@
 /**
- * Instruments Service — shared instrument cache with fetch mutex.
+ * Instruments Service — shared instrument cache with a cross-process fetch lock.
  *
  * Fetches two datasets from Kite:
  *   1. NSE instruments (filtered to EQ — stocks only)
