@@ -70,6 +70,7 @@ import {
   getSpotToken,
   getStrikeStepSize,
   deleteOiHistoryByScrip,
+  withNamedAdvisoryLock,
 } from './db.js';
 import { PostgresSessionStore } from './sessionStore.js';
 import { createRateLimiter } from './rateLimit.js';
@@ -699,145 +700,151 @@ app.post('/api/oi-history/fetch', requireAuth, async (req, res) => {
       return res.end();
     }
 
-    // Step 2: For each trading day, compute ATM. Past stored dates are skipped;
-    // today is always refreshed because intraday OI can change until close.
-    const existingDates = await getOiHistoryDatesForExpiryMonth(scrip, expiryMonth, from, to);
-    send('step', { step: 2, message: `Found ${spotCandles.length} trading days.` });
+    // Serialize fetches for the SAME scrip+expiryMonth across all users/replicas.
+    // Different scrips/months lock independently and run fully in parallel.
+    // A waiting caller re-checks stored dates inside the lock (below) and skips
+    // whatever the previous caller just fetched — avoiding duplicate Kite calls.
+    const summary = await withNamedAdvisoryLock(`oi-history:${scrip}:${expiryMonth}`, async () => {
+      // Step 2: For each trading day, compute ATM. Past stored dates are skipped;
+      // today is always refreshed because intraday OI can change until close.
+      // This runs INSIDE the lock so a waiting caller sees the latest stored dates.
+      const existingDates = await getOiHistoryDatesForExpiryMonth(scrip, expiryMonth, from, to);
+      send('step', { step: 2, message: `Found ${spotCandles.length} trading days.` });
 
-    const allDays = []; // all trading days from Kite
-    for (const candle of spotCandles) {
-      const date = candle[0].slice(0, 10);
-      if (date !== today && existingDates.has(date)) continue;
-      const spotClose = candle[4];
-      const atm = Math.round(spotClose / stepSize) * stepSize;
-      allDays.push({ date, spotClose, atm });
-    }
-
-    const skippedDays = spotCandles.length - allDays.length;
-    if (allDays.length === 0) {
-      send('done', { rowCount: 0, tradingDays: spotCandles.length, skippedDays, fetchedDays: 0, uniqueTokens: 0 });
-      return res.end();
-    }
-
-    const fetchFrom = allDays[0].date;
-    const fetchTo = allDays[allDays.length - 1].date;
-
-    // Collect unique tokens needed across all days
-    const uniqueTokens = new Map();
-    const dayTokenSets = [];
-
-    for (const { date, spotClose, atm } of allDays) {
-      const options = (await getOptionsForAtm(scripName, atm, stepSize, range, { allExpiries: true, targetMonth: expiryMonth }))
-        .filter((opt) => opt.expiry && opt.expiry >= date);
-      const tokenSet = new Set();
-      for (const opt of options) {
-        tokenSet.add(opt.instrumentToken);
-        if (!uniqueTokens.has(opt.instrumentToken)) {
-          uniqueTokens.set(opt.instrumentToken, opt);
-        }
+      const allDays = []; // all trading days from Kite
+      for (const candle of spotCandles) {
+        const date = candle[0].slice(0, 10);
+        if (date !== today && existingDates.has(date)) continue;
+        const spotClose = candle[4];
+        const atm = Math.round(spotClose / stepSize) * stepSize;
+        allDays.push({ date, spotClose, atm });
       }
-      dayTokenSets.push({ date, spotClose, tokens: tokenSet });
-    }
 
-    if (uniqueTokens.size === 0) {
-      send('done', { rowCount: 0, tradingDays: spotCandles.length, skippedDays, fetchedDays: 0, uniqueTokens: 0, message: 'No option instruments found. Ensure the server has loaded instruments today.' });
-      return res.end();
-    }
+      const skippedDays = spotCandles.length - allDays.length;
+      if (allDays.length === 0) {
+        return { rowCount: 0, tradingDays: spotCandles.length, skippedDays, fetchedDays: 0, uniqueTokens: 0 };
+      }
 
-    // Step 3: Fetch daily candles for each unique token (batches of 5, 300ms delay)
-    send('step', { step: 3, message: `Fetching OI candles for ${uniqueTokens.size} instruments...` });
+      const fetchFrom = allDays[0].date;
+      const fetchTo = allDays[allDays.length - 1].date;
 
-    const tokenCandles = new Map();
-    const tokenList = [...uniqueTokens.keys()];
-    const batchSize = 5;
-    const totalBatches = Math.ceil(tokenList.length / batchSize);
+      // Collect unique tokens needed across all days
+      const uniqueTokens = new Map();
+      const dayTokenSets = [];
 
-    for (let i = 0; i < tokenList.length; i += batchSize) {
-      const batch = tokenList.slice(i, i + batchSize);
-      const batchNum = Math.floor(i / batchSize) + 1;
-      const promises = batch.map(async (token) => {
-        try {
-          const url = `https://api.kite.trade/instruments/historical/${token}/day?from=${fetchFrom}&to=${fetchTo}&oi=1`;
-          const response = await fetch(url, {
-            headers: { Authorization: authHeader, 'X-Kite-Version': '3' },
-          });
-          if (!response.ok) return;
-
-          const result = await response.json();
-          const candles = result?.data?.candles;
-          if (!candles?.length) return;
-
-          const dateMap = new Map();
-          for (const c of candles) {
-            dateMap.set(c[0].slice(0, 10), c);
+      for (const { date, spotClose, atm } of allDays) {
+        const options = (await getOptionsForAtm(scripName, atm, stepSize, range, { allExpiries: true, targetMonth: expiryMonth }))
+          .filter((opt) => opt.expiry && opt.expiry >= date);
+        const tokenSet = new Set();
+        for (const opt of options) {
+          tokenSet.add(opt.instrumentToken);
+          if (!uniqueTokens.has(opt.instrumentToken)) {
+            uniqueTokens.set(opt.instrumentToken, opt);
           }
-          tokenCandles.set(token, dateMap);
-        } catch {
-          // Skip failed fetches
         }
-      });
-
-      await Promise.all(promises);
-
-      // Send progress after each batch
-      const done = Math.min(i + batchSize, tokenList.length);
-      const lastToken = batch[batch.length - 1];
-      const lastMeta = uniqueTokens.get(lastToken);
-      send('progress', {
-        done,
-        total: tokenList.length,
-        pct: Math.round((done / tokenList.length) * 100),
-        batch: batchNum,
-        totalBatches,
-        symbol: lastMeta?.tradingsymbol || '',
-      });
-
-      if (i + batchSize < tokenList.length) {
-        await new Promise((r) => setTimeout(r, 300));
+        dayTokenSets.push({ date, spotClose, tokens: tokenSet });
       }
-    }
 
-    // Step 4: Build rows and upsert
-    send('step', { step: 4, message: 'Saving to database...' });
+      if (uniqueTokens.size === 0) {
+        return { rowCount: 0, tradingDays: spotCandles.length, skippedDays, fetchedDays: 0, uniqueTokens: 0, message: 'No option instruments found. Ensure the server has loaded instruments today.' };
+      }
 
-    const rows = [];
-    for (const { date, spotClose, tokens } of dayTokenSets) {
-      for (const token of tokens) {
-        const meta = uniqueTokens.get(token);
-        const dateMap = tokenCandles.get(token);
-        const candle = dateMap?.get(date);
-        if (!candle || !meta) continue;
+      // Step 3: Fetch daily candles for each unique token (batches of 5, 300ms delay)
+      send('step', { step: 3, message: `Fetching OI candles for ${uniqueTokens.size} instruments...` });
 
-        rows.push({
-          date,
-          instrumentToken: token,
-          tradingsymbol: meta.tradingsymbol,
-          strike: meta.strike,
-          optionType: meta.optionType,
-          expiry: meta.expiry,
-          open: candle[1],
-          high: candle[2],
-          low: candle[3],
-          close: candle[4],
-          volume: candle[5],
-          oi: candle[6] ?? 0,
-          spotClose,
+      const tokenCandles = new Map();
+      const tokenList = [...uniqueTokens.keys()];
+      const batchSize = 5;
+      const totalBatches = Math.ceil(tokenList.length / batchSize);
+
+      for (let i = 0; i < tokenList.length; i += batchSize) {
+        const batch = tokenList.slice(i, i + batchSize);
+        const batchNum = Math.floor(i / batchSize) + 1;
+        const promises = batch.map(async (token) => {
+          try {
+            const url = `https://api.kite.trade/instruments/historical/${token}/day?from=${fetchFrom}&to=${fetchTo}&oi=1`;
+            const response = await fetch(url, {
+              headers: { Authorization: authHeader, 'X-Kite-Version': '3' },
+            });
+            if (!response.ok) return;
+
+            const result = await response.json();
+            const candles = result?.data?.candles;
+            if (!candles?.length) return;
+
+            const dateMap = new Map();
+            for (const c of candles) {
+              dateMap.set(c[0].slice(0, 10), c);
+            }
+            tokenCandles.set(token, dateMap);
+          } catch {
+            // Skip failed fetches
+          }
         });
+
+        await Promise.all(promises);
+
+        // Send progress after each batch
+        const done = Math.min(i + batchSize, tokenList.length);
+        const lastToken = batch[batch.length - 1];
+        const lastMeta = uniqueTokens.get(lastToken);
+        send('progress', {
+          done,
+          total: tokenList.length,
+          pct: Math.round((done / tokenList.length) * 100),
+          batch: batchNum,
+          totalBatches,
+          symbol: lastMeta?.tradingsymbol || '',
+        });
+
+        if (i + batchSize < tokenList.length) {
+          await new Promise((r) => setTimeout(r, 300));
+        }
       }
-    }
 
-    // Upsert: insertOiHistoryRows uses INSERT OR REPLACE keyed on
-    // (scrip, date, instrument_token), so existing rows are overwritten.
-    const rowCount = await insertOiHistoryRows(scrip, rows);
-    console.log(`[OI History] Fetched ${rowCount} rows for ${scrip} ${expiryMonth} (${allDays.length} fetched days, ${skippedDays} skipped days, ${uniqueTokens.size} tokens)`);
+      // Step 4: Build rows and upsert
+      send('step', { step: 4, message: 'Saving to database...' });
 
-    send('done', {
-      rowCount,
-      tradingDays: spotCandles.length,
-      skippedDays,
-      fetchedDays: allDays.length,
-      uniqueTokens: uniqueTokens.size,
+      const rows = [];
+      for (const { date, spotClose, tokens } of dayTokenSets) {
+        for (const token of tokens) {
+          const meta = uniqueTokens.get(token);
+          const dateMap = tokenCandles.get(token);
+          const candle = dateMap?.get(date);
+          if (!candle || !meta) continue;
+
+          rows.push({
+            date,
+            instrumentToken: token,
+            tradingsymbol: meta.tradingsymbol,
+            strike: meta.strike,
+            optionType: meta.optionType,
+            expiry: meta.expiry,
+            open: candle[1],
+            high: candle[2],
+            low: candle[3],
+            close: candle[4],
+            volume: candle[5],
+            oi: candle[6] ?? 0,
+            spotClose,
+          });
+        }
+      }
+
+      // Upsert keyed on (scrip, date, instrument_token) — existing rows overwritten.
+      const rowCount = await insertOiHistoryRows(scrip, rows);
+      console.log(`[OI History] Fetched ${rowCount} rows for ${scrip} ${expiryMonth} (${allDays.length} fetched days, ${skippedDays} skipped days, ${uniqueTokens.size} tokens)`);
+
+      return {
+        rowCount,
+        tradingDays: spotCandles.length,
+        skippedDays,
+        fetchedDays: allDays.length,
+        uniqueTokens: uniqueTokens.size,
+      };
     });
+
+    send('done', summary);
     res.end();
   } catch (err) {
     console.error('[OI History] Fetch error:', err.message);

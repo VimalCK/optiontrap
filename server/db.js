@@ -241,6 +241,32 @@ export async function withAdvisoryLock(lockKey, fn) {
   }
 }
 
+/**
+ * Hash an arbitrary string into a signed 64-bit BigInt suitable for use as a
+ * Postgres advisory-lock key. Uses SHA-256 truncated to 8 bytes.
+ *
+ * @param {string} value
+ * @returns {bigint}
+ */
+export function advisoryLockKey(value) {
+  const hash = crypto.createHash('sha256').update(value).digest();
+  // Read the first 8 bytes as a signed BigInt (pg advisory keys are bigint).
+  return hash.readBigInt64BE(0);
+}
+
+/**
+ * Run `fn` while holding a transaction-scoped advisory lock derived from a
+ * string name. Different names lock independently; the same name serializes.
+ *
+ * @param {string} name
+ * @param {() => Promise<T>} fn
+ * @returns {Promise<T>}
+ * @template T
+ */
+export async function withNamedAdvisoryLock(name, fn) {
+  return withAdvisoryLock(advisoryLockKey(name), fn);
+}
+
 // ---------------------------------------------------------------------------
 // User CRUD
 // ---------------------------------------------------------------------------
