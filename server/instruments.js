@@ -204,7 +204,7 @@ async function fetchFromKite(apiKey, accessToken) {
 // ---------------------------------------------------------------------------
 
 /**
- * Get instruments — from SQLite cache or Kite API (with mutex).
+ * Get instruments — from the database cache or Kite API (with mutex).
  *
  * @param {string} apiKey - Caller's API key (used only if fetch is needed)
  * @param {string} accessToken - Caller's access token
@@ -213,10 +213,10 @@ async function fetchFromKite(apiKey, accessToken) {
 export async function getOrFetchInstruments(apiKey, accessToken) {
   const today = getTodayIST();
 
-  // 1. Check SQLite cache
-  const cachedDate = getInstrumentsDate();
+  // 1. Check database cache
+  const cachedDate = await getInstrumentsDate();
   if (cachedDate === today) {
-    const cached = getInstruments();
+    const cached = await getInstruments();
     if (cached.length > 0) return cached;
   }
 
@@ -229,15 +229,15 @@ export async function getOrFetchInstruments(apiKey, accessToken) {
   fetchInFlight = (async () => {
     try {
       // Double-check after acquiring (another request may have just finished)
-      const recheckDate = getInstrumentsDate();
+      const recheckDate = await getInstrumentsDate();
       if (recheckDate === today) {
-        const cached = getInstruments();
+        const cached = await getInstruments();
         if (cached.length > 0) return cached;
       }
 
       console.log('[Instruments] Fetching NSE + NFO instruments from Kite...');
       const instruments = await fetchFromKite(apiKey, accessToken);
-      saveInstruments(instruments, today);
+      await saveInstruments(instruments, today);
       console.log(`[Instruments] Cached ${instruments.length} instruments (NSE EQ + NFO F&O) for ${today}`);
       return instruments;
     } finally {
