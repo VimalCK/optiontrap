@@ -42,20 +42,11 @@
   z-index: 1;
   width: min(520px, 100%);
   padding: 24px;
-  border: 1px solid rgba(99, 102, 241, 0.22);
+  border: 1px solid var(--card-border);
   border-radius: 22px;
-  background: #0f172a;
+  background: var(--content-bg);
   box-shadow: 0 28px 80px rgba(0, 0, 0, 0.45);
   isolation: isolate;
-}
-
-.feedback-modal__card::before {
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  border-radius: inherit;
-  background: linear-gradient(145deg, rgba(30, 41, 59, 0.98), rgba(15, 23, 42, 1));
-  content: '';
 }
 
 .feedback-modal__header {
@@ -77,16 +68,6 @@
   margin: 6px 0 0;
   color: var(--text-primary);
   font-size: 24px;
-}
-
-.feedback-modal__close {
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--card-border);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
 }
 
 .feedback-types {
@@ -129,11 +110,17 @@
   resize: vertical;
   border: 1px solid var(--card-border);
   border-radius: 12px;
-  background: var(--input-bg, rgba(15, 23, 42, 0.55));
+  background: var(--card-bg-solid);
   color: var(--text-primary);
   font: inherit;
   line-height: 1.5;
   padding: 12px;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.feedback-field textarea:focus {
+  border-color: var(--accent);
 }
 
 .feedback-modal__error {

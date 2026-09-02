@@ -65,7 +65,6 @@ const FeedbackButton: React.FC = () => {
                 <span className="feedback-modal__eyebrow">Help improve OptionTrap</span>
                 <h2 id="feedback-title">Send feedback</h2>
               </div>
-              <button type="button" className="feedback-modal__close" onClick={close} aria-label="Close feedback">x</button>
             </div>
 
             {submitted ? (
