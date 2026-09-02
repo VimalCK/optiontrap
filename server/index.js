@@ -46,6 +46,13 @@ import {
   createFeedback,
   getFeedbackList,
   updateFeedbackStatus,
+  getFeedbackCounts,
+  pingDb,
+  getUsageStats,
+  getAdminUsers,
+  adminActivateSubscription,
+  adminExtendSubscription,
+  adminCancelSubscription,
   createWatchlist,
   getWatchlists,
   getWatchlistItems,
@@ -590,6 +597,76 @@ app.patch('/api/admin/feedback/:id', requireAuth, requireAdmin, async (req, res)
   } catch (err) {
     console.error(`${ts()} ${RED}ADMIN${RESET} feedback update error:`, err);
     res.status(500).json({ status: 'error', message: 'Failed to update feedback' });
+  }
+});
+
+app.get('/api/admin/health', requireAuth, requireAdmin, async (req, res) => {
+  const dbConnected = await pingDb();
+
+  // Gather metrics independently so a single failure doesn't blank the page.
+  const [usage, feedback, lastOi] = await Promise.allSettled([
+    getUsageStats(),
+    getFeedbackCounts(),
+    getLatestOiSnapshotTimestamp(),
+  ]);
+
+  const val = (r, fallback) => (r.status === 'fulfilled' ? r.value : fallback);
+  const kite = req.session?.kiteSession;
+
+  res.json({
+    status: 'ok',
+    data: {
+      db: { connected: dbConnected },
+      kite: {
+        connected: Boolean(kite?.accessToken),
+        userId: kite?.userId || null,
+        userName: kite?.userName || null,
+        loginTime: kite?.loginTime || null,
+      },
+      lastOiUpdate: val(lastOi, null),
+      usage: val(usage, { activeSessions: 0, totalUsers: 0 }),
+      feedback: val(feedback, { total: 0, open: 0 }),
+      server: {
+        uptimeSeconds: Math.round(process.uptime()),
+        mode: IS_PROD ? 'production' : 'development',
+      },
+      timestamp: Date.now(),
+    },
+  });
+});
+
+app.get('/api/admin/users', requireAuth, requireAdmin, async (_req, res) => {
+  try {
+    const users = await getAdminUsers();
+    res.json({ status: 'ok', data: users });
+  } catch (err) {
+    console.error(`${ts()} ${RED}ADMIN${RESET} users list error:`, err);
+    res.status(500).json({ status: 'error', message: 'Failed to load users' });
+  }
+});
+
+app.post('/api/admin/users/:userId/subscription', requireAuth, requireAdmin, async (req, res) => {
+  const { userId } = req.params;
+  const { action, planId } = req.body || {};
+
+  try {
+    let subscription;
+    if (action === 'activate') {
+      if (!planId) return res.status(400).json({ status: 'error', message: 'planId is required' });
+      subscription = await adminActivateSubscription(userId, planId);
+    } else if (action === 'extend') {
+      if (!planId) return res.status(400).json({ status: 'error', message: 'planId is required' });
+      subscription = await adminExtendSubscription(userId, planId);
+    } else if (action === 'cancel') {
+      subscription = await adminCancelSubscription(userId);
+    } else {
+      return res.status(400).json({ status: 'error', message: 'action must be activate, extend or cancel' });
+    }
+
+    res.json({ status: 'ok', data: subscription });
+  } catch (err) {
+    console.error(`${ts()} ${RED}ADMIN${RESET} subscription update error:`, err);
+    res.status(400).json({ status: 'error', message: err.message || 'Failed to update subscription' });
   }
 });
 

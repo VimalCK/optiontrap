@@ -43,6 +43,63 @@ export async function getFeedback(filters: FeedbackFilters = {}): Promise<Feedba
   return readJson<FeedbackItem[]>(res);
 }
 
+export interface AdminUser {
+  userId: string;
+  userName: string | null;
+  isAdmin: boolean;
+  lastLogin: string | null;
+  feedbackCount: number;
+  subscription: {
+    status: string;
+    active: boolean;
+    planId: string | null;
+    planName: string | null;
+    expiresAt: string | null;
+    durationCount: number | null;
+    durationUnit: string | null;
+  };
+}
+
+export type SubscriptionAction = 'activate' | 'extend' | 'cancel';
+
+export async function getUsers(): Promise<AdminUser[]> {
+  const res = await fetch('/api/admin/users', { credentials: 'include' });
+  return readJson<AdminUser[]>(res);
+}
+
+export async function updateUserSubscription(
+  userId: string,
+  action: SubscriptionAction,
+  planId?: string,
+): Promise<void> {
+  const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/subscription`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    body: JSON.stringify({ action, planId }),
+  });
+
+  if (!res.ok) {
+    const json = await res.json().catch(() => null);
+    throw new Error(json?.message || `Failed to update subscription (${res.status})`);
+  }
+}
+
+export interface HealthStatus {
+  db: { connected: boolean };
+  kite: { connected: boolean; userId: string | null; userName: string | null; loginTime: string | null };
+  lastOiUpdate: number | null;
+  usage: { activeSessions: number; totalUsers: number };
+  feedback: { total: number; open: number };
+  server: { uptimeSeconds: number; mode: string };
+  timestamp: number;
+}
+
+export async function getHealth(): Promise<HealthStatus> {
+  const res = await fetch('/api/admin/health', { credentials: 'include' });
+  return readJson<HealthStatus>(res);
+}
+
 export async function updateFeedbackStatus(id: string, status: FeedbackStatus): Promise<void> {
   const res = await fetch(`/api/admin/feedback/${id}`, {
     method: 'PATCH',

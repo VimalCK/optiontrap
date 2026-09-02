@@ -279,29 +279,41 @@ function formatDbTimestamp(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-function getPlanExpiryDate(durationCount, durationUnit) {
-  const expiresAt = new Date();
+/** Add a plan's duration to a base date and return a new Date. */
+function addPlanDuration(fromDate, durationCount, durationUnit) {
+  const d = new Date(fromDate.getTime());
   const count = Math.max(1, parseInt(durationCount, 10) || 1);
 
   switch (durationUnit) {
     case 'day':
-      expiresAt.setDate(expiresAt.getDate() + count);
+      d.setDate(d.getDate() + count);
       break;
     case 'week':
-      expiresAt.setDate(expiresAt.getDate() + count * 7);
+      d.setDate(d.getDate() + count * 7);
       break;
     case 'month':
-      expiresAt.setMonth(expiresAt.getMonth() + count);
+      d.setMonth(d.getMonth() + count);
       break;
     case 'year':
-      expiresAt.setFullYear(expiresAt.getFullYear() + count);
+      d.setFullYear(d.getFullYear() + count);
       break;
     default:
-      expiresAt.setMonth(expiresAt.getMonth() + count);
+      d.setMonth(d.getMonth() + count);
       break;
   }
 
-  return expiresAt;
+  return d;
+}
+
+function getPlanExpiryDate(durationCount, durationUnit) {
+  return addPlanDuration(new Date(), durationCount, durationUnit);
+}
+
+/** Parse a stored 'YYYY-MM-DD HH:MI:SS' timestamp into a Date. */
+function parseDbTimestamp(value) {
+  if (!value) return null;
+  const d = new Date(value.replace(' ', 'T'));
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
 export async function getActiveSubscriptionPlans() {
@@ -375,6 +387,131 @@ export async function activateSubscription(userId, planId = 'one_month', provide
   }
 
   return getUserSubscription(userId);
+}
+
+// ---------------------------------------------------------------------------
+// Admin: subscription management & user listing
+// ---------------------------------------------------------------------------
+
+/** Upsert the user's single subscription row with explicit dates/status. */
+async function setUserSubscription(userId, planId, startsAt, expiresAt, status, provider = 'admin') {
+  const existing = await firstRow(
+    'SELECT id FROM subscriptions WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1',
+    [userId],
+  );
+
+  if (existing) {
+    await query(
+      `UPDATE subscriptions SET
+         plan_id = $1, status = $2, starts_at = $3, expires_at = $4, provider = $5,
+         updated_at = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+       WHERE id = $6`,
+      [planId, status, startsAt, expiresAt, provider, existing.id],
+    );
+  } else {
+    await query(
+      `INSERT INTO subscriptions (id, user_id, plan_id, status, starts_at, expires_at, provider, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))`,
+      [crypto.randomUUID(), userId, planId, status, startsAt, expiresAt, provider],
+    );
+  }
+
+  return getUserSubscription(userId);
+}
+
+async function requirePlan(planId) {
+  const plan = await firstRow(
+    'SELECT id, duration_count, duration_unit FROM subscription_plans WHERE id = $1 AND is_active = 1',
+    [planId],
+  );
+  if (!plan) throw new Error('Subscription plan not found');
+  return plan;
+}
+
+/** Activate a fresh subscription from now. */
+export async function adminActivateSubscription(userId, planId) {
+  const plan = await requirePlan(planId);
+  const startsAt = formatDbTimestamp(new Date());
+  const expiresAt = formatDbTimestamp(getPlanExpiryDate(plan.duration_count, plan.duration_unit));
+  return setUserSubscription(userId, planId, startsAt, expiresAt, 'active');
+}
+
+/** Extend from the current expiry if still in the future, otherwise from now. */
+export async function adminExtendSubscription(userId, planId) {
+  const plan = await requirePlan(planId);
+  const current = await getUserSubscription(userId);
+
+  const currentExpiry = current ? parseDbTimestamp(current.expiresAt) : null;
+  const base = currentExpiry && currentExpiry.getTime() > Date.now() ? currentExpiry : new Date();
+
+  const startsAt = current?.startsAt || formatDbTimestamp(new Date());
+  const expiresAt = formatDbTimestamp(addPlanDuration(base, plan.duration_count, plan.duration_unit));
+  return setUserSubscription(userId, planId, startsAt, expiresAt, 'active');
+}
+
+/** Cancel the user's subscription (keeps dates, marks status cancelled). */
+export async function adminCancelSubscription(userId) {
+  const existing = await firstRow(
+    'SELECT id FROM subscriptions WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1',
+    [userId],
+  );
+  if (!existing) return null;
+
+  await query(
+    `UPDATE subscriptions SET status = 'cancelled', updated_at = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+     WHERE id = $1`,
+    [existing.id],
+  );
+  return getUserSubscription(userId);
+}
+
+/** List all registered users with subscription, last login and feedback count. */
+export async function getAdminUsers() {
+  const result = await rows(
+    `SELECT
+       u.user_id,
+       u.user_name,
+       u.is_admin,
+       u.updated_at AS last_login,
+       (SELECT COUNT(*) FROM feedback f WHERE f.user_id = u.user_id)::int AS feedback_count,
+       s.status       AS sub_status,
+       s.expires_at   AS sub_expires,
+       s.plan_id      AS sub_plan_id,
+       p.name         AS sub_plan_name,
+       p.duration_count AS sub_duration_count,
+       p.duration_unit  AS sub_duration_unit
+     FROM users u
+     LEFT JOIN LATERAL (
+       SELECT * FROM subscriptions s2 WHERE s2.user_id = u.user_id ORDER BY s2.updated_at DESC LIMIT 1
+     ) s ON TRUE
+     LEFT JOIN subscription_plans p ON p.id = s.plan_id
+     WHERE u.is_admin = 0
+     ORDER BY u.updated_at DESC
+     LIMIT 500`,
+  );
+
+  return result.map((row) => {
+    const expiry = row.sub_expires || null;
+    const expired = expiry ? new Date(String(expiry).replace(' ', 'T')).getTime() <= Date.now() : false;
+    const status = expired && row.sub_status === 'active' ? 'expired' : (row.sub_status || 'inactive');
+
+    return {
+      userId: row.user_id,
+      userName: row.user_name || null,
+      isAdmin: Boolean(row.is_admin),
+      lastLogin: row.last_login || null,
+      feedbackCount: row.feedback_count || 0,
+      subscription: {
+        status,
+        active: row.sub_status === 'active' && !expired,
+        planId: row.sub_plan_id || null,
+        planName: row.sub_plan_name || null,
+        expiresAt: expiry,
+        durationCount: row.sub_duration_count != null ? Number(row.sub_duration_count) : null,
+        durationUnit: row.sub_duration_unit || null,
+      },
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -464,6 +601,44 @@ export async function updateFeedbackStatus(id, status) {
   );
 
   return result.rowCount > 0;
+}
+
+export async function getFeedbackCounts() {
+  const row = await firstRow(
+    `SELECT COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE status = 'open')::int AS open
+     FROM feedback`,
+  );
+
+  return { total: row?.total || 0, open: row?.open || 0 };
+}
+
+// ---------------------------------------------------------------------------
+// Diagnostics (admin health page)
+// ---------------------------------------------------------------------------
+
+/** Simple connectivity probe — resolves true if the DB answers a trivial query. */
+export async function pingDb() {
+  try {
+    await query('SELECT 1');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Total registered users and count of currently-active (non-expired) sessions. */
+export async function getUsageStats() {
+  const sessions = await firstRow(
+    'SELECT COUNT(*) FILTER (WHERE expires > $1)::int AS active FROM sessions',
+    [Date.now()],
+  );
+  const users = await firstRow('SELECT COUNT(*)::int AS total FROM users');
+
+  return {
+    activeSessions: sessions?.active || 0,
+    totalUsers: users?.total || 0,
+  };
 }
 
 // ---------------------------------------------------------------------------
