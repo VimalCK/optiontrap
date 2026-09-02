@@ -87,7 +87,7 @@ const App: React.FC = () => {
                   </div>
                   <footer className="content__footer">&copy; 2026 OptionTrap</footer>
                 </main>
-                <FeedbackButton />
+                {!isAdmin && <FeedbackButton />}
               </div>
             )
           ) : (
