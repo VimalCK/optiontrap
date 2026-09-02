@@ -42,7 +42,10 @@ import {
   getActiveSubscriptionPlans,
   getUserSubscription,
   activateSubscription,
+  isUserAdmin,
   createFeedback,
+  getFeedbackList,
+  updateFeedbackStatus,
   createWatchlist,
   getWatchlists,
   getWatchlistItems,
@@ -134,6 +137,9 @@ async function getSafeSession(kiteSession) {
   if (!kiteSession) return null;
 
   const { accessToken, apiKey, ...safe } = kiteSession;
+  // Read the role live from the DB so the client reflects admin status
+  // immediately, even for sessions created before the flag existed.
+  safe.isAdmin = await isUserAdmin(kiteSession.userId);
   safe.subscription = await getSubscriptionSummary(kiteSession.userId);
 
   return safe;
@@ -322,7 +328,10 @@ app.post('/auth/token', async (req, res) => {
     // 1. Record user identity (no credentials stored)
     await upsertUser(data.user_id, data.user_name);
 
-    // 2. Set active session
+    // 2. Resolve role (admins bypass subscription and unlock the admin inbox)
+    const isAdmin = await isUserAdmin(data.user_id);
+
+    // 3. Set active session
     req.session.kiteSession = {
       apiKey,
       accessToken: data.access_token,
@@ -333,6 +342,7 @@ app.post('/auth/token', async (req, res) => {
       broker: data.broker,
       loginTime: data.login_time,
       avatarUrl: data.avatar_url || null,
+      isAdmin,
     };
 
     const safe = await getSafeSession(req.session.kiteSession);
@@ -415,6 +425,30 @@ const requireAuth = (req, res, next) => {
   next();
 };
 
+const adminSubscription = {
+  status: 'admin', active: true, planId: null, plan: null, startsAt: null, expiresAt: null,
+};
+
+const requireAdmin = async (req, res, next) => {
+  const userId = req.session?.kiteSession?.userId;
+
+  if (!userId) {
+    return res.status(401).json({ status: 'error', message: 'Not authenticated' });
+  }
+
+  try {
+    // Authoritative check against the DB (live), not the cached session flag —
+    // so role changes take effect without requiring the user to log in again.
+    if (!(await isUserAdmin(userId))) {
+      return res.status(403).json({ status: 'error', message: 'Admin access required' });
+    }
+    next();
+  } catch (err) {
+    console.error(`${ts()} ${RED}ADMIN${RESET} guard error:`, err);
+    res.status(500).json({ status: 'error', message: 'Failed to verify admin access' });
+  }
+};
+
 const requireSubscription = async (req, res, next) => {
   const userId = req.session?.kiteSession?.userId;
 
@@ -425,17 +459,24 @@ const requireSubscription = async (req, res, next) => {
   try {
     const subscription = await getSubscriptionSummary(userId);
 
-    if (!subscription.active) {
-      return res.status(402).json({
-        status: 'error',
-        code: 'SUBSCRIPTION_REQUIRED',
-        message: 'An active subscription is required',
-        data: subscription,
-      });
+    // Fast path: active subscribers pass with a single query.
+    if (subscription.active) {
+      req.subscription = subscription;
+      return next();
     }
 
-    req.subscription = subscription;
-    next();
+    // No active subscription — admins are the ultimate role and pass anyway.
+    if (await isUserAdmin(userId)) {
+      req.subscription = adminSubscription;
+      return next();
+    }
+
+    return res.status(402).json({
+      status: 'error',
+      code: 'SUBSCRIPTION_REQUIRED',
+      message: 'An active subscription is required',
+      data: subscription,
+    });
   } catch (err) {
     console.error(`${ts()} ${RED}SUBSCRIPTION${RESET} gate error:`, err);
     res.status(500).json({ status: 'error', message: 'Failed to verify subscription' });
@@ -484,6 +525,56 @@ app.post('/api/feedback', requireAuth, async (req, res) => {
   });
 
   res.json({ status: 'ok', data: feedback });
+});
+
+// ---------- Admin Routes ----------
+// Auth + admin role required. No subscription needed — admins have full access.
+
+const FEEDBACK_STATUSES = new Set(['open', 'reviewed', 'resolved']);
+const FEEDBACK_TYPES = new Set(['bug', 'feature', 'general', 'subscription']);
+
+app.get('/api/admin/feedback', requireAuth, requireAdmin, async (req, res) => {
+  const { type, status } = req.query;
+
+  if (type && !FEEDBACK_TYPES.has(type)) {
+    return res.status(400).json({ status: 'error', message: 'Invalid feedback type filter' });
+  }
+
+  if (status && !FEEDBACK_STATUSES.has(status)) {
+    return res.status(400).json({ status: 'error', message: 'Invalid feedback status filter' });
+  }
+
+  try {
+    const feedback = await getFeedbackList({ type: type || null, status: status || null });
+    res.json({ status: 'ok', data: feedback });
+  } catch (err) {
+    console.error(`${ts()} ${RED}ADMIN${RESET} feedback list error:`, err);
+    res.status(500).json({ status: 'error', message: 'Failed to load feedback' });
+  }
+});
+
+app.patch('/api/admin/feedback/:id', requireAuth, requireAdmin, async (req, res) => {
+  const { status } = req.body || {};
+
+  if (!FEEDBACK_STATUSES.has(status)) {
+    return res.status(400).json({
+      status: 'error',
+      message: 'status must be one of: open, reviewed, resolved',
+    });
+  }
+
+  try {
+    const updated = await updateFeedbackStatus(req.params.id, status);
+
+    if (!updated) {
+      return res.status(404).json({ status: 'error', message: 'Feedback not found' });
+    }
+
+    res.json({ status: 'ok' });
+  } catch (err) {
+    console.error(`${ts()} ${RED}ADMIN${RESET} feedback update error:`, err);
+    res.status(500).json({ status: 'error', message: 'Failed to update feedback' });
+  }
 });
 
 // ---------- Watchlist Routes ----------

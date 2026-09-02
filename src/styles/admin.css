@@ -1,0 +1,333 @@
+.admin {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.admin-refresh {
+  padding: 8px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.admin-refresh:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--sidebar-active);
+}
+
+.admin-refresh:disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.admin-summary {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.admin-chip {
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+  border: 1px solid var(--card-border);
+}
+
+.admin-chip--open {
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.admin-chip--reviewed {
+  color: #3b82f6;
+  border-color: rgba(59, 130, 246, 0.35);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.admin-chip--resolved {
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.35);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.admin-filters {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  align-items: flex-end;
+}
+
+.admin-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 180px;
+}
+
+.admin-filter__label {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.admin-error {
+  padding: 10px 12px;
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 8px;
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  font-size: 13px;
+}
+
+.admin-empty {
+  padding: 40px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+  border: 1px dashed var(--card-border);
+  border-radius: 12px;
+  font-size: 14px;
+}
+
+.admin-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--card-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.admin-table__head,
+.admin-table__row {
+  display: grid;
+  grid-template-columns: 160px 160px 110px 1fr 120px;
+  gap: 14px;
+  padding: 11px 16px;
+  align-items: center;
+}
+
+.admin-table__head {
+  background: var(--card-bg);
+  border-bottom: 1px solid var(--card-border);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.admin-table__head span:nth-child(3) {
+  text-align: center;
+}
+
+/* Rows wrap a clickable summary button + an expandable detail panel */
+.admin-row {
+  border-bottom: 1px solid var(--card-border);
+}
+
+.admin-row:last-child {
+  border-bottom: none;
+}
+
+.admin-table__row {
+  width: 100%;
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.12s ease;
+}
+
+.admin-table__row:hover,
+.admin-row--expanded .admin-table__row {
+  background: var(--card-hover-bg);
+}
+
+/* Every summary cell is a single line, so row height stays uniform */
+.admin-cell {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-cell--date {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.admin-cell--user {
+  font-weight: 600;
+}
+
+.admin-cell--type {
+  text-align: center;
+}
+
+.admin-cell--message {
+  color: var(--text-secondary);
+}
+
+.admin-cell--status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  overflow: visible;
+}
+
+.admin-chevron {
+  color: var(--text-secondary);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.admin-chevron--open {
+  transform: rotate(180deg);
+}
+
+/* Expanded detail panel — neutral background, roomy spacing */
+.admin-row__detail {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  background: var(--card-bg);
+  border-top: 1px solid var(--card-border);
+}
+
+.admin-detail__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+}
+
+.admin-detail__field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.admin-detail__label {
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.admin-detail__value {
+  font-size: 13px;
+  color: var(--text-primary);
+  word-break: break-all;
+}
+
+.admin-detail__message {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.admin-detail__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 4px;
+  justify-content: flex-end;
+}
+
+.admin-type {
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: capitalize;
+  border: 1px solid var(--card-border);
+  color: var(--text-secondary);
+  width: fit-content;
+}
+
+.admin-type--bug { color: #ef4444; border-color: rgba(239, 68, 68, 0.35); }
+.admin-type--feature { color: #8b5cf6; border-color: rgba(139, 92, 246, 0.35); }
+.admin-type--subscription { color: #10b981; border-color: rgba(16, 185, 129, 0.35); }
+
+.admin-status {
+  display: inline-flex;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: capitalize;
+  width: fit-content;
+}
+
+.admin-status--open { color: #f59e0b; background: rgba(245, 158, 11, 0.12); }
+.admin-status--reviewed { color: #3b82f6; background: rgba(59, 130, 246, 0.12); }
+.admin-status--resolved { color: #10b981; background: rgba(16, 185, 129, 0.12); }
+
+.admin-action {
+  padding: 5px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 7px;
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.admin-action:hover:not(:disabled) {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--sidebar-active);
+}
+
+.admin-action--primary {
+  color: #10b981;
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.admin-action--primary:hover:not(:disabled) {
+  color: #10b981;
+  border-color: #10b981;
+  background: rgba(16, 185, 129, 0.1);
+}
+
+.admin-action--ghost {
+  opacity: 0.75;
+}
+
+.admin-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@media (max-width: 900px) {
+  .admin-table__head {
+    display: none;
+  }
+
+  .admin-table__row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}

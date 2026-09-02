@@ -233,3 +233,25 @@
   object-fit: cover;
   border: 1.5px solid var(--accent);
 }
+
+/* Admin badge */
+.sidebar__admin-badge {
+  margin-left: auto;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  white-space: nowrap;
+  opacity: 1;
+  transition: opacity var(--transition-speed) ease;
+}
+
+.sidebar.collapsed .sidebar__admin-badge {
+  opacity: 0;
+  pointer-events: none;
+}

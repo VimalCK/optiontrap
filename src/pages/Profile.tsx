@@ -128,7 +128,10 @@ const Profile: React.FC = () => {
     <div>
       <div className="page-header" style={{ position: 'relative' }}>
         <div>
-          <h1 className="page-header__title">Profile</h1>
+          <h1 className="page-header__title">
+            Profile
+            {session?.isAdmin && <span className="profile-admin-badge">Admin</span>}
+          </h1>
           <p className="page-header__subtitle">
             Your account and session information
           </p>
@@ -181,6 +184,10 @@ const Profile: React.FC = () => {
               <div className="profile-details__row">
                 <span className="profile-details__label">Account Type</span>
                 <span className="profile-details__value">{profile.userType}</span>
+              </div>
+              <div className="profile-details__row">
+                <span className="profile-details__label">Role</span>
+                <span className="profile-details__value">{session?.isAdmin ? 'Administrator' : 'Member'}</span>
               </div>
               <div className="profile-details__row">
                 <span className="profile-details__label">Exchanges</span>

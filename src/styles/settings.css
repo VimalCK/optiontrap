@@ -612,3 +612,19 @@
     justify-content: flex-end;
   }
 }
+
+.profile-admin-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 12px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  vertical-align: middle;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.14);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+}

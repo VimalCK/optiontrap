@@ -9,6 +9,7 @@ import {
   SettingsIcon,
   ChevronLeftIcon,
   LogoIcon,
+  ShieldIcon,
 } from '../icons/Icons';
 import { KiteSession } from '@/services/kiteAuth';
 import '@/styles/sidebar.css';
@@ -34,6 +35,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, session }) => {
   const isSignedIn = session !== null;
+  const isAdmin = session?.isAdmin === true;
 
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`} aria-label="Main navigation">
@@ -67,6 +69,16 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, session }) => {
             <span className="sidebar__nav-label">{item.label}</span>
           </NavLink>
         ))}
+        {isAdmin && (
+          <NavLink
+            to="/admin"
+            className={({ isActive }) => `sidebar__nav-item ${isActive ? 'active' : ''}`}
+            title={collapsed ? 'Admin' : undefined}
+          >
+            <span className="sidebar__nav-icon"><ShieldIcon /></span>
+            <span className="sidebar__nav-label">Admin</span>
+          </NavLink>
+        )}
       </nav>
 
       <div className="sidebar__footer">
@@ -91,6 +103,7 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, session }) => {
               ? session.userName.split(' ').map((w: string) => w[0]).join('')
               : 'Not signed in'}
           </span>
+          {isAdmin && <span className="sidebar__admin-badge" title="Administrator">Admin</span>}
         </NavLink>
         <NavLink
           to="/settings"

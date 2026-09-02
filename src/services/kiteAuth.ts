@@ -17,6 +17,7 @@ export interface KiteSession {
   broker: string;
   loginTime: string;
   avatarUrl: string | null;
+  isAdmin: boolean;
   subscription: SubscriptionStatus;
 }
 

@@ -13,6 +13,7 @@ import Settings from './pages/Settings';
 import Redirect from './pages/Redirect';
 import Login from './pages/Login';
 import Subscribe from './pages/Subscribe';
+import Admin from './pages/Admin';
 import './styles/content.css';
 import './styles/redirect.css';
 import './styles/login.css';
@@ -22,16 +23,18 @@ const SIDEBAR_STORAGE_KEY = 'optiontrap_sidebar_collapsed';
 const App: React.FC = () => {
   const { session, loading } = useKiteSession();
   const isAuthenticated = session !== null;
-  const hasActiveSubscription = session?.subscription?.active === true;
+  const isAdmin = session?.isAdmin === true;
+  // Admins are the ultimate role — full access without a subscription.
+  const hasAccess = session?.subscription?.active === true || isAdmin;
 
   // Connect/disconnect the singleton ticker when session changes
   useEffect(() => {
-    if (isAuthenticated && hasActiveSubscription) {
+    if (isAuthenticated && hasAccess) {
       tickerConnect();
     } else {
       tickerDisconnect();
     }
-  }, [isAuthenticated, hasActiveSubscription]);
+  }, [isAuthenticated, hasAccess]);
 
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
@@ -54,16 +57,16 @@ const App: React.FC = () => {
   return (
     <Routes>
       {/* Public routes — no sidebar, no auth required */}
-      <Route path="/login" element={isAuthenticated ? <Navigate to={hasActiveSubscription ? '/portfolio' : '/subscribe'} replace /> : <Login />} />
+      <Route path="/login" element={isAuthenticated ? <Navigate to={hasAccess ? '/portfolio' : '/subscribe'} replace /> : <Login />} />
       <Route path="/redirect" element={<Redirect />} />
-      <Route path="/subscribe" element={isAuthenticated ? <><Subscribe /><FeedbackButton /></> : <Navigate to="/login" replace />} />
+      <Route path="/subscribe" element={isAuthenticated ? (hasAccess ? <Navigate to="/portfolio" replace /> : <><Subscribe /><FeedbackButton /></>) : <Navigate to="/login" replace />} />
 
       {/* Protected routes — require valid session cookie */}
       <Route
         path="*"
         element={
           isAuthenticated ? (
-            !hasActiveSubscription ? (
+            !hasAccess ? (
               <Navigate to="/subscribe" replace />
             ) : (
               <div className="layout">
@@ -78,6 +81,7 @@ const App: React.FC = () => {
                       <Route path="/watchlist" element={<Watchlist />} />
                       <Route path="/profile" element={<Profile />} />
                       <Route path="/settings" element={<Settings />} />
+                      {isAdmin && <Route path="/admin" element={<Admin />} />}
                       <Route path="*" element={<Navigate to="/portfolio" replace />} />
                     </Routes>
                   </div>
