@@ -47,6 +47,9 @@ const monthsOf = (p: SubscriptionPlan): number => {
 
 const currencySymbol = (code: string) => (code === 'INR' ? '₹' : `${code} `);
 
+// The redirect URL that must be registered in the user's Kite Connect app.
+const REDIRECT_URL = 'https://optiontrap.com/redirect';
+
 // ─── Animated app showcase (CSS/JS mockup, replaced by real screenshots later) ─
 
 const STRIKES = [
@@ -213,6 +216,17 @@ const Login: React.FC = () => {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [authOpen, setAuthOpen] = useState(expired);
   const [plans, setPlans] = useState<SubscriptionPlan[]>(FALLBACK_PLANS);
+  const [copied, setCopied] = useState(false);
+
+  const copyRedirect = () => {
+    navigator.clipboard?.writeText(REDIRECT_URL).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      },
+      () => { /* clipboard unavailable — ignore */ },
+    );
+  };
 
   useEffect(() => {
     const lastAvatar = getLastAvatarUrl();
@@ -397,6 +411,16 @@ const Login: React.FC = () => {
                   Enter your Kite Connect API credentials.{' '}
                   <a href="https://developers.kite.trade" target="_blank" rel="noopener noreferrer">Get keys</a>
                 </p>
+
+                <div className="auth-form__redirect">
+                  <span className="auth-form__redirect-label">In your Kite app, set the Redirect URL to</span>
+                  <div className="auth-form__redirect-row">
+                    <code>{REDIRECT_URL}</code>
+                    <button type="button" className="auth-form__copy" onClick={copyRedirect}>
+                      {copied ? 'Copied' : 'Copy'}
+                    </button>
+                  </div>
+                </div>
 
                 <div className="form-field">
                   <label className="form-field__label" htmlFor="login-api-key">API Key</label>
