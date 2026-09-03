@@ -987,6 +987,79 @@ function isMonthlyExpiry(expiry: string): boolean {
   return d.getDate() > lastDay - 7;
 }
 
+interface ChartXAxisProps {
+  dates: string[];
+  padL: number;
+  plotW: number;
+  h: number;
+}
+
+/**
+ * X-axis for the OI Price History chart: renders day-of-month numbers on top
+ * and a colored month band with month-name labels underneath, so the axis
+ * doesn't get crowded even when spanning many days across months.
+ */
+const ChartXAxis: React.FC<ChartXAxisProps> = ({ dates, padL, plotW, h }) => {
+  const n = dates.length;
+  if (n === 0) return null;
+  const stepX = plotW / n;
+  const centerX = (i: number) => padL + (i + 0.5) * stepX;
+
+  // Group contiguous dates by month (they arrive sorted ascending).
+  const groups: { month: string; startIdx: number; endIdx: number }[] = [];
+  dates.forEach((d, i) => {
+    const month = d.slice(0, 7);
+    const last = groups[groups.length - 1];
+    if (!last || last.month !== month) groups.push({ month, startIdx: i, endIdx: i });
+    else last.endIdx = i;
+  });
+
+  return (
+    <g>
+      {/* Day-of-month labels */}
+      {dates.map((d, i) => (
+        <text key={d} x={centerX(i)} y={h - 20} textAnchor="middle" fontSize="5.5" fill="var(--text-secondary)">
+          {d.slice(8)}
+        </text>
+      ))}
+
+      {/* Month band: neutral line + month name (no color, so it doesn't
+          compete with the coloured expiry lines above). */}
+      {groups.map((g) => {
+        const startX = padL + g.startIdx * stepX;
+        const endX = padL + (g.endIdx + 1) * stepX;
+        const midX = (startX + endX) / 2;
+        const [year, monthNum] = g.month.split('-').map(Number);
+        const label = new Date(year, monthNum - 1, 1).toLocaleDateString('en-US', { month: 'short' });
+        return (
+          <g key={g.month}>
+            <line
+              x1={startX + 2}
+              x2={endX - 2}
+              y1={h - 12}
+              y2={h - 12}
+              stroke="var(--text-secondary)"
+              strokeWidth="1"
+              strokeLinecap="round"
+              opacity={0.55}
+            />
+            <text
+              x={midX}
+              y={h - 4}
+              textAnchor="middle"
+              fontSize="5.5"
+              fontWeight={700}
+              fill="var(--text-secondary)"
+            >
+              {label}
+            </text>
+          </g>
+        );
+      })}
+    </g>
+  );
+};
+
 const OiHistory: React.FC = () => {
   const [scrip, setScrip] = useState('NIFTY50');
   const [selectedExpiryMonth, setSelectedExpiryMonth] = useState(currentMonthIST());
@@ -2111,7 +2184,7 @@ const OiHistory: React.FC = () => {
           <div className="oi-history__chart-pair">
             {/* CE Chart */}
             {(() => {
-              const W = 700, H = 150, PAD_L = 50, PAD_R = 50, PAD_T = 16, PAD_B = 18;
+              const W = 700, H = 162, PAD_L = 50, PAD_R = 50, PAD_T = 16, PAD_B = 30;
               const plotW = W - PAD_L - PAD_R;
               const plotH = H - PAD_T - PAD_B;
               const { dates, dateMap, maxOi, maxCePrice } = chartData;
@@ -2205,15 +2278,8 @@ const OiHistory: React.FC = () => {
                       </text>
                     ))}
 
-                    {/* X-axis date labels */}
-                    {dates.map((d, i) => {
-                      const x = PAD_L + (i + 0.5) * (plotW / n);
-                      return (
-                        <text key={d} x={x} y={H - 4} textAnchor="middle" fontSize="5.5" fill="var(--text-secondary)">
-                          {d.slice(5)}
-                        </text>
-                      );
-                    })}
+                    {/* X-axis: day numbers + month band */}
+                    <ChartXAxis dates={dates} padL={PAD_L} plotW={plotW} h={H} />
                   </svg>
                 </div>
               );
@@ -2221,7 +2287,7 @@ const OiHistory: React.FC = () => {
 
             {/* PE Chart */}
             {(() => {
-              const W = 700, H = 150, PAD_L = 50, PAD_R = 50, PAD_T = 16, PAD_B = 18;
+              const W = 700, H = 162, PAD_L = 50, PAD_R = 50, PAD_T = 16, PAD_B = 30;
               const plotW = W - PAD_L - PAD_R;
               const plotH = H - PAD_T - PAD_B;
               const { dates, dateMap, maxOi, maxPePrice } = chartData;
@@ -2310,14 +2376,8 @@ const OiHistory: React.FC = () => {
                       </text>
                     ))}
 
-                    {dates.map((d, i) => {
-                      const x = PAD_L + (i + 0.5) * (plotW / n);
-                      return (
-                        <text key={d} x={x} y={H - 4} textAnchor="middle" fontSize="5.5" fill="var(--text-secondary)">
-                          {d.slice(5)}
-                        </text>
-                      );
-                    })}
+                    {/* X-axis: day numbers + month band */}
+                    <ChartXAxis dates={dates} padL={PAD_L} plotW={plotW} h={H} />
                   </svg>
                 </div>
               );
