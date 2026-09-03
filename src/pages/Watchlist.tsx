@@ -14,6 +14,7 @@ import { loadInstruments, searchInstruments, getDisplayLabel, Instrument } from 
 import { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe } from '@/services/tickerSingleton';
 import AppSelect from '@/components/AppSelect/AppSelect';
+import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import {
   PriceAlert,
   PriceAlertCondition,
@@ -611,6 +612,7 @@ const Watchlist: React.FC = () => {
                       <tr key={item.id} className="wl-table__row">
                         <td className="wl-table__td wl-table__td--symbol">
                           <span className="wl-symbol">{instrumentMap.has(item.instrumentToken) ? getDisplayLabel(instrumentMap.get(item.instrumentToken)!) : item.tradingsymbol}</span>
+                          <TradingViewLink symbol={item.tradingsymbol} exchange={item.exchange} />
                           <span className="wl-exchange">{item.exchange}</span>
                         </td>
                         <td className={`wl-table__td wl-table__td--num ${changeColor}`}>

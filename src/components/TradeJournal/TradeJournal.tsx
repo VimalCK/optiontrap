@@ -7,6 +7,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import PnLHeatmap from './PnLHeatmap';
 import AppSelect from '@/components/AppSelect/AppSelect';
+import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import {
   getPaperTradeEntries,
   getLiveTradeEntries,
@@ -279,6 +280,7 @@ const TradeJournal: React.FC<{
                             <tr key={t.id} className={`tj-trade-row ${initialTradeId === t.id ? 'tj-trade-row--highlighted' : ''}`}>
                               <td className="tj-symbol">
                                 {t.symbol}
+                                <TradingViewLink symbol={t.symbol} />
                                 {(t.strategyTag || t.confidence != null || t.targetPrice != null || t.stopLossPrice != null || t.note) && (
                                   <div className="tj-trade-meta">
                                     {t.strategyTag && <span className="tj-trade-meta__tag">{t.strategyTag}</span>}

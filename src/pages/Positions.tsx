@@ -4,6 +4,7 @@ import { getPositions, exitPosition, Position } from '@/services/positions';
 import { fetchQuotes, fetchPositions, KitePosition, KitePositions } from '@/services/kiteApi';
 import { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe } from '@/services/tickerSingleton';
+import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import { isMarketLive } from '@/utils/marketStatus';
 import '@/styles/positions.css';
 
@@ -125,6 +126,7 @@ const PaperPositions: React.FC = () => {
                   <td>
                     <span className="positions-table__instrument">
                       <span className="positions-table__name">{pos.tradingsymbol.replace(/\d.*/,'')}</span>
+                      <TradingViewLink symbol={pos.tradingsymbol} exchange="NFO" />
                       <span className="positions-table__strike">{pos.strike}</span>
                       <span className={`positions-table__type positions-table__type--${pos.optionType.toLowerCase()}`}>{pos.optionType}</span>
                       <span className="positions-table__expiry">{new Date(pos.expiry).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
@@ -268,6 +270,7 @@ const LivePositions: React.FC = () => {
                   <td>
                     <span className="positions-table__instrument">
                       <span className="live-positions__symbol">{pos.tradingsymbol}</span>
+                      <TradingViewLink symbol={pos.tradingsymbol} exchange={pos.exchange} />
                       <span className="live-positions__exchange">{pos.exchange}</span>
                     </span>
                   </td>
@@ -310,6 +313,7 @@ const LivePositions: React.FC = () => {
                   <td>
                     <span className="positions-table__instrument">
                       <span className="live-positions__symbol">{pos.tradingsymbol}</span>
+                      <TradingViewLink symbol={pos.tradingsymbol} exchange={pos.exchange} />
                       <span className="live-positions__exchange">{pos.exchange}</span>
                     </span>
                   </td>

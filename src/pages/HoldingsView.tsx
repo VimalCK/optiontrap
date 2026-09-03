@@ -5,6 +5,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { HoldingsIcon } from '@/components/icons/Icons';
+import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import { fetchHoldings, Holding } from '@/services/kiteApi';
 import { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe } from '@/services/tickerSingleton';
@@ -270,6 +271,7 @@ const HoldingsView: React.FC = () => {
                     <tr key={`${h.exchange}:${h.tradingsymbol}`}>
                       <td>
                         <span className="holdings-table__symbol">{h.tradingsymbol}</span>
+                        <TradingViewLink symbol={h.tradingsymbol} exchange={h.exchange} />
                         {isPledged && <span className="badge-pledged" title="Pledged">P</span>}
                         <span className="holdings-table__exchange">{h.exchange}</span>
                       </td>
