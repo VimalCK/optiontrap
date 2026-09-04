@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { addPosition } from '@/services/positions';
 import { getLotSize } from '@/services/optionChain';
+import { fetchQuotes } from '@/services/kiteApi';
 import { loadInstruments, getLotSizeByToken } from '@/services/instruments';
 import '@/styles/oihistory.css';
 
@@ -1443,11 +1444,23 @@ const OiHistory: React.FC = () => {
   ) => {
     const token = optionType === 'CE' ? cell.ceToken : cell.peToken;
     const tradingsymbol = optionType === 'CE' ? cell.ceTradingsymbol : cell.peTradingsymbol;
-    const price = optionType === 'CE' ? cell.ceClose : cell.peClose;
+    const historicalClose = optionType === 'CE' ? cell.ceClose : cell.peClose;
 
-    if (!token || !tradingsymbol || !price) return;
+    if (!token || !tradingsymbol || !historicalClose) return;
 
     try {
+      // Enter at the current live/last-traded price so the position opens near
+      // break-even, rather than the historical close from the OI-history grid
+      // (which can differ materially from the current market price).
+      let entryPrice = historicalClose;
+      try {
+        const quotes = await fetchQuotes([`NFO:${tradingsymbol}`]);
+        const ltp = quotes.get(`NFO:${tradingsymbol}`)?.last_price;
+        if (ltp && ltp > 0) entryPrice = ltp;
+      } catch {
+        // Quote unavailable — fall back to the historical close.
+      }
+
       await addPosition({
         tradingsymbol,
         instrumentToken: token,
@@ -1455,10 +1468,10 @@ const OiHistory: React.FC = () => {
         optionType,
         side,
         quantity: getLotSizeByToken(token) ?? getLotSize(token),
-        entryPrice: price,
+        entryPrice,
         expiry,
       });
-      showToast(`${side} ${strike}${optionType} @ ₹${price.toFixed(2)}`, 'green');
+      showToast(`${side} ${strike}${optionType} @ ₹${entryPrice.toFixed(2)}`, 'green');
     } catch {
       showToast('Failed to add position', 'red');
     }
