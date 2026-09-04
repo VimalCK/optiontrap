@@ -2215,7 +2215,9 @@ const OiHistory: React.FC = () => {
               const { dates, dateMap, maxOi, maxCePrice } = chartData;
               const n = dates.length;
               if (n === 0 || maxOi === 0) return null;
-              const barW = Math.min(plotW / n * 0.4, 10);
+              const expiryCount = Math.max(1, visibleTableExpiries.length);
+              const slotW = plotW / n;
+              const barW = Math.min((slotW * 0.8) / expiryCount, 10);
               const safeMaxPrice = maxCePrice || 1;
 
               // Build price lines per expiry
@@ -2254,7 +2256,7 @@ const OiHistory: React.FC = () => {
                         const barH = (b.oi / maxOi) * plotH;
                         const bx = x - totalBarW / 2 + j * barW;
                         return (
-                          <rect key={`${d}-${b.exp}`} x={bx} y={PAD_T + plotH - barH} width={barW - 1} height={barH}
+                          <rect key={`${d}-${b.exp}`} x={bx} y={PAD_T + plotH - barH} width={Math.max(barW * 0.85, 0.5)} height={barH}
                             fill={expiryColors.get(b.exp)} opacity={0.25} rx={1} />
                         );
                       });
@@ -2318,7 +2320,9 @@ const OiHistory: React.FC = () => {
               const { dates, dateMap, maxOi, maxPePrice } = chartData;
               const n = dates.length;
               if (n === 0 || maxOi === 0) return null;
-              const barW = Math.min(plotW / n * 0.4, 10);
+              const expiryCount = Math.max(1, visibleTableExpiries.length);
+              const slotW = plotW / n;
+              const barW = Math.min((slotW * 0.8) / expiryCount, 10);
               const safeMaxPrice = maxPePrice || 1;
 
               const priceLines = visibleTableExpiries.map((exp) => {
@@ -2354,7 +2358,7 @@ const OiHistory: React.FC = () => {
                         const barH = (b.oi / maxOi) * plotH;
                         const bx = x - totalBarW / 2 + j * barW;
                         return (
-                          <rect key={`${d}-${b.exp}`} x={bx} y={PAD_T + plotH - barH} width={barW - 1} height={barH}
+                          <rect key={`${d}-${b.exp}`} x={bx} y={PAD_T + plotH - barH} width={Math.max(barW * 0.85, 0.5)} height={barH}
                             fill={expiryColors.get(b.exp)} opacity={0.25} rx={1} />
                         );
                       });
