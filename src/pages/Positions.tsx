@@ -9,23 +9,12 @@ import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import { isMarketLive } from '@/utils/marketStatus';
 import {
   computeRiskGroups,
-  underlyingFromSymbol,
   samplePayoffCurve,
+  loadGroupOi,
   RiskGroup,
+  OiBar,
 } from '@/services/positionRisk';
 import '@/styles/positions.css';
-
-/** Kite quote keys for underlying spot prices, keyed by underlying name. */
-const SPOT_QUOTE_KEYS: Record<string, string> = {
-  NIFTY: 'NSE:NIFTY 50',
-  BANKNIFTY: 'NSE:NIFTY BANK',
-  FINNIFTY: 'NSE:NIFTY FIN SERVICE',
-  MIDCPNIFTY: 'NSE:NIFTY MID SELECT',
-};
-
-function spotQuoteKey(underlying: string): string {
-  return SPOT_QUOTE_KEYS[underlying] || `NSE:${underlying}`;
-}
 
 const fmtInr = (n: number) =>
   `${n >= 0 ? '+' : ''}${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -33,26 +22,52 @@ const fmtInr = (n: number) =>
 export type PositionsMode = 'paper' | 'live';
 
 /**
- * PayoffChart — an SVG expiry payoff curve for a single risk group.
- * Renders the P&L-at-expiry line, a zero axis, breakeven markers, and a
- * marker at the current underlying spot (when available).
+ * Generate rounded ("nice") axis tick values covering [min, max].
+ * Picks a step from the 1/2/5 × 10ⁿ family so labels land on clean numbers
+ * (e.g. 620, 640, 660 rather than 621, 643, 665).
  */
-const PayoffChart: React.FC<{ group: RiskGroup; spot?: number }> = ({ group, spot }) => {
+function niceTicks(min: number, max: number, targetCount: number): number[] {
+  const span = max - min;
+  if (span <= 0) return [Math.round(min)];
+
+  const rawStep = span / targetCount;
+  const mag = Math.pow(10, Math.floor(Math.log10(rawStep)));
+  const norm = rawStep / mag;
+  const step = (norm >= 5 ? 5 : norm >= 2 ? 2 : 1) * mag;
+
+  const start = Math.ceil(min / step) * step;
+  const ticks: number[] = [];
+  for (let v = start; v <= max + step * 0.001; v += step) {
+    ticks.push(Number(v.toFixed(10)));
+  }
+  return ticks;
+}
+
+/**
+ * PayoffChart — an SVG expiry payoff curve for a single risk group.
+ * Renders the P&L-at-expiry line (split green/red), a zero axis, and
+ * breakeven markers.
+ */
+const PayoffChart: React.FC<{ group: RiskGroup; oiBars?: OiBar[] }> = ({ group, oiBars }) => {
   const W = 900;
   const H = 460;
-  const PAD = { top: 28, right: 28, bottom: 44, left: 78 };
+  const hasOi = !!oiBars && oiBars.length > 0;
+  // Extra right padding for the secondary OI axis when OI bars are shown.
+  const PAD = { top: 28, right: hasOi ? 64 : 28, bottom: 44, left: 78 };
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
 
-  const curve = samplePayoffCurve(group, spot);
+  const curve = samplePayoffCurve(group);
   const { points, minPrice, maxPrice } = curve;
 
-  // Pad the payoff domain a little so the line doesn't touch the edges.
+  // Symmetric payoff domain so the zero P&L line sits exactly at the vertical
+  // center: bound both sides by the larger of |max profit| and |max loss|.
   const rawMin = Math.min(curve.minPayoff, 0);
   const rawMax = Math.max(curve.maxPayoff, 0);
-  const yPad = (rawMax - rawMin) * 0.1 || 1;
-  const yMin = rawMin - yPad;
-  const yMax = rawMax + yPad;
+  const bound = Math.max(Math.abs(rawMin), Math.abs(rawMax)) || 1;
+  const yPad = bound * 0.1;
+  const yMax = bound + yPad;
+  const yMin = -(bound + yPad);
 
   const xScale = (price: number) =>
     PAD.left + ((price - minPrice) / (maxPrice - minPrice || 1)) * plotW;
@@ -61,10 +76,72 @@ const PayoffChart: React.FC<{ group: RiskGroup; spot?: number }> = ({ group, spo
 
   const zeroY = yScale(0);
 
-  // Split the curve into profit (green) and loss (red) segments for fill.
-  const linePath = points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${xScale(p.price).toFixed(1)} ${yScale(p.payoff).toFixed(1)}`)
-    .join(' ');
+  // OI bars: filter to strikes within the visible price range, then scale their
+  // height off a secondary axis (0 → maxOi). Bars hang down from the zero P&L
+  // center line toward the plot bottom.
+  const visibleOi = hasOi
+    ? oiBars!.filter((b) => b.strike >= minPrice && b.strike <= maxPrice)
+    : [];
+  const maxOi = visibleOi.reduce((m, b) => Math.max(m, b.ceOi, b.peOi), 0);
+  // Available vertical space from the center line up to the top of the plot.
+  const oiSpan = Math.max(0, zeroY - PAD.top);
+  const oiHeight = (oi: number) =>
+    maxOi > 0 ? (oi / maxOi) * oiSpan : 0;
+  // Bar half-width based on strike spacing (fallback to a fixed width).
+  const strikeGapPx = visibleOi.length > 1
+    ? Math.abs(xScale(visibleOi[1].strike) - xScale(visibleOi[0].strike))
+    : 24;
+  const barW = Math.max(3, Math.min(10, strikeGapPx * 0.32));
+
+  // Build the payoff line as {x, y, payoff} vertices, inserting extra vertices
+  // exactly at each zero-crossing so profit (green) and loss (red) segments can
+  // be split cleanly at the P&L = 0 axis.
+  type V = { x: number; y: number; payoff: number };
+  const verts: V[] = [];
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    if (i > 0) {
+      const prev = points[i - 1];
+      // Zero-crossing between prev and current → insert the crossing point.
+      if ((prev.payoff < 0 && p.payoff > 0) || (prev.payoff > 0 && p.payoff < 0)) {
+        const t = prev.payoff / (prev.payoff - p.payoff);
+        const crossPrice = prev.price + t * (p.price - prev.price);
+        verts.push({ x: xScale(crossPrice), y: zeroY, payoff: 0 });
+      }
+    }
+    verts.push({ x: xScale(p.price), y: yScale(p.payoff), payoff: p.payoff });
+  }
+
+  // Produce line + filled-area path strings for one side of the zero axis.
+  // A "run" is a maximal sequence of vertices on that side; each run yields a
+  // line polyline and a closed area down/up to the zero axis.
+  const buildSide = (sign: 1 | -1): { line: string; area: string } => {
+    const inSide = (v: V) => (sign > 0 ? v.payoff >= 0 : v.payoff <= 0);
+    let line = '';
+    let area = '';
+    let run: V[] = [];
+
+    const flush = () => {
+      if (run.length < 2) { run = []; return; }
+      line += 'M ' + run.map((v) => `${v.x.toFixed(1)} ${v.y.toFixed(1)}`).join(' L ') + ' ';
+      const first = run[0];
+      const last = run[run.length - 1];
+      area += `M ${first.x.toFixed(1)} ${zeroY.toFixed(1)} `
+        + run.map((v) => `L ${v.x.toFixed(1)} ${v.y.toFixed(1)}`).join(' ')
+        + ` L ${last.x.toFixed(1)} ${zeroY.toFixed(1)} Z `;
+      run = [];
+    };
+
+    for (const v of verts) {
+      if (inSide(v)) run.push(v);
+      else flush();
+    }
+    flush();
+    return { line, area };
+  };
+
+  const green = buildSide(1);
+  const red = buildSide(-1);
 
   const fmtK = (n: number) => {
     const abs = Math.abs(n);
@@ -73,36 +150,120 @@ const PayoffChart: React.FC<{ group: RiskGroup; spot?: number }> = ({ group, spo
     return n.toFixed(0);
   };
 
+  // Unique pattern ids per chart instance (avoids SVG defs collisions).
+  const profitPatternId = `hatch-profit-${group.key}`;
+  const lossPatternId = `hatch-loss-${group.key}`;
+
   return (
     <svg className="payoff-chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Payoff curve">
+      <defs>
+        {/* Diagonal hairline hatch over a translucent fill (same slope both sides) */}
+        <pattern id={profitPatternId} patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
+          <rect width="8" height="8" fill="rgba(34, 197, 94, 0.14)" />
+          <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(34, 197, 94, 0.55)" strokeWidth="0.6" />
+        </pattern>
+        <pattern id={lossPatternId} patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
+          <rect width="8" height="8" fill="rgba(239, 68, 68, 0.14)" />
+          <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(239, 68, 68, 0.55)" strokeWidth="0.6" />
+        </pattern>
+      </defs>
+
       {/* Zero P&L axis */}
       <line x1={PAD.left} y1={zeroY} x2={W - PAD.right} y2={zeroY} className="payoff-chart__zero" />
 
-      {/* Y axis labels: max, 0, min */}
-      {[yMax, 0, yMin].map((v, i) => (
+      {/* Y axis labels: max, mid, 0, -mid, -max (symmetric) */}
+      {[yMax, yMax / 2, 0, yMin / 2, yMin].map((v, i) => (
         <text key={i} x={PAD.left - 8} y={yScale(v) + 3} className="payoff-chart__ylabel" textAnchor="end">
           {fmtK(v)}
         </text>
       ))}
 
-      {/* X axis labels: five ticks across the price range */}
-      {[0, 0.25, 0.5, 0.75, 1].map((f, i, arr) => {
-        const v = minPrice + f * (maxPrice - minPrice);
+      {/* Left vertical axis title */}
+      <text
+        className="payoff-chart__axis-title"
+        textAnchor="middle"
+        transform={`translate(16, ${PAD.top + plotH / 2}) rotate(-90)`}
+      >
+        Profit / Loss
+      </text>
+
+      {/* X axis labels + ticks at rounded ("nice") price values */}
+      {niceTicks(minPrice, maxPrice, 5).map((v, i, arr) => {
+        const x = xScale(v);
         return (
-          <text
-            key={i}
-            x={xScale(v)}
-            y={H - 14}
-            className="payoff-chart__xlabel"
-            textAnchor={i === 0 ? 'start' : i === arr.length - 1 ? 'end' : 'middle'}
-          >
-            {v.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-          </text>
+          <g key={i}>
+            <line x1={x} y1={H - PAD.bottom} x2={x} y2={H - PAD.bottom + 5} className="payoff-chart__tick" />
+            <text
+              x={x}
+              y={H - 14}
+              className="payoff-chart__xlabel"
+              textAnchor={i === 0 ? 'start' : i === arr.length - 1 ? 'end' : 'middle'}
+            >
+              {v.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            </text>
+          </g>
         );
       })}
 
-      {/* Payoff line */}
-      <path d={linePath} className="payoff-chart__line" fill="none" />
+      {/* OI bars (behind the payoff curve) — CE and PE per strike, rising
+          up from the zero P&L center line */}
+      {hasOi && visibleOi.map((b) => {
+        const cx = xScale(b.strike);
+        const ceH = oiHeight(b.ceOi);
+        const peH = oiHeight(b.peOi);
+        return (
+          <g key={b.strike}>
+            {/* PE bar on the left of the strike, CE bar on the right */}
+            <rect
+              x={cx - barW - 0.5}
+              y={zeroY - peH}
+              width={barW}
+              height={peH}
+              className="payoff-chart__oi-pe"
+            />
+            <rect
+              x={cx + 0.5}
+              y={zeroY - ceH}
+              width={barW}
+              height={ceH}
+              className="payoff-chart__oi-ce"
+            />
+          </g>
+        );
+      })}
+
+      {/* Secondary OI axis (right): 0 at the center line, max at the top */}
+      {hasOi && maxOi > 0 && (
+        <g>
+          {[maxOi, maxOi / 2, 0].map((v, i) => (
+            <text
+              key={i}
+              x={W - PAD.right + 8}
+              y={zeroY - oiHeight(v) + 4}
+              className="payoff-chart__oi-label"
+              textAnchor="start"
+            >
+              {v === 0 ? '0' : fmtK(v)}
+            </text>
+          ))}
+          {/* Right vertical axis title — centered over the full plot height */}
+          <text
+            className="payoff-chart__axis-title"
+            textAnchor="middle"
+            transform={`translate(${W - 14}, ${PAD.top + plotH / 2}) rotate(90)`}
+          >
+            Open Interest
+          </text>
+        </g>
+      )}
+
+      {/* Filled areas — translucent fill overlaid with diagonal hatch hairlines */}
+      {red.area && <path d={red.area} fill={`url(#${lossPatternId})`} stroke="none" />}
+      {green.area && <path d={green.area} fill={`url(#${profitPatternId})`} stroke="none" />}
+
+      {/* Payoff line, split into profit (green) and loss (red) */}
+      {red.line && <path d={red.line} className="payoff-chart__line-loss" fill="none" />}
+      {green.line && <path d={green.line} className="payoff-chart__line-profit" fill="none" />}
 
       {/* Breakeven markers */}
       {group.breakevens.map((be, i) => (
@@ -114,15 +275,6 @@ const PayoffChart: React.FC<{ group: RiskGroup; spot?: number }> = ({ group, spo
         </g>
       ))}
 
-      {/* Spot marker */}
-      {spot && spot > 0 && spot >= minPrice && spot <= maxPrice && (
-        <g>
-          <line x1={xScale(spot)} y1={PAD.top} x2={xScale(spot)} y2={H - PAD.bottom} className="payoff-chart__spot-line" />
-          <text x={xScale(spot)} y={H - PAD.bottom + 28} className="payoff-chart__spot-label" textAnchor="middle">
-            Spot {spot.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
-          </text>
-        </g>
-      )}
     </svg>
   );
 };
@@ -134,11 +286,12 @@ const expiryLabel = (iso: string) =>
  * PayoffModal — full-size payoff curve in a centered overlay.
  * Closes on backdrop click, the × button, or Esc.
  */
-const PayoffModal: React.FC<{ group: RiskGroup; spot?: number; onClose: () => void }> = ({
+const PayoffModal: React.FC<{ group: RiskGroup; onClose: () => void }> = ({
   group,
-  spot,
   onClose,
 }) => {
+  const [oiBars, setOiBars] = useState<OiBar[]>([]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -148,6 +301,12 @@ const PayoffModal: React.FC<{ group: RiskGroup; spot?: number; onClose: () => vo
       document.body.style.overflow = '';
     };
   }, [onClose]);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadGroupOi(group).then((bars) => { if (!cancelled) setOiBars(bars); });
+    return () => { cancelled = true; };
+  }, [group]);
 
   return createPortal(
     <div className="payoff-modal__backdrop" onClick={onClose}>
@@ -165,12 +324,17 @@ const PayoffModal: React.FC<{ group: RiskGroup; spot?: number; onClose: () => vo
           <span>Max Loss: <strong className="negative">{group.maxLoss == null ? 'Unlimited' : group.maxLoss >= 0 ? '—' : fmtInr(group.maxLoss)}</strong></span>
           <span>Max Profit: <strong className="positive">{group.maxProfit == null ? 'Unlimited' : group.maxProfit <= 0 ? '—' : fmtInr(group.maxProfit)}</strong></span>
           <span>Breakeven: <strong>{group.breakevens.length === 0 ? '—' : group.breakevens.map((b) => b.toLocaleString('en-IN')).join(' / ')}</strong></span>
-          {spot && spot > 0 && <span>Spot: <strong>{spot.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</strong></span>}
         </div>
 
         <div className="payoff-modal__chart">
-          <PayoffChart group={group} spot={spot} />
+          <PayoffChart group={group} oiBars={oiBars} />
         </div>
+        {oiBars.length > 0 && (
+          <div className="payoff-modal__legend">
+            <span className="payoff-modal__legend-item"><span className="swatch swatch--ce" /> Call OI</span>
+            <span className="payoff-modal__legend-item"><span className="swatch swatch--pe" /> Put OI</span>
+          </div>
+        )}
       </div>
     </div>,
     document.body,
@@ -182,10 +346,7 @@ const PayoffModal: React.FC<{ group: RiskGroup; spot?: number; onClose: () => vo
  * and an invalidation-hit flag against journal stop-loss levels.
  * Clicking a card opens the payoff curve in a modal popup.
  */
-const RiskPanel: React.FC<{ groups: RiskGroup[]; spotPrices: Map<string, number> }> = ({
-  groups,
-  spotPrices,
-}) => {
+const RiskPanel: React.FC<{ groups: RiskGroup[] }> = ({ groups }) => {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   if (groups.length === 0) return null;
@@ -281,7 +442,6 @@ const RiskPanel: React.FC<{ groups: RiskGroup[]; spotPrices: Map<string, number>
       {selected && (
         <PayoffModal
           group={selected}
-          spot={spotPrices.get(selected.underlying)}
           onClose={() => setSelectedKey(null)}
         />
       )}
@@ -292,7 +452,6 @@ const RiskPanel: React.FC<{ groups: RiskGroup[]; spotPrices: Map<string, number>
 const PaperPositions: React.FC = () => {
   const [positions, setPositions] = useState<Position[]>([]);
   const [livePrices, setLivePrices] = useState<Map<number, number>>(new Map());
-  const [spotPrices, setSpotPrices] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
 
   const loadPositions = useCallback(async () => {
@@ -335,28 +494,6 @@ const PaperPositions: React.FC = () => {
         setLivePrices(priceMap);
       }).catch(() => {});
     }
-  }, [positions]);
-
-  // Fetch underlying spot prices for the spot marker on the payoff chart.
-  useEffect(() => {
-    const openPositions = positions.filter((p) => !p.exited);
-    if (openPositions.length === 0) return;
-
-    const underlyings = [...new Set(openPositions.map((p) => underlyingFromSymbol(p.tradingsymbol)))];
-    const keys = underlyings.map(spotQuoteKey);
-
-    let cancelled = false;
-    fetchQuotes(keys).then((quotes) => {
-      if (cancelled) return;
-      const map = new Map<string, number>();
-      underlyings.forEach((u) => {
-        const q = quotes.get(spotQuoteKey(u));
-        if (q && q.last_price > 0) map.set(u, q.last_price);
-      });
-      setSpotPrices(map);
-    }).catch(() => {});
-
-    return () => { cancelled = true; };
   }, [positions]);
 
   const handleExit = async (id: string, instrumentToken: number) => {
@@ -407,7 +544,7 @@ const PaperPositions: React.FC = () => {
       </div>
 
       {/* Position Risk Panel */}
-      <RiskPanel groups={riskGroups} spotPrices={spotPrices} />
+      <RiskPanel groups={riskGroups} />
 
       {/* Positions Table */}
       <div className="card">

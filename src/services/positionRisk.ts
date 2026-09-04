@@ -309,3 +309,64 @@ function findBreakevens(legs: Position[], strikes: number[]): number[] {
   }
   return breakevens;
 }
+
+export interface OiBar {
+  strike: number;
+  ceOi: number;
+  peOi: number;
+}
+
+interface OiHistoryRow {
+  date: string;
+  strike: number | null;
+  optionType: string | null;
+  expiry: string | null;
+  oi: number;
+}
+
+/**
+ * Load call/put open interest per strike for a risk group from the persisted
+ * OI history (`/api/oi-history`), which stores per-day CE/PE OI per strike for
+ * each scrip and expiry month. We query the group's underlying + expiry-month,
+ * keep only rows matching the group's exact expiry, then take the latest
+ * available date and aggregate CE/PE OI per strike.
+ *
+ * Returns bars sorted by strike; empty when no data is available. Never throws.
+ */
+export async function loadGroupOi(group: RiskGroup): Promise<OiBar[]> {
+  try {
+    const groupDay = (group.expiry || '').slice(0, 10); // YYYY-MM-DD
+    const expiryMonth = groupDay.slice(0, 7);           // YYYY-MM
+    if (!expiryMonth) return [];
+
+    const params = new URLSearchParams({ scrip: group.underlying, expiryMonth });
+    const res = await fetch(`/api/oi-history?${params}`, { credentials: 'include' });
+    if (!res.ok) return [];
+    const json = await res.json();
+    if (json.status !== 'ok' || !Array.isArray(json.data)) return [];
+
+    const rows = (json.data as OiHistoryRow[]).filter(
+      (r) => r.strike != null && r.optionType != null && (r.expiry || '').slice(0, 10) === groupDay,
+    );
+    if (rows.length === 0) return [];
+
+    // Use the most recent date's OI.
+    const latestDate = rows.reduce((max, r) => (r.date > max ? r.date : max), rows[0].date);
+    const latestRows = rows.filter((r) => r.date === latestDate);
+
+    const byStrike = new Map<number, OiBar>();
+    for (const r of latestRows) {
+      const strike = r.strike as number;
+      const oi = Number(r.oi) || 0;
+      if (oi <= 0) continue;
+      let bar = byStrike.get(strike);
+      if (!bar) { bar = { strike, ceOi: 0, peOi: 0 }; byStrike.set(strike, bar); }
+      if (r.optionType === 'CE') bar.ceOi += oi;
+      else bar.peOi += oi;
+    }
+
+    return [...byStrike.values()].sort((a, b) => a.strike - b.strike);
+  } catch {
+    return [];
+  }
+}

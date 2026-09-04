@@ -528,16 +528,71 @@
   width: 100%;
 }
 
+.payoff-modal__legend {
+  display: flex;
+  gap: 20px;
+  justify-content: center;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.payoff-modal__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.payoff-modal__legend .swatch {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  display: inline-block;
+}
+
+.payoff-modal__legend .swatch--ce { background: rgba(59, 130, 246, 0.75); }
+.payoff-modal__legend .swatch--pe { background: rgba(249, 115, 22, 0.75); }
+
 .payoff-chart {
   width: 100%;
   height: auto;
   display: block;
 }
 
-.payoff-chart__line {
-  stroke: #818cf8;
-  stroke-width: 2.5;
+.payoff-chart__oi-ce {
+  fill: rgba(59, 130, 246, 0.45);
 }
+
+.payoff-chart__oi-pe {
+  fill: rgba(249, 115, 22, 0.45);
+}
+
+.payoff-chart__oi-label {
+  fill: var(--text-secondary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.payoff-chart__axis-title {
+  fill: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 400;
+  letter-spacing: 0.4px;
+}
+
+.payoff-chart__line-profit {
+  stroke: #22c55e;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+
+.payoff-chart__line-loss {
+  stroke: #ef4444;
+  stroke-width: 2.5;
+  stroke-linejoin: round;
+}
+
+
 
 .payoff-chart__zero {
   stroke: rgba(255, 255, 255, 0.25);
@@ -548,8 +603,13 @@
 .payoff-chart__ylabel,
 .payoff-chart__xlabel {
   fill: var(--text-secondary);
-  font-size: 13px;
+  font-size: 10px;
   font-variant-numeric: tabular-nums;
+}
+
+.payoff-chart__tick {
+  stroke: rgba(255, 255, 255, 0.2);
+  stroke-width: 1;
 }
 
 .payoff-chart__be-line {
@@ -564,9 +624,10 @@
   font-weight: 600;
 }
 
-.payoff-chart__spot-line {
-  stroke: rgba(250, 204, 21, 0.6);
-  stroke-width: 1.5;
+.payoff-chart__spot-dot {
+  fill: #facc15;
+  stroke: rgba(0, 0, 0, 0.5);
+  stroke-width: 1;
 }
 
 .payoff-chart__spot-label {
