@@ -980,11 +980,19 @@ function expiryLabel(expiry: string, isMonthly: boolean): string {
   return `${month} ${day}${isMonthly ? ' (M)' : ''}`;
 }
 
-/** Check if an expiry is monthly (last Thursday of month — approximate: last 7 days) */
-function isMonthlyExpiry(expiry: string): boolean {
-  const d = new Date(expiry + 'T00:00:00');
-  const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-  return d.getDate() > lastDay - 7;
+/**
+ * Build the set of monthly expiries from a list of expiry dates.
+ * A monthly expiry is the last (latest) expiry within its calendar month.
+ * This is data-driven and robust to exchange weekday changes (Thu → Tue, etc.).
+ */
+function computeMonthlyExpiries(allExpiries: string[]): Set<string> {
+  const lastPerMonth = new Map<string, string>();
+  for (const exp of allExpiries) {
+    const key = exp.slice(0, 7); // YYYY-MM
+    const cur = lastPerMonth.get(key);
+    if (!cur || exp > cur) lastPerMonth.set(key, exp);
+  }
+  return new Set(lastPerMonth.values());
 }
 
 interface ChartXAxisProps {
@@ -1472,6 +1480,12 @@ const OiHistory: React.FC = () => {
     return [...set].sort();
   }, [data]);
 
+  const monthlyExpirySet = useMemo(() => computeMonthlyExpiries(expiries), [expiries]);
+  const isMonthlyExpiry = useCallback(
+    (expiry: string) => monthlyExpirySet.has(expiry),
+    [monthlyExpirySet],
+  );
+
   /** Dates that are weekly expiries in the loaded trading dates. */
   const weeklyExpiryDates = useMemo(() => {
     const knownWeeklyExpiries = expiries.filter((exp) => !isMonthlyExpiry(exp));
@@ -1497,7 +1511,7 @@ const OiHistory: React.FC = () => {
     }
 
     return set;
-  }, [availableDates, expiries]);
+  }, [availableDates, expiries, isMonthlyExpiry]);
 
   /** Rows for the selected date */
   const filteredRows = useMemo(() => {
