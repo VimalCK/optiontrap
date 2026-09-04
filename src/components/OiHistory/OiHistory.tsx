@@ -1031,8 +1031,9 @@ const ChartXAxis: React.FC<ChartXAxisProps> = ({ dates, padL, plotW, h }) => {
         </text>
       ))}
 
-      {/* Month band: neutral line + month name (no color, so it doesn't
-          compete with the coloured expiry lines above). */}
+      {/* Month markers: small vertical ticks on the x-axis at the start and
+          end of each month, plus the month name. No horizontal band, so it
+          doesn't compete with the coloured expiry lines above. */}
       {groups.map((g) => {
         const startX = padL + g.startIdx * stepX;
         const endX = padL + (g.endIdx + 1) * stepX;
@@ -1042,18 +1043,28 @@ const ChartXAxis: React.FC<ChartXAxisProps> = ({ dates, padL, plotW, h }) => {
         return (
           <g key={g.month}>
             <line
-              x1={startX + 2}
-              x2={endX - 2}
-              y1={h - 12}
-              y2={h - 12}
+              x1={startX}
+              x2={startX}
+              y1={h - 30}
+              y2={h - 24}
               stroke="var(--text-secondary)"
-              strokeWidth="1"
+              strokeWidth="0.5"
               strokeLinecap="round"
-              opacity={0.55}
+              opacity={0.5}
+            />
+            <line
+              x1={endX}
+              x2={endX}
+              y1={h - 30}
+              y2={h - 24}
+              stroke="var(--text-secondary)"
+              strokeWidth="0.5"
+              strokeLinecap="round"
+              opacity={0.5}
             />
             <text
               x={midX}
-              y={h - 4}
+              y={h - 8}
               textAnchor="middle"
               fontSize="5.5"
               fontWeight={700}
