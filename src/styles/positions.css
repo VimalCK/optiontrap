@@ -341,3 +341,236 @@
   color: #818cf8;
   letter-spacing: 0.3px;
 }
+
+/* ── Position Risk Panel ─────────────────────────────────────────────── */
+.risk-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.risk-card {
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.risk-card--invalidated {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.risk-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.risk-card__title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.risk-card__expiry {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.risk-card__legs {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(99, 102, 241, 0.12);
+  color: #818cf8;
+}
+
+.risk-card__flag {
+  font-size: 11px;
+  font-weight: 700;
+  color: #ef4444;
+  white-space: nowrap;
+}
+
+.risk-card__metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px 16px;
+}
+
+.risk-metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.risk-metric__label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.risk-metric__value {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.risk-card__breached {
+  margin-top: 10px;
+  font-size: 11px;
+  color: #ef4444;
+  font-weight: 600;
+}
+
+/* Clickable card + expand affordance */
+.risk-card {
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.risk-card:hover {
+  border-color: rgba(129, 140, 248, 0.5);
+}
+
+.risk-card--open {
+  border-color: rgba(129, 140, 248, 0.6);
+}
+
+.risk-card__chart-icon {
+  font-size: 13px;
+  margin-left: 4px;
+  opacity: 0.7;
+}
+
+/* Payoff modal */
+.payoff-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.payoff-modal {
+  background: var(--card-bg-solid, #191920);
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
+  border-radius: 12px;
+  width: min(960px, 96vw);
+  max-height: 92vh;
+  overflow-y: auto;
+  padding: 20px 22px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+.payoff-modal__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.payoff-modal__title {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.payoff-modal__close {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 26px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+}
+
+.payoff-modal__close:hover {
+  color: var(--text-primary);
+}
+
+.payoff-modal__summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.payoff-modal__summary strong {
+  font-weight: 700;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.payoff-modal__chart {
+  width: 100%;
+}
+
+.payoff-chart {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.payoff-chart__line {
+  stroke: #818cf8;
+  stroke-width: 2.5;
+}
+
+.payoff-chart__zero {
+  stroke: rgba(255, 255, 255, 0.25);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.payoff-chart__ylabel,
+.payoff-chart__xlabel {
+  fill: var(--text-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.payoff-chart__be-line {
+  stroke: rgba(34, 197, 94, 0.5);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.payoff-chart__be-label {
+  fill: #22c55e;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.payoff-chart__spot-line {
+  stroke: rgba(250, 204, 21, 0.6);
+  stroke-width: 1.5;
+}
+
+.payoff-chart__spot-label {
+  fill: #facc15;
+  font-size: 12px;
+  font-weight: 600;
+}
