@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react'
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { addPosition } from '@/services/positions';
 import { getLotSize } from '@/services/optionChain';
+import { loadInstruments, getLotSizeByToken } from '@/services/instruments';
 import '@/styles/oihistory.css';
 
 interface OiHistoryRow {
@@ -1123,6 +1124,11 @@ const OiHistory: React.FC = () => {
     return [5, 10, 20].includes(val) ? val : 10;
   });
 
+  // Warm the instruments cache so lot sizes are available for setup trades.
+  useEffect(() => {
+    loadInstruments().catch(() => { /* lot size falls back to 1 if unavailable */ });
+  }, []);
+
   // Fetch available future expiry months for the selected scrip from instruments
   useEffect(() => {
     const current = currentMonthIST();
@@ -1448,7 +1454,7 @@ const OiHistory: React.FC = () => {
         strike,
         optionType,
         side,
-        quantity: getLotSize(token),
+        quantity: getLotSizeByToken(token) ?? getLotSize(token),
         entryPrice: price,
         expiry,
       });
@@ -1810,6 +1816,73 @@ const OiHistory: React.FC = () => {
 
     return { dates, dateMap, maxOi, maxCePrice, maxPePrice, biasSummary, priceTrend, tradeBias, tradeSetup, tradeLevels, sellingSetup };
   }, [data, selectedStrike, availableDates, visibleTableExpiries, selectedSpotClose, tableData]);
+
+  /**
+   * Resolve the strike/side/optionType a trade setup recommends and place it.
+   * Reuses handleTrade so token/tradingsymbol/price come from the OI grid.
+   *   mode 'buy'  → BUY; CE for Bullish, PE for Bearish
+   *   mode 'sell' → SELL; CE for Call Sell, PE for Put Sell
+   * Strike = setup's key level (resistance for CE side, support for PE side),
+   * falling back to ATM / max-OI magnet when the level is missing.
+   */
+  const tradeFromSetup = useCallback((mode: 'buy' | 'sell') => {
+    if (!chartData) return;
+    const { tradeSetup, sellingSetup, tradeLevels } = chartData;
+
+    let optionType: 'CE' | 'PE' | null = null;
+    let side: 'BUY' | 'SELL';
+    if (mode === 'buy') {
+      side = 'BUY';
+      if (tradeSetup.direction === 'Bullish') optionType = 'CE';
+      else if (tradeSetup.direction === 'Bearish') optionType = 'PE';
+    } else {
+      side = 'SELL';
+      if (sellingSetup.type === 'Call Sell') optionType = 'CE';
+      else if (sellingSetup.type === 'Put Sell') optionType = 'PE';
+    }
+
+    if (!optionType) {
+      showToast('No single-leg strike for this setup', 'red');
+      return;
+    }
+
+    // CE side leans to resistance, PE side to support; fall back to ATM/max-OI.
+    const keyLevel = optionType === 'CE' ? tradeLevels.resistanceStrike : tradeLevels.supportStrike;
+    const targetStrike = keyLevel ?? atmStrike ?? tradeLevels.maxOiStrike;
+    if (!targetStrike) {
+      showToast('No tradeable strike found', 'red');
+      return;
+    }
+
+    const row = tableData.find((r) => r.strike === targetStrike);
+    if (!row) {
+      showToast(`Strike ${targetStrike} not in table`, 'red');
+      return;
+    }
+
+    // Pick the nearest visible expiry that has a live cell for this option type.
+    type RowCell = ReturnType<typeof row.cells.get>;
+    let chosenCell: RowCell;
+    let chosenExpiry: string | undefined;
+    for (const exp of visibleTableExpiries) {
+      const cell = row.cells.get(exp);
+      if (!cell) continue;
+      const token = optionType === 'CE' ? cell.ceToken : cell.peToken;
+      const price = optionType === 'CE' ? cell.ceClose : cell.peClose;
+      if (token && price) {
+        chosenCell = cell;
+        chosenExpiry = exp;
+        break;
+      }
+    }
+
+    if (!chosenCell || !chosenExpiry) {
+      showToast(`No ${optionType} data at strike ${targetStrike}`, 'red');
+      return;
+    }
+
+    void handleTrade(chosenCell, optionType, side, targetStrike, chosenExpiry);
+  }, [chartData, atmStrike, tableData, visibleTableExpiries, handleTrade, showToast]);
 
   /** Expiry colors for chart lines */
   const expiryColors = useMemo(() => {
@@ -2470,6 +2543,15 @@ const OiHistory: React.FC = () => {
                       <strong>{chartData.tradeSetup.target}</strong>
                     </div>
                   </div>
+                  {(chartData.tradeSetup.direction === 'Bullish' || chartData.tradeSetup.direction === 'Bearish') && (
+                    <button
+                      type="button"
+                      className="oi-history__setup-trade-btn oi-history__setup-trade-btn--buy"
+                      onClick={() => tradeFromSetup('buy')}
+                    >
+                      Trade this setup &middot; Buy {chartData.tradeSetup.direction === 'Bullish' ? 'CE' : 'PE'}
+                    </button>
+                  )}
                 </div>
 
                 <div className={`oi-history__setup-mode-card oi-history__setup-mode-card--${chartData.sellingSetup.status.toLowerCase()}`}>
@@ -2501,6 +2583,15 @@ const OiHistory: React.FC = () => {
                       <strong>{chartData.sellingSetup.target}</strong>
                     </div>
                   </div>
+                  {(chartData.sellingSetup.type === 'Call Sell' || chartData.sellingSetup.type === 'Put Sell') && (
+                    <button
+                      type="button"
+                      className="oi-history__setup-trade-btn oi-history__setup-trade-btn--sell"
+                      onClick={() => tradeFromSetup('sell')}
+                    >
+                      Trade this setup &middot; Sell {chartData.sellingSetup.type === 'Call Sell' ? 'CE' : 'PE'}
+                    </button>
+                  )}
                 </div>
               </div>
 

@@ -33,7 +33,27 @@ export async function loadInstruments(): Promise<Instrument[]> {
 
   const json = await res.json();
   memoryCache = json.data as Instrument[];
+  lotSizeByToken = null; // rebuild lazily on next lookup
   return memoryCache;
+}
+
+/** Token → lot size map, built lazily from the loaded instruments cache. */
+let lotSizeByToken: Map<number, number> | null = null;
+
+/**
+ * Look up an instrument's lot size by token from the loaded instruments cache.
+ * Returns null if instruments aren't loaded yet or the token isn't found,
+ * so callers can decide on a sensible fallback.
+ */
+export function getLotSizeByToken(instrumentToken: number): number | null {
+  if (!memoryCache) return null;
+  if (!lotSizeByToken) {
+    lotSizeByToken = new Map();
+    for (const inst of memoryCache) {
+      if (inst.lotSize && inst.lotSize > 0) lotSizeByToken.set(inst.instrumentToken, inst.lotSize);
+    }
+  }
+  return lotSizeByToken.get(instrumentToken) ?? null;
 }
 
 /**

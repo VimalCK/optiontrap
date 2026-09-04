@@ -1085,6 +1085,38 @@
   letter-spacing: -0.01em;
 }
 
+.oi-history__setup-trade-btn {
+  margin-top: auto;
+  padding: 11px 14px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.oi-history__setup-trade-btn:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.08);
+}
+
+.oi-history__setup-trade-btn:active {
+  transform: translateY(0);
+}
+
+.oi-history__setup-trade-btn--buy {
+  background: linear-gradient(135deg, #16a34a, #22c55e);
+  box-shadow: 0 10px 24px -14px rgba(34, 197, 94, 0.9);
+}
+
+.oi-history__setup-trade-btn--sell {
+  background: linear-gradient(135deg, #dc2626, #ef4444);
+  box-shadow: 0 10px 24px -14px rgba(239, 68, 68, 0.9);
+}
+
 .oi-history__setup-mode-card p,
 .oi-history__setup-mode-card em {
   color: var(--text-secondary);
