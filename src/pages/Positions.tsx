@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getPositions, exitPosition, Position } from '@/services/positions';
 
@@ -150,12 +150,69 @@ const PayoffChart: React.FC<{ group: RiskGroup; oiBars?: OiBar[] }> = ({ group, 
     return n.toFixed(0);
   };
 
+  // ── Hover interaction ────────────────────────────────────────────────
+  const strikes = [...new Set(group.legs.map((l) => l.position.strike))].sort((a, b) => a - b);
+
+  // Exact payoff at an arbitrary price via linear interpolation between the
+  // sampled curve points (kinks are sampled, so interpolation is exact).
+  const payoffAt = (price: number): number => {
+    const pts = points;
+    if (pts.length === 0) return 0;
+    if (price <= pts[0].price) return pts[0].payoff;
+    if (price >= pts[pts.length - 1].price) return pts[pts.length - 1].payoff;
+    for (let i = 1; i < pts.length; i++) {
+      if (price <= pts[i].price) {
+        const a = pts[i - 1];
+        const b = pts[i];
+        const t = b.price === a.price ? 0 : (price - a.price) / (b.price - a.price);
+        return a.payoff + t * (b.payoff - a.payoff);
+      }
+    }
+    return pts[pts.length - 1].payoff;
+  };
+
+  const [hover, setHover] = useState<{ price: number; payoff: number } | null>(null);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+
+  const handleMove = (e: React.MouseEvent<SVGSVGElement>) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    if (rect.width === 0) return;
+    // Client px → SVG viewBox coords.
+    const mx = ((e.clientX - rect.left) / rect.width) * W;
+    if (mx < PAD.left || mx > W - PAD.right) { setHover(null); return; }
+
+    let price = minPrice + ((mx - PAD.left) / (plotW || 1)) * (maxPrice - minPrice);
+    price = Math.max(minPrice, Math.min(maxPrice, price));
+
+    // Soft-snap to a nearby strike (within ~10px).
+    const SNAP_PX = 10;
+    let bestStrike: number | null = null;
+    let bestDist = SNAP_PX;
+    for (const s of strikes) {
+      const d = Math.abs(xScale(s) - mx);
+      if (d <= bestDist) { bestDist = d; bestStrike = s; }
+    }
+    if (bestStrike != null) price = bestStrike;
+
+    setHover({ price, payoff: payoffAt(price) });
+  };
+
   // Unique pattern ids per chart instance (avoids SVG defs collisions).
   const profitPatternId = `hatch-profit-${group.key}`;
   const lossPatternId = `hatch-loss-${group.key}`;
 
   return (
-    <svg className="payoff-chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Payoff curve">
+    <svg
+      ref={svgRef}
+      className="payoff-chart"
+      viewBox={`0 0 ${W} ${H}`}
+      role="img"
+      aria-label="Payoff curve"
+      onMouseMove={handleMove}
+      onMouseLeave={() => setHover(null)}
+    >
       <defs>
         {/* Diagonal hairline hatch over a translucent fill (same slope both sides) */}
         <pattern id={profitPatternId} patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
@@ -274,6 +331,40 @@ const PayoffChart: React.FC<{ group: RiskGroup; oiBars?: OiBar[] }> = ({ group, 
           </text>
         </g>
       ))}
+
+      {/* Hover crosshair + dot + tooltip */}
+      {hover && (() => {
+        const hx = xScale(hover.price);
+        const hy = yScale(hover.payoff);
+        const isProfit = hover.payoff >= 0;
+        const priceStr = `When Price is at ${hover.price.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+        const pnlStr = `Expected P&L on expiry: ${hover.payoff >= 0 ? '+' : ''}${hover.payoff.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+        const tipW = 250;
+        const tipH = 46;
+        // Flip the tooltip to the left of the cursor near the right edge.
+        const flip = hx + 14 + tipW > W - PAD.right;
+        const tipX = flip ? hx - 14 - tipW : hx + 14;
+        const tipY = Math.max(PAD.top, Math.min(hy - tipH / 2, H - PAD.bottom - tipH));
+        return (
+          <g className="payoff-chart__hover">
+            <line x1={hx} y1={PAD.top} x2={hx} y2={H - PAD.bottom} className="payoff-chart__crosshair" />
+            <circle cx={hx} cy={hy} r={4.5} className="payoff-chart__hover-dot" />
+            <g>
+              <rect x={tipX} y={tipY} width={tipW} height={tipH} rx={5} className="payoff-chart__tooltip-bg" />
+              <text x={tipX + 10} y={tipY + 18} className="payoff-chart__tooltip-text">
+                {priceStr}
+              </text>
+              <text
+                x={tipX + 10}
+                y={tipY + 35}
+                className={`payoff-chart__tooltip-text payoff-chart__tooltip-pnl ${isProfit ? 'positive' : 'negative'}`}
+              >
+                {pnlStr}
+              </text>
+            </g>
+          </g>
+        );
+      })()}
 
     </svg>
   );

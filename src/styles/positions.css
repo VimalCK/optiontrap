@@ -606,6 +606,45 @@
   stroke-width: 1;
 }
 
+.payoff-chart {
+  cursor: crosshair;
+}
+
+.payoff-chart__crosshair {
+  stroke: rgba(255, 255, 255, 0.35);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+  pointer-events: none;
+}
+
+.payoff-chart__hover-dot {
+  fill: #fff;
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+.payoff-chart__tooltip-bg {
+  fill: rgba(20, 22, 28, 0.95);
+  stroke: rgba(255, 255, 255, 0.15);
+  stroke-width: 1;
+  pointer-events: none;
+}
+
+.payoff-chart__tooltip-text {
+  fill: var(--text-primary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+.payoff-chart__tooltip-pnl {
+  font-weight: 700;
+}
+
+.payoff-chart__tooltip-pnl.positive { fill: #22c55e; }
+.payoff-chart__tooltip-pnl.negative { fill: #ef4444; }
+
 .payoff-chart__be-line {
   stroke: rgba(34, 197, 94, 0.5);
   stroke-width: 1;
