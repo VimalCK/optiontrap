@@ -449,12 +449,6 @@
   border-color: rgba(129, 140, 248, 0.6);
 }
 
-.risk-card__chart-icon {
-  font-size: 13px;
-  margin-left: 4px;
-  opacity: 0.7;
-}
-
 /* Payoff modal */
 .payoff-modal__backdrop {
   position: fixed;

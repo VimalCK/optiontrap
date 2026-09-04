@@ -881,10 +881,17 @@ export async function saveInstruments(instruments, dateIST) {
 // ---------------------------------------------------------------------------
 
 export async function getPositions(userId, mode = null) {
+  // Exclude positions that were exited before today (IST). Open positions are
+  // always returned; exited positions only if they were exited today.
+  // exit_time is stored as an ISO-8601 UTC string, which sorts chronologically,
+  // so a plain string comparison against today's IST-midnight threshold works.
+  const todayStart = new Date(getTodayMidnight()).toISOString();
+
+  const notPastExit = '(exited = 0 OR exit_time >= $%d)';
   const sql = mode
-    ? 'SELECT * FROM positions WHERE user_id = $1 AND mode = $2 ORDER BY entry_time DESC'
-    : 'SELECT * FROM positions WHERE user_id = $1 ORDER BY entry_time DESC';
-  const params = mode ? [userId, mode] : [userId];
+    ? `SELECT * FROM positions WHERE user_id = $1 AND mode = $2 AND ${notPastExit.replace('%d', '3')} ORDER BY entry_time DESC`
+    : `SELECT * FROM positions WHERE user_id = $1 AND ${notPastExit.replace('%d', '2')} ORDER BY entry_time DESC`;
+  const params = mode ? [userId, mode, todayStart] : [userId, todayStart];
 
   const result = await rows(sql, params);
   return result.map(mapPositionRow);

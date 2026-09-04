@@ -379,7 +379,6 @@ const RiskPanel: React.FC<{ groups: RiskGroup[] }> = ({ groups }) => {
                   ⚠ Invalidation hit
                 </span>
               )}
-              <span className="risk-card__chart-icon" aria-hidden="true">📈</span>
             </div>
 
             <div className="risk-card__metrics">
@@ -455,16 +454,9 @@ const PaperPositions: React.FC = () => {
   const [loading, setLoading] = useState(true);
 
   const loadPositions = useCallback(async () => {
+    // Server already excludes positions exited before today (IST).
     const pos = await getPositions();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const filtered = pos.filter((p) => {
-      if (!p.exited || !p.exitTime) return true;
-      const exitDate = new Date(p.exitTime);
-      exitDate.setHours(0, 0, 0, 0);
-      return exitDate.getTime() >= today.getTime();
-    });
-    setPositions(filtered);
+    setPositions(pos);
     setLoading(false);
   }, []);
 
