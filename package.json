@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node scripts/start-db.mjs",
     "dev": "concurrently -n server,client -c blue,green \"node --watch-path=server/index.js --watch-path=server/db.js --watch-path=server/sessionStore.js --watch-path=server/rateLimit.js --watch-path=server/instruments.js server/index.js\" \"vite\"",
     "dev:client": "vite",
     "dev:server": "node --watch-path=server/index.js --watch-path=server/db.js --watch-path=server/sessionStore.js --watch-path=server/rateLimit.js --watch-path=server/instruments.js server/index.js",
