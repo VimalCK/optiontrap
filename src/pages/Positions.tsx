@@ -11,15 +11,32 @@ import {
   computeRiskGroups,
   samplePayoffCurve,
   loadGroupOi,
+  underlyingFromSymbol,
   RiskGroup,
   OiBar,
 } from '@/services/positionRisk';
+import { loadInstruments, Instrument } from '@/services/instruments';
 import '@/styles/positions.css';
 
 const fmtInr = (n: number) =>
   `${n >= 0 ? '+' : ''}${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 export type PositionsMode = 'paper' | 'live';
+
+const INDEX_SPOTS: Record<string, { token: number; quoteKey: string }> = {
+  NIFTY: { token: 256265, quoteKey: 'NSE:NIFTY 50' },
+  BANKNIFTY: { token: 260105, quoteKey: 'NSE:NIFTY BANK' },
+};
+
+function getSpotInstrument(underlying: string, instruments: Instrument[]): { token: number; quoteKey: string } | null {
+  const indexSpot = INDEX_SPOTS[underlying];
+  if (indexSpot) return indexSpot;
+
+  const eq = instruments.find(
+    (inst) => inst.exchange === 'NSE' && inst.instrumentType === 'EQ' && inst.tradingsymbol === underlying,
+  );
+  return eq ? { token: eq.instrumentToken, quoteKey: `${eq.exchange}:${eq.tradingsymbol}` } : null;
+}
 
 /**
  * Generate rounded ("nice") axis tick values covering [min, max].
@@ -48,7 +65,11 @@ function niceTicks(min: number, max: number, targetCount: number): number[] {
  * Renders the P&L-at-expiry line (split green/red), a zero axis, and
  * breakeven markers.
  */
-const PayoffChart: React.FC<{ group: RiskGroup; oiBars?: OiBar[] }> = ({ group, oiBars }) => {
+const PayoffChart: React.FC<{ group: RiskGroup; oiBars?: OiBar[]; spotPrice?: number | null }> = ({
+  group,
+  oiBars,
+  spotPrice,
+}) => {
   const W = 900;
   const H = 460;
   const hasOi = !!oiBars && oiBars.length > 0;
@@ -57,7 +78,7 @@ const PayoffChart: React.FC<{ group: RiskGroup; oiBars?: OiBar[] }> = ({ group, 
   const plotW = W - PAD.left - PAD.right;
   const plotH = H - PAD.top - PAD.bottom;
 
-  const curve = samplePayoffCurve(group);
+  const curve = samplePayoffCurve(group, spotPrice ?? undefined);
   const { points, minPrice, maxPrice } = curve;
 
   // Symmetric payoff domain so the zero P&L line sits exactly at the vertical
@@ -173,6 +194,9 @@ const PayoffChart: React.FC<{ group: RiskGroup; oiBars?: OiBar[] }> = ({ group, 
 
   const [hover, setHover] = useState<{ price: number; payoff: number } | null>(null);
   const svgRef = useRef<SVGSVGElement | null>(null);
+  const spotMarker = spotPrice != null && spotPrice > 0 && spotPrice >= minPrice && spotPrice <= maxPrice
+    ? { price: spotPrice, payoff: payoffAt(spotPrice) }
+    : null;
 
   const handleMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const svg = svgRef.current;
@@ -322,6 +346,32 @@ const PayoffChart: React.FC<{ group: RiskGroup; oiBars?: OiBar[] }> = ({ group, 
       {red.line && <path d={red.line} className="payoff-chart__line-loss" fill="none" />}
       {green.line && <path d={green.line} className="payoff-chart__line-profit" fill="none" />}
 
+      {/* Current underlying marker: where today's spot sits on the expiry payoff curve. */}
+      {spotMarker && (() => {
+        const sx = xScale(spotMarker.price);
+        const sy = yScale(spotMarker.payoff);
+        const isProfit = spotMarker.payoff >= 0;
+        const labelW = 184;
+        const labelH = 48;
+        const labelX = Math.max(PAD.left + 6, Math.min(sx + 10, W - PAD.right - labelW - 6));
+        const labelY = Math.max(PAD.top + 6, Math.min(sy - labelH - 10, H - PAD.bottom - labelH - 6));
+        return (
+          <g className={`payoff-chart__spot payoff-chart__spot--${isProfit ? 'profit' : 'loss'}`}>
+            <line x1={sx} y1={PAD.top} x2={sx} y2={H - PAD.bottom} className="payoff-chart__spot-line" />
+            <circle cx={sx} cy={sy} r={5} className="payoff-chart__spot-dot" />
+            <g>
+              <rect x={labelX} y={labelY} width={labelW} height={labelH} rx={6} className="payoff-chart__spot-label-bg" />
+              <text x={labelX + 10} y={labelY + 19} className="payoff-chart__spot-label">
+                Spot {spotMarker.price.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+              </text>
+              <text x={labelX + 10} y={labelY + 37} className="payoff-chart__spot-pnl">
+                {isProfit ? 'Profit' : 'Loss'} {fmtInr(spotMarker.payoff)}
+              </text>
+            </g>
+          </g>
+        );
+      })()}
+
       {/* Breakeven markers */}
       {group.breakevens.map((be, i) => (
         <g key={i}>
@@ -377,8 +427,9 @@ const expiryLabel = (iso: string) =>
  * PayoffModal — full-size payoff curve in a centered overlay.
  * Closes on backdrop click, the × button, or Esc.
  */
-const PayoffModal: React.FC<{ group: RiskGroup; onClose: () => void }> = ({
+const PayoffModal: React.FC<{ group: RiskGroup; spotPrice?: number | null; onClose: () => void }> = ({
   group,
+  spotPrice,
   onClose,
 }) => {
   const [oiBars, setOiBars] = useState<OiBar[]>([]);
@@ -418,7 +469,7 @@ const PayoffModal: React.FC<{ group: RiskGroup; onClose: () => void }> = ({
         </div>
 
         <div className="payoff-modal__chart">
-          <PayoffChart group={group} oiBars={oiBars} />
+          <PayoffChart group={group} oiBars={oiBars} spotPrice={spotPrice} />
         </div>
         {oiBars.length > 0 && (
           <div className="payoff-modal__legend">
@@ -437,7 +488,7 @@ const PayoffModal: React.FC<{ group: RiskGroup; onClose: () => void }> = ({
  * and an invalidation-hit flag against journal stop-loss levels.
  * Clicking a card opens the payoff curve in a modal popup.
  */
-const RiskPanel: React.FC<{ groups: RiskGroup[] }> = ({ groups }) => {
+const RiskPanel: React.FC<{ groups: RiskGroup[]; spotPrices: Map<string, number> }> = ({ groups, spotPrices }) => {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   if (groups.length === 0) return null;
@@ -532,6 +583,7 @@ const RiskPanel: React.FC<{ groups: RiskGroup[] }> = ({ groups }) => {
       {selected && (
         <PayoffModal
           group={selected}
+          spotPrice={spotPrices.get(selected.underlying)}
           onClose={() => setSelectedKey(null)}
         />
       )}
@@ -542,6 +594,7 @@ const RiskPanel: React.FC<{ groups: RiskGroup[] }> = ({ groups }) => {
 const PaperPositions: React.FC = () => {
   const [positions, setPositions] = useState<Position[]>([]);
   const [livePrices, setLivePrices] = useState<Map<number, number>>(new Map());
+  const [spotPrices, setSpotPrices] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
 
   const loadPositions = useCallback(async () => {
@@ -577,6 +630,68 @@ const PaperPositions: React.FC = () => {
         setLivePrices(priceMap);
       }).catch(() => {});
     }
+  }, [positions]);
+
+  useEffect(() => {
+    const underlyings = [...new Set(
+      positions
+        .filter((p) => !p.exited)
+        .map((p) => underlyingFromSymbol(p.tradingsymbol)),
+    )];
+
+    if (underlyings.length === 0) {
+      setSpotPrices(new Map());
+      return;
+    }
+
+    let cancelled = false;
+    let unsubscribe: (() => void) | undefined;
+
+    const loadSpotPrices = async () => {
+      const needsInstruments = underlyings.some((underlying) => !INDEX_SPOTS[underlying]);
+      const instruments = needsInstruments ? await loadInstruments().catch(() => []) : [];
+      if (cancelled) return;
+
+      const spotMeta = underlyings
+        .map((underlying) => ({ underlying, spot: getSpotInstrument(underlying, instruments) }))
+        .filter((item): item is { underlying: string; spot: { token: number; quoteKey: string } } => item.spot != null);
+
+      if (spotMeta.length === 0) return;
+
+      if (isMarketLive()) {
+        const byToken = new Map(spotMeta.map((item) => [item.spot.token, item.underlying]));
+        unsubscribe = tickerSubscribe('paper-position-spots', [...byToken.keys()], (ticks: Tick[]) => {
+          setSpotPrices((prev) => {
+            const next = new Map(prev);
+            ticks.forEach((tick) => {
+              const underlying = byToken.get(tick.instrumentToken);
+              if (underlying) next.set(underlying, tick.lastPrice);
+            });
+            return next;
+          });
+        });
+        return;
+      }
+
+      const quotes = await fetchQuotes(spotMeta.map((item) => item.spot.quoteKey));
+      if (cancelled) return;
+
+      setSpotPrices((prev) => {
+        const next = new Map(prev);
+        spotMeta.forEach((item) => {
+          const quote = quotes.get(item.spot.quoteKey);
+          if (quote && quote.last_price > 0) next.set(item.underlying, quote.last_price);
+        });
+        return next;
+      });
+    };
+
+    loadSpotPrices();
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
   }, [positions]);
 
   const handleExit = async (id: string, instrumentToken: number) => {
@@ -627,7 +742,7 @@ const PaperPositions: React.FC = () => {
       </div>
 
       {/* Position Risk Panel */}
-      <RiskPanel groups={riskGroups} />
+      <RiskPanel groups={riskGroups} spotPrices={spotPrices} />
 
       {/* Positions Table */}
       <div className="card">
@@ -653,10 +768,10 @@ const PaperPositions: React.FC = () => {
                   <td>
                     <span className="positions-table__instrument">
                       <span className="positions-table__name">{pos.tradingsymbol.replace(/\d.*/,'')}</span>
-                      <TradingViewLink symbol={pos.tradingsymbol} exchange="NFO" />
                       <span className="positions-table__strike">{pos.strike}</span>
                       <span className={`positions-table__type positions-table__type--${pos.optionType.toLowerCase()}`}>{pos.optionType}</span>
                       <span className="positions-table__expiry">{new Date(pos.expiry).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
+                      <TradingViewLink symbol={pos.tradingsymbol} exchange="NFO" />
                     </span>
                     {(pos.strategyTag || pos.confidence != null || pos.targetPrice != null || pos.stopLossPrice != null || pos.note) && (
                       <div className="positions-table__meta">
