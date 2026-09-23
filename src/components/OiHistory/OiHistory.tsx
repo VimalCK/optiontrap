@@ -1121,9 +1121,13 @@ const OiHistory: React.FC = () => {
   const [strikeRange, setStrikeRange] = useState<number>(() => {
     const stored = localStorage.getItem('optiontrap_strike_range');
     const val = stored ? parseInt(stored, 10) : 10;
-    // 0 ("All") is no longer offered — fall back to 10
-    return [5, 10, 20].includes(val) ? val : 10;
+    return [-1, 0, 5, 10, 20].includes(val) ? val : 10;
   });
+  const [specificStrike, setSpecificStrike] = useState<string>(() => localStorage.getItem('optiontrap_specific_strike') || '');
+  const specificStrikeValue = useMemo(() => {
+    const value = Number(specificStrike);
+    return Number.isFinite(value) && value > 0 ? value : null;
+  }, [specificStrike]);
 
   // Warm the instruments cache so lot sizes are available for setup trades.
   useEffect(() => {
@@ -1234,7 +1238,12 @@ const OiHistory: React.FC = () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       credentials: 'include',
-      body: JSON.stringify({ scrip, expiryMonth: month }),
+      body: JSON.stringify({
+        scrip,
+        expiryMonth: month,
+        strikeMode: strikeRange === -1 ? 'specific' : strikeRange === 0 ? 'allStored' : 'atmRange',
+        specificStrike: strikeRange === -1 ? specificStrikeValue : undefined,
+      }),
     });
 
     if (!res.ok || !res.body) {
@@ -1299,10 +1308,15 @@ const OiHistory: React.FC = () => {
       }
     }
     if (buffer.trim()) processBlock(buffer);
-  }, [scrip]);
+  }, [scrip, strikeRange, specificStrikeValue]);
 
   /** Fetch current/future included expiry months from Kite. Historical months are loaded from DB only. */
   const handleFetch = useCallback(async () => {
+    if (strikeRange === -1 && specificStrikeValue === null) {
+      setFetchError('Enter a valid strike to fetch specific OI history.');
+      return;
+    }
+
     if (fetchableExpiryMonths.length === 0) {
       setFetchResult('Selected month is historical only. Stored database data is already loaded.');
       return;
@@ -1326,7 +1340,7 @@ const OiHistory: React.FC = () => {
       setFetching(false);
       loadData();
     }
-  }, [fetchableExpiryMonths, fetchExpiryMonth, loadData]);
+  }, [fetchableExpiryMonths, fetchExpiryMonth, loadData, strikeRange, specificStrikeValue]);
 
   // When scrip or expiry month changes, load existing data from the DB only.
   // Fetching fresh data from Kite is an explicit action via the Fetch button.
@@ -1516,32 +1530,29 @@ const OiHistory: React.FC = () => {
     [monthlyExpirySet],
   );
 
-  /** Dates that are weekly expiries in the loaded trading dates. */
-  const weeklyExpiryDates = useMemo(() => {
-    const knownWeeklyExpiries = expiries.filter((exp) => !isMonthlyExpiry(exp));
-    const weeklyExpiryWeekdays = new Set(
-      knownWeeklyExpiries.map((exp) => new Date(`${exp}T00:00:00`).getDay()),
+  /** Dates that should be marked as expiry days in the loaded trading dates. */
+  const expiryMarkerDates = useMemo(() => {
+    const current = currentMonthIST();
+    const currentMonthExpiries = expiries.filter((exp) => exp.slice(0, 7) === current);
+    const currentExpiryWeekdays = new Set(
+      currentMonthExpiries.map((exp) => new Date(`${exp}T00:00:00`).getDay()),
     );
+    const set = new Set<string>();
 
-    const set = new Set<string>(knownWeeklyExpiries);
-    if (weeklyExpiryWeekdays.size === 0) return set;
+    for (const exp of currentMonthExpiries) {
+      set.add(exp);
+    }
 
-    if (availableDates.length === 0) return set;
-
-    const [year, month] = availableDates[availableDates.length - 1].slice(0, 7).split('-').map(Number);
-    const daysInMonth = new Date(year, month, 0).getDate();
-    const availableDateSet = new Set(availableDates);
-
-    for (let day = 1; day <= daysInMonth; day++) {
-      const date = new Date(year, month - 1, day);
-      const dateKey = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      if (weeklyExpiryWeekdays.has(date.getDay()) && !isMonthlyExpiry(dateKey) && availableDateSet.has(dateKey)) {
-        set.add(dateKey);
+    for (const date of availableDates) {
+      if (date.slice(0, 7) !== current) continue;
+      const weekday = new Date(`${date}T00:00:00`).getDay();
+      if (currentExpiryWeekdays.has(weekday)) {
+        set.add(date);
       }
     }
 
     return set;
-  }, [availableDates, expiries, isMonthlyExpiry]);
+  }, [availableDates, expiries]);
 
   /** Rows for the selected date */
   const filteredRows = useMemo(() => {
@@ -1608,10 +1619,14 @@ const OiHistory: React.FC = () => {
 
   // Auto-select ATM strike to show chart on load
   useEffect(() => {
+    if (strikeRange === -1 && specificStrikeValue !== null) {
+      setSelectedStrike(specificStrikeValue);
+      return;
+    }
     if (atmStrike) {
       setSelectedStrike(atmStrike);
     }
-  }, [atmStrike]);
+  }, [atmStrike, strikeRange, specificStrikeValue]);
 
   /** Build table data: rows = strikes, columns = expiries */
   const tableData = useMemo(() => {
@@ -1745,6 +1760,10 @@ const OiHistory: React.FC = () => {
         dimmed: boolean;
       }[];
 
+    if (strikeRange === -1) {
+      return specificStrikeValue === null ? [] : rows.filter((row) => row.strike === specificStrikeValue);
+    }
+
     // Limit strikes around ATM based on selected range
     if (strikeRange > 0 && atmStrike && rows.length > 0) {
       const atmIdx = rows.findIndex((r) => r.strike >= atmStrike);
@@ -1755,7 +1774,7 @@ const OiHistory: React.FC = () => {
     }
 
     return rows;
-  }, [filteredRows, visibleTableExpiries, prevDayOi, prevDayClose, scrip, atmStrike, strikeRange]);
+  }, [filteredRows, visibleTableExpiries, prevDayOi, prevDayClose, scrip, atmStrike, strikeRange, specificStrikeValue]);
 
   const maxConsolidatedOi = useMemo(() => {
     let max = 0;
@@ -1771,13 +1790,14 @@ const OiHistory: React.FC = () => {
   // otherwise clear the selection.
   useEffect(() => {
     if (selectedStrike === null) return;
+    if (strikeRange === -1) return;
     if (tableData.some((r) => r.strike === selectedStrike)) return;
     if (atmStrike && tableData.some((r) => r.strike === atmStrike)) {
       setSelectedStrike(atmStrike);
     } else {
       setSelectedStrike(null);
     }
-  }, [tableData, selectedStrike, atmStrike]);
+  }, [tableData, selectedStrike, atmStrike, strikeRange]);
 
   /** Chart data for selected strike across all dates */
   const chartData = useMemo(() => {
@@ -1962,9 +1982,29 @@ const OiHistory: React.FC = () => {
               { value: 5, label: '5' },
               { value: 10, label: '10' },
               { value: 20, label: '20' },
+              { value: 0, label: 'All' },
+              { value: -1, label: 'Specific' },
             ]}
             onChange={(v) => { const val = Number(v); setStrikeRange(val); localStorage.setItem('optiontrap_strike_range', String(val)); }}
           />
+
+          {strikeRange === -1 && (
+            <label className="oi-history__label">
+              <input
+                className="app-input oi-history__specific-strike"
+                type="number"
+                min="0"
+                step="50"
+                placeholder="Strike"
+                value={specificStrike}
+                onChange={(event) => {
+                  setSpecificStrike(event.target.value);
+                  localStorage.setItem('optiontrap_specific_strike', event.target.value);
+                }}
+                disabled={fetching}
+              />
+            </label>
+          )}
 
           <div className="oi-history__primary-actions">
             <button
@@ -2121,13 +2161,13 @@ const OiHistory: React.FC = () => {
               <span className="oi-history__date-group-label">{formatMonthShortLabel(month)}</span>
               <div className="oi-history__date-group-days">
                 {dates.map((d) => {
-                  const isWeeklyExpiry = weeklyExpiryDates.has(d);
+                  const isExpiryDay = expiryMarkerDates.has(d);
                   return (
                     <button
                       key={d}
-                      className={`oi-history__date-btn ${filterDate === d ? 'oi-history__date-btn--active' : ''} ${isWeeklyExpiry ? 'oi-history__date-btn--weekly-expiry' : ''}`}
+                      className={`oi-history__date-btn ${filterDate === d ? 'oi-history__date-btn--active' : ''} ${isExpiryDay ? 'oi-history__date-btn--weekly-expiry' : ''}`}
                       onClick={() => setFilterDate(d)}
-                      title={`${formatFullDateLabel(d)}${isWeeklyExpiry ? ' — Weekly expiry' : ''}`}
+                      title={`${formatFullDateLabel(d)}${isExpiryDay ? ' — Expiry day' : ''}`}
                     >
                       {Number(d.slice(8))}
                     </button>

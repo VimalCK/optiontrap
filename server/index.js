@@ -74,9 +74,10 @@ import {
   getOiHistoryData,
   getOiHistoryDataByExpiryMonth,
   getOiHistoryDatesForExpiryMonth,
-  getOiHistoryExpiryMonths,
   getStoredOiHistoryExpiryMonths,
+  getStoredOiHistoryStrikes,
   getOptionsForAtm,
+  getOptionsForStrikes,
   deleteOiHistoryByMonth,
   deleteOiHistoryByExpiryMonth,
   deleteOiHistoryBeforeExpiryMonth,
@@ -925,7 +926,7 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
   };
 
   try {
-    const { scrip, expiryMonth } = req.body;
+    const { scrip, expiryMonth, strikeMode = 'atmRange', specificStrike } = req.body;
     if (!scrip || !expiryMonth) {
       send('error', { message: 'scrip and expiryMonth are required' });
       return res.end();
@@ -933,6 +934,12 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
 
     if (!/^\d{4}-\d{2}$/.test(expiryMonth)) {
       send('error', { message: 'expiryMonth must be in YYYY-MM format' });
+      return res.end();
+    }
+
+    const exactStrike = Number(specificStrike);
+    if (strikeMode === 'specific' && (!Number.isFinite(exactStrike) || exactStrike <= 0)) {
+      send('error', { message: 'specificStrike must be a positive number' });
       return res.end();
     }
 
@@ -967,6 +974,8 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
 
     const stepSize = await getStrikeStepSize(scripName);
     const range = 20;
+    const fetchAllStoredStrikes = strikeMode === 'allStored';
+    const fetchSpecificStrike = strikeMode === 'specific';
 
     await createOiHistoryTable();
 
@@ -999,7 +1008,12 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
       // Step 2: For each trading day, compute ATM. Past stored dates are skipped;
       // today is always refreshed because intraday OI can change until close.
       // This runs INSIDE the lock so a waiting caller sees the latest stored dates.
-      const existingDates = await getOiHistoryDatesForExpiryMonth(scrip, expiryMonth, from, to);
+      const existingDates = fetchAllStoredStrikes || fetchSpecificStrike
+        ? new Set()
+        : await getOiHistoryDatesForExpiryMonth(scrip, expiryMonth, from, to);
+      const storedStrikes = fetchAllStoredStrikes
+        ? await getStoredOiHistoryStrikes(scrip, expiryMonth)
+        : [];
       send('step', { step: 2, message: `Found ${spotCandles.length} trading days.` });
 
       const allDays = []; // all trading days from Kite
@@ -1024,7 +1038,15 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
       const dayTokenSets = [];
 
       for (const { date, spotClose, atm } of allDays) {
-        const options = (await getOptionsForAtm(scripName, atm, stepSize, range, { allExpiries: true, targetMonth: expiryMonth }))
+        let optionsSource;
+        if (fetchSpecificStrike) {
+          optionsSource = await getOptionsForStrikes(scripName, [exactStrike], { targetMonth: expiryMonth });
+        } else if (fetchAllStoredStrikes && storedStrikes.length > 0) {
+          optionsSource = await getOptionsForStrikes(scripName, storedStrikes, { targetMonth: expiryMonth });
+        } else {
+          optionsSource = await getOptionsForAtm(scripName, atm, stepSize, range, { allExpiries: true, targetMonth: expiryMonth });
+        }
+        const options = optionsSource
           .filter((opt) => opt.expiry && opt.expiry >= date);
         const tokenSet = new Set();
         for (const opt of options) {
@@ -1156,11 +1178,25 @@ app.get('/api/oi-history/expiry-months', requireAuth, requireSubscription, async
     }
 
     const { apiKey, accessToken } = req.session.kiteSession;
-    await getOrFetchInstruments(apiKey, accessToken);
+    const instruments = await getOrFetchInstruments(apiKey, accessToken);
+    const scripName = scrip === 'NIFTY50' ? 'NIFTY' : scrip;
+    const minExpiryDate = todayIST();
+    const liveMonths = [...new Set(
+      instruments
+        .filter((inst) =>
+          inst.name === scripName &&
+          inst.exchange === 'NFO' &&
+          (inst.instrumentType === 'CE' || inst.instrumentType === 'PE') &&
+          inst.expiry &&
+          inst.expiry >= minExpiryDate
+        )
+        .map((inst) => inst.expiry.slice(0, 7))
+        .sort(),
+    )].slice(0, 3);
 
     const months = [...new Set([
       ...await getStoredOiHistoryExpiryMonths(scrip),
-      ...await getOiHistoryExpiryMonths(scrip, todayIST()),
+      ...liveMonths,
     ])].sort();
     res.json({ status: 'ok', months });
   } catch (err) {

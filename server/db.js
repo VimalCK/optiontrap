@@ -1340,6 +1340,48 @@ export async function getOptionsForAtm(scripName, atmStrike, stepSize = 50, rang
   return all.filter((r) => r.expiry === targetExpiry);
 }
 
+export async function getOptionsForStrikes(scripName, strikes, { targetMonth = '' } = {}) {
+  const uniqueStrikes = [...new Set(strikes.map(Number).filter(Number.isFinite))].sort((a, b) => a - b);
+  if (uniqueStrikes.length === 0) return [];
+
+  let sql = `SELECT instrument_token, tradingsymbol, strike, instrument_type, expiry
+     FROM instruments
+     WHERE name = $1
+       AND exchange = 'NFO'
+       AND instrument_type IN ('CE', 'PE')
+       AND strike = ANY($2::double precision[])`;
+  const params = [scripName, uniqueStrikes];
+
+  if (targetMonth) {
+    sql += ' AND expiry LIKE $3 || \'%\'';
+    params.push(targetMonth);
+  }
+
+  sql += ' ORDER BY expiry, strike, instrument_type';
+
+  const result = await rows(sql, params);
+  return result.map((row) => ({
+    instrumentToken: Number(row.instrument_token),
+    tradingsymbol: row.tradingsymbol,
+    strike: row.strike,
+    optionType: row.instrument_type,
+    expiry: row.expiry,
+  }));
+}
+
+export async function getStoredOiHistoryStrikes(scrip, expiryMonth) {
+  const result = await rows(
+    `SELECT DISTINCT strike
+     FROM oi_history
+     WHERE scrip = $1
+       AND expiry LIKE $2 || '%'
+       AND strike IS NOT NULL
+     ORDER BY strike`,
+    [scrip, expiryMonth],
+  );
+  return result.map((r) => Number(r.strike)).filter(Number.isFinite);
+}
+
 export async function getOiHistoryDates(scrip, fromDate, toDate, minExpiries = 0) {
   let where = ' WHERE scrip = $1';
   const params = [scrip];

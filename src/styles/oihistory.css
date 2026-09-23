@@ -34,6 +34,10 @@
   width: 180px;
 }
 
+.oi-history__specific-strike {
+  width: 96px;
+}
+
 .oi-history__primary-actions {
   display: inline-flex;
   align-items: flex-end;
