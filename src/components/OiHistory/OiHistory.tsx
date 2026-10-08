@@ -1530,29 +1530,8 @@ const OiHistory: React.FC = () => {
     [monthlyExpirySet],
   );
 
-  /** Dates that should be marked as expiry days in the loaded trading dates. */
-  const expiryMarkerDates = useMemo(() => {
-    const current = currentMonthIST();
-    const currentMonthExpiries = expiries.filter((exp) => exp.slice(0, 7) === current);
-    const currentExpiryWeekdays = new Set(
-      currentMonthExpiries.map((exp) => new Date(`${exp}T00:00:00`).getDay()),
-    );
-    const set = new Set<string>();
-
-    for (const exp of currentMonthExpiries) {
-      set.add(exp);
-    }
-
-    for (const date of availableDates) {
-      if (date.slice(0, 7) !== current) continue;
-      const weekday = new Date(`${date}T00:00:00`).getDay();
-      if (currentExpiryWeekdays.has(weekday)) {
-        set.add(date);
-      }
-    }
-
-    return set;
-  }, [availableDates, expiries]);
+  /** Mark only actual contract expiry dates; weekdays can vary around holidays. */
+  const expiryMarkerDates = useMemo(() => new Set(expiries), [expiries]);
 
   /** Rows for the selected date */
   const filteredRows = useMemo(() => {
