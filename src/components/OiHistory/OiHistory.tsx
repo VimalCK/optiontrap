@@ -1934,6 +1934,7 @@ const OiHistory: React.FC = () => {
       <div className="oi-history__controls card">
         <div className="oi-history__control-row">
           <label className="oi-history__label">
+            <span>Instrument</span>
             <AppSelect
               value={scrip}
               options={scripOptions}
@@ -1944,6 +1945,7 @@ const OiHistory: React.FC = () => {
           </label>
 
           <label className="oi-history__label">
+            <span>Expiry month</span>
             <AppSelect
               value={selectedExpiryMonth}
               options={selectableExpiryMonthOptions.map((o) => ({
@@ -1955,17 +1957,20 @@ const OiHistory: React.FC = () => {
             />
           </label>
 
-          <AppSelect
-            value={strikeRange}
-            options={[
-              { value: 5, label: '5' },
-              { value: 10, label: '10' },
-              { value: 20, label: '20' },
-              { value: 0, label: 'All' },
-              { value: -1, label: 'Specific' },
-            ]}
-            onChange={(v) => { const val = Number(v); setStrikeRange(val); localStorage.setItem('optiontrap_strike_range', String(val)); }}
-          />
+          <label className="oi-history__label">
+            <span>Strikes</span>
+            <AppSelect
+              value={strikeRange}
+              options={[
+                { value: 5, label: '5' },
+                { value: 10, label: '10' },
+                { value: 20, label: '20' },
+                { value: 0, label: 'All' },
+                { value: -1, label: 'Specific' },
+              ]}
+              onChange={(v) => { const val = Number(v); setStrikeRange(val); localStorage.setItem('optiontrap_strike_range', String(val)); }}
+            />
+          </label>
 
           {strikeRange === -1 && (
             <label className="oi-history__label">
@@ -2171,8 +2176,18 @@ const OiHistory: React.FC = () => {
       {tableData.length > 0 && (
         <div className="oi-history__table-wrap card">
           <div className="oi-history__table-header">
-            <div className="oi-history__table-count">
-              {tableData.length} strikes &middot; {visibleTableExpiries.length} expiries
+            <div className="oi-history__table-header-left">
+              <div>
+                <div className="oi-history__table-title">OI Snapshot</div>
+                <div className="oi-history__table-subtitle">
+                  {filterDate ? formatFullDateLabel(filterDate) : 'Select a date'}
+                  <span>Daily change vs previous session</span>
+                </div>
+              </div>
+            </div>
+            <div className="oi-history__table-meta">
+              <span className="oi-history__table-count">{tableData.length} strikes</span>
+              <span className="oi-history__table-count">{visibleTableExpiries.length} expiries</span>
             </div>
           </div>
 
@@ -2210,8 +2225,9 @@ const OiHistory: React.FC = () => {
                     >
                       {/* CE Pattern */}
                       <td
-                        className="oi-history__cell--pattern"
+                        className="oi-history__cell--pattern oi-history__cell--pattern-ce"
                         style={{ color: patternColor(cePattern) }}
+                        title={`CE pattern: ${cePattern}`}
                       >
                         {cePattern}
                       </td>
@@ -2238,7 +2254,7 @@ const OiHistory: React.FC = () => {
                       })}
 
                       {/* Strike */}
-                      <td className={`oi-history__cell--strike ${isAtm ? 'oi-history__cell--strike-atm' : ''}`}>
+                      <td className={`oi-history__cell--strike ${isAtm ? 'oi-history__cell--strike-atm' : ''}`} title={isAtm ? 'At-the-money strike' : `Strike ${strike}`}>
                         <div className="oi-history__strike-bars" style={{ '--oi-history-expiry-count': visibleTableExpiries.length } as React.CSSProperties}>
                           <div className="oi-history__oi-bar oi-history__oi-bar--ce" style={{ width: `${ceBarWidth}%` }} />
                           <div className="oi-history__oi-bar oi-history__oi-bar--pe" style={{ width: `${peBarWidth}%` }} />
@@ -2269,8 +2285,9 @@ const OiHistory: React.FC = () => {
 
                       {/* PE Pattern */}
                       <td
-                        className="oi-history__cell--pattern"
+                        className="oi-history__cell--pattern oi-history__cell--pattern-pe"
                         style={{ color: patternColor(pePattern) }}
+                        title={`PE pattern: ${pePattern}`}
                       >
                         {pePattern}
                       </td>
