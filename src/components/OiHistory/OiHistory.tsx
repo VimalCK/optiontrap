@@ -2115,8 +2115,9 @@ const OiHistory: React.FC = () => {
               <li><strong style={{ color: '#ef4444' }}>Exiting (Short Cover)</strong> — Sellers closing out, the wall is being abandoned.</li>
               <li><strong style={{ color: '#22c55e' }}>Fresh Build (Short)</strong> — New sellers at far expiry. New wall being established.</li>
               <li><strong style={{ color: '#22c55e' }}>Fresh Build (Long)</strong> — New buyers at far expiry. New directional bet.</li>
-              <li><strong style={{ color: '#22c55e' }}>Doubling Down</strong> — OI rising across multiple expiries. Strong conviction.</li>
-              <li><strong style={{ color: '#ef4444' }}>Unwinding</strong> — OI falling across all expiries. Full retreat from this level.</li>
+              <li><strong style={{ color: '#22c55e' }}>Doubling Down (Long)</strong> — OI rising across multiple expiries while option price is rising. Buyers are adding conviction across expiries.</li>
+              <li><strong style={{ color: '#ef4444' }}>Doubling Down (Short)</strong> — OI rising across multiple expiries while option price is falling. Sellers are adding conviction across expiries.</li>
+              <li><strong style={{ color: '#ef4444' }}>Unwinding</strong> — OI falling across all expiries because existing positions are being closed. No meaningful new positions are replacing them.</li>
               <li><strong style={{ color: 'var(--text-secondary)' }}>Stable</strong> — No significant change (&lt;2%). Positions held steady.</li>
             </ul>
 
