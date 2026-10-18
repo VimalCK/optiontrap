@@ -73,6 +73,9 @@ import {
   insertOiHistoryRows,
   getOiHistoryData,
   getOiHistoryDataByExpiryMonth,
+  saveTradeSetupSignal,
+  getTradeSetupSignals,
+  updateTradeSetupSignalOutcome,
   getOiHistoryDatesForExpiryMonth,
   getStoredOiHistoryExpiryMonths,
   getStoredOiHistoryStrikes,
@@ -1224,6 +1227,57 @@ app.get('/api/oi-history', requireAuth, requireSubscription, async (req, res) =>
   } catch (err) {
     console.error('[OI History] GET error:', err.message);
     res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+app.post('/api/oi-history/signals', requireAuth, requireSubscription, async (req, res) => {
+  try {
+    const { scrip, signalDate, expiry, strike, optionType, action, status, entryPremium, spotPrice, details } = req.body || {};
+    if (!scrip || !signalDate || !Number.isFinite(Number(strike)) || !['CE', 'PE'].includes(optionType) || !['BUY', 'SELL'].includes(action)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid trade setup signal' });
+    }
+    const signal = await saveTradeSetupSignal(req.session.kiteSession.userId, {
+      scrip, signalDate, expiry, strike: Number(strike), optionType, action,
+      status: status || 'Watch', entryPremium: Number(entryPremium) || null,
+      spotPrice: Number(spotPrice) || null, details,
+    });
+    res.json({ status: 'ok', signal });
+  } catch (err) {
+    console.error('[OI History] Signal save error:', err.message);
+    res.status(500).json({ status: 'error', message: 'Failed to save trade setup signal' });
+  }
+});
+
+app.get('/api/oi-history/signals', requireAuth, requireSubscription, async (req, res) => {
+  try {
+    const signals = await getTradeSetupSignals(req.session.kiteSession.userId, {
+      scrip: req.query.scrip || null,
+      limit: req.query.limit,
+    });
+    res.json({ status: 'ok', signals });
+  } catch (err) {
+    console.error('[OI History] Signal list error:', err.message);
+    res.status(500).json({ status: 'error', message: 'Failed to load trade setup signals' });
+  }
+});
+
+app.patch('/api/oi-history/signals/:id/outcome', requireAuth, requireSubscription, async (req, res) => {
+  try {
+    const { price, date, returnPct, status, maxFavorableReturn, maxAdverseReturn, final } = req.body || {};
+    if (!Number.isFinite(Number(price)) || !date || !Number.isFinite(Number(returnPct)) ||
+        !Number.isFinite(Number(maxFavorableReturn)) || !Number.isFinite(Number(maxAdverseReturn)) ||
+        !['Profit', 'Loss', 'Open'].includes(status)) {
+      return res.status(400).json({ status: 'error', message: 'Invalid signal outcome' });
+    }
+    const outcome = await updateTradeSetupSignalOutcome(req.session.kiteSession.userId, req.params.id, {
+      price: Number(price), date, returnPct: Number(returnPct), status,
+      maxFavorableReturn: Number(maxFavorableReturn), maxAdverseReturn: Number(maxAdverseReturn), final: Boolean(final),
+    });
+    if (!outcome) return res.status(404).json({ status: 'error', message: 'Signal not found' });
+    res.json({ status: 'ok', outcome });
+  } catch (err) {
+    console.error('[OI History] Signal outcome error:', err.message);
+    res.status(500).json({ status: 'error', message: 'Failed to save signal outcome' });
   }
 });
 

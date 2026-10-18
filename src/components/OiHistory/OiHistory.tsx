@@ -28,6 +28,24 @@ interface FetchProgress {
   detail: string;
 }
 
+interface SignalPerformanceSummary {
+  total: number;
+  evaluated: number;
+  wins: number;
+  winRate: number | null;
+  averageReturn: number | null;
+  averageMaxFavorable: number | null;
+  averageMaxAdverse: number | null;
+  averageWin: number | null;
+  averageLoss: number | null;
+  profitFactor: number | null;
+  sellEvaluated: number;
+  sellWinRate: number | null;
+  buyEvaluated: number;
+  buyWinRate: number | null;
+  optionBreakdown: Array<{ label: string; evaluated: number; winRate: number | null; averageReturn: number | null }>;
+}
+
 type RolloverPattern =
   | 'Rolling Over (Long)'
   | 'Rolling Over (Short)'
@@ -159,6 +177,56 @@ interface SellingSetupSummary {
   target: string;
   sizing: string;
   checklist: TradeSetupChecklistItem[];
+}
+
+interface StrikeHistoryEntry {
+  ceOi: number;
+  peOi: number;
+  ceClose: number;
+  peClose: number;
+  ceVolume: number;
+  peVolume: number;
+}
+
+interface PremiumDecaySide {
+  optionType: 'CE' | 'PE';
+  firstClose: number;
+  latestClose: number;
+  decayPct: number;
+  recentDecayPct: number | null;
+  latestOi: number;
+  oiChangePct: number | null;
+  latestVolume: number;
+  averageVolume: number;
+  daysToExpiry: number | null;
+  score: number;
+  reason: string;
+}
+
+interface PremiumDecaySummary {
+  nearestExpiry: string | null;
+  ce: PremiumDecaySide | null;
+  pe: PremiumDecaySide | null;
+}
+
+interface OptionMomentumSide {
+  optionType: 'CE' | 'PE';
+  firstClose: number;
+  latestClose: number;
+  momentumPct: number;
+  recentMomentumPct: number | null;
+  oiChangePct: number | null;
+  latestVolume: number;
+  averageVolume: number;
+  daysToExpiry: number | null;
+  score: number;
+  reason: string;
+}
+
+interface OptionMomentumSummary {
+  nearestExpiry: string | null;
+  ce: OptionMomentumSide | null;
+  pe: OptionMomentumSide | null;
 }
 
 /** Default scrip options shown before dynamic list loads */
@@ -511,33 +579,115 @@ function summarizeTradeLevels(rows: TradeLevelRow[], spot: number | null, select
   };
 }
 
+function summarizeOptionMomentum(
+  dates: string[],
+  dateMap: Map<string, Map<string, StrikeHistoryEntry>>,
+  expiries: string[],
+  priceTrend: PriceTrendSummary,
+  levels: TradeLevelContext,
+): OptionMomentumSummary {
+  const nearestExpiry = expiries[0] ?? null;
+  if (!nearestExpiry || dates.length < 2) return { nearestExpiry, ce: null, pe: null };
+  const series = dates
+    .map((date) => ({ date, entry: dateMap.get(date)?.get(nearestExpiry) }))
+    .filter((item): item is { date: string; entry: StrikeHistoryEntry } => Boolean(item.entry));
+  if (series.length < 2) return { nearestExpiry, ce: null, pe: null };
+
+  const expiryTime = new Date(`${nearestExpiry}T00:00:00`).getTime();
+  const latestTime = new Date(`${series[series.length - 1].date}T00:00:00`).getTime();
+  const daysToExpiry = Number.isFinite(expiryTime) && Number.isFinite(latestTime)
+    ? Math.max(0, Math.ceil((expiryTime - latestTime) / 86400000))
+    : null;
+
+  const buildSide = (optionType: 'CE' | 'PE'): OptionMomentumSide | null => {
+    const close = (entry: StrikeHistoryEntry) => optionType === 'CE' ? entry.ceClose : entry.peClose;
+    const oi = (entry: StrikeHistoryEntry) => optionType === 'CE' ? entry.ceOi : entry.peOi;
+    const volume = (entry: StrikeHistoryEntry) => optionType === 'CE' ? entry.ceVolume : entry.peVolume;
+    const priced = series.filter((item) => close(item.entry) > 0);
+    if (priced.length < 2) return null;
+    const first = priced[0];
+    const latest = priced[priced.length - 1];
+    const firstClose = close(first.entry);
+    const latestClose = close(latest.entry);
+    const momentumPct = pctChange(firstClose, latestClose) ?? 0;
+    const recent = priced.slice(-Math.min(4, priced.length));
+    const recentMomentumPct = recent.length >= 2
+      ? pctChange(close(recent[0].entry), close(recent[recent.length - 1].entry))
+      : null;
+    const firstOi = oi(first.entry);
+    const latestOi = oi(latest.entry);
+    const oiChangePct = firstOi > 0 ? pctChange(firstOi, latestOi) : null;
+    const volumes = priced.map((item) => volume(item.entry)).filter((value) => value > 0);
+    const latestVolume = volume(latest.entry);
+    const averageVolume = volumes.length ? volumes.reduce((sum, value) => sum + value, 0) / volumes.length : 0;
+    const momentumScore = momentumPct >= 20 ? 3 : momentumPct >= 10 ? 2 : momentumPct >= 5 ? 1 : 0;
+    const recentScore = recentMomentumPct !== null && recentMomentumPct >= 8 ? 2 : recentMomentumPct !== null && recentMomentumPct >= 4 ? 1 : 0;
+    const oiScore = oiChangePct !== null && oiChangePct >= 8 ? 2 : oiChangePct !== null && oiChangePct >= 0 ? 1 : 0;
+    const activityScore = latestVolume > 0 && averageVolume > 0 && latestVolume >= averageVolume * 0.6 ? 1 : 0;
+    const adverseTrend = (optionType === 'CE' && priceTrend.direction === 'Downward') ||
+      (optionType === 'PE' && priceTrend.direction === 'Upward');
+    const adversePenalty = adverseTrend && priceTrend.strength === 'Strong' ? 3 : adverseTrend ? 1 : 0;
+    const distanceScore = Math.abs(levels.selectedDistancePct ?? 999) <= 0.8 ? 1 : 0;
+    const score = momentumScore + recentScore + oiScore + activityScore + distanceScore - adversePenalty;
+    const reason = `${optionType} premium ${formatPct(momentumPct)} since ${first.date}` +
+      `${recentMomentumPct !== null ? `, recent ${formatPct(recentMomentumPct)}` : ''}` +
+      `${latestVolume > 0 ? `, volume ${latestVolume.toLocaleString('en-IN')}` : ''}.`;
+    return { optionType, firstClose, latestClose, momentumPct, recentMomentumPct, oiChangePct, latestVolume, averageVolume, daysToExpiry, score, reason };
+  };
+
+  return { nearestExpiry, ce: buildSide('CE'), pe: buildSide('PE') };
+}
+
 function summarizeTradeSetup(
   priceTrend: PriceTrendSummary,
   optionFlow: StrikeBiasSummary,
   selectedStrike: number,
   levels: TradeLevelContext,
+  momentum: OptionMomentumSummary,
 ): TradeSetupSummary {
   const flowBullish = optionFlow.bias === 'Upward';
   const flowBearish = optionFlow.bias === 'Downward';
   const priceBullish = priceTrend.direction === 'Upward';
   const priceBearish = priceTrend.direction === 'Downward';
-  const directionalFlow = flowBullish || flowBearish;
-  const direction = flowBullish ? 'Bullish' : flowBearish ? 'Bearish' : 'Neutral';
-  const priceAligned = (flowBullish && priceBullish) || (flowBearish && priceBearish);
-  const priceConflicts = (flowBullish && priceBearish) || (flowBearish && priceBullish);
-  const recentAligned = (flowBullish && optionFlow.recentBias === 'Bullish') || (flowBearish && optionFlow.recentBias === 'Bearish');
-  const recentConflicts = (flowBullish && optionFlow.recentBias === 'Bearish') || (flowBearish && optionFlow.recentBias === 'Bullish');
+  const sideMomentumPass = (side: OptionMomentumSide | null) => Boolean(side && side.score >= 4 && side.momentumPct >= 5 &&
+    (side.recentMomentumPct === null || side.recentMomentumPct >= 0));
+  const sideMomentumWatch = (side: OptionMomentumSide | null) => Boolean(side && side.score >= 3 && side.momentumPct >= 3);
+  const ceMomentumPass = sideMomentumPass(momentum.ce);
+  const peMomentumPass = sideMomentumPass(momentum.pe);
+  const cePriceSupport = priceTrend.direction !== 'Downward';
+  const pePriceSupport = priceTrend.direction !== 'Upward';
+  const expiryPassFor = (side: OptionMomentumSide | null) => side?.daysToExpiry === null || (side?.daysToExpiry !== undefined && side.daysToExpiry >= 3);
+  const ceCandidate = Boolean(ceMomentumPass && cePriceSupport && expiryPassFor(momentum.ce) && levels.riskRewardStatus !== 'fail');
+  const peCandidate = Boolean(peMomentumPass && pePriceSupport && expiryPassFor(momentum.pe) && levels.riskRewardStatus !== 'fail');
+  const selectedSide = ceCandidate ? momentum.ce : peCandidate ? momentum.pe :
+    (momentum.ce?.score ?? -Infinity) >= (momentum.pe?.score ?? -Infinity) ? momentum.ce : momentum.pe;
+  const directionalFlow = ceCandidate || peCandidate || flowBullish || flowBearish;
+  const direction = ceCandidate ? 'Bullish' : peCandidate ? 'Bearish' : flowBullish ? 'Bullish' : flowBearish ? 'Bearish' : 'Neutral';
+  const priceAligned = ceCandidate ? priceBullish : peCandidate ? priceBearish : (flowBullish && priceBullish) || (flowBearish && priceBearish);
+  const priceConflicts = ceCandidate ? priceBearish : peCandidate ? priceBullish : (flowBullish && priceBearish) || (flowBearish && priceBullish);
+  const recentAligned = ceCandidate
+    ? momentum.ce?.recentMomentumPct !== null && momentum.ce?.recentMomentumPct !== undefined && momentum.ce.recentMomentumPct >= 0
+    : peCandidate
+      ? momentum.pe?.recentMomentumPct !== null && momentum.pe?.recentMomentumPct !== undefined && momentum.pe.recentMomentumPct >= 0
+      : (flowBullish && optionFlow.recentBias === 'Bullish') || (flowBearish && optionFlow.recentBias === 'Bearish');
+  const recentConflicts = ceCandidate
+    ? Boolean(momentum.ce?.recentMomentumPct !== null && momentum.ce?.recentMomentumPct !== undefined && momentum.ce.recentMomentumPct < 0)
+    : peCandidate
+      ? Boolean(momentum.pe?.recentMomentumPct !== null && momentum.pe?.recentMomentumPct !== undefined && momentum.pe.recentMomentumPct < 0)
+      : (flowBullish && optionFlow.recentBias === 'Bearish') || (flowBearish && optionFlow.recentBias === 'Bullish');
+  const momentumSide = selectedSide;
+  const momentumAvailable = Boolean(momentumSide);
+  const momentumPass = ceCandidate || peCandidate || sideMomentumPass(momentumSide);
+  const momentumWatch = sideMomentumWatch(momentumSide);
+  const volumePass = Boolean(momentumSide && momentumSide.latestVolume > 0 && momentumSide.averageVolume > 0 && momentumSide.latestVolume >= momentumSide.averageVolume * 0.6);
+  const oiPass = Boolean(momentumSide && momentumSide.oiChangePct !== null && momentumSide.oiChangePct >= 0);
+  const expiryPass = expiryPassFor(momentumSide);
   const confidenceStatus: ChecklistStatus = optionFlow.confidence >= 65 ? 'pass' : optionFlow.confidence >= 55 ? 'warn' : 'fail';
-  const strengthStatus: ChecklistStatus = optionFlow.strength === 'Strong' || optionFlow.strength === 'Moderate'
-    ? 'pass'
-    : optionFlow.strength === 'Mild'
-      ? 'warn'
-      : 'fail';
   const priceStatus: ChecklistStatus = priceAligned ? 'pass' : priceConflicts ? 'fail' : 'warn';
   const recentStatus: ChecklistStatus = recentAligned ? 'pass' : recentConflicts ? 'fail' : 'warn';
   const flowStatus: ChecklistStatus = directionalFlow ? 'pass' : 'fail';
-  const ready = directionalFlow && priceAligned && optionFlow.confidence >= 60 && !recentConflicts && strengthStatus === 'pass' && levels.riskRewardStatus !== 'fail';
-  const watch = directionalFlow && !ready && !priceConflicts && optionFlow.confidence >= 55 && levels.locationStatus !== 'fail';
+  const ready = (ceCandidate || peCandidate) && priceAligned && momentumPass && !recentConflicts && levels.locationStatus !== 'fail' && expiryPass;
+  const watch = directionalFlow && !ready && !priceConflicts && momentumWatch && levels.locationStatus !== 'fail';
   const status: TradeSetupStatus = ready ? 'Confirmed' : watch ? 'Watch' : 'Avoid';
   const strikeLabel = selectedStrike.toFixed(0);
   const sideLabel = direction === 'Bullish' ? 'upside' : direction === 'Bearish' ? 'downside' : 'range';
@@ -573,6 +723,34 @@ function summarizeTradeSetup(
           : 'Recent flow is not decisive',
     },
     {
+      label: 'Premium momentum',
+      status: momentumPass ? 'pass' : momentumWatch ? 'warn' : 'fail',
+      answer: momentumSide
+        ? `${momentumSide.optionType} ${formatPct(momentumSide.momentumPct)} overall${momentumSide.recentMomentumPct !== null ? `, ${formatPct(momentumSide.recentMomentumPct)} recent` : ''}`
+        : 'No nearest-expiry momentum evidence',
+    },
+    {
+      label: 'Volume confirms',
+      status: volumePass ? 'pass' : momentumAvailable ? 'warn' : 'fail',
+      answer: momentumSide && momentumSide.latestVolume > 0
+        ? `Latest volume ${momentumSide.latestVolume.toLocaleString('en-IN')} vs average ${Math.round(momentumSide.averageVolume).toLocaleString('en-IN')}`
+        : 'Volume is unavailable or too thin',
+    },
+    {
+      label: 'OI confirms',
+      status: oiPass ? 'pass' : momentumAvailable ? 'warn' : 'fail',
+      answer: momentumSide?.oiChangePct !== null && momentumSide?.oiChangePct !== undefined
+        ? `OI ${formatPct(momentumSide.oiChangePct)} across the nearest-expiry history`
+        : 'OI change is unavailable',
+    },
+    {
+      label: 'Expiry risk',
+      status: expiryPass ? 'pass' : 'fail',
+      answer: momentumSide?.daysToExpiry === null || momentumSide?.daysToExpiry === undefined
+        ? 'DTE unavailable'
+        : `${momentumSide.daysToExpiry} DTE; avoid fresh buying too close to expiry`,
+    },
+    {
       label: 'Risk location',
       status: levels.locationStatus,
       answer: levels.locationAnswer,
@@ -589,7 +767,7 @@ function summarizeTradeSetup(
       status,
       direction,
       title: `${direction} setup confirmed`,
-      action: `Option buying ${sideLabel} trade is allowed if live price holds confirmation.`,
+      action: `Option buying ${sideLabel} trade is allowed: nearest-expiry ${momentumSide?.reason ?? 'premium momentum is confirmed'}`,
       strategy: direction === 'Bullish' ? 'Prefer call debit spread or long futures on pullback.' : 'Prefer put debit spread or short futures on failed bounce.',
       trigger: direction === 'Bullish' ? `Enter only above/holding ${strikeLabel}; stronger if price clears CE wall ${levels.resistanceStrike ?? '-'}.` : `Enter only below/rejecting ${strikeLabel}; stronger if PE support ${levels.supportStrike ?? '-'} weakens.`,
       invalidation: `Exit if price closes back ${oppositeLabel} ${strikeLabel}; also respect VWAP/previous-day levels if live chart provides them.`,
@@ -604,7 +782,7 @@ function summarizeTradeSetup(
       status,
       direction,
       title: `${direction} watchlist, not entry yet`,
-      action: `Bias exists, but the checklist is not clean enough for a fresh trade.`,
+      action: `Directional bias exists, but nearest-expiry premium momentum is not fully confirmed. Wait for continuation.`,
       strategy: direction === 'Bullish' ? 'Wait for breakout/hold before call spread.' : 'Wait for breakdown/rejection before put spread.',
       trigger: direction === 'Bullish' ? `Need price acceptance above ${strikeLabel}, VWAP, or CE resistance ${levels.resistanceStrike ?? '-'}.` : `Need price acceptance below ${strikeLabel}, VWAP, or failed bounce from CE resistance ${levels.resistanceStrike ?? '-'}.`,
       invalidation: 'No trade until invalidation is close and obvious.',
@@ -628,11 +806,95 @@ function summarizeTradeSetup(
   };
 }
 
+function summarizePremiumDecay(
+  dates: string[],
+  dateMap: Map<string, Map<string, StrikeHistoryEntry>>,
+  expiries: string[],
+  priceTrend: PriceTrendSummary,
+  levels: TradeLevelContext,
+): PremiumDecaySummary {
+  const nearestExpiry = expiries[0] ?? null;
+  if (!nearestExpiry || dates.length < 2) {
+    return { nearestExpiry, ce: null, pe: null };
+  }
+
+  const series = dates
+    .map((date) => ({ date, entry: dateMap.get(date)?.get(nearestExpiry) }))
+    .filter((item): item is { date: string; entry: StrikeHistoryEntry } => Boolean(item.entry));
+
+  if (series.length < 2) return { nearestExpiry, ce: null, pe: null };
+
+  const expiryTime = new Date(`${nearestExpiry}T00:00:00`).getTime();
+  const latestDate = new Date(`${series[series.length - 1].date}T00:00:00`).getTime();
+  const daysToExpiry = Number.isFinite(expiryTime) && Number.isFinite(latestDate)
+    ? Math.max(0, Math.ceil((expiryTime - latestDate) / 86400000))
+    : null;
+
+  const buildSide = (optionType: 'CE' | 'PE'): PremiumDecaySide | null => {
+    const close = (entry: StrikeHistoryEntry) => optionType === 'CE' ? entry.ceClose : entry.peClose;
+    const oi = (entry: StrikeHistoryEntry) => optionType === 'CE' ? entry.ceOi : entry.peOi;
+    const volume = (entry: StrikeHistoryEntry) => optionType === 'CE' ? entry.ceVolume : entry.peVolume;
+    const priced = series.filter((item) => close(item.entry) > 0);
+    if (priced.length < 2) return null;
+
+    const first = priced[0];
+    const latest = priced[priced.length - 1];
+    const firstClose = close(first.entry);
+    const latestClose = close(latest.entry);
+    const decayPct = pctChange(firstClose, latestClose) ?? 0;
+    const recent = priced.slice(-Math.min(4, priced.length));
+    const recentDecayPct = recent.length >= 2
+      ? pctChange(close(recent[0].entry), close(recent[recent.length - 1].entry))
+      : null;
+    const previousOi = oi(first.entry);
+    const latestOi = oi(latest.entry);
+    const oiChangePct = previousOi > 0 ? pctChange(previousOi, latestOi) : null;
+    const volumes = priced.map((item) => volume(item.entry)).filter((value) => value > 0);
+    const latestVolume = volume(latest.entry);
+    const averageVolume = volumes.length > 0 ? volumes.reduce((sum, value) => sum + value, 0) / volumes.length : 0;
+
+    // Decay is a separate selling path: it does not require directional OI,
+    // but it does require enough time-series evidence and real activity.
+    const decayStrength = decayPct <= -25 ? 3 : decayPct <= -12 ? 2 : decayPct <= -6 ? 1 : 0;
+    const recentDecayStrength = recentDecayPct !== null && recentDecayPct <= -8 ? 1 : 0;
+    const timeStrength = daysToExpiry !== null && daysToExpiry <= 7 ? 2 : daysToExpiry !== null && daysToExpiry <= 14 ? 1 : 0;
+    const activityStrength = latestVolume > 0 && averageVolume > 0 ? 1 : 0;
+    const oiStrength = latestOi > 0 && (oiChangePct === null || oiChangePct >= -15) ? 1 : 0;
+    const adverseTrend = (optionType === 'CE' && priceTrend.direction === 'Upward') ||
+      (optionType === 'PE' && priceTrend.direction === 'Downward');
+    const adversePenalty = adverseTrend && priceTrend.strength === 'Strong' ? 3 : adverseTrend ? 1 : 0;
+    const distancePctFromSpot = Math.abs(levels.selectedDistancePct ?? 999);
+    const distanceStrength = distancePctFromSpot <= 2.5 ? 1 : 0;
+    const score = decayStrength + recentDecayStrength + timeStrength + activityStrength + oiStrength + distanceStrength - adversePenalty;
+    const reason = `${optionType} premium ${formatPct(decayPct)} since ${first.date}` +
+      `${daysToExpiry !== null ? `, ${daysToExpiry} DTE` : ''}` +
+      `${latestVolume > 0 ? `, volume ${latestVolume.toLocaleString('en-IN')}` : ''}.`;
+
+    return {
+      optionType,
+      firstClose,
+      latestClose,
+      decayPct,
+      recentDecayPct,
+      latestOi,
+      oiChangePct,
+      latestVolume,
+      averageVolume,
+      daysToExpiry,
+      score,
+      reason,
+    };
+  };
+
+  return { nearestExpiry, ce: buildSide('CE'), pe: buildSide('PE') };
+}
+
 function summarizeSellingSetup(
   priceTrend: PriceTrendSummary,
   optionFlow: StrikeBiasSummary,
   selectedStrike: number,
   levels: TradeLevelContext,
+  decay: PremiumDecaySummary,
 ): SellingSetupSummary {
   const flowBearish = optionFlow.bias === 'Downward';
   const flowBullish = optionFlow.bias === 'Upward';
@@ -646,16 +908,25 @@ function summarizeSellingSetup(
   const callSellCandidate = flowBearish && !priceBullish && hasResistance && confidenceOk;
   const putSellCandidate = flowBullish && !priceBearish && hasSupport && confidenceOk;
   const rangeSellCandidate = priceSideways && hasSupport && hasResistance && optionFlow.confidence >= 50;
+  const decaySide = [decay.ce, decay.pe]
+    .filter((side): side is PremiumDecaySide => side !== null)
+    .sort((a, b) => b.score - a.score || a.decayPct - b.decayPct)[0];
+  const decayCandidate = decaySide && decaySide.score >= 4 && decaySide.decayPct <= -6 &&
+    (decaySide.daysToExpiry === null || decaySide.daysToExpiry <= 21);
   const type: SellingSetupType = callSellCandidate
     ? 'Call Sell'
     : putSellCandidate
       ? 'Put Sell'
+      : decayCandidate
+        ? decaySide.optionType === 'CE' ? 'Call Sell' : 'Put Sell'
       : rangeSellCandidate
         ? 'Range Sell'
         : 'No Sell';
-  const status: TradeSetupStatus = (callSellCandidate || putSellCandidate) && locationOk && levels.riskRewardStatus !== 'fail'
+  const decayConfirmed = Boolean(decayCandidate && locationOk && (decaySide!.score >= 5 || levels.riskRewardStatus !== 'fail'));
+  const decayWatch = Boolean(decayCandidate && !decayConfirmed);
+  const status: TradeSetupStatus = ((callSellCandidate || putSellCandidate) && locationOk && levels.riskRewardStatus !== 'fail') || decayConfirmed
     ? 'Confirmed'
-    : type !== 'No Sell'
+    : type !== 'No Sell' || decayWatch
       ? 'Watch'
       : 'Avoid';
   const strikeLabel = selectedStrike.toFixed(0);
@@ -663,7 +934,9 @@ function summarizeSellingSetup(
     {
       label: 'Selling bias',
       status: type !== 'No Sell' ? 'pass' : 'fail',
-      answer: type === 'Call Sell'
+      answer: decayCandidate
+        ? `${decaySide!.optionType} premium-decay setup: ${decaySide!.reason}`
+        : type === 'Call Sell'
         ? 'Bearish/sideways bias supports call selling'
         : type === 'Put Sell'
           ? 'Bullish/sideways bias supports put selling'
@@ -672,8 +945,10 @@ function summarizeSellingSetup(
             : 'No premium-selling edge detected',
     },
     {
-      label: 'OI wall',
-      status: type === 'Call Sell' ? (hasResistance ? 'pass' : 'fail') : type === 'Put Sell' ? (hasSupport ? 'pass' : 'fail') : hasSupport && hasResistance ? 'pass' : 'warn',
+      label: 'OI wall / decay',
+      status: decayCandidate
+        ? (decaySide!.latestOi > 0 ? 'pass' : 'warn')
+        : type === 'Call Sell' ? (hasResistance ? 'pass' : 'fail') : type === 'Put Sell' ? (hasSupport ? 'pass' : 'fail') : hasSupport && hasResistance ? 'pass' : 'warn',
       answer: `Support ${levels.supportStrike ?? '-'}, resistance ${levels.resistanceStrike ?? '-'}`,
     },
     {
@@ -682,9 +957,11 @@ function summarizeSellingSetup(
       answer: `Price trend is ${priceTrend.direction.toLowerCase()}`,
     },
     {
-      label: 'Confidence',
-      status: optionFlow.confidence >= 65 ? 'pass' : optionFlow.confidence >= 55 ? 'warn' : 'fail',
-      answer: `${optionFlow.confidence}% selling flow support`,
+      label: 'Premium decay',
+      status: decayCandidate ? (decayConfirmed ? 'pass' : 'warn') : 'fail',
+      answer: decaySide
+        ? `${decaySide.optionType} ${formatPct(decaySide.decayPct)} over history${decaySide.daysToExpiry !== null ? `; ${decaySide.daysToExpiry} days to expiry` : ''}`
+        : 'No reliable nearest-expiry premium decay',
     },
     {
       label: 'Risk location',
@@ -699,29 +976,47 @@ function summarizeSellingSetup(
   ];
 
   if (type === 'Call Sell') {
+    const decaySell = decayCandidate && decaySide!.optionType === 'CE';
     return {
       status,
       type,
-      title: status === 'Confirmed' ? 'Call sell candidate' : 'Call sell watch',
-      action: 'Selling calls can be considered only near resistance/rejection, not after a large breakdown chase.',
-      trigger: `Sell call spread near CE resistance ${levels.resistanceStrike ?? strikeLabel} after rejection/failure to reclaim.`,
-      invalidation: `Exit if price accepts above ${levels.resistanceStrike ?? strikeLabel} or bullish flow expands.`,
-      target: 'Cover at 50-70% premium decay or near support/max-OI magnet.',
-      sizing: status === 'Confirmed' ? 'Defined-risk normal size.' : 'Small size or wait for rejection candle.',
+      title: decaySell
+        ? (status === 'Confirmed' ? 'Call decay sell candidate' : 'Call decay sell watch')
+        : (status === 'Confirmed' ? 'Call sell candidate' : 'Call sell watch'),
+      action: decaySell
+        ? `Nearest-expiry CE premium has decayed ${formatPct(decaySide!.decayPct)}. Prefer a defined-risk call spread; do not treat decay as protection from a sudden rally.`
+        : 'Selling calls can be considered only near resistance/rejection, not after a large breakdown chase.',
+      trigger: decaySell
+        ? `Enter only while CE premium remains below ${decaySide!.latestClose.toFixed(2)} and spot stays below ${levels.resistanceStrike ?? strikeLabel}.`
+        : `Sell call spread near CE resistance ${levels.resistanceStrike ?? strikeLabel} after rejection/failure to reclaim.`,
+      invalidation: decaySell
+        ? `Exit if spot accepts above ${levels.resistanceStrike ?? strikeLabel}, CE premium reverses sharply, or volume expands with a breakout.`
+        : `Exit if price accepts above ${levels.resistanceStrike ?? strikeLabel} or bullish flow expands.`,
+      target: decaySell ? 'Cover after another 50-70% premium reduction or before the remaining risk becomes asymmetric.' : 'Cover at 50-70% premium decay or near support/max-OI magnet.',
+      sizing: status === 'Confirmed' ? 'Defined-risk small/normal size; expiry decay has gap risk.' : 'Small size or wait for rejection candle.',
       checklist,
     };
   }
 
   if (type === 'Put Sell') {
+    const decaySell = decayCandidate && decaySide!.optionType === 'PE';
     return {
       status,
       type,
-      title: status === 'Confirmed' ? 'Put sell candidate' : 'Put sell watch',
-      action: 'Selling puts can be considered only near support/hold, not into a fresh breakdown.',
-      trigger: `Sell put spread near PE support ${levels.supportStrike ?? strikeLabel} after hold/reclaim.`,
-      invalidation: `Exit if price accepts below ${levels.supportStrike ?? strikeLabel} or bearish flow expands.`,
-      target: 'Cover at 50-70% premium decay or near resistance/max-OI magnet.',
-      sizing: status === 'Confirmed' ? 'Defined-risk normal size.' : 'Small size or wait for support hold.',
+      title: decaySell
+        ? (status === 'Confirmed' ? 'Put decay sell candidate' : 'Put decay sell watch')
+        : (status === 'Confirmed' ? 'Put sell candidate' : 'Put sell watch'),
+      action: decaySell
+        ? `Nearest-expiry PE premium has decayed ${formatPct(decaySide!.decayPct)}. Prefer a defined-risk put spread; a quiet market can still gap lower.`
+        : 'Selling puts can be considered only near support/hold, not into a fresh breakdown.',
+      trigger: decaySell
+        ? `Enter only while PE premium remains below ${decaySide!.latestClose.toFixed(2)} and spot stays above ${levels.supportStrike ?? strikeLabel}.`
+        : `Sell put spread near PE support ${levels.supportStrike ?? strikeLabel} after hold/reclaim.`,
+      invalidation: decaySell
+        ? `Exit if spot accepts below ${levels.supportStrike ?? strikeLabel}, PE premium reverses sharply, or volume expands with a breakdown.`
+        : `Exit if price accepts below ${levels.supportStrike ?? strikeLabel} or bearish flow expands.`,
+      target: decaySell ? 'Cover after another 50-70% premium reduction or before the remaining risk becomes asymmetric.' : 'Cover at 50-70% premium decay or near resistance/max-OI magnet.',
+      sizing: status === 'Confirmed' ? 'Defined-risk small/normal size; expiry decay has gap risk.' : 'Small size or wait for support hold.',
       checklist,
     };
   }
@@ -1095,7 +1390,10 @@ const OiHistory: React.FC = () => {
   const [showPatternInfo, setShowPatternInfo] = useState(false);
   const [analysisTab, setAnalysisTab] = useState<'history' | 'setup'>('history');
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
+  const [signalPerformance, setSignalPerformance] = useState<SignalPerformanceSummary | null>(null);
+  const loggedSignalKeysRef = useRef(new Set<string>());
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(() => new Set());
+  const [showVolume, setShowVolume] = useState(false);
   const [recentScrips, setRecentScrips] = useState<string[]>(() => loadRecentScrips());
   const [scripOptions, setScripOptions] = useState(DEFAULT_SCRIP_OPTIONS);
   const [expiryMonthOptions, setExpiryMonthOptions] = useState<{ value: string; label: string }[]>(() => {
@@ -1783,7 +2081,7 @@ const OiHistory: React.FC = () => {
     if (!selectedStrike || availableDates.length === 0 || visibleTableExpiries.length === 0) return null;
 
     // Group data by date+expiry for the selected strike
-    const dateMap = new Map<string, Map<string, { ceOi: number; peOi: number; ceClose: number; peClose: number }>>();
+    const dateMap = new Map<string, Map<string, StrikeHistoryEntry>>();
     const spotByDate = new Map<string, number>();
     const tableExpirySet = new Set(visibleTableExpiries);
 
@@ -1792,14 +2090,25 @@ const OiHistory: React.FC = () => {
       if (r.spotClose > 0) spotByDate.set(r.date, r.spotClose);
       if (!dateMap.has(r.date)) dateMap.set(r.date, new Map());
       const expMap = dateMap.get(r.date)!;
-      if (!expMap.has(r.expiry)) expMap.set(r.expiry, { ceOi: 0, peOi: 0, ceClose: 0, peClose: 0 });
+      if (!expMap.has(r.expiry)) {
+        expMap.set(r.expiry, {
+          ceOi: 0,
+          peOi: 0,
+          ceClose: 0,
+          peClose: 0,
+          ceVolume: 0,
+          peVolume: 0,
+        });
+      }
       const entry = expMap.get(r.expiry)!;
       if (r.optionType === 'CE') {
         entry.ceOi = r.oi;
         entry.ceClose = r.close;
+        entry.ceVolume = r.volume;
       } else {
         entry.peOi = r.oi;
         entry.peClose = r.close;
+        entry.peVolume = r.volume;
       }
     }
 
@@ -1810,8 +2119,10 @@ const OiHistory: React.FC = () => {
     const tradeBias = summarizeTradeBias(priceTrend, biasSummary);
     const latestSpot = priceTrend.endPrice ?? selectedSpotClose;
     const tradeLevels = summarizeTradeLevels(tableData, latestSpot, selectedStrike);
-    const tradeSetup = summarizeTradeSetup(priceTrend, biasSummary, selectedStrike, tradeLevels);
-    const sellingSetup = summarizeSellingSetup(priceTrend, biasSummary, selectedStrike, tradeLevels);
+    const optionMomentum = summarizeOptionMomentum(dates, dateMap, visibleTableExpiries, priceTrend, tradeLevels);
+    const premiumDecay = summarizePremiumDecay(dates, dateMap, visibleTableExpiries, priceTrend, tradeLevels);
+    const tradeSetup = summarizeTradeSetup(priceTrend, biasSummary, selectedStrike, tradeLevels, optionMomentum);
+    const sellingSetup = summarizeSellingSetup(priceTrend, biasSummary, selectedStrike, tradeLevels, premiumDecay);
 
     // Find max values for axis scaling
     let maxOi = 0;
@@ -1826,8 +2137,186 @@ const OiHistory: React.FC = () => {
       }
     }
 
-    return { dates, dateMap, maxOi, maxCePrice, maxPePrice, biasSummary, priceTrend, tradeBias, tradeSetup, tradeLevels, sellingSetup };
+    return { dates, dateMap, maxOi, maxCePrice, maxPePrice, biasSummary, priceTrend, tradeBias, tradeSetup, tradeLevels, optionMomentum, premiumDecay, sellingSetup };
   }, [data, selectedStrike, availableDates, visibleTableExpiries, selectedSpotClose, tableData]);
+
+  // Persist each actionable setup once per session/date. This creates the
+  // evidence needed for later outcome tracking and backtesting without
+  // creating another UI section.
+  useEffect(() => {
+    if (!chartData || !selectedStrike || chartData.dates.length === 0) return;
+    const selling = chartData.sellingSetup;
+    const buying = chartData.tradeSetup;
+    let action: 'BUY' | 'SELL' | null = null;
+    let optionType: 'CE' | 'PE' | null = null;
+    let setupStatus: TradeSetupStatus = 'Avoid';
+
+    if ((selling.type === 'Call Sell' || selling.type === 'Put Sell') && selling.status !== 'Avoid') {
+      action = 'SELL';
+      optionType = selling.type === 'Call Sell' ? 'CE' : 'PE';
+      setupStatus = selling.status;
+    } else if ((buying.direction === 'Bullish' || buying.direction === 'Bearish') && buying.status !== 'Avoid') {
+      action = 'BUY';
+      optionType = buying.direction === 'Bullish' ? 'CE' : 'PE';
+      setupStatus = buying.status;
+    }
+    if (!action || !optionType) return;
+
+    const signalDate = chartData.dates[chartData.dates.length - 1];
+    const expiry = chartData.premiumDecay.nearestExpiry;
+    const side = optionType === 'CE' ? chartData.premiumDecay.ce : chartData.premiumDecay.pe;
+    const key = `${scrip}|${signalDate}|${expiry}|${selectedStrike}|${optionType}|${action}`;
+    if (loggedSignalKeysRef.current.has(key)) return;
+    loggedSignalKeysRef.current.add(key);
+
+    void fetch('/api/oi-history/signals', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        scrip,
+        signalDate,
+        expiry,
+        strike: selectedStrike,
+        optionType,
+        action,
+        status: setupStatus,
+        entryPremium: side?.latestClose ?? null,
+        spotPrice: chartData.priceTrend.endPrice ?? null,
+        details: {
+          priceTrend: chartData.priceTrend,
+          sellingType: selling.type,
+          sellingStatus: selling.status,
+          buyingDirection: buying.direction,
+          buyingStatus: buying.status,
+          buyingMomentum: optionType === 'CE' ? chartData.optionMomentum.ce : chartData.optionMomentum.pe,
+          decay: side ? { decayPct: side.decayPct, score: side.score, daysToExpiry: side.daysToExpiry, latestVolume: side.latestVolume } : null,
+        },
+      }),
+    }).catch(() => {
+      // Logging must never affect the Trade Setup UI.
+    });
+  }, [chartData, scrip, selectedStrike]);
+
+  // Refresh outcomes for older signals whenever a newer session is visible.
+  // This gives the research log a simple mark-to-market result without
+  // pretending that an order was actually executed.
+  useEffect(() => {
+    if (!chartData || chartData.dates.length === 0 || !selectedStrike) return;
+    const latestDate = chartData.dates[chartData.dates.length - 1];
+    const availableExpiries = new Set(visibleTableExpiries);
+    if (availableExpiries.size === 0) return;
+
+    void (async () => {
+      try {
+        const response = await fetch(`/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=200`, { credentials: 'include' });
+        if (!response.ok) return;
+        const result = await response.json() as { signals?: Array<{
+          id: number; signal_date: string; expiry: string | null; strike: number; option_type: 'CE' | 'PE';
+          action: 'BUY' | 'SELL'; entry_premium: number | null; outcome_status: string | null; outcome_final: boolean;
+        }> };
+        for (const signal of result.signals || []) {
+          if (signal.outcome_final || signal.signal_date >= latestDate || !signal.expiry || !availableExpiries.has(signal.expiry) || signal.strike !== selectedStrike) continue;
+          if (!signal.entry_premium || signal.entry_premium <= 0) continue;
+          const path = chartData.dates
+            .filter((date) => date >= signal.signal_date)
+            .map((date) => chartData.dateMap.get(date)?.get(signal.expiry!)?.[signal.option_type === 'CE' ? 'ceClose' : 'peClose'] || 0)
+            .filter((price) => price > 0);
+          if (path.length === 0) continue;
+          const returns = path.map((price) => {
+            const raw = ((price - signal.entry_premium!) / signal.entry_premium!) * 100;
+            return signal.action === 'SELL' ? -raw : raw;
+          });
+          const returnPct = returns[returns.length - 1];
+          const final = latestDate >= signal.expiry;
+          await fetch(`/api/oi-history/signals/${signal.id}/outcome`, {
+            method: 'PATCH',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              price: path[path.length - 1],
+              date: latestDate,
+              returnPct,
+              maxFavorableReturn: Math.max(...returns),
+              maxAdverseReturn: Math.min(...returns),
+              final,
+              status: final ? (returnPct > 0 ? 'Profit' : 'Loss') : 'Open',
+            }),
+          });
+        }
+      } catch {
+        // Outcome tracking must never affect the Trade Setup UI.
+      }
+    })();
+  }, [chartData, scrip, selectedStrike, visibleTableExpiries]);
+
+  useEffect(() => {
+    if (!chartData || !scrip) return;
+    void (async () => {
+      try {
+        const response = await fetch(`/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=500`, { credentials: 'include' });
+        if (!response.ok) return;
+        const result = await response.json() as {
+          signals?: Array<{ action: 'BUY' | 'SELL'; option_type: 'CE' | 'PE'; outcome_status: string | null; outcome_return: number | null; max_favorable_return: number | null; max_adverse_return: number | null }>;
+        };
+        const signals = result.signals || [];
+        const evaluated = signals.filter((signal) => signal.outcome_status === 'Profit' || signal.outcome_status === 'Loss');
+        const wins = evaluated.filter((signal) => signal.outcome_status === 'Profit').length;
+        const average = evaluated.length ? evaluated.reduce((sum, signal) => sum + Number(signal.outcome_return || 0), 0) / evaluated.length : null;
+        const favorableRows = evaluated.filter((signal) => signal.max_favorable_return !== null);
+        const adverseRows = evaluated.filter((signal) => signal.max_adverse_return !== null);
+        const averageMaxFavorable = favorableRows.length
+          ? favorableRows.reduce((sum, signal) => sum + Number(signal.max_favorable_return), 0) / favorableRows.length
+          : null;
+        const averageMaxAdverse = adverseRows.length
+          ? adverseRows.reduce((sum, signal) => sum + Number(signal.max_adverse_return), 0) / adverseRows.length
+          : null;
+        const winningReturns = evaluated.map((signal) => Number(signal.outcome_return || 0)).filter((value) => value > 0);
+        const losingReturns = evaluated.map((signal) => Number(signal.outcome_return || 0)).filter((value) => value < 0);
+        const grossProfit = winningReturns.reduce((sum, value) => sum + value, 0);
+        const grossLoss = Math.abs(losingReturns.reduce((sum, value) => sum + value, 0));
+        const averageWin = winningReturns.length ? grossProfit / winningReturns.length : null;
+        const averageLoss = losingReturns.length ? -grossLoss / losingReturns.length : null;
+        const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : null);
+        const byAction = (action: 'BUY' | 'SELL') => {
+          const rows = evaluated.filter((signal) => signal.action === action);
+          return { count: rows.length, wins: rows.filter((signal) => signal.outcome_status === 'Profit').length };
+        };
+        const sells = byAction('SELL');
+        const buys = byAction('BUY');
+        const optionBreakdown = (['BUY CE', 'BUY PE', 'SELL CE', 'SELL PE'] as const).map((label) => {
+          const [action, optionType] = label.split(' ') as ['BUY' | 'SELL', 'CE' | 'PE'];
+          const rows = evaluated.filter((signal) => signal.action === action && signal.option_type === optionType);
+          const rowWins = rows.filter((signal) => signal.outcome_status === 'Profit').length;
+          return {
+            label,
+            evaluated: rows.length,
+            winRate: rows.length ? (rowWins / rows.length) * 100 : null,
+            averageReturn: rows.length ? rows.reduce((sum, signal) => sum + Number(signal.outcome_return || 0), 0) / rows.length : null,
+          };
+        });
+        setSignalPerformance({
+          total: signals.length,
+          evaluated: evaluated.length,
+          wins,
+          winRate: evaluated.length ? (wins / evaluated.length) * 100 : null,
+          averageReturn: average,
+          averageMaxFavorable,
+          averageMaxAdverse,
+          averageWin,
+          averageLoss,
+          profitFactor,
+          sellEvaluated: sells.count,
+          sellWinRate: sells.count ? (sells.wins / sells.count) * 100 : null,
+          buyEvaluated: buys.count,
+          buyWinRate: buys.count ? (buys.wins / buys.count) * 100 : null,
+          optionBreakdown,
+        });
+      } catch {
+        // Research metrics are optional and must never block the setup.
+      }
+    })();
+  }, [chartData, scrip]);
 
   /**
    * Resolve the strike/side/optionType a trade setup recommends and place it.
@@ -1919,6 +2408,26 @@ const OiHistory: React.FC = () => {
       return next;
     });
   };
+
+  const exportSignalResults = useCallback(async () => {
+    try {
+      const response = await fetch(`/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=500`, { credentials: 'include' });
+      if (!response.ok) return;
+      const result = await response.json() as { signals?: Array<Record<string, unknown>> };
+      const signals = result.signals || [];
+      const columns = ['signal_date', 'scrip', 'expiry', 'strike', 'option_type', 'action', 'status', 'entry_premium', 'spot_price', 'outcome_status', 'outcome_date', 'outcome_return', 'max_favorable_return', 'max_adverse_return', 'outcome_final'];
+      const escapeCsv = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
+      const csv = [columns.join(','), ...signals.map((signal) => columns.map((column) => escapeCsv(signal[column])).join(','))].join('\n');
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `optiontrap-${scrip.toLowerCase()}-trade-signals.csv`;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      // Export is optional and must not affect the setup UI.
+    }
+  }, [scrip]);
 
   return (
     <div className="oi-history">
@@ -2305,25 +2814,27 @@ const OiHistory: React.FC = () => {
         <div className="oi-history__chart-wrap card">
           <div className="oi-history__chart-header">
             <span className="oi-history__chart-title">Strike {selectedStrike}</span>
-            <div className="oi-history__analysis-tabs" role="tablist" aria-label="OI analysis view">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={analysisTab === 'history'}
-                className={`oi-history__analysis-tab ${analysisTab === 'history' ? 'oi-history__analysis-tab--active' : ''}`}
-                onClick={() => setAnalysisTab('history')}
-              >
-                OI Price History
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={analysisTab === 'setup'}
-                className={`oi-history__analysis-tab ${analysisTab === 'setup' ? 'oi-history__analysis-tab--active' : ''}`}
-                onClick={() => setAnalysisTab('setup')}
-              >
-                Trade Setup
-              </button>
+            <div className="oi-history__chart-controls">
+              <div className="oi-history__analysis-tabs" role="tablist" aria-label="OI analysis view">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={analysisTab === 'history'}
+                  className={`oi-history__analysis-tab ${analysisTab === 'history' ? 'oi-history__analysis-tab--active' : ''}`}
+                  onClick={() => setAnalysisTab('history')}
+                >
+                  OI Price History
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={analysisTab === 'setup'}
+                  className={`oi-history__analysis-tab ${analysisTab === 'setup' ? 'oi-history__analysis-tab--active' : ''}`}
+                  onClick={() => setAnalysisTab('setup')}
+                >
+                  Trade Setup
+                </button>
+              </div>
             </div>
           </div>
 
@@ -2336,6 +2847,9 @@ const OiHistory: React.FC = () => {
               const plotW = W - PAD_L - PAD_R;
               const plotH = H - PAD_T - PAD_B;
               const { dates, dateMap, maxOi, maxCePrice } = chartData;
+              const maxBarValue = showVolume
+                ? Math.max(1, ...dates.flatMap((date) => visibleTableExpiries.map((exp) => dateMap.get(date)?.get(exp)?.ceVolume || 0)))
+                : maxOi;
               const n = dates.length;
               if (n === 0 || maxOi === 0) return null;
               const expiryCount = Math.max(1, visibleTableExpiries.length);
@@ -2372,11 +2886,11 @@ const OiHistory: React.FC = () => {
                     {dates.map((d, i) => {
                       const x = PAD_L + (i + 0.5) * (plotW / n);
                       const expiryBars = visibleTableExpiries
-                        .map((exp) => ({ exp, oi: dateMap.get(d)?.get(exp)?.ceOi || 0 }))
-                        .filter((b) => b.oi > 0);
+                        .map((exp) => ({ exp, value: showVolume ? dateMap.get(d)?.get(exp)?.ceVolume || 0 : dateMap.get(d)?.get(exp)?.ceOi || 0 }))
+                        .filter((b) => b.value > 0);
                       const totalBarW = barW * expiryBars.length;
                       return expiryBars.map((b, j) => {
-                        const barH = (b.oi / maxOi) * plotH;
+                        const barH = (b.value / maxBarValue) * plotH;
                         const bx = x - totalBarW / 2 + j * barW;
                         return (
                           <rect key={`${d}-${b.exp}`} x={bx} y={PAD_T + plotH - barH} width={Math.max(barW * 0.85, 0.5)} height={barH}
@@ -2424,7 +2938,7 @@ const OiHistory: React.FC = () => {
                     {/* Right axis labels (OI) */}
                     {[0, 0.5, 1].map((frac) => (
                       <text key={frac} x={W - PAD_R + 4} y={PAD_T + plotH * (1 - frac) + 3} textAnchor="start" fontSize="6" fill="var(--text-secondary)">
-                        {formatOiCompact(Math.round(maxOi * frac))}
+                        {formatOiCompact(Math.round(maxBarValue * frac))}
                       </text>
                     ))}
 
@@ -2441,6 +2955,9 @@ const OiHistory: React.FC = () => {
               const plotW = W - PAD_L - PAD_R;
               const plotH = H - PAD_T - PAD_B;
               const { dates, dateMap, maxOi, maxPePrice } = chartData;
+              const maxBarValue = showVolume
+                ? Math.max(1, ...dates.flatMap((date) => visibleTableExpiries.map((exp) => dateMap.get(date)?.get(exp)?.peVolume || 0)))
+                : maxOi;
               const n = dates.length;
               if (n === 0 || maxOi === 0) return null;
               const expiryCount = Math.max(1, visibleTableExpiries.length);
@@ -2474,11 +2991,11 @@ const OiHistory: React.FC = () => {
                     {dates.map((d, i) => {
                       const x = PAD_L + (i + 0.5) * (plotW / n);
                       const expiryBars = visibleTableExpiries
-                        .map((exp) => ({ exp, oi: dateMap.get(d)?.get(exp)?.peOi || 0 }))
-                        .filter((b) => b.oi > 0);
+                        .map((exp) => ({ exp, value: showVolume ? dateMap.get(d)?.get(exp)?.peVolume || 0 : dateMap.get(d)?.get(exp)?.peOi || 0 }))
+                        .filter((b) => b.value > 0);
                       const totalBarW = barW * expiryBars.length;
                       return expiryBars.map((b, j) => {
-                        const barH = (b.oi / maxOi) * plotH;
+                        const barH = (b.value / maxBarValue) * plotH;
                         const bx = x - totalBarW / 2 + j * barW;
                         return (
                           <rect key={`${d}-${b.exp}`} x={bx} y={PAD_T + plotH - barH} width={Math.max(barW * 0.85, 0.5)} height={barH}
@@ -2524,7 +3041,7 @@ const OiHistory: React.FC = () => {
 
                     {[0, 0.5, 1].map((frac) => (
                       <text key={frac} x={W - PAD_R + 4} y={PAD_T + plotH * (1 - frac) + 3} textAnchor="start" fontSize="6" fill="var(--text-secondary)">
-                        {formatOiCompact(Math.round(maxOi * frac))}
+                        {formatOiCompact(Math.round(maxBarValue * frac))}
                       </text>
                     ))}
 
@@ -2557,6 +3074,12 @@ const OiHistory: React.FC = () => {
             <span className="oi-history__chart-legend-item">
               <span className="oi-history__chart-legend-bar" /> OI
             </span>
+          </div>
+          <div className="oi-history__chart-metric-row">
+            <div className="oi-history__metric-toggle" role="group" aria-label="Chart bar metric">
+              <button type="button" className={`oi-history__volume-toggle ${!showVolume ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setShowVolume(false)} aria-pressed={!showVolume}>OI</button>
+              <button type="button" className={`oi-history__volume-toggle ${showVolume ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setShowVolume(true)} aria-pressed={showVolume}>Volume</button>
+            </div>
           </div>
             </>
           )}
@@ -2615,6 +3138,62 @@ const OiHistory: React.FC = () => {
                     <div><span style={{ width: setupReadinessWidth(chartData.sellingSetup.status, readinessScore(chartData.sellingSetup.checklist)) }} /></div>
                   </div>
                   <p>{chartData.sellingSetup.action}</p>
+                  <div className="oi-history__decay-summary">
+                    <div className="oi-history__decay-summary-head">
+                      <span>Nearest-expiry decay monitor</span>
+                      <strong>{chartData.premiumDecay.nearestExpiry ? expiryLabel(chartData.premiumDecay.nearestExpiry, isMonthlyExpiry(chartData.premiumDecay.nearestExpiry)) : 'Unavailable'}</strong>
+                    </div>
+                    <div className="oi-history__decay-summary-grid">
+                      {(['CE', 'PE'] as const).map((optionType) => {
+                        const side = optionType === 'CE' ? chartData.premiumDecay.ce : chartData.premiumDecay.pe;
+                        return (
+                          <div key={optionType} className="oi-history__decay-summary-side">
+                            <span>{optionType} premium</span>
+                            <strong>{side ? formatPct(side.decayPct) : '-'}</strong>
+                            <small>{side ? `${side.daysToExpiry === null ? '? days' : `${side.daysToExpiry} DTE`} · Vol ${side.latestVolume > 0 ? side.latestVolume.toLocaleString('en-IN') : '-'}` : 'Not enough price history'}</small>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                  {signalPerformance && (
+                    <div className="oi-history__signal-performance">
+                      <div className="oi-history__signal-performance-head">
+                        <span>Recorded setup results</span>
+                        <div>
+                          <strong>{signalPerformance.total} signals · {signalPerformance.evaluated} evaluated</strong>
+                          <button type="button" className="oi-history__signal-export" onClick={exportSignalResults}>Export CSV</button>
+                        </div>
+                      </div>
+                      <div className={`oi-history__signal-confidence ${signalPerformance.evaluated >= 20 ? 'is-ready' : ''}`}>
+                        {signalPerformance.evaluated >= 20
+                          ? 'Performance sample is large enough for an initial review.'
+                          : `Preliminary sample: ${Math.max(0, 20 - signalPerformance.evaluated)} more evaluated signals needed before trusting the percentages.`}
+                      </div>
+                      <div className="oi-history__signal-performance-grid">
+                        <span>Win rate <strong>{signalPerformance.winRate === null ? '-' : `${signalPerformance.winRate.toFixed(0)}%`}</strong></span>
+                        <span>Avg return <strong>{signalPerformance.averageReturn === null ? '-' : `${signalPerformance.averageReturn >= 0 ? '+' : ''}${signalPerformance.averageReturn.toFixed(1)}%`}</strong></span>
+                        <span>Avg best move <strong>{signalPerformance.averageMaxFavorable === null ? '-' : `+${signalPerformance.averageMaxFavorable.toFixed(1)}%`}</strong></span>
+                        <span>Avg worst move <strong>{signalPerformance.averageMaxAdverse === null ? '-' : `${signalPerformance.averageMaxAdverse.toFixed(1)}%`}</strong></span>
+                        <span>Sell <strong>{signalPerformance.sellWinRate === null ? '-' : `${signalPerformance.sellWinRate.toFixed(0)}% (${signalPerformance.sellEvaluated})`}</strong></span>
+                        <span>Buy <strong>{signalPerformance.buyWinRate === null ? '-' : `${signalPerformance.buyWinRate.toFixed(0)}% (${signalPerformance.buyEvaluated})`}</strong></span>
+                      </div>
+                      <div className="oi-history__signal-breakdown">
+                        {signalPerformance.optionBreakdown.map((item) => (
+                          <span key={item.label}>
+                            {item.label}
+                            <strong>{item.winRate === null ? '-' : `${item.winRate.toFixed(0)}%`}</strong>
+                            <small>{item.evaluated} evaluated{item.averageReturn === null ? '' : ` · ${item.averageReturn >= 0 ? '+' : ''}${item.averageReturn.toFixed(1)}% avg`}</small>
+                          </span>
+                        ))}
+                      </div>
+                      <div className="oi-history__signal-quality">
+                        <span>Avg win <strong>{signalPerformance.averageWin === null ? '-' : `+${signalPerformance.averageWin.toFixed(1)}%`}</strong></span>
+                        <span>Avg loss <strong>{signalPerformance.averageLoss === null ? '-' : `${signalPerformance.averageLoss.toFixed(1)}%`}</strong></span>
+                        <span>Profit factor <strong>{signalPerformance.profitFactor === null ? '-' : signalPerformance.profitFactor === Infinity ? '∞' : signalPerformance.profitFactor.toFixed(2)}</strong></span>
+                      </div>
+                    </div>
+                  )}
                   <div className="oi-history__setup-primary-action">
                     <span>Structure</span>
                     <strong>{chartData.sellingSetup.type === 'No Sell' ? 'Wait for support/resistance setup' : 'Prefer defined-risk credit spread'}</strong>
@@ -2645,74 +3224,15 @@ const OiHistory: React.FC = () => {
                 </div>
               </div>
 
-              <div className="oi-history__setup-context-strip">
-                <div>
-                  <span>Price</span>
-                  <strong>{chartData.priceTrend.direction}</strong>
-                </div>
-                <div>
-                  <span>Flow</span>
-                  <strong>{chartData.biasSummary.bias} - {chartData.biasSummary.strength}</strong>
-                </div>
-                <div>
-                  <span>Support</span>
-                  <strong>{chartData.tradeLevels.supportStrike ?? '-'}</strong>
-                </div>
-                <div>
-                  <span>Spot</span>
-                  <strong>{chartData.tradeLevels.spot !== null ? chartData.tradeLevels.spot.toFixed(2) : '-'}</strong>
-                </div>
-                <div>
-                  <span>Resistance</span>
-                  <strong>{chartData.tradeLevels.resistanceStrike ?? '-'}</strong>
-                </div>
-                <div>
-                  <span>Max OI</span>
-                  <strong>{chartData.tradeLevels.maxOiStrike ?? '-'}</strong>
-                </div>
-              </div>
-
-              <div className="oi-history__setup-visual-grid oi-history__setup-visual-grid--compact">
-                <div className="oi-history__alignment-card">
-                  <span>Alignment</span>
-                  <div className="oi-history__alignment-row">
-                    <div>
-                      <small>Price</small>
-                      <strong>{chartData.priceTrend.direction}</strong>
-                    </div>
-                    <div>
-                      <small>Flow</small>
-                      <strong>{chartData.biasSummary.bias}</strong>
-                    </div>
-                    <div>
-                      <small>Bias</small>
-                      <strong>{chartData.tradeBias.bias}</strong>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="oi-history__level-card">
-                  <span>Level map</span>
-                  <div className="oi-history__level-map">
-                    <div>
-                      <small>Support</small>
-                      <strong>{chartData.tradeLevels.supportStrike ?? '-'}</strong>
-                    </div>
-                    <div>
-                      <small>Spot</small>
-                      <strong>{chartData.tradeLevels.spot !== null ? chartData.tradeLevels.spot.toFixed(2) : '-'}</strong>
-                    </div>
-                    <div>
-                      <small>Resistance</small>
-                      <strong>{chartData.tradeLevels.resistanceStrike ?? '-'}</strong>
-                    </div>
-                  </div>
-                  <div className="oi-history__level-line">
-                    <span />
-                    <span />
-                    <span />
-                  </div>
-                  <em>Max-OI magnet: {chartData.tradeLevels.maxOiStrike ?? '-'}</em>
+              <div className="oi-history__market-context" aria-label="Market context">
+                <span className="oi-history__market-context-title">Market context</span>
+                <div className="oi-history__market-context-items">
+                  <span><small>Price</small><strong>{chartData.priceTrend.direction}</strong></span>
+                  <span><small>Flow</small><strong>{chartData.biasSummary.bias} · {chartData.biasSummary.strength}</strong></span>
+                  <span><small>Support</small><strong>{chartData.tradeLevels.supportStrike ?? '-'}</strong></span>
+                  <span><small>Spot</small><strong>{chartData.tradeLevels.spot !== null ? chartData.tradeLevels.spot.toFixed(2) : '-'}</strong></span>
+                  <span><small>Resistance</small><strong>{chartData.tradeLevels.resistanceStrike ?? '-'}</strong></span>
+                  <span><small>Max OI</small><strong>{chartData.tradeLevels.maxOiStrike ?? '-'}</strong></span>
                 </div>
               </div>
 

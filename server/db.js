@@ -1305,6 +1305,53 @@ export async function getOiHistoryDataByExpiryMonth(scrip, expiryMonth, fromDate
   return result.map(mapOiHistoryRow);
 }
 
+export async function saveTradeSetupSignal(userId, signal) {
+  const row = await firstRow(
+    `INSERT INTO trade_setup_signals
+      (user_id, scrip, signal_date, expiry, strike, option_type, action, status, entry_premium, spot_price, details)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+     ON CONFLICT (user_id, scrip, signal_date, expiry, strike, option_type, action)
+     DO UPDATE SET status = EXCLUDED.status,
+                   entry_premium = EXCLUDED.entry_premium,
+                   spot_price = EXCLUDED.spot_price,
+                   details = EXCLUDED.details
+     RETURNING id, signal_date, strike, option_type, action, status`,
+    [userId, signal.scrip, signal.signalDate, signal.expiry || null, signal.strike,
+      signal.optionType, signal.action, signal.status, signal.entryPremium ?? null,
+      signal.spotPrice ?? null, JSON.stringify(signal.details || {})],
+  );
+  return row;
+}
+
+export async function getTradeSetupSignals(userId, { scrip = null, limit = 100 } = {}) {
+  const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
+  if (scrip) {
+    return rows(
+      `SELECT * FROM trade_setup_signals WHERE user_id = $1 AND scrip = $2
+       ORDER BY signal_date DESC, created_at DESC LIMIT $3`,
+      [userId, scrip, safeLimit],
+    );
+  }
+  return rows(
+    `SELECT * FROM trade_setup_signals WHERE user_id = $1
+     ORDER BY signal_date DESC, created_at DESC LIMIT $2`,
+    [userId, safeLimit],
+  );
+}
+
+export async function updateTradeSetupSignalOutcome(userId, signalId, outcome) {
+  return firstRow(
+    `UPDATE trade_setup_signals
+     SET outcome_price = $1, outcome_date = $2, outcome_return = $3, outcome_status = $4,
+         max_favorable_return = $5, max_adverse_return = $6, outcome_final = $7
+     WHERE id = $8 AND user_id = $9
+     RETURNING id, outcome_price, outcome_date, outcome_return, outcome_status,
+               max_favorable_return, max_adverse_return, outcome_final`,
+    [outcome.price, outcome.date, outcome.returnPct, outcome.status,
+      outcome.maxFavorableReturn, outcome.maxAdverseReturn, outcome.final, signalId, userId],
+  );
+}
+
 export async function getOptionsForAtm(scripName, atmStrike, stepSize = 50, range = 15, { allExpiries = false, targetMonth = '' } = {}) {
   const lowerStrike = atmStrike - range * stepSize;
   const upperStrike = atmStrike + range * stepSize;

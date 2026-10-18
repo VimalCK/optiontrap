@@ -648,6 +648,12 @@
   color: var(--text-primary);
 }
 
+.oi-history__chart-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .oi-history__analysis-tabs {
   display: inline-flex;
   gap: 4px;
@@ -1131,6 +1137,188 @@
   background: rgba(148, 163, 184, 0.35);
 }
 
+.oi-history__decay-summary {
+  margin: 8px 0 4px;
+  padding: 9px 10px;
+  border: 1px solid rgba(245, 158, 11, 0.28);
+  border-radius: 8px;
+  background: rgba(245, 158, 11, 0.06);
+}
+
+.oi-history__decay-summary-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.oi-history__decay-summary-head span,
+.oi-history__decay-summary-side span,
+.oi-history__decay-summary-side small {
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.oi-history__decay-summary-head strong {
+  color: var(--text-primary);
+  font-size: 10px;
+}
+
+.oi-history__decay-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 7px;
+}
+
+.oi-history__decay-summary-side {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.oi-history__decay-summary-side strong {
+  color: var(--text-primary);
+  font-size: 16px;
+}
+
+.oi-history__signal-performance {
+  margin: 8px 0 4px;
+  padding: 8px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.oi-history__signal-performance-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.oi-history__signal-performance-head strong {
+  color: var(--text-primary);
+  font-size: 10px;
+}
+
+.oi-history__signal-performance-head > div {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.oi-history__signal-confidence {
+  margin-top: 5px;
+  color: #fbbf24;
+  font-size: 9px;
+}
+
+.oi-history__signal-confidence.is-ready {
+  color: #86efac;
+}
+
+.oi-history__signal-export {
+  padding: 3px 7px;
+  border: 1px solid var(--card-border);
+  border-radius: 5px;
+  color: var(--text-secondary);
+  background: transparent;
+  font-size: 9px;
+  cursor: pointer;
+}
+
+.oi-history__signal-export:hover {
+  color: var(--text-primary);
+  border-color: var(--accent, #60a5fa);
+}
+
+.oi-history__signal-performance-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 8px;
+  margin-top: 7px;
+  color: var(--text-secondary);
+  font-size: 10px;
+}
+
+.oi-history__signal-performance-grid span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.oi-history__signal-performance-grid strong {
+  color: var(--text-primary);
+  font-size: 13px;
+}
+
+.oi-history__signal-breakdown {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--card-border);
+}
+
+.oi-history__signal-breakdown span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: var(--text-secondary);
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.oi-history__signal-breakdown strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.oi-history__signal-breakdown small {
+  color: var(--text-muted, var(--text-secondary));
+  font-size: 9px;
+  font-weight: 500;
+}
+
+.oi-history__signal-quality {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-top: 7px;
+  padding-top: 7px;
+  border-top: 1px solid var(--card-border);
+  color: var(--text-secondary);
+  font-size: 9px;
+}
+
+.oi-history__signal-quality span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.oi-history__signal-quality strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+@media (max-width: 520px) {
+  .oi-history__signal-performance-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .oi-history__signal-breakdown {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .oi-history__signal-quality {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
 .oi-history__setup-mode-card span,
 .oi-history__setup-section-title {
   color: var(--text-secondary);
@@ -1223,6 +1411,54 @@
 
 .oi-history__setup-context-strip > div:hover {
   border-color: rgba(255, 255, 255, 0.12);
+}
+
+.oi-history__market-context {
+  margin: 12px 0 14px;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.oi-history__market-context-title {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.oi-history__market-context-items {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.oi-history__market-context-items span {
+  min-width: 0;
+}
+
+.oi-history__market-context-items small,
+.oi-history__market-context-items strong {
+  display: block;
+}
+
+.oi-history__market-context-items small {
+  color: var(--text-secondary);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.oi-history__market-context-items strong {
+  overflow: hidden;
+  margin-top: 3px;
+  color: var(--text-primary);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .oi-history__readiness-meter {
@@ -1774,6 +2010,12 @@
   color: var(--text-secondary);
 }
 
+.oi-history__chart-metric-row {
+  display: flex;
+  justify-content: center;
+  margin-top: 7px;
+}
+
 .oi-history__chart-legend-item {
   display: flex;
   align-items: center;
@@ -1847,6 +2089,37 @@ span.oi-history__chart-legend-item:hover {
 
 .oi-history__chart-label--pe {
   color: var(--red, #ef4444);
+}
+
+.oi-history__volume-toggle {
+  min-height: 24px;
+  padding: 4px 9px;
+  border: 0;
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: transparent;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.oi-history__volume-toggle:hover {
+  color: var(--text-primary);
+}
+
+.oi-history__volume-toggle--active {
+  color: var(--text-primary);
+  background: rgba(96, 165, 250, 0.1);
+}
+
+.oi-history__metric-toggle {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.12);
 }
 
 /* Dominant pattern indicator */
@@ -1928,8 +2201,13 @@ span.oi-history__chart-legend-item:hover {
     flex-direction: column;
   }
 
-  .oi-history__analysis-tabs {
+  .oi-history__chart-controls {
     width: 100%;
+    justify-content: space-between;
+  }
+
+  .oi-history__analysis-tabs {
+    flex: 1;
   }
 
   .oi-history__analysis-tab {
@@ -1972,6 +2250,10 @@ span.oi-history__chart-legend-item:hover {
 
   .oi-history__setup-confidence em {
     text-align: left;
+  }
+
+  .oi-history__market-context-items {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .oi-history__setup-signal-strip,
@@ -2029,6 +2311,10 @@ span.oi-history__chart-legend-item:hover {
 
   .oi-history__setup-header {
     flex-direction: column;
+  }
+
+  .oi-history__market-context-items {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .oi-history__bias-stats {
