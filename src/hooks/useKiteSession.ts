@@ -1,13 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { getSession, fetchAuthStatus, KiteSession, AuthStatus } from '@/services/kiteAuth';
-
-const SESSION_EVENT = 'optiontrap_session_change';
+import { AUTH_SESSION_EVENT } from '@/services/authSession';
 
 /**
  * Dispatch this after login/logout to notify all listeners
  */
 export function notifySessionChange(): void {
-  window.dispatchEvent(new Event(SESSION_EVENT));
+  window.dispatchEvent(new Event(AUTH_SESSION_EVENT));
 }
 
 /**
@@ -32,10 +31,10 @@ export function useKiteSession(): { session: KiteSession | null; loading: boolea
     refresh();
 
     const handleChange = () => { refresh(); };
-    window.addEventListener(SESSION_EVENT, handleChange);
+    window.addEventListener(AUTH_SESSION_EVENT, handleChange);
     window.addEventListener('storage', handleChange);
     return () => {
-      window.removeEventListener(SESSION_EVENT, handleChange);
+      window.removeEventListener(AUTH_SESSION_EVENT, handleChange);
       window.removeEventListener('storage', handleChange);
     };
   }, [refresh]);

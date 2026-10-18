@@ -2,6 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useKiteSession } from '@/hooks/useKiteSession';
 import { tickerConnect, tickerDisconnect } from '@/services/tickerSingleton';
+import { handleKiteAuthFailure, isKiteAuthFailure } from '@/services/authSession';
 import FeedbackButton from '@/components/Feedback/FeedbackButton';
 import Sidebar from './components/Sidebar/Sidebar';
 import Holdings from './pages/Holdings';
@@ -20,12 +21,47 @@ import './styles/login.css';
 
 const SIDEBAR_STORAGE_KEY = 'optiontrap_sidebar_collapsed';
 
+function isAuthEndpoint(input: RequestInfo | URL): boolean {
+  const rawUrl = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+  try {
+    return new URL(rawUrl, window.location.origin).pathname.startsWith('/auth/');
+  } catch {
+    return false;
+  }
+}
+
 const App: React.FC = () => {
   const { session, loading } = useKiteSession();
   const isAuthenticated = session !== null;
   const isAdmin = session?.isAdmin === true;
   // Admins are the ultimate role — full access without a subscription.
   const hasAccess = session?.subscription?.active === true || isAdmin;
+
+  // Some Kite failures are returned in a successful HTTP response body. Observe
+  // all app fetches so every page gets the same session-expiry behaviour.
+  useEffect(() => {
+    const originalFetch = window.fetch;
+
+    window.fetch = async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const response = await originalFetch.call(window, input, init);
+
+      if (!isAuthEndpoint(input)) {
+        if (response.status === 401 || response.status === 403) {
+          handleKiteAuthFailure();
+        } else if (!response.headers.get('content-type')?.includes('text/event-stream')) {
+          void response.clone().text().then((body) => {
+            if (isKiteAuthFailure(body)) handleKiteAuthFailure();
+          }).catch(() => undefined);
+        }
+      }
+
+      return response;
+    };
+
+    return () => {
+      window.fetch = originalFetch;
+    };
+  }, []);
 
   // Connect/disconnect the singleton ticker when session changes
   useEffect(() => {

@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { handleKiteAuthFailure, isKiteAuthFailure } from '@/services/authSession';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { addPosition } from '@/services/positions';
 import { getLotSize } from '@/services/optionChain';
@@ -1384,6 +1386,7 @@ const ChartXAxis: React.FC<ChartXAxisProps> = ({ dates, padL, plotW, h }) => {
 };
 
 const OiHistory: React.FC = () => {
+  const navigate = useNavigate();
   const [scrip, setScrip] = useState('NIFTY50');
   const [selectedExpiryMonth, setSelectedExpiryMonth] = useState(currentMonthIST());
   const [fetching, setFetching] = useState(false);
@@ -1552,8 +1555,12 @@ const OiHistory: React.FC = () => {
       }),
     });
 
-    if (!res.ok || !res.body) {
-      throw new Error(`Server error (${res.status})`);
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new Error(body || `Server error (${res.status})`);
+    }
+    if (!res.body) {
+      throw new Error('Server returned an empty response');
     }
 
     const reader = res.body.getReader();
@@ -1640,13 +1647,19 @@ const OiHistory: React.FC = () => {
       }
       setProgress(null);
     } catch (err) {
-      setFetchError(err instanceof Error ? err.message : 'Network error');
+      const message = err instanceof Error ? err.message : 'Network error';
+      if (isKiteAuthFailure(message)) {
+        handleKiteAuthFailure();
+        navigate('/login', { replace: true });
+      } else {
+        setFetchError(message);
+      }
       setProgress(null);
     } finally {
       setFetching(false);
       loadData();
     }
-  }, [fetchableExpiryMonths, fetchExpiryMonth, loadData, strikeRange, specificStrikeValue]);
+  }, [fetchableExpiryMonths, fetchExpiryMonth, loadData, navigate, strikeRange, specificStrikeValue]);
 
   // When scrip or expiry month changes, load existing data from the DB only.
   // Fetching fresh data from Kite is an explicit action via the Fetch button.
