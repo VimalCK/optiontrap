@@ -25,6 +25,19 @@ interface OiHistoryRow {
   spotClose: number;
 }
 
+interface FuturesHistoryRow {
+  date: string;
+  instrumentToken: number;
+  tradingsymbol: string;
+  expiry: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  volume: number;
+  oi: number;
+}
+
 interface FetchProgress {
   step: string;
   pct: number;
@@ -1396,9 +1409,13 @@ const OiHistory: React.FC = () => {
   const [fetchResult, setFetchResult] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [data, setData] = useState<OiHistoryRow[]>([]);
+  const [futuresData, setFuturesData] = useState<FuturesHistoryRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [filterDate, setFilterDate] = useState('');
   const [showPatternInfo, setShowPatternInfo] = useState(false);
+  const [showFuturesInfo, setShowFuturesInfo] = useState(false);
+  const [futuresView, setFuturesView] = useState<'table' | 'chart'>('table');
+  const [futuresHover, setFuturesHover] = useState<{ date: string; close: number; oi: number; volume: number; x: number; y: number } | null>(null);
   const [analysisTab, setAnalysisTab] = useState<'history' | 'setup'>('history');
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [signalPerformance, setSignalPerformance] = useState<SignalPerformanceSummary | null>(null);
@@ -1520,8 +1537,11 @@ const OiHistory: React.FC = () => {
           return apiClient.get<OiHistoryRow[]>(`/api/oi-history?${params}`);
         }),
       );
+      const futuresParams = new URLSearchParams({ scrip, expiryMonth: selectedExpiryMonth });
+      const futuresResult = await apiClient.get<FuturesHistoryRow[]>(`/api/oi-history/futures?${futuresParams}`);
       const merged = results.flat();
       setData(merged);
+      setFuturesData(futuresResult);
       if (merged.length > 0) {
         const dates = [...new Set(merged.map((r) => r.date))].sort();
         const current = currentMonthIST();
@@ -1533,7 +1553,7 @@ const OiHistory: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [scrip, includedExpiryMonths]);
+  }, [scrip, includedExpiryMonths, selectedExpiryMonth]);
 
   /** Stream a single expiry-month fetch from Kite via SSE. Returns on stream end. */
   const fetchExpiryMonth = useCallback(async (month: string, monthLabel: string) => {
@@ -2430,6 +2450,54 @@ const OiHistory: React.FC = () => {
     }
   }, [scrip]);
 
+  const futuresTableRows = useMemo(() => {
+    const sorted = [...futuresData].sort((a, b) => a.date.localeCompare(b.date));
+    return sorted.map((row, index) => {
+      const previous = sorted[index - 1];
+      const priceChangePct = previous?.close > 0 ? ((row.close - previous.close) / previous.close) * 100 : null;
+      const oiChangePct = previous?.oi > 0 ? ((row.oi - previous.oi) / previous.oi) * 100 : null;
+      const averageVolume = sorted.slice(Math.max(0, index - 5), index).map((item) => item.volume).filter((value) => value > 0);
+      const avgVolume = averageVolume.length ? averageVolume.reduce((sum, value) => sum + value, 0) / averageVolume.length : null;
+      let interpretation = 'New data';
+      if (priceChangePct !== null && oiChangePct !== null) {
+        if (priceChangePct >= 0 && oiChangePct >= 0) interpretation = 'Long buildup';
+        else if (priceChangePct < 0 && oiChangePct >= 0) interpretation = 'Short buildup';
+        else if (priceChangePct < 0 && oiChangePct < 0) interpretation = 'Long unwinding';
+        else interpretation = 'Short covering';
+      }
+      return { ...row, priceChangePct, oiChangePct, avgVolume, interpretation };
+    });
+  }, [futuresData]);
+
+  const futuresChart = useMemo(() => {
+    if (futuresTableRows.length === 0) return null;
+    const prices = futuresTableRows.map((row) => row.close).filter((price) => Number.isFinite(price) && price > 0);
+    if (prices.length === 0) return null;
+    const min = Math.min(...prices);
+    const max = Math.max(...prices);
+    const range = max - min || Math.max(max * 0.01, 1);
+    const padding = range * 0.12;
+    const low = min - padding;
+    const high = max + padding;
+    const left = 50;
+    const right = 50;
+    const top = 16;
+    const bottom = 30;
+    const width = 700;
+    const height = 162;
+    const plotWidth = width - left - right;
+    const plotHeight = height - top - bottom;
+    const maxOi = Math.max(1, ...futuresTableRows.map((row) => row.oi || 0));
+    const maxVolume = Math.max(1, ...futuresTableRows.map((row) => row.volume || 0));
+    const stepX = plotWidth / futuresTableRows.length;
+    const points = futuresTableRows.map((row, index) => ({
+      ...row,
+      x: left + (index + 0.5) * stepX,
+      y: top + ((high - row.close) / (high - low)) * plotHeight,
+    }));
+    return { points, low, high, left, right, top, bottom, width, height, plotWidth, plotHeight, maxOi, maxVolume };
+  }, [futuresTableRows]);
+
   return (
     <div className="oi-history">
       {toasts.length > 0 && (
@@ -2550,16 +2618,6 @@ const OiHistory: React.FC = () => {
             </div>
           </div>
 
-          <button
-            className="app-btn app-btn--icon"
-            onClick={() => setShowPatternInfo(!showPatternInfo)}
-            title="Pattern definitions"
-            style={{ marginLeft: 'auto' }}
-          >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
-            </svg>
-          </button>
         </div>
 
         {recentScripOptions.length > 0 && (
@@ -2674,6 +2732,163 @@ const OiHistory: React.FC = () => {
         </div>
       )}
 
+      {futuresTableRows.length > 0 && (
+        <div className="oi-history__table-wrap card" style={{ marginBottom: 16 }}>
+          <div className="oi-history__table-header">
+            <div className="oi-history__table-header-left">
+              <div>
+                <div className="oi-history__table-title">Futures Context</div>
+                <div className="oi-history__table-subtitle">
+                  {futuresTableRows[0].tradingsymbol} · Daily price, OI, and volume confirmation
+                </div>
+              </div>
+            </div>
+            <div className="oi-history__table-meta">
+              <div className="oi-history__metric-toggle" role="group" aria-label="Futures view">
+                <button type="button" className={`oi-history__volume-toggle ${futuresView === 'table' ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setFuturesView('table')} aria-pressed={futuresView === 'table'}>Table</button>
+                <button type="button" className={`oi-history__volume-toggle ${futuresView === 'chart' ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setFuturesView('chart')} aria-pressed={futuresView === 'chart'}>Chart</button>
+              </div>
+              <button
+                type="button"
+                className="app-btn app-btn--icon oi-history__futures-info-button"
+                onClick={() => setShowFuturesInfo((visible) => !visible)}
+                title="Explain futures signals"
+                aria-label="Explain futures signals"
+                aria-expanded={showFuturesInfo}
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+          {showFuturesInfo && (
+            <div className="oi-history__futures-info" role="note">
+              <div className="oi-history__futures-info-title">How futures signals are calculated</div>
+              <div className="oi-history__futures-info-grid">
+                <div className="oi-history__futures-info-item oi-history__futures-info-item--bullish">
+                  <strong>Long buildup</strong>
+                  <span>Price ↑ and OI ↑</span>
+                  <small>New buyers are entering. Generally bullish.</small>
+                </div>
+                <div className="oi-history__futures-info-item oi-history__futures-info-item--bearish">
+                  <strong>Short buildup</strong>
+                  <span>Price ↓ and OI ↑</span>
+                  <small>New sellers are entering. Generally bearish.</small>
+                </div>
+                <div className="oi-history__futures-info-item oi-history__futures-info-item--bearish">
+                  <strong>Long unwinding</strong>
+                  <span>Price ↓ and OI ↓</span>
+                  <small>Existing buyers are closing positions. Signals weakness.</small>
+                </div>
+                <div className="oi-history__futures-info-item oi-history__futures-info-item--bullish">
+                  <strong>Short covering</strong>
+                  <span>Price ↑ and OI ↓</span>
+                  <small>Existing sellers are closing positions. Can support a rebound.</small>
+                </div>
+              </div>
+              <div className="oi-history__futures-volume-note">
+                <strong>Active volume:</strong> today’s volume is at least the average of the previous five trading days. This indicates stronger participation, not direction by itself.
+              </div>
+            </div>
+          )}
+          {futuresView === 'chart' && futuresChart ? (
+            <div className="oi-history__chart-wrap">
+              <div className="oi-history__chart-header">
+                <div className="oi-history__chart-title">Futures Price History</div>
+              </div>
+              <svg className="oi-history__chart-svg" viewBox={`0 0 ${futuresChart.width} ${futuresChart.height}`} role="img" aria-label={`${futuresTableRows[0].tradingsymbol} futures price chart`}>
+                {[0, 0.5, 1].map((fraction) => {
+                  const y = futuresChart.top + fraction * futuresChart.plotHeight;
+                  const value = futuresChart.high - fraction * (futuresChart.high - futuresChart.low);
+                  return (
+                    <g key={fraction}>
+                      <line x1={futuresChart.left} x2={futuresChart.width - futuresChart.right} y1={y} y2={y} stroke="var(--card-border)" strokeWidth="0.5" />
+                      <text x={futuresChart.left - 4} y={y + 3} textAnchor="end" fontSize="6" fill="var(--text-secondary)">{value.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</text>
+                    </g>
+                  );
+                })}
+                <line x1={futuresChart.left} x2={futuresChart.width - futuresChart.right} y1={futuresChart.top + futuresChart.plotHeight} y2={futuresChart.top + futuresChart.plotHeight} stroke="var(--text-secondary)" strokeWidth="0.5" opacity="0.5" />
+                <line x1={futuresChart.left} x2={futuresChart.width - futuresChart.right} y1={futuresChart.top + futuresChart.plotHeight} y2={futuresChart.top + futuresChart.plotHeight} stroke="var(--text-secondary)" strokeWidth="0.5" opacity="0.5" />
+                {futuresChart.points.map((point) => {
+                  const slotWidth = futuresChart.plotWidth / futuresChart.points.length;
+                  const barWidth = Math.min(slotWidth * 0.32, 6);
+                  const oiHeight = (point.oi / futuresChart.maxOi) * futuresChart.plotHeight;
+                  const volumeHeight = (point.volume / futuresChart.maxVolume) * futuresChart.plotHeight;
+                  return (
+                    <g key={`bars-${point.date}`} onMouseEnter={() => setFuturesHover(point)} onMouseLeave={() => setFuturesHover(null)}>
+                      <rect x={point.x - barWidth} y={futuresChart.top + futuresChart.plotHeight - oiHeight} width={Math.max(barWidth, 0.5)} height={oiHeight} fill="#8b5cf6" opacity="0.45" rx="1">
+                        <title>{`${formatFullDateLabel(point.date)} OI: ${formatOiCompact(point.oi)}`}</title>
+                      </rect>
+                      <rect x={point.x} y={futuresChart.top + futuresChart.plotHeight - volumeHeight} width={Math.max(barWidth, 0.5)} height={volumeHeight} fill="#06b6d4" opacity="0.45" rx="1">
+                        <title>{`${formatFullDateLabel(point.date)} Volume: ${formatOiCompact(point.volume)}`}</title>
+                      </rect>
+                    </g>
+                  );
+                })}
+                <polyline points={futuresChart.points.map((point) => `${point.x},${point.y}`).join(' ')} fill="none" stroke="var(--green, #22c55e)" strokeWidth="1.2" strokeLinejoin="round" />
+                {futuresChart.points.map((point) => (
+                  <circle key={point.date} cx={point.x} cy={point.y} r="3" fill="var(--green, #22c55e)" onMouseEnter={() => setFuturesHover(point)} onMouseLeave={() => setFuturesHover(null)}>
+                    <title>{`${formatFullDateLabel(point.date)}: ${point.close.toLocaleString('en-IN')}`}</title>
+                  </circle>
+                ))}
+                {futuresHover && (() => {
+                  const tooltipWidth = 150;
+                  const tooltipX = Math.min(Math.max(futuresHover.x - tooltipWidth / 2, futuresChart.left), futuresChart.width - futuresChart.right - tooltipWidth);
+                  return (
+                    <g pointerEvents="none">
+                      <rect x={tooltipX} y={futuresChart.top + 3} width={tooltipWidth} height="40" rx="3" fill="var(--card-bg-solid, #111827)" stroke="var(--card-border)" />
+                      <text x={tooltipX + 7} y={futuresChart.top + 14} fontSize="8" fill="var(--text-primary)">{formatFullDateLabel(futuresHover.date)}</text>
+                      <text x={tooltipX + 7} y={futuresChart.top + 26} fontSize="8" fill="var(--green, #22c55e)">Close: {futuresHover.close.toLocaleString('en-IN')}</text>
+                      <text x={tooltipX + 7} y={futuresChart.top + 38} fontSize="8" fill="var(--text-secondary)">OI: {formatOiCompact(futuresHover.oi)} · Vol: {formatOiCompact(futuresHover.volume)}</text>
+                    </g>
+                  );
+                })()}
+                {futuresChart.points.map((point) => (
+                  <text key={`label-${point.date}`} x={point.x} y={futuresChart.height - 20} textAnchor="middle" fontSize="5.5" fill="var(--text-secondary)">{point.date.slice(8)}</text>
+                ))}
+              </svg>
+              <div className="oi-history__chart-legend">
+                <span className="oi-history__chart-legend-item"><span className="oi-history__chart-legend-swatch" style={{ background: '#8b5cf6' }} /> OI</span>
+                <span className="oi-history__chart-legend-item"><span className="oi-history__chart-legend-swatch" style={{ background: '#06b6d4' }} /> Volume</span>
+                <span className="oi-history__chart-legend-item"><span className="oi-history__chart-legend-swatch" style={{ background: 'var(--green, #22c55e)' }} /> Price</span>
+              </div>
+            </div>
+          ) : (
+          <div className="oi-history__table-scroll">
+            <table className="oi-history__table oi-history__futures-table">
+              <thead><tr>
+                <th className="oi-history__futures-th--date">Date</th>
+                <th className="oi-history__futures-th--price">Close</th>
+                <th className="oi-history__futures-th--price">Price</th>
+                <th className="oi-history__futures-th--oi">OI</th>
+                <th className="oi-history__futures-th--oi">OI change</th>
+                <th className="oi-history__futures-th--volume">Volume</th>
+                <th className="oi-history__futures-th--signal">Signal</th>
+              </tr></thead>
+              <tbody>{futuresTableRows.map((row) => (
+                <tr key={row.date}>
+                  <td className="oi-history__futures-date">{formatFullDateLabel(row.date)}</td>
+                  <td className="oi-history__futures-close">{row.close?.toLocaleString('en-IN') || '-'}</td>
+                  <td className={row.priceChangePct !== null && row.priceChangePct >= 0 ? 'oi-history__futures-positive' : 'oi-history__futures-negative'}>
+                    <span className="oi-history__cell-primary">{row.priceChangePct === null ? '-' : `${row.priceChangePct >= 0 ? '+' : ''}${row.priceChangePct.toFixed(2)}%`}</span>
+                  </td>
+                  <td className="oi-history__futures-oi">{row.oi?.toLocaleString('en-IN') || '-'}</td>
+                  <td className={row.oiChangePct !== null && row.oiChangePct >= 0 ? 'oi-history__futures-positive' : 'oi-history__futures-negative'}>
+                    <span className="oi-history__cell-primary">{row.oiChangePct === null ? '-' : `${row.oiChangePct >= 0 ? '+' : ''}${row.oiChangePct.toFixed(2)}%`}</span>
+                  </td>
+                  <td className="oi-history__futures-volume">{row.volume?.toLocaleString('en-IN') || '-'}</td>
+                  <td className={`oi-history__futures-signal ${row.interpretation === 'Long buildup' || row.interpretation === 'Short covering' ? 'oi-history__futures-signal--bullish' : row.interpretation === 'Short buildup' || row.interpretation === 'Long unwinding' ? 'oi-history__futures-signal--bearish' : ''}`}>
+                    {row.interpretation}{row.avgVolume && row.volume >= row.avgVolume ? ' · active volume' : ''}
+                  </td>
+                </tr>
+              ))}</tbody>
+            </table>
+          </div>
+          )}
+        </div>
+      )}
+
       {/* Loading indicator */}
       {(loading || fetching) && data.length === 0 && (
         <div className="card oi-history__loading-card">
@@ -2698,6 +2913,18 @@ const OiHistory: React.FC = () => {
             <div className="oi-history__table-meta">
               <span className="oi-history__table-count">{tableData.length} strikes</span>
               <span className="oi-history__table-count">{visibleTableExpiries.length} expiries</span>
+              <button
+                type="button"
+                className="app-btn app-btn--icon oi-history__pattern-info-button"
+                onClick={() => setShowPatternInfo((visible) => !visible)}
+                title="Explain OI Snapshot patterns"
+                aria-label="Explain OI Snapshot patterns"
+                aria-expanded={showPatternInfo}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+                </svg>
+              </button>
             </div>
           </div>
 

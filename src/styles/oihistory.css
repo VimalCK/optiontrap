@@ -431,6 +431,136 @@
   font-size: 11px;
 }
 
+/* Futures Context is a daily table, so its first column must not inherit the
+   strike-grid offset used by the option table. */
+.oi-history__futures-table {
+  min-width: 760px;
+  table-layout: fixed;
+}
+
+.oi-history__futures-table th:first-child,
+.oi-history__futures-table td:first-child {
+  width: 112px;
+  min-width: 112px;
+  left: 0;
+}
+
+.oi-history__futures-table th:nth-child(2),
+.oi-history__futures-table td:nth-child(2) {
+  width: 100px;
+  min-width: 100px;
+}
+
+.oi-history__futures-table th:nth-child(3),
+.oi-history__futures-table td:nth-child(3),
+.oi-history__futures-table th:nth-child(5),
+.oi-history__futures-table td:nth-child(5) {
+  width: 96px;
+  min-width: 96px;
+}
+
+.oi-history__futures-table th {
+  background: var(--bg-secondary);
+}
+
+.oi-history__futures-th--date { color: var(--text-primary) !important; border-bottom-color: var(--accent) !important; }
+.oi-history__futures-th--price { color: var(--green, #22c55e) !important; border-bottom-color: rgba(34, 197, 94, 0.4) !important; }
+.oi-history__futures-th--oi { color: #a78bfa !important; border-bottom-color: rgba(167, 139, 250, 0.4) !important; }
+.oi-history__futures-th--volume { color: #38bdf8 !important; border-bottom-color: rgba(56, 189, 248, 0.4) !important; }
+.oi-history__futures-th--signal { color: #f59e0b !important; border-bottom-color: rgba(245, 158, 11, 0.4) !important; }
+
+.oi-history__futures-date,
+.oi-history__futures-close,
+.oi-history__futures-oi,
+.oi-history__futures-volume {
+  font-variant-numeric: tabular-nums;
+}
+
+.oi-history__futures-close { color: var(--green, #22c55e) !important; font-weight: 600; }
+.oi-history__futures-oi { color: #c4b5fd !important; }
+.oi-history__futures-volume { color: #7dd3fc !important; }
+.oi-history__futures-positive { background: rgba(34, 197, 94, 0.1); color: var(--green, #22c55e) !important; font-weight: 600; }
+.oi-history__futures-negative { background: rgba(239, 68, 68, 0.1); color: var(--red, #ef4444) !important; font-weight: 600; }
+.oi-history__futures-signal { font-weight: 600; color: var(--text-primary); }
+.oi-history__futures-signal--bullish { color: var(--green, #22c55e) !important; }
+.oi-history__futures-signal--bearish { color: var(--red, #ef4444) !important; }
+
+.oi-history__futures-info-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.oi-history__pattern-info-button {
+  width: 32px;
+  height: 32px;
+  padding: 0;
+}
+
+.oi-history__futures-info {
+  padding: 10px 14px;
+  color: var(--text-secondary);
+  background: rgba(99, 102, 241, 0.07);
+  border-top: 1px solid var(--card-border);
+  border-bottom: 1px solid var(--card-border);
+  font-size: 11px;
+}
+
+.oi-history__futures-info-title {
+  margin-bottom: 9px;
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.oi-history__futures-info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.oi-history__futures-info-item {
+  display: grid;
+  gap: 3px;
+  padding: 8px 10px;
+  background: var(--card-bg-solid);
+  border: 1px solid var(--card-border);
+  border-left: 3px solid var(--text-secondary);
+  border-radius: 5px;
+}
+
+.oi-history__futures-info-item--bullish { border-left-color: var(--green, #22c55e); }
+.oi-history__futures-info-item--bearish { border-left-color: var(--red, #ef4444); }
+
+.oi-history__futures-info-item strong { color: var(--text-primary); }
+.oi-history__futures-info-item--bullish strong { color: var(--green, #22c55e); }
+.oi-history__futures-info-item--bearish strong { color: var(--red, #ef4444); }
+
+.oi-history__futures-info-item span {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.oi-history__futures-info-item small {
+  line-height: 1.35;
+}
+
+.oi-history__futures-volume-note {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px solid var(--card-border);
+  line-height: 1.4;
+}
+
+.oi-history__futures-volume-note strong {
+  color: #38bdf8;
+}
+
+@media (max-width: 600px) {
+  .oi-history__futures-info-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .oi-history__table thead {}
 
 .oi-history__table th {

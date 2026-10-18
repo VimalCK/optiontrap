@@ -71,8 +71,10 @@ import {
   getLatestOiSnapshotTimestamp,
   createOiHistoryTable,
   insertOiHistoryRows,
+  insertOiHistoryFuturesRows,
   getOiHistoryData,
   getOiHistoryDataByExpiryMonth,
+  getOiHistoryFuturesData,
   saveTradeSetupSignal,
   getTradeSetupSignals,
   updateTradeSetupSignalOutcome,
@@ -1029,12 +1031,40 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
       }
 
       const skippedDays = spotCandles.length - allDays.length;
+      // Futures history is independent of option-row caching. Even when all
+      // option days are already stored, refresh/load the futures series so the
+      // Futures Context table can be populated.
+      const fetchFrom = allDays[0]?.date || spotCandles[0][0].slice(0, 10);
+      const fetchTo = allDays[allDays.length - 1]?.date || spotCandles[spotCandles.length - 1][0].slice(0, 10);
+
+      // Futures are stored separately from the strike-level option history.
+      // Use the nearest futures contract in the selected expiry month.
+      const instruments = await getOrFetchInstruments(apiKey, accessToken);
+      const futuresContract = instruments
+        .filter((inst) => inst.name === scripName && inst.exchange === 'NFO' && inst.instrumentType === 'FUT'
+          && inst.expiry && inst.expiry.startsWith(expiryMonth) && inst.expiry >= today)
+        .sort((a, b) => a.expiry.localeCompare(b.expiry))[0];
+      if (futuresContract) {
+        send('step', { step: 2, message: `Fetching futures OI and volume for ${futuresContract.tradingsymbol}...` });
+        try {
+          const futuresUrl = `https://api.kite.trade/instruments/historical/${futuresContract.instrumentToken}/day?from=${fetchFrom}&to=${fetchTo}&oi=1`;
+          const futuresResponse = await fetch(futuresUrl, { headers: { Authorization: authHeader, 'X-Kite-Version': '3' } });
+          if (futuresResponse.ok) {
+            const futuresCandles = (await futuresResponse.json())?.data?.candles || [];
+            await insertOiHistoryFuturesRows(scrip, futuresCandles.map((candle) => ({
+              expiry: futuresContract.expiry, date: candle[0].slice(0, 10),
+              instrumentToken: futuresContract.instrumentToken, tradingsymbol: futuresContract.tradingsymbol,
+              open: candle[1], high: candle[2], low: candle[3], close: candle[4], volume: candle[5], oi: candle[6] ?? 0,
+            })));
+          }
+        } catch (err) {
+          console.warn('[OI History] Futures fetch failed:', err.message);
+        }
+      }
+
       if (allDays.length === 0) {
         return { rowCount: 0, tradingDays: spotCandles.length, skippedDays, fetchedDays: 0, uniqueTokens: 0 };
       }
-
-      const fetchFrom = allDays[0].date;
-      const fetchTo = allDays[allDays.length - 1].date;
 
       // Collect unique tokens needed across all days
       const uniqueTokens = new Map();
@@ -1226,6 +1256,18 @@ app.get('/api/oi-history', requireAuth, requireSubscription, async (req, res) =>
     res.json({ status: 'ok', data });
   } catch (err) {
     console.error('[OI History] GET error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+app.get('/api/oi-history/futures', requireAuth, requireSubscription, async (req, res) => {
+  try {
+    const { scrip, expiryMonth, from } = req.query;
+    if (!scrip || !expiryMonth) return res.status(400).json({ status: 'error', message: 'scrip and expiryMonth are required' });
+    const data = await getOiHistoryFuturesData(scrip, expiryMonth, from || null);
+    res.json({ status: 'ok', data });
+  } catch (err) {
+    console.error('[OI History] Futures GET error:', err.message);
     res.status(500).json({ status: 'error', message: err.message });
   }
 });
