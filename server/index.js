@@ -1031,11 +1031,14 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
       }
 
       const skippedDays = spotCandles.length - allDays.length;
-      // Futures history is independent of option-row caching. Even when all
-      // option days are already stored, refresh/load the futures series so the
-      // Futures Context table can be populated.
+      // Option history only needs the missing option days. Futures history is
+      // independent of option-row caching, so always fetch the full spot date
+      // range. Otherwise the first production fetch can start several days
+      // late when earlier option rows are already cached.
       const fetchFrom = allDays[0]?.date || spotCandles[0][0].slice(0, 10);
       const fetchTo = allDays[allDays.length - 1]?.date || spotCandles[spotCandles.length - 1][0].slice(0, 10);
+      const futuresFetchFrom = spotCandles[0][0].slice(0, 10);
+      const futuresFetchTo = spotCandles[spotCandles.length - 1][0].slice(0, 10);
 
       // Futures are stored separately from the strike-level option history.
       // Use the nearest futures contract in the selected expiry month.
@@ -1047,7 +1050,7 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
       if (futuresContract) {
         send('step', { step: 2, message: `Fetching futures OI and volume for ${futuresContract.tradingsymbol}...` });
         try {
-          const futuresUrl = `https://api.kite.trade/instruments/historical/${futuresContract.instrumentToken}/day?from=${fetchFrom}&to=${fetchTo}&oi=1`;
+          const futuresUrl = `https://api.kite.trade/instruments/historical/${futuresContract.instrumentToken}/day?from=${futuresFetchFrom}&to=${futuresFetchTo}&oi=1`;
           const futuresResponse = await fetch(futuresUrl, { headers: { Authorization: authHeader, 'X-Kite-Version': '3' } });
           if (futuresResponse.ok) {
             const futuresCandles = (await futuresResponse.json())?.data?.candles || [];
