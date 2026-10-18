@@ -3086,6 +3086,17 @@ const OiHistory: React.FC = () => {
 
           {analysisTab === 'setup' && (
             <div className={`oi-history__setup-dashboard oi-history__setup-dashboard--${chartData.tradeSetup.status.toLowerCase()}`}>
+              <div className="oi-history__setup-titlebar">
+                <div>
+                  <span>TRADE SETUP</span>
+                  <h3>Decision dashboard</h3>
+                  <p>One view for buying momentum, selling decay, and the conditions that invalidate each idea.</p>
+                </div>
+                <div className="oi-history__setup-titlebar-meta">
+                  <strong>{selectedStrike ?? '-'} STRIKE</strong>
+                  <span>{filterDate} · {visibleTableExpiries.length} expiry{visibleTableExpiries.length === 1 ? '' : 'ies'}</span>
+                </div>
+              </div>
               <div className="oi-history__setup-choice-grid">
                 <div className={`oi-history__setup-mode-card oi-history__setup-mode-card--${chartData.tradeSetup.status.toLowerCase()}`}>
                   <div className="oi-history__setup-mode-card-head">
@@ -3098,6 +3109,37 @@ const OiHistory: React.FC = () => {
                     <div><span style={{ width: setupReadinessWidth(chartData.tradeSetup.status, readinessScore(chartData.tradeSetup.checklist)) }} /></div>
                   </div>
                   <p>{chartData.tradeSetup.action}</p>
+                  <div className="oi-history__buying-summary">
+                    <div className="oi-history__buying-summary-head">
+                      <div>
+                        <span>Nearest-expiry momentum</span>
+                        <strong>{chartData.optionMomentum.nearestExpiry ? expiryLabel(chartData.optionMomentum.nearestExpiry, isMonthlyExpiry(chartData.optionMomentum.nearestExpiry)) : 'Unavailable'}</strong>
+                      </div>
+                      <em>Buying pressure</em>
+                    </div>
+                    <div className="oi-history__buying-summary-grid">
+                      {(['CE', 'PE'] as const).map((optionType) => {
+                        const side = optionType === 'CE' ? chartData.optionMomentum.ce : chartData.optionMomentum.pe;
+                        return (
+                          <div key={optionType} className="oi-history__buying-summary-side">
+                            <div className="oi-history__buying-summary-side-head">
+                              <strong>{optionType}</strong>
+                              <span>{side ? (side.momentumPct >= 0 ? 'Momentum up' : 'Momentum down') : 'No history'}</span>
+                            </div>
+                            <div className={`oi-history__buying-summary-value ${side && side.momentumPct >= 0 ? 'is-positive' : 'is-negative'}`}>
+                              <strong>{side ? formatPct(side.momentumPct) : '-'}</strong>
+                              <small>premium change</small>
+                            </div>
+                            <div className="oi-history__buying-summary-metrics">
+                              <span>OI <b>{side ? formatPct(side.oiChangePct) : '-'}</b></span>
+                              <span>Vol <b>{side && side.latestVolume > 0 ? side.latestVolume.toLocaleString('en-IN') : '-'}</b></span>
+                              <span>DTE <b>{side?.daysToExpiry ?? '-'}</b></span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
                   <div className="oi-history__setup-primary-action">
                     <span>Strategy</span>
                     <strong>{chartData.tradeSetup.strategy}</strong>
@@ -3116,13 +3158,14 @@ const OiHistory: React.FC = () => {
                       <strong>{chartData.tradeSetup.target}</strong>
                     </div>
                   </div>
-                  {(chartData.tradeSetup.direction === 'Bullish' || chartData.tradeSetup.direction === 'Bearish') && (
+                  {chartData.tradeSetup.status !== 'Avoid' &&
+                    (chartData.tradeSetup.direction === 'Bullish' || chartData.tradeSetup.direction === 'Bearish') && (
                     <button
                       type="button"
                       className="oi-history__setup-trade-btn oi-history__setup-trade-btn--buy"
                       onClick={() => tradeFromSetup('buy')}
                     >
-                      Trade this setup &middot; Buy {chartData.tradeSetup.direction === 'Bullish' ? 'CE' : 'PE'}
+                      Buy {chartData.tradeSetup.direction === 'Bullish' ? 'CE' : 'PE'}
                     </button>
                   )}
                 </div>
@@ -3138,62 +3181,37 @@ const OiHistory: React.FC = () => {
                     <div><span style={{ width: setupReadinessWidth(chartData.sellingSetup.status, readinessScore(chartData.sellingSetup.checklist)) }} /></div>
                   </div>
                   <p>{chartData.sellingSetup.action}</p>
-                  <div className="oi-history__decay-summary">
-                    <div className="oi-history__decay-summary-head">
-                      <span>Nearest-expiry decay monitor</span>
-                      <strong>{chartData.premiumDecay.nearestExpiry ? expiryLabel(chartData.premiumDecay.nearestExpiry, isMonthlyExpiry(chartData.premiumDecay.nearestExpiry)) : 'Unavailable'}</strong>
+                  <div className="oi-history__buying-summary oi-history__decay-monitor">
+                    <div className="oi-history__buying-summary-head">
+                      <div>
+                        <span>Nearest-expiry decay monitor</span>
+                        <strong>{chartData.premiumDecay.nearestExpiry ? expiryLabel(chartData.premiumDecay.nearestExpiry, isMonthlyExpiry(chartData.premiumDecay.nearestExpiry)) : 'Unavailable'}</strong>
+                      </div>
+                      <em>Time decay</em>
                     </div>
-                    <div className="oi-history__decay-summary-grid">
+                    <div className="oi-history__buying-summary-grid">
                       {(['CE', 'PE'] as const).map((optionType) => {
                         const side = optionType === 'CE' ? chartData.premiumDecay.ce : chartData.premiumDecay.pe;
                         return (
-                          <div key={optionType} className="oi-history__decay-summary-side">
-                            <span>{optionType} premium</span>
-                            <strong>{side ? formatPct(side.decayPct) : '-'}</strong>
-                            <small>{side ? `${side.daysToExpiry === null ? '? days' : `${side.daysToExpiry} DTE`} · Vol ${side.latestVolume > 0 ? side.latestVolume.toLocaleString('en-IN') : '-'}` : 'Not enough price history'}</small>
+                          <div key={optionType} className="oi-history__buying-summary-side">
+                            <div className="oi-history__buying-summary-side-head">
+                              <strong>{optionType}</strong>
+                              <span>{side ? (side.decayPct <= 0 ? 'Decay active' : 'Premium rising') : 'No history'}</span>
+                            </div>
+                            <div className={`oi-history__buying-summary-value ${side && side.decayPct <= 0 ? 'is-positive' : 'is-negative'}`}>
+                              <strong>{side ? formatPct(side.decayPct) : '-'}</strong>
+                              <small>premium change</small>
+                            </div>
+                            <div className="oi-history__buying-summary-metrics">
+                              <span>OI <b>{side ? formatPct(side.oiChangePct) : '-'}</b></span>
+                              <span>Vol <b>{side && side.latestVolume > 0 ? side.latestVolume.toLocaleString('en-IN') : '-'}</b></span>
+                              <span>DTE <b>{side?.daysToExpiry ?? '-'}</b></span>
+                            </div>
                           </div>
                         );
                       })}
                     </div>
                   </div>
-                  {signalPerformance && (
-                    <div className="oi-history__signal-performance">
-                      <div className="oi-history__signal-performance-head">
-                        <span>Recorded setup results</span>
-                        <div>
-                          <strong>{signalPerformance.total} signals · {signalPerformance.evaluated} evaluated</strong>
-                          <button type="button" className="oi-history__signal-export" onClick={exportSignalResults}>Export CSV</button>
-                        </div>
-                      </div>
-                      <div className={`oi-history__signal-confidence ${signalPerformance.evaluated >= 20 ? 'is-ready' : ''}`}>
-                        {signalPerformance.evaluated >= 20
-                          ? 'Performance sample is large enough for an initial review.'
-                          : `Preliminary sample: ${Math.max(0, 20 - signalPerformance.evaluated)} more evaluated signals needed before trusting the percentages.`}
-                      </div>
-                      <div className="oi-history__signal-performance-grid">
-                        <span>Win rate <strong>{signalPerformance.winRate === null ? '-' : `${signalPerformance.winRate.toFixed(0)}%`}</strong></span>
-                        <span>Avg return <strong>{signalPerformance.averageReturn === null ? '-' : `${signalPerformance.averageReturn >= 0 ? '+' : ''}${signalPerformance.averageReturn.toFixed(1)}%`}</strong></span>
-                        <span>Avg best move <strong>{signalPerformance.averageMaxFavorable === null ? '-' : `+${signalPerformance.averageMaxFavorable.toFixed(1)}%`}</strong></span>
-                        <span>Avg worst move <strong>{signalPerformance.averageMaxAdverse === null ? '-' : `${signalPerformance.averageMaxAdverse.toFixed(1)}%`}</strong></span>
-                        <span>Sell <strong>{signalPerformance.sellWinRate === null ? '-' : `${signalPerformance.sellWinRate.toFixed(0)}% (${signalPerformance.sellEvaluated})`}</strong></span>
-                        <span>Buy <strong>{signalPerformance.buyWinRate === null ? '-' : `${signalPerformance.buyWinRate.toFixed(0)}% (${signalPerformance.buyEvaluated})`}</strong></span>
-                      </div>
-                      <div className="oi-history__signal-breakdown">
-                        {signalPerformance.optionBreakdown.map((item) => (
-                          <span key={item.label}>
-                            {item.label}
-                            <strong>{item.winRate === null ? '-' : `${item.winRate.toFixed(0)}%`}</strong>
-                            <small>{item.evaluated} evaluated{item.averageReturn === null ? '' : ` · ${item.averageReturn >= 0 ? '+' : ''}${item.averageReturn.toFixed(1)}% avg`}</small>
-                          </span>
-                        ))}
-                      </div>
-                      <div className="oi-history__signal-quality">
-                        <span>Avg win <strong>{signalPerformance.averageWin === null ? '-' : `+${signalPerformance.averageWin.toFixed(1)}%`}</strong></span>
-                        <span>Avg loss <strong>{signalPerformance.averageLoss === null ? '-' : `${signalPerformance.averageLoss.toFixed(1)}%`}</strong></span>
-                        <span>Profit factor <strong>{signalPerformance.profitFactor === null ? '-' : signalPerformance.profitFactor === Infinity ? '∞' : signalPerformance.profitFactor.toFixed(2)}</strong></span>
-                      </div>
-                    </div>
-                  )}
                   <div className="oi-history__setup-primary-action">
                     <span>Structure</span>
                     <strong>{chartData.sellingSetup.type === 'No Sell' ? 'Wait for support/resistance setup' : 'Prefer defined-risk credit spread'}</strong>
@@ -3212,17 +3230,57 @@ const OiHistory: React.FC = () => {
                       <strong>{chartData.sellingSetup.target}</strong>
                     </div>
                   </div>
-                  {(chartData.sellingSetup.type === 'Call Sell' || chartData.sellingSetup.type === 'Put Sell') && (
+                  {chartData.sellingSetup.status !== 'Avoid' &&
+                    (chartData.sellingSetup.type === 'Call Sell' || chartData.sellingSetup.type === 'Put Sell') && (
                     <button
                       type="button"
                       className="oi-history__setup-trade-btn oi-history__setup-trade-btn--sell"
                       onClick={() => tradeFromSetup('sell')}
                     >
-                      Trade this setup &middot; Sell {chartData.sellingSetup.type === 'Call Sell' ? 'CE' : 'PE'}
+                      Sell {chartData.sellingSetup.type === 'Call Sell' ? 'CE' : 'PE'}
                     </button>
                   )}
                 </div>
               </div>
+
+              {signalPerformance && (
+                <div className="oi-history__signal-performance oi-history__signal-performance--dashboard">
+                  <div className="oi-history__signal-performance-head">
+                    <span>Recorded setup performance</span>
+                    <div>
+                      <strong>{signalPerformance.total} signals · {signalPerformance.evaluated} evaluated</strong>
+                      <button type="button" className="oi-history__signal-export" onClick={exportSignalResults}>Export CSV</button>
+                    </div>
+                  </div>
+                  <div className={`oi-history__signal-confidence ${signalPerformance.evaluated >= 20 ? 'is-ready' : ''}`}>
+                    {signalPerformance.evaluated >= 20
+                      ? 'Performance sample is large enough for an initial review.'
+                      : `Preliminary sample: ${Math.max(0, 20 - signalPerformance.evaluated)} more evaluated signals needed before trusting the percentages.`}
+                  </div>
+                  <div className="oi-history__signal-performance-grid">
+                    <span>Win rate <strong>{signalPerformance.winRate === null ? '-' : `${signalPerformance.winRate.toFixed(0)}%`}</strong></span>
+                    <span>Avg return <strong>{signalPerformance.averageReturn === null ? '-' : `${signalPerformance.averageReturn >= 0 ? '+' : ''}${signalPerformance.averageReturn.toFixed(1)}%`}</strong></span>
+                    <span>Avg best move <strong>{signalPerformance.averageMaxFavorable === null ? '-' : `+${signalPerformance.averageMaxFavorable.toFixed(1)}%`}</strong></span>
+                    <span>Avg worst move <strong>{signalPerformance.averageMaxAdverse === null ? '-' : `${signalPerformance.averageMaxAdverse.toFixed(1)}%`}</strong></span>
+                    <span>Sell <strong>{signalPerformance.sellWinRate === null ? '-' : `${signalPerformance.sellWinRate.toFixed(0)}% (${signalPerformance.sellEvaluated})`}</strong></span>
+                    <span>Buy <strong>{signalPerformance.buyWinRate === null ? '-' : `${signalPerformance.buyWinRate.toFixed(0)}% (${signalPerformance.buyEvaluated})`}</strong></span>
+                  </div>
+                  <div className="oi-history__signal-breakdown">
+                    {signalPerformance.optionBreakdown.map((item) => (
+                      <span key={item.label}>
+                        {item.label}
+                        <strong>{item.winRate === null ? '-' : `${item.winRate.toFixed(0)}%`}</strong>
+                        <small>{item.evaluated} evaluated{item.averageReturn === null ? '' : ` · ${item.averageReturn >= 0 ? '+' : ''}${item.averageReturn.toFixed(1)}% avg`}</small>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="oi-history__signal-quality">
+                    <span>Avg win <strong>{signalPerformance.averageWin === null ? '-' : `+${signalPerformance.averageWin.toFixed(1)}%`}</strong></span>
+                    <span>Avg loss <strong>{signalPerformance.averageLoss === null ? '-' : `${signalPerformance.averageLoss.toFixed(1)}%`}</strong></span>
+                    <span>Profit factor <strong>{signalPerformance.profitFactor === null ? '-' : signalPerformance.profitFactor === Infinity ? '∞' : signalPerformance.profitFactor.toFixed(2)}</strong></span>
+                  </div>
+                </div>
+              )}
 
               <div className="oi-history__market-context" aria-label="Market context">
                 <span className="oi-history__market-context-title">Market context</span>
@@ -3250,7 +3308,7 @@ const OiHistory: React.FC = () => {
               )}
 
               <details className="oi-history__setup-detail-drawer">
-                <summary>Show checklists and detailed reasoning</summary>
+                <summary>Why this setup?</summary>
                 <div className="oi-history__setup-detail-section">
                   <div className="oi-history__setup-section-title">Option Buying Checklist</div>
                   <div className="oi-history__setup-signal-strip">
