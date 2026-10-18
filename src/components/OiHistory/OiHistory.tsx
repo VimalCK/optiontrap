@@ -30,6 +30,8 @@ interface FetchProgress {
 
 interface SignalPerformanceSummary {
   total: number;
+  open: number;
+  averageOpenReturn: number | null;
   evaluated: number;
   wins: number;
   winRate: number | null;
@@ -508,6 +510,11 @@ function checklistStatusText(status: ChecklistStatus): string {
   if (status === 'pass') return 'Yes';
   if (status === 'warn') return 'Wait';
   return 'No';
+}
+
+function sortChecklistByStatus(items: TradeSetupChecklistItem[]): TradeSetupChecklistItem[] {
+  const order: Record<ChecklistStatus, number> = { pass: 0, warn: 1, fail: 2 };
+  return [...items].sort((a, b) => order[a.status] - order[b.status]);
 }
 
 function readinessScore(items: TradeSetupChecklistItem[]): number {
@@ -1391,6 +1398,7 @@ const OiHistory: React.FC = () => {
   const [analysisTab, setAnalysisTab] = useState<'history' | 'setup'>('history');
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [signalPerformance, setSignalPerformance] = useState<SignalPerformanceSummary | null>(null);
+  const [outcomeRefreshVersion, setOutcomeRefreshVersion] = useState(0);
   const loggedSignalKeysRef = useRef(new Set<string>());
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(() => new Set());
   const [showVolume, setShowVolume] = useState(false);
@@ -2215,8 +2223,9 @@ const OiHistory: React.FC = () => {
           id: number; signal_date: string; expiry: string | null; strike: number; option_type: 'CE' | 'PE';
           action: 'BUY' | 'SELL'; entry_premium: number | null; outcome_status: string | null; outcome_final: boolean;
         }> };
+        let outcomesUpdated = false;
         for (const signal of result.signals || []) {
-          if (signal.outcome_final || signal.signal_date >= latestDate || !signal.expiry || !availableExpiries.has(signal.expiry) || signal.strike !== selectedStrike) continue;
+          if (signal.outcome_final || signal.signal_date > latestDate || !signal.expiry || !availableExpiries.has(signal.expiry) || signal.strike !== selectedStrike) continue;
           if (!signal.entry_premium || signal.entry_premium <= 0) continue;
           const path = chartData.dates
             .filter((date) => date >= signal.signal_date)
@@ -2229,7 +2238,7 @@ const OiHistory: React.FC = () => {
           });
           const returnPct = returns[returns.length - 1];
           const final = latestDate >= signal.expiry;
-          await fetch(`/api/oi-history/signals/${signal.id}/outcome`, {
+          const outcomeResponse = await fetch(`/api/oi-history/signals/${signal.id}/outcome`, {
             method: 'PATCH',
             credentials: 'include',
             headers: { 'Content-Type': 'application/json' },
@@ -2243,7 +2252,9 @@ const OiHistory: React.FC = () => {
               status: final ? (returnPct > 0 ? 'Profit' : 'Loss') : 'Open',
             }),
           });
+          if (outcomeResponse.ok) outcomesUpdated = true;
         }
+        if (outcomesUpdated) setOutcomeRefreshVersion((version) => version + 1);
       } catch {
         // Outcome tracking must never affect the Trade Setup UI.
       }
@@ -2260,6 +2271,11 @@ const OiHistory: React.FC = () => {
           signals?: Array<{ action: 'BUY' | 'SELL'; option_type: 'CE' | 'PE'; outcome_status: string | null; outcome_return: number | null; max_favorable_return: number | null; max_adverse_return: number | null }>;
         };
         const signals = result.signals || [];
+        const openSignals = signals.filter((signal) => signal.outcome_status === 'Open' || signal.outcome_status === null);
+        const openReturns = openSignals
+          .map((signal) => signal.outcome_return)
+          .filter((value): value is number => value !== null && Number.isFinite(Number(value)))
+          .map(Number);
         const evaluated = signals.filter((signal) => signal.outcome_status === 'Profit' || signal.outcome_status === 'Loss');
         const wins = evaluated.filter((signal) => signal.outcome_status === 'Profit').length;
         const average = evaluated.length ? evaluated.reduce((sum, signal) => sum + Number(signal.outcome_return || 0), 0) / evaluated.length : null;
@@ -2297,6 +2313,8 @@ const OiHistory: React.FC = () => {
         });
         setSignalPerformance({
           total: signals.length,
+          open: openSignals.length,
+          averageOpenReturn: openReturns.length ? openReturns.reduce((sum, value) => sum + value, 0) / openReturns.length : null,
           evaluated: evaluated.length,
           wins,
           winRate: evaluated.length ? (wins / evaluated.length) * 100 : null,
@@ -2316,7 +2334,7 @@ const OiHistory: React.FC = () => {
         // Research metrics are optional and must never block the setup.
       }
     })();
-  }, [chartData, scrip]);
+  }, [chartData, scrip, outcomeRefreshVersion]);
 
   /**
    * Resolve the strike/side/optionType a trade setup recommends and place it.
@@ -3248,16 +3266,20 @@ const OiHistory: React.FC = () => {
                   <div className="oi-history__signal-performance-head">
                     <span>Recorded setup performance</span>
                     <div>
-                      <strong>{signalPerformance.total} signals · {signalPerformance.evaluated} evaluated</strong>
+                      <strong>{signalPerformance.total} signals · {signalPerformance.open} open · {signalPerformance.evaluated} evaluated</strong>
                       <button type="button" className="oi-history__signal-export" onClick={exportSignalResults}>Export CSV</button>
                     </div>
                   </div>
                   <div className={`oi-history__signal-confidence ${signalPerformance.evaluated >= 20 ? 'is-ready' : ''}`}>
                     {signalPerformance.evaluated >= 20
                       ? 'Performance sample is large enough for an initial review.'
-                      : `Preliminary sample: ${Math.max(0, 20 - signalPerformance.evaluated)} more evaluated signals needed before trusting the percentages.`}
+                      : signalPerformance.open > 0
+                        ? `${signalPerformance.open} signal${signalPerformance.open === 1 ? '' : 's'} remain open; current return is provisional until expiry.`
+                        : `Preliminary sample: ${Math.max(0, 20 - signalPerformance.evaluated)} more evaluated signals needed before trusting the percentages.`}
                   </div>
                   <div className="oi-history__signal-performance-grid">
+                    <span>Open <strong>{signalPerformance.open}</strong></span>
+                    <span>Current open avg <strong>{signalPerformance.averageOpenReturn === null ? '-' : `${signalPerformance.averageOpenReturn >= 0 ? '+' : ''}${signalPerformance.averageOpenReturn.toFixed(1)}%`}</strong></span>
                     <span>Win rate <strong>{signalPerformance.winRate === null ? '-' : `${signalPerformance.winRate.toFixed(0)}%`}</strong></span>
                     <span>Avg return <strong>{signalPerformance.averageReturn === null ? '-' : `${signalPerformance.averageReturn >= 0 ? '+' : ''}${signalPerformance.averageReturn.toFixed(1)}%`}</strong></span>
                     <span>Avg best move <strong>{signalPerformance.averageMaxFavorable === null ? '-' : `+${signalPerformance.averageMaxFavorable.toFixed(1)}%`}</strong></span>
@@ -3294,25 +3316,19 @@ const OiHistory: React.FC = () => {
                 </div>
               </div>
 
-              {chartData.biasSummary.recentDays.length > 0 && (
-                <div className="oi-history__recent-flow-strip">
-                  <span>Recent flow</span>
-                  <div>
-                    {chartData.biasSummary.recentDays.map((day) => (
-                      <span key={day.date} className={`oi-history__recent-flow-chip oi-history__recent-flow-chip--${day.bias.toLowerCase()}`}>
-                        {day.date.slice(5)} {day.bias} {day.score > 0 ? '+' : ''}{day.score}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
               <details className="oi-history__setup-detail-drawer">
-                <summary>Why this setup?</summary>
-                <div className="oi-history__setup-detail-section">
-                  <div className="oi-history__setup-section-title">Option Buying Checklist</div>
+                <summary>
+                  <span>Why this setup?</span>
+                  <em>Evidence, risk checks, and market context</em>
+                </summary>
+                <div className="oi-history__setup-evidence-grid">
+                  <div className="oi-history__setup-detail-section oi-history__setup-detail-section--buying">
+                    <div className="oi-history__setup-section-heading">
+                      <span>Option buying</span>
+                      <strong>{setupReadinessLabel(chartData.tradeSetup.status, readinessScore(chartData.tradeSetup.checklist))}</strong>
+                    </div>
                   <div className="oi-history__setup-signal-strip">
-                    {chartData.tradeSetup.checklist.map((item) => (
+                    {sortChecklistByStatus(chartData.tradeSetup.checklist).map((item) => (
                       <div key={item.label} className={`oi-history__signal-tile oi-history__signal-tile--${item.status}`}>
                         <span>{item.label}</span>
                         <strong>{checklistStatusText(item.status)}</strong>
@@ -3320,17 +3336,21 @@ const OiHistory: React.FC = () => {
                       </div>
                     ))}
                   </div>
-                </div>
-                <div className="oi-history__setup-detail-section">
-                  <div className="oi-history__setup-section-title">Option Selling Checklist</div>
+                  </div>
+                  <div className="oi-history__setup-detail-section oi-history__setup-detail-section--selling">
+                    <div className="oi-history__setup-section-heading">
+                      <span>Option selling</span>
+                      <strong>{setupReadinessLabel(chartData.sellingSetup.status, readinessScore(chartData.sellingSetup.checklist))}</strong>
+                    </div>
                   <div className="oi-history__setup-signal-strip">
-                    {chartData.sellingSetup.checklist.map((item) => (
+                    {sortChecklistByStatus(chartData.sellingSetup.checklist).map((item) => (
                       <div key={item.label} className={`oi-history__signal-tile oi-history__signal-tile--${item.status}`}>
                         <span>{item.label}</span>
                         <strong>{checklistStatusText(item.status)}</strong>
                         <em>{item.answer}</em>
                       </div>
                     ))}
+                  </div>
                   </div>
                 </div>
                 <div className="oi-history__setup-context">
