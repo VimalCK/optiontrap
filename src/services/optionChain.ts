@@ -15,6 +15,7 @@ export interface OptionChainRow {
   ce: OptionInstrument | null;
   pe: OptionInstrument | null;
 }
+import { apiClient } from './apiClient';
 
 /** In-memory cache of all instruments to avoid re-fetching */
 let instrumentsCache: any[] | null = null;
@@ -25,20 +26,7 @@ let instrumentsCache: any[] | null = null;
  */
 export async function fetchOptions(symbol: string): Promise<OptionInstrument[]> {
   if (!instrumentsCache) {
-    const response = await fetch('/instruments', {
-      credentials: 'include',
-    });
-
-    if (!response.ok) {
-      const text = await response.text().catch(() => '');
-      if (response.status === 403 || text.toLowerCase().includes('api_key') || text.toLowerCase().includes('access_token')) {
-        throw new Error('Session expired. Please login again from the Profile page.');
-      }
-      throw new Error('Failed to fetch instruments');
-    }
-
-    const json = await response.json();
-    instrumentsCache = json.data || [];
+    instrumentsCache = await apiClient.get<any[]>('/instruments');
   }
 
   // Filter for the given symbol's CE/PE options
@@ -90,11 +78,8 @@ export function getLotSize(instrumentToken: number): number {
  */
 export async function fetchFnoSymbols(): Promise<string[]> {
   try {
-    const res = await fetch('/api/fno-symbols', { credentials: 'include' });
-    const json = await res.json();
-    if (json.status === 'ok' && json.data?.length > 0) {
-      return json.data;
-    }
+    const symbols = await apiClient.get<string[]>('/api/fno-symbols');
+    if (symbols.length > 0) return symbols;
   } catch { /* fallback */ }
   return ['NIFTY', 'BANKNIFTY'];
 }

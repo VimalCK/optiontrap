@@ -3,6 +3,7 @@
  * Manages paper trading positions via server-side REST API.
  * Netting logic (average-in, partial close, over-close) runs on the server.
  */
+import { apiClient } from './apiClient';
 
 export interface Position {
   id: string;
@@ -26,20 +27,8 @@ export interface Position {
   confidence?: number | null;
 }
 
-async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(url, { credentials: 'include', ...options });
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(body?.message || `Request failed (${res.status})`);
-  }
-
-  const json = await res.json();
-  return json.data as T;
-}
-
 export async function getPositions(mode: 'paper' | 'live' = 'paper'): Promise<Position[]> {
-  return request<Position[]>(`/api/positions?mode=${mode}`);
+  return apiClient.get<Position[]>(`/api/positions?mode=${mode}`);
 }
 
 /**
@@ -51,34 +40,26 @@ export async function getPositions(mode: 'paper' | 'live' = 'paper'): Promise<Po
 export async function addPosition(
   position: Omit<Position, 'id' | 'entryTime' | 'mode'> & { mode?: 'paper' | 'live' },
 ): Promise<Position> {
-  return request<Position>('/api/positions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...position, mode: position.mode || 'paper' }),
-  });
+  return apiClient.post<Position>('/api/positions', { ...position, mode: position.mode || 'paper' });
 }
 
 /**
  * Exit a position — marks it as exited with exit price and time.
  */
 export async function exitPosition(id: string, exitPrice: number): Promise<void> {
-  await request<void>(`/api/positions/${id}/exit`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ exitPrice }),
-  });
+  await apiClient.put(`/api/positions/${id}/exit`, { exitPrice });
 }
 
 /**
  * Remove a position by ID (permanently delete).
  */
 export async function removePosition(id: string): Promise<void> {
-  await request<void>(`/api/positions/${id}`, { method: 'DELETE' });
+  await apiClient.delete(`/api/positions/${id}`);
 }
 
 /**
  * Clear all positions for a given mode.
  */
 export async function clearPositions(mode: 'paper' | 'live' = 'paper'): Promise<void> {
-  await request<void>(`/api/positions?mode=${mode}`, { method: 'DELETE' });
+  await apiClient.delete(`/api/positions?mode=${mode}`);
 }

@@ -1,4 +1,5 @@
 import { FeedbackType } from './feedback';
+import { apiClient } from './apiClient';
 
 export type FeedbackStatus = 'open' | 'reviewed' | 'resolved';
 
@@ -20,27 +21,13 @@ export interface FeedbackFilters {
   status?: FeedbackStatus | '';
 }
 
-async function readJson<T>(res: Response): Promise<T> {
-  const json = await res.json().catch(() => null);
-
-  if (!res.ok) {
-    throw new Error(json?.message || `Request failed (${res.status})`);
-  }
-
-  return json.data;
-}
-
 export async function getFeedback(filters: FeedbackFilters = {}): Promise<FeedbackItem[]> {
   const params = new URLSearchParams();
   if (filters.type) params.set('type', filters.type);
   if (filters.status) params.set('status', filters.status);
 
   const query = params.toString();
-  const res = await fetch(`/api/admin/feedback${query ? `?${query}` : ''}`, {
-    credentials: 'include',
-  });
-
-  return readJson<FeedbackItem[]>(res);
+  return apiClient.get<FeedbackItem[]>(`/api/admin/feedback${query ? `?${query}` : ''}`);
 }
 
 export interface AdminUser {
@@ -63,8 +50,7 @@ export interface AdminUser {
 export type SubscriptionAction = 'activate' | 'extend' | 'cancel';
 
 export async function getUsers(): Promise<AdminUser[]> {
-  const res = await fetch('/api/admin/users', { credentials: 'include' });
-  return readJson<AdminUser[]>(res);
+  return apiClient.get<AdminUser[]>('/api/admin/users');
 }
 
 export async function updateUserSubscription(
@@ -72,17 +58,7 @@ export async function updateUserSubscription(
   action: SubscriptionAction,
   planId?: string,
 ): Promise<void> {
-  const res = await fetch(`/api/admin/users/${encodeURIComponent(userId)}/subscription`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ action, planId }),
-  });
-
-  if (!res.ok) {
-    const json = await res.json().catch(() => null);
-    throw new Error(json?.message || `Failed to update subscription (${res.status})`);
-  }
+  await apiClient.post(`/api/admin/users/${encodeURIComponent(userId)}/subscription`, { action, planId });
 }
 
 export interface HealthStatus {
@@ -96,20 +72,9 @@ export interface HealthStatus {
 }
 
 export async function getHealth(): Promise<HealthStatus> {
-  const res = await fetch('/api/admin/health', { credentials: 'include' });
-  return readJson<HealthStatus>(res);
+  return apiClient.get<HealthStatus>('/api/admin/health');
 }
 
 export async function updateFeedbackStatus(id: string, status: FeedbackStatus): Promise<void> {
-  const res = await fetch(`/api/admin/feedback/${id}`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ status }),
-  });
-
-  if (!res.ok) {
-    const json = await res.json().catch(() => null);
-    throw new Error(json?.message || `Failed to update feedback (${res.status})`);
-  }
+  await apiClient.patch(`/api/admin/feedback/${id}`, { status });
 }

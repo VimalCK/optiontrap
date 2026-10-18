@@ -14,6 +14,7 @@
  */
 
 import { Position } from './positions';
+import { apiClient } from './apiClient';
 
 export interface LegRisk {
   position: Position;
@@ -340,12 +341,7 @@ export async function loadGroupOi(group: RiskGroup): Promise<OiBar[]> {
     if (!expiryMonth) return [];
 
     const params = new URLSearchParams({ scrip: group.underlying, expiryMonth });
-    const res = await fetch(`/api/oi-history?${params}`, { credentials: 'include' });
-    if (!res.ok) return [];
-    const json = await res.json();
-    if (json.status !== 'ok' || !Array.isArray(json.data)) return [];
-
-    const rows = (json.data as OiHistoryRow[]).filter(
+    const rows = (await apiClient.get<OiHistoryRow[]>(`/api/oi-history?${params}`)).filter(
       (r) => r.strike != null && r.optionType != null && (r.expiry || '').slice(0, 10) === groupDay,
     );
     if (rows.length === 0) return [];

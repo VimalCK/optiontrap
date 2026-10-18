@@ -5,6 +5,7 @@
  * The server caches in SQLite, shared across all users.
  * Provides a fast prefix-match search for the watchlist "add instrument" UI.
  */
+import { apiClient } from './apiClient';
 
 export interface Instrument {
   instrumentToken: number;
@@ -28,11 +29,7 @@ let memoryCache: Instrument[] | null = null;
 export async function loadInstruments(): Promise<Instrument[]> {
   if (memoryCache) return memoryCache;
 
-  const res = await fetch('/instruments', { credentials: 'include' });
-  if (!res.ok) throw new Error(`Failed to fetch instruments (${res.status})`);
-
-  const json = await res.json();
-  memoryCache = json.data as Instrument[];
+  memoryCache = await apiClient.get<Instrument[]>('/instruments');
   lotSizeByToken = null; // rebuild lazily on next lookup
   return memoryCache;
 }

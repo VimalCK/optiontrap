@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { handleKiteAuthFailure, isKiteAuthFailure } from '@/services/authSession';
+import { apiClient } from '@/services/apiClient';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { addPosition } from '@/services/positions';
 import { getLotSize } from '@/services/optionChain';
@@ -1447,11 +1448,7 @@ const OiHistory: React.FC = () => {
   useEffect(() => {
     const current = currentMonthIST();
     setFetchError(null);
-    fetch(`/api/oi-history/expiry-months?scrip=${scrip}`, { credentials: 'include' })
-      .then((res) => {
-        if (!res.ok) throw new Error(`Failed to load expiry months (${res.status})`);
-        return res.json();
-      })
+    apiClient.get<{ status: string; months?: string[]; message?: string }>(`/api/oi-history/expiry-months?scrip=${scrip}`)
       .then((json) => {
         if (json.status === 'ok') {
           const months: string[] = json.months || [];
@@ -1478,11 +1475,10 @@ const OiHistory: React.FC = () => {
 
   // Fetch available F&O symbols on mount
   useEffect(() => {
-    fetch('/api/fno-symbols', { credentials: 'include' })
-      .then((res) => res.json())
-      .then((json) => {
-        if (json.status === 'ok' && json.data?.length > 0) {
-          const options = json.data.map((name: string) => ({
+    apiClient.get<string[]>('/api/fno-symbols')
+      .then((symbols) => {
+        if (symbols.length > 0) {
+          const options = symbols.map((name: string) => ({
             value: name === 'NIFTY' ? 'NIFTY50' : name,
             label: name === 'NIFTY' ? 'NIFTY 50' : name === 'BANKNIFTY' ? 'BANK NIFTY' : name,
           }));
@@ -1521,9 +1517,7 @@ const OiHistory: React.FC = () => {
       const results = await Promise.all(
         includedExpiryMonths.map(async (month) => {
           const params = new URLSearchParams({ scrip, expiryMonth: month });
-          const res = await fetch(`/api/oi-history?${params}`, { credentials: 'include' });
-          const json = await res.json();
-          return json.status === 'ok' ? (json.data as OiHistoryRow[]) : [];
+          return apiClient.get<OiHistoryRow[]>(`/api/oi-history?${params}`);
         }),
       );
       const merged = results.flat();
@@ -1543,16 +1537,15 @@ const OiHistory: React.FC = () => {
 
   /** Stream a single expiry-month fetch from Kite via SSE. Returns on stream end. */
   const fetchExpiryMonth = useCallback(async (month: string, monthLabel: string) => {
-    const res = await fetch('/api/oi-history/fetch', {
+    const res = await apiClient.raw('/api/oi-history/fetch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      credentials: 'include',
-      body: JSON.stringify({
+      body: {
         scrip,
         expiryMonth: month,
         strikeMode: strikeRange === -1 ? 'specific' : strikeRange === 0 ? 'allStored' : 'atmRange',
         specificStrike: strikeRange === -1 ? specificStrikeValue : undefined,
-      }),
+      },
     });
 
     if (!res.ok) {
@@ -1713,11 +1706,7 @@ const OiHistory: React.FC = () => {
 
     try {
       const params = new URLSearchParams({ scrip });
-      const res = await fetch(`/api/oi-history?${params}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      const json = await res.json();
+      const json = await apiClient.delete<{ status: string; message?: string }>(`/api/oi-history?${params}`);
       if (json.status === 'ok') {
         setData([]);
         lastFetchedRef.current = '';
@@ -1738,11 +1727,7 @@ const OiHistory: React.FC = () => {
 
     try {
       const params = new URLSearchParams({ scrip, beforeExpiryMonth: cleanupCutoffMonth });
-      const res = await fetch(`/api/oi-history/old?${params}`, {
-        method: 'DELETE',
-        credentials: 'include',
-      });
-      const json = await res.json();
+      const json = await apiClient.delete<{ status: string; deleted?: number; message?: string }>(`/api/oi-history/old?${params}`);
       if (json.status === 'ok') {
         const deleted = Number(json.deleted || 0);
         setFetchResult(deleted > 0
@@ -2190,11 +2175,7 @@ const OiHistory: React.FC = () => {
     if (loggedSignalKeysRef.current.has(key)) return;
     loggedSignalKeysRef.current.add(key);
 
-    void fetch('/api/oi-history/signals', {
-      method: 'POST',
-      credentials: 'include',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    void apiClient.post('/api/oi-history/signals', {
         scrip,
         signalDate,
         expiry,
@@ -2213,8 +2194,8 @@ const OiHistory: React.FC = () => {
           buyingMomentum: optionType === 'CE' ? chartData.optionMomentum.ce : chartData.optionMomentum.pe,
           decay: side ? { decayPct: side.decayPct, score: side.score, daysToExpiry: side.daysToExpiry, latestVolume: side.latestVolume } : null,
         },
-      }),
-    }).catch(() => {
+      },
+    ).catch(() => {
       // Logging must never affect the Trade Setup UI.
     });
   }, [chartData, scrip, selectedStrike]);
@@ -2230,12 +2211,10 @@ const OiHistory: React.FC = () => {
 
     void (async () => {
       try {
-        const response = await fetch(`/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=200`, { credentials: 'include' });
-        if (!response.ok) return;
-        const result = await response.json() as { signals?: Array<{
+        const result = await apiClient.get<{ signals?: Array<{
           id: number; signal_date: string; expiry: string | null; strike: number; option_type: 'CE' | 'PE';
           action: 'BUY' | 'SELL'; entry_premium: number | null; outcome_status: string | null; outcome_final: boolean;
-        }> };
+        }> }>(`/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=200`);
         let outcomesUpdated = false;
         for (const signal of result.signals || []) {
           if (signal.outcome_final || signal.signal_date > latestDate || !signal.expiry || !availableExpiries.has(signal.expiry) || signal.strike !== selectedStrike) continue;
@@ -2251,11 +2230,7 @@ const OiHistory: React.FC = () => {
           });
           const returnPct = returns[returns.length - 1];
           const final = latestDate >= signal.expiry;
-          const outcomeResponse = await fetch(`/api/oi-history/signals/${signal.id}/outcome`, {
-            method: 'PATCH',
-            credentials: 'include',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+          await apiClient.patch(`/api/oi-history/signals/${signal.id}/outcome`, {
               price: path[path.length - 1],
               date: latestDate,
               returnPct,
@@ -2263,9 +2238,8 @@ const OiHistory: React.FC = () => {
               maxAdverseReturn: Math.min(...returns),
               final,
               status: final ? (returnPct > 0 ? 'Profit' : 'Loss') : 'Open',
-            }),
           });
-          if (outcomeResponse.ok) outcomesUpdated = true;
+          outcomesUpdated = true;
         }
         if (outcomesUpdated) setOutcomeRefreshVersion((version) => version + 1);
       } catch {
@@ -2278,11 +2252,9 @@ const OiHistory: React.FC = () => {
     if (!chartData || !scrip) return;
     void (async () => {
       try {
-        const response = await fetch(`/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=500`, { credentials: 'include' });
-        if (!response.ok) return;
-        const result = await response.json() as {
+        const result = await apiClient.get<{
           signals?: Array<{ action: 'BUY' | 'SELL'; option_type: 'CE' | 'PE'; outcome_status: string | null; outcome_return: number | null; max_favorable_return: number | null; max_adverse_return: number | null }>;
-        };
+        }>(`/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=500`);
         const signals = result.signals || [];
         const openSignals = signals.filter((signal) => signal.outcome_status === 'Open' || signal.outcome_status === null);
         const openReturns = openSignals
@@ -2442,9 +2414,7 @@ const OiHistory: React.FC = () => {
 
   const exportSignalResults = useCallback(async () => {
     try {
-      const response = await fetch(`/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=500`, { credentials: 'include' });
-      if (!response.ok) return;
-      const result = await response.json() as { signals?: Array<Record<string, unknown>> };
+      const result = await apiClient.get<{ signals?: Array<Record<string, unknown>> }>(`/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=500`);
       const signals = result.signals || [];
       const columns = ['signal_date', 'scrip', 'expiry', 'strike', 'option_type', 'action', 'status', 'entry_premium', 'spot_price', 'outcome_status', 'outcome_date', 'outcome_return', 'max_favorable_return', 'max_adverse_return', 'outcome_final'];
       const escapeCsv = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;

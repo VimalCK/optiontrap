@@ -1,14 +1,5 @@
 import { SubscriptionPlan, SubscriptionStatus } from './kiteAuth';
-
-async function readJson<T>(res: Response): Promise<T> {
-  const json = await res.json().catch(() => null);
-
-  if (!res.ok) {
-    throw new Error(json?.message || `Request failed (${res.status})`);
-  }
-
-  return json.data;
-}
+import { apiClient } from './apiClient';
 
 /**
  * Human-readable duration label from the generic count + unit model.
@@ -20,28 +11,18 @@ export function formatDuration(count: number, unit: string): string {
 }
 
 export async function getSubscriptionPlans(): Promise<SubscriptionPlan[]> {
-  const res = await fetch('/api/subscription/plans', { credentials: 'include' });
-  return readJson<SubscriptionPlan[]>(res);
+  return apiClient.get<SubscriptionPlan[]>('/api/subscription/plans');
 }
 
 /** Public plans for the pre-login landing page (no auth required). */
 export async function getPublicPlans(): Promise<SubscriptionPlan[]> {
-  const res = await fetch('/api/public/plans');
-  return readJson<SubscriptionPlan[]>(res);
+  return apiClient.get<SubscriptionPlan[]>('/api/public/plans', { credentials: 'omit' });
 }
 
 export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
-  const res = await fetch('/api/subscription/status', { credentials: 'include' });
-  return readJson<SubscriptionStatus>(res);
+  return apiClient.get<SubscriptionStatus>('/api/subscription/status');
 }
 
 export async function activateSubscription(planId: string): Promise<SubscriptionStatus> {
-  const res = await fetch('/api/subscription/activate', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    credentials: 'include',
-    body: JSON.stringify({ planId }),
-  });
-
-  return readJson<SubscriptionStatus>(res);
+  return apiClient.post<SubscriptionStatus>('/api/subscription/activate', { planId });
 }

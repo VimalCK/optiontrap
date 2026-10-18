@@ -7,6 +7,7 @@
  * GET /watchlist returns metadata only (no items) for fast tab rendering.
  * GET /watchlist/:id returns a single list with items — called on tab switch.
  */
+import { apiClient } from './apiClient';
 
 export interface WatchlistItem {
   id: string;
@@ -32,17 +33,7 @@ export interface WatchlistFull {
   items: WatchlistItem[];
 }
 
-async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
-  const res = await fetch(url, { credentials: 'include', ...options });
-
-  if (!res.ok) {
-    const body = await res.json().catch(() => null);
-    throw new Error(body?.message || `Request failed (${res.status})`);
-  }
-
-  const json = await res.json();
-  return json.data as T;
-}
+const request = <T>(url: string, options?: Parameters<typeof apiClient.get>[1]) => apiClient.get<T>(url, options);
 
 /** Fetch all watchlists (metadata only — id, name, itemCount) */
 export async function fetchWatchlists(): Promise<WatchlistMeta[]> {
@@ -55,41 +46,27 @@ export async function fetchWatchlistItems(id: string): Promise<WatchlistFull> {
 }
 
 export async function createWatchlist(name: string): Promise<WatchlistMeta> {
-  return request<WatchlistMeta>('/api/watchlist', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  });
+  return apiClient.post<WatchlistMeta>('/api/watchlist', { name });
 }
 
 export async function renameWatchlist(id: string, name: string): Promise<void> {
-  await request<void>(`/api/watchlist/${id}`, {
-    method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ name }),
-  });
+  await apiClient.put(`/api/watchlist/${id}`, { name });
 }
 
 export async function deleteWatchlist(id: string): Promise<void> {
-  await request<void>(`/api/watchlist/${id}`, { method: 'DELETE' });
+  await apiClient.delete(`/api/watchlist/${id}`);
 }
 
 export async function addWatchlistItem(
   watchlistId: string,
   item: { instrumentToken: number; tradingsymbol: string; exchange: string },
 ): Promise<WatchlistItem> {
-  return request<WatchlistItem>(`/api/watchlist/${watchlistId}/items`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(item),
-  });
+  return apiClient.post<WatchlistItem>(`/api/watchlist/${watchlistId}/items`, item);
 }
 
 export async function removeWatchlistItem(
   watchlistId: string,
   itemId: string,
 ): Promise<void> {
-  await request<void>(`/api/watchlist/${watchlistId}/items/${itemId}`, {
-    method: 'DELETE',
-  });
+  await apiClient.delete(`/api/watchlist/${watchlistId}/items/${itemId}`);
 }

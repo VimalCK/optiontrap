@@ -2,6 +2,7 @@
  * Intraday OI Snapshots Service
  * Uses server-side SQLite via REST API (shared across all users).
  */
+import { apiClient } from './apiClient';
 
 const SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
@@ -52,11 +53,7 @@ export async function saveOiSnapshot(
     : undefined;
 
   try {
-    await fetch('/api/oi-snapshots', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ timestamp, timeLabel: getTimeLabel(timestamp), data, prices, close, spot, volumes }),
-    });
+    await apiClient.post('/api/oi-snapshots', { timestamp, timeLabel: getTimeLabel(timestamp), data, prices, close, spot, volumes });
     console.log(`[OI Snapshots] Saved at ${getTimeLabel(timestamp)} (${Object.keys(data).length} instruments${prices ? `, ${Object.keys(prices).length} prices` : ''})`);
   } catch (err) {
     console.error('[OI Snapshots] Failed to save:', err);
@@ -65,10 +62,8 @@ export async function saveOiSnapshot(
 
 export async function getTodaySnapshots(): Promise<OiSnapshot[]> {
   try {
-    const res = await fetch('/api/oi-snapshots');
-    if (!res.ok) return [];
-    const json = await res.json();
-    return (json.data || []).sort((a: OiSnapshot, b: OiSnapshot) => a.timestamp - b.timestamp);
+    const snapshots = await apiClient.get<OiSnapshot[]>('/api/oi-snapshots');
+    return snapshots.sort((a, b) => a.timestamp - b.timestamp);
   } catch {
     return [];
   }
@@ -76,16 +71,13 @@ export async function getTodaySnapshots(): Promise<OiSnapshot[]> {
 
 export async function cleanOldSnapshots(): Promise<void> {
   try {
-    await fetch('/api/oi-snapshots/old', { method: 'DELETE' });
+    await apiClient.delete('/api/oi-snapshots/old');
   } catch { /* silently fail */ }
 }
 
 export async function shouldTakeSnapshot(): Promise<boolean> {
   try {
-    const res = await fetch('/api/oi-snapshots/latest');
-    if (!res.ok) return true;
-    const json = await res.json();
-    const latest = json.data?.timestamp;
+    const latest = (await apiClient.get<OiSnapshot | null>('/api/oi-snapshots/latest'))?.timestamp;
     if (!latest) return true;
     return (Date.now() - latest) >= SNAPSHOT_INTERVAL_MS;
   } catch {

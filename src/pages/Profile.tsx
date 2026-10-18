@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { ConnectionIcon, PowerIcon } from '@/components/icons/Icons';
 import { getSession, logout, deleteAccount, KiteSession } from '@/services/kiteAuth';
 import { fetchMargins, Margins } from '@/services/kiteApi';
+import { apiClient } from '@/services/apiClient';
 import { formatDuration } from '@/services/subscription';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import '@/styles/settings.css';
@@ -70,12 +71,8 @@ const Profile: React.FC = () => {
   const fetchProfile = async () => {
     setProfileLoading(true);
     try {
-      const response = await fetch('/api/user/profile', {
-        credentials: 'include',
-      });
-      if (response.ok) {
-        const result = await response.json();
-        const data = result.data;
+      const data = await apiClient.get<any>('/api/user/profile');
+      if (data) {
         setProfile({
           userId: data.user_id,
           userName: data.user_name,

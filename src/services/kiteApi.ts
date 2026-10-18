@@ -1,292 +1,70 @@
-import { clearSession } from './kiteAuth';
-import { notifySessionChange } from '@/hooks/useKiteSession';
+import { apiClient } from './apiClient';
 
-const API_BASE = '/api';
-
-interface RequestOptions {
-  method?: string;
-  body?: Record<string, string>;
-}
-
-async function kiteRequest<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
-  const headers: Record<string, string> = {};
-
-  const fetchOptions: RequestInit = {
-    method: options.method || 'GET',
-    headers,
-    credentials: 'include', // Send session cookie
-  };
-
-  if (options.body) {
-    headers['Content-Type'] = 'application/x-www-form-urlencoded';
-    fetchOptions.body = new URLSearchParams(options.body);
-  }
-
-  const response = await fetch(`${API_BASE}${endpoint}`, fetchOptions);
-
-  if (!response.ok) {
-    const errorBody = await response.json().catch(() => null);
-
-    // Expired / invalid session — clear locally so the auth guard redirects to login
-    if (response.status === 401 || response.status === 403) {
-      clearSession();
-      notifySessionChange();
-      throw new Error('Session expired. Please login again.');
-    }
-
-    // User-friendly messages for common failures
-    const friendlyMessages: Record<number, string> = {
-      429: 'Too many requests. Please wait a moment and try again.',
-      500: 'Something went wrong on the server. Please try again.',
-      502: 'Market data service is temporarily unavailable. Please try again shortly.',
-      503: 'Market data service is under maintenance. Please try again later.',
-      504: 'Request timed out. Please check your connection and try again.',
-    };
-
-    const message = friendlyMessages[response.status]
-      || errorBody?.message
-      || `Something went wrong (${response.status}). Please try again.`;
-
-    throw new Error(message);
-  }
-
-  const result = await response.json();
-  return result.data;
-}
-
-/**
- * Fetch full quotes for multiple instruments (max 500 per call)
- * Returns a map of instrument identifier to quote data
- */
 export interface QuoteData {
-  last_price: number;
-  oi: number;
+  last_price: number; oi: number;
   ohlc: { open: number; high: number; low: number; close: number };
-  volume: number;
-  oi_day_high?: number;
-  oi_day_low?: number;
+  volume: number; oi_day_high?: number; oi_day_low?: number;
 }
 
 export async function fetchQuotes(instruments: string[]): Promise<Map<string, QuoteData>> {
   const results = new Map<string, QuoteData>();
-
-  // Kite /quote API accepts max 500 instruments, but URL length is the real
-  // constraint. Each instrument like "NFO:NIFTY2560524500CE" is ~22 chars,
-  // URL-encoded with "i=" prefix and "&" separator ≈ 30 chars each.
-  // Keep batches small enough so the full URL stays well under 2048 chars.
-  const batchSize = 40;
-
-  for (let i = 0; i < instruments.length; i += batchSize) {
-    const batch = instruments.slice(i, i + batchSize);
-    const params = batch.map((inst) => `i=${encodeURIComponent(inst)}`).join('&');
-
+  for (let i = 0; i < instruments.length; i += 40) {
+    const params = instruments.slice(i, i + 40).map((instrument) => `i=${encodeURIComponent(instrument)}`).join('&');
     try {
-      const response = await fetch(`/api/quote?${params}`, {
-        credentials: 'include',
-      });
-
-      if (!response.ok) {
-        console.warn(`[fetchQuotes] Batch ${i / batchSize + 1} failed with status ${response.status}`);
-        continue;
+      const data = await apiClient.get<Record<string, QuoteData>>(`/api/quote?${params}`);
+      for (const [key, value] of Object.entries(data || {})) {
+        results.set(key, { ...value, last_price: value.last_price || 0, oi: value.oi || 0, volume: value.volume || 0, ohlc: value.ohlc || { open: 0, high: 0, low: 0, close: 0 } });
       }
-
-      const result = await response.json();
-      const data = result.data;
-      if (data) {
-        for (const [key, value] of Object.entries(data)) {
-          const v = value as { last_price: number; oi: number; ohlc: { open: number; high: number; low: number; close: number }; volume: number; oi_day_high?: number; oi_day_low?: number };
-          results.set(key, {
-            last_price: v.last_price || 0,
-            oi: v.oi || 0,
-            ohlc: v.ohlc || { open: 0, high: 0, low: 0, close: 0 },
-            volume: v.volume || 0,
-            oi_day_high: v.oi_day_high,
-            oi_day_low: v.oi_day_low,
-          });
-        }
-      }
-    } catch (err) {
-      console.warn(`[fetchQuotes] Batch ${i / batchSize + 1} error:`, err);
-    }
+    } catch (error) { console.warn(`[fetchQuotes] Batch ${i / 40 + 1} failed`, error); }
   }
-
   return results;
 }
 
-// Holdings
 export interface Holding {
-  tradingsymbol: string;
-  exchange: string;
-  instrument_token: number;
-  isin: string;
-  product: string;
-  quantity: number;
-  opening_quantity: number;
-  t1_quantity: number;
-  realised_quantity: number;
-  used_quantity: number;
-  average_price: number;
-  last_price: number;
-  close_price: number;
-  pnl: number;
-  day_change: number;
-  day_change_percentage: number;
-  collateral_quantity: number;
-  collateral_type: string;
+  tradingsymbol: string; exchange: string; instrument_token: number; isin: string; product: string;
+  quantity: number; opening_quantity: number; t1_quantity: number; realised_quantity: number; used_quantity: number;
+  average_price: number; last_price: number; close_price: number; pnl: number; day_change: number;
+  day_change_percentage: number; collateral_quantity: number; collateral_type: string;
 }
+export function fetchHoldings(): Promise<Holding[]> { return apiClient.get('/api/portfolio/holdings'); }
 
-export function fetchHoldings(): Promise<Holding[]> {
-  return kiteRequest<Holding[]>('/portfolio/holdings');
-}
-
-// Margins
 export interface SegmentMargin {
-  enabled: boolean;
-  net: number;
-  available: {
-    cash: number;
-    opening_balance: number;
-    live_balance: number;
-    collateral: number;
-    intraday_payin: number;
-    adhoc_margin: number;
-  };
-  utilised: {
-    debits: number;
-    exposure: number;
-    span: number;
-    option_premium: number;
-    holding_sales: number;
-    m2m_realised: number;
-    m2m_unrealised: number;
-    delivery: number;
-  };
+  enabled: boolean; net: number;
+  available: { cash: number; opening_balance: number; live_balance: number; collateral: number; intraday_payin: number; adhoc_margin: number };
+  utilised: { debits: number; exposure: number; span: number; option_premium: number; holding_sales: number; m2m_realised: number; m2m_unrealised: number; delivery: number };
 }
+export interface Margins { equity: SegmentMargin; commodity: SegmentMargin }
+export function fetchMargins(): Promise<Margins> { return apiClient.get('/api/user/margins'); }
 
-export interface Margins {
-  equity: SegmentMargin;
-  commodity: SegmentMargin;
-}
-
-export function fetchMargins(): Promise<Margins> {
-  return kiteRequest<Margins>('/user/margins');
-}
-
-/**
- * Fetch previous trading day's closing OI for multiple instrument tokens
- * using the Historical Data API (day candle with oi=1).
- *
- * Returns a Map of instrumentToken -> previous day's closing OI.
- * We fetch day candles up to today and pick the SECOND-TO-LAST candle,
- * which represents the previous trading day's close OI.
- * (The last candle is today/most recent day — same as what /quote shows as current.)
- */
-export async function fetchPreviousDayOI(
-  instrumentTokens: number[],
-  onBatch?: (partial: Map<number, number>) => void,
-  signal?: AbortSignal,
-): Promise<Map<number, number>> {
+export async function fetchPreviousDayOI(instrumentTokens: number[], onBatch?: (partial: Map<number, number>) => void, signal?: AbortSignal): Promise<Map<number, number>> {
   const results = new Map<number, number>();
-
   const now = new Date();
   const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
   const today = new Date(ist.getFullYear(), ist.getMonth(), ist.getDate());
-
-  // Fetch candles from 10 days back to today to ensure we get at least 2 trading days
-  const from = new Date(today);
-  from.setDate(from.getDate() - 10);
-
-  const formatDate = (d: Date) =>
-    `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-  const fromStr = formatDate(from);
-  const toStr = formatDate(today);
-
-  // Fetch in parallel batches of 5 with delays to avoid rate limiting
-  const batchSize = 5;
-  for (let i = 0; i < instrumentTokens.length; i += batchSize) {
+  const from = new Date(today); from.setDate(from.getDate() - 10);
+  const date = (value: Date) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+  for (let i = 0; i < instrumentTokens.length; i += 5) {
     if (signal?.aborted) break;
-
-    const batch = instrumentTokens.slice(i, i + batchSize);
-    const promises = batch.map(async (token) => {
+    await Promise.all(instrumentTokens.slice(i, i + 5).map(async (token) => {
       try {
-        const url = `/api/instruments/historical/${token}/day?from=${fromStr}&to=${toStr}&oi=1`;
-        const response = await fetch(url, {
-          credentials: 'include',
-          signal,
-        });
-        if (!response.ok) return;
-
-        const result = await response.json();
-        const candles = result?.data?.candles;
-        if (candles && candles.length >= 2) {
-          // Second-to-last candle = previous trading day's close OI
-          const prevDayCandle = candles[candles.length - 2];
-          const oi = prevDayCandle[6];
-          if (oi !== undefined && oi > 0) {
-            results.set(token, oi);
-          }
-        }
-      } catch {
-        // Skip failed fetches silently (includes AbortError)
-      }
-    });
-
-    await Promise.all(promises);
-
-    // Notify caller of partial results after each batch so UI can update incrementally
-    if (!signal?.aborted && onBatch && results.size > 0) {
-      onBatch(new Map(results));
-    }
-
-    // Small delay between batches to avoid hitting rate limits
-    if (i + batchSize < instrumentTokens.length) {
-      await new Promise((r) => setTimeout(r, 300));
-    }
+        const result = await apiClient.get<{ candles?: unknown[][] }>(`/api/instruments/historical/${token}/day?from=${date(from)}&to=${date(today)}&oi=1`, { signal });
+        const candles = result?.candles || [];
+        const oi = candles.length >= 2 ? candles[candles.length - 2][6] : undefined;
+        if (typeof oi === 'number' && oi > 0) results.set(token, oi);
+      } catch (error) { if (!signal?.aborted) console.warn(`[fetchPreviousDayOI] Failed for ${token}`, error); }
+    }));
+    if (!signal?.aborted && onBatch && results.size > 0) onBatch(new Map(results));
+    if (i + 5 < instrumentTokens.length) await new Promise((resolve) => setTimeout(resolve, 300));
   }
-
   return results;
 }
 
-// ── Positions ────────────────────────────────────────────────────────────────
-
 export interface KitePosition {
-  tradingsymbol: string;
-  exchange: string;
-  instrument_token: number;
-  product: string;
-  quantity: number;
-  overnight_quantity: number;
-  multiplier: number;
-  average_price: number;
-  close_price: number;
-  last_price: number;
-  value: number;
-  pnl: number;
-  m2m: number;
-  unrealised: number;
-  realised: number;
-  buy_quantity: number;
-  buy_price: number;
-  buy_value: number;
-  buy_m2m: number;
-  sell_quantity: number;
-  sell_price: number;
-  sell_value: number;
-  sell_m2m: number;
-  day_buy_quantity: number;
-  day_buy_price: number;
-  day_buy_value: number;
-  day_sell_quantity: number;
-  day_sell_price: number;
-  day_sell_value: number;
+  tradingsymbol: string; exchange: string; instrument_token: number; product: string; quantity: number; overnight_quantity: number;
+  multiplier: number; average_price: number; close_price: number; last_price: number; value: number; pnl: number; m2m: number;
+  unrealised: number; realised: number; buy_quantity: number; buy_price: number; buy_value: number; buy_m2m: number;
+  sell_quantity: number; sell_price: number; sell_value: number; sell_m2m: number; day_buy_quantity: number; day_buy_price: number;
+  day_buy_value: number; day_sell_quantity: number; day_sell_price: number; day_sell_value: number;
 }
-
-export interface KitePositions {
-  net: KitePosition[];
-  day: KitePosition[];
-}
-
-export function fetchPositions(): Promise<KitePositions> {
-  return kiteRequest<KitePositions>('/portfolio/positions');
-}
+export interface KitePositions { net: KitePosition[]; day: KitePosition[] }
+export function fetchPositions(): Promise<KitePositions> { return apiClient.get('/api/portfolio/positions'); }
