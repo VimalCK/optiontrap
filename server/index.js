@@ -103,6 +103,7 @@ const PORT = parseInt(process.env.PORT || '3001', 10);
 const SESSION_SECRET = process.env.SESSION_SECRET || 'insecure-dev-secret';
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
 const IS_PROD = process.env.NODE_ENV === 'production';
+const APP_VERSION = (process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || 'local').slice(0, 7);
 
 // ---------- Log colours ----------
 
@@ -501,6 +502,10 @@ const requireSubscription = async (req, res, next) => {
 // Cached in memory for 30 minutes — plans change rarely, and this shields the
 // DB from unauthenticated traffic floods (single-flight prevents stampedes).
 const getCachedPlans = cached(getActiveSubscriptionPlans, 30 * 60_000);
+
+app.get('/api/version', (_req, res) => {
+  res.json({ status: 'ok', data: { version: APP_VERSION } });
+});
 
 app.get('/api/public/plans', async (_req, res) => {
   try {
