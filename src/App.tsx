@@ -2,7 +2,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useKiteSession } from '@/hooks/useKiteSession';
 import { tickerConnect, tickerDisconnect } from '@/services/tickerSingleton';
-import { handleKiteAuthFailure, isKiteAuthFailure } from '@/services/authSession';
+import { handleKiteAuthFailure } from '@/services/authSession';
 import FeedbackButton from '@/components/Feedback/FeedbackButton';
 import Sidebar from './components/Sidebar/Sidebar';
 import Holdings from './pages/Holdings';
@@ -48,10 +48,6 @@ const App: React.FC = () => {
       if (!isAuthEndpoint(input)) {
         if (response.status === 401 || response.status === 403) {
           handleKiteAuthFailure();
-        } else if (!response.headers.get('content-type')?.includes('text/event-stream')) {
-          void response.clone().text().then((body) => {
-            if (isKiteAuthFailure(body)) handleKiteAuthFailure();
-          }).catch(() => undefined);
         }
       }
 
