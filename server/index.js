@@ -1500,8 +1500,9 @@ server.on('upgrade', (request, socket, head) => {
     }
 
     getSubscriptionSummary(sessionData.kiteSession.userId)
-      .then((subscription) => {
-        if (!subscription.active) {
+      .then(async (subscription) => {
+        // Mirror requireSubscription: admins pass without an active subscription.
+        if (!subscription.active && !(await isUserAdmin(sessionData.kiteSession.userId))) {
           socket.write('HTTP/1.1 402 Payment Required\r\n\r\n');
           socket.destroy();
           return;
