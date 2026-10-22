@@ -221,7 +221,21 @@ export async function getOrFetchInstruments(apiKey, accessToken) {
     if (cached.length > 0) return cached;
   }
 
-  // 2. Serialize the fetch across all callers/replicas.
+  // 2. Within this process, concurrent callers share one in-flight load rather
+  //    than each holding a pooled connection while blocked on the advisory lock.
+  if (!inFlightLoad || inFlightLoad.date !== today) {
+    const promise = loadWithLock(apiKey, accessToken, today)
+      .finally(() => { if (inFlightLoad?.promise === promise) inFlightLoad = null; });
+    inFlightLoad = { date: today, promise };
+  }
+  return inFlightLoad.promise;
+}
+
+/** @type {{ date: string, promise: Promise<any[]> } | null} */
+let inFlightLoad = null;
+
+async function loadWithLock(apiKey, accessToken, today) {
+  // 3. Serialize the fetch across replicas.
   return withAdvisoryLock(INSTRUMENTS_FETCH_LOCK, async () => {
     // Re-check inside the lock — another caller may have just fetched.
     const recheckDate = await getInstrumentsDate();

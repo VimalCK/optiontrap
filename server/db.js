@@ -837,6 +837,31 @@ export async function getInstruments() {
   }));
 }
 
+/**
+ * Insert rows with multi-row INSERT statements (one round trip per batch rather
+ * than per row). `rowValues` is an array of per-row value arrays in column order;
+ * `suffix` is the trailing ON CONFLICT clause. With ON CONFLICT DO UPDATE the
+ * caller must de-duplicate rows by the conflict key first — Postgres rejects a
+ * statement that would update the same row twice.
+ */
+async function insertInBatches(client, insertPrefix, suffix, rowValues, batchSize = 1000) {
+  if (!rowValues.length) return;
+  const columnCount = rowValues[0].length;
+  for (let i = 0; i < rowValues.length; i += batchSize) {
+    const batch = rowValues.slice(i, i + batchSize);
+    const placeholders = batch.map((_, rowIndex) => {
+      const base = rowIndex * columnCount;
+      return `(${Array.from({ length: columnCount }, (_, col) => `$${base + col + 1}`).join(', ')})`;
+    });
+    await client.query(`${insertPrefix} VALUES ${placeholders.join(', ')} ${suffix}`, batch.flat());
+  }
+}
+
+/** Keep the last row per key, matching what sequential upserts would leave behind. */
+function lastPerKey(items, keyOf) {
+  return [...new Map(items.map((item) => [keyOf(item), item])).values()];
+}
+
 export async function saveInstruments(instruments, dateIST) {
   const client = await pool.connect();
   try {
@@ -844,13 +869,14 @@ export async function saveInstruments(instruments, dateIST) {
     await client.query('DELETE FROM instruments');
     await client.query("DELETE FROM instruments_meta WHERE key = 'last_fetched_date'");
 
-    const text = `INSERT INTO instruments
-      (instrument_token, exchange_token, tradingsymbol, name, exchange, instrument_type, strike, expiry, lot_size)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
-      ON CONFLICT (instrument_token) DO NOTHING`;
-
-    for (const inst of instruments) {
-      await client.query(text, [
+    // Row-by-row inserts of the full NSE + NFO list took minutes on a hosted DB,
+    // blocking every request that waits on the instruments cache.
+    await insertInBatches(
+      client,
+      `INSERT INTO instruments
+        (instrument_token, exchange_token, tradingsymbol, name, exchange, instrument_type, strike, expiry, lot_size)`,
+      'ON CONFLICT (instrument_token) DO NOTHING',
+      instruments.map((inst) => [
         inst.instrumentToken,
         inst.exchangeToken,
         inst.tradingsymbol,
@@ -860,8 +886,8 @@ export async function saveInstruments(instruments, dateIST) {
         inst.strike || null,
         inst.expiry || null,
         inst.lotSize || null,
-      ]);
-    }
+      ]),
+    );
 
     await client.query(
       "INSERT INTO instruments_meta (key, value) VALUES ('last_fetched_date', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
@@ -1222,18 +1248,19 @@ export async function insertOiHistoryFuturesRows(scrip, rowsToInsert) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const text = `
-      INSERT INTO oi_history_futures
-        (scrip, expiry, date, instrument_token, tradingsymbol, open, high, low, close, volume, oi)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      ON CONFLICT (scrip, expiry, date) DO UPDATE SET
+    await insertInBatches(
+      client,
+      `INSERT INTO oi_history_futures
+        (scrip, expiry, date, instrument_token, tradingsymbol, open, high, low, close, volume, oi)`,
+      `ON CONFLICT (scrip, expiry, date) DO UPDATE SET
         instrument_token = EXCLUDED.instrument_token, tradingsymbol = EXCLUDED.tradingsymbol,
         open = EXCLUDED.open, high = EXCLUDED.high, low = EXCLUDED.low,
-        close = EXCLUDED.close, volume = EXCLUDED.volume, oi = EXCLUDED.oi`;
-    for (const row of rowsToInsert) {
-      await client.query(text, [scrip, row.expiry, row.date, row.instrumentToken, row.tradingsymbol,
-        row.open, row.high, row.low, row.close, row.volume, row.oi]);
-    }
+        close = EXCLUDED.close, volume = EXCLUDED.volume, oi = EXCLUDED.oi`,
+      lastPerKey(rowsToInsert, (row) => `${row.expiry}|${row.date}`).map((row) => [
+        scrip, row.expiry, row.date, row.instrumentToken, row.tradingsymbol,
+        row.open, row.high, row.low, row.close, row.volume, row.oi,
+      ]),
+    );
     await client.query('COMMIT');
     return rowsToInsert.length;
   } catch (err) {
@@ -1262,10 +1289,7 @@ export async function insertOiHistoryRows(scrip, rowsToInsert) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const text = `
-      INSERT INTO oi_history
-        (scrip, date, instrument_token, tradingsymbol, strike, option_type, expiry, open, high, low, close, volume, oi, spot_close)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+    const conflictClause = `
       ON CONFLICT (scrip, date, instrument_token) DO UPDATE SET
         tradingsymbol = EXCLUDED.tradingsymbol,
         strike        = EXCLUDED.strike,
@@ -1280,13 +1304,17 @@ export async function insertOiHistoryRows(scrip, rowsToInsert) {
         spot_close    = EXCLUDED.spot_close
     `;
 
-    for (const r of rowsToInsert) {
-      await client.query(text, [
+    await insertInBatches(
+      client,
+      `INSERT INTO oi_history
+        (scrip, date, instrument_token, tradingsymbol, strike, option_type, expiry, open, high, low, close, volume, oi, spot_close)`,
+      conflictClause,
+      lastPerKey(rowsToInsert, (r) => `${r.date}|${r.instrumentToken}`).map((r) => [
         scrip, r.date, r.instrumentToken, r.tradingsymbol, r.strike ?? null,
         r.optionType ?? null, r.expiry ?? null,
         r.open, r.high, r.low, r.close, r.volume, r.oi, r.spotClose,
-      ]);
-    }
+      ]),
+    );
     await client.query('COMMIT');
     return rowsToInsert.length;
   } catch (err) {

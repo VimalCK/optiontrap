@@ -1490,9 +1490,24 @@ const OiHistory: React.FC = () => {
   // Fetch available future expiry months for the selected scrip from instruments
   useEffect(() => {
     const current = currentMonthIST();
+    let stale = false;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     setFetchError(null);
-    apiClient.get<{ status: string; months?: string[]; message?: string }>(`/api/oi-history/expiry-months?scrip=${scrip}`, { signal: pageSignal })
+    const requestMonths = () => apiClient.get<{ status: string; months?: string[]; message?: string }>(`/api/oi-history/expiry-months?scrip=${scrip}`, { signal: pageSignal });
+    // Retry once: on the first login of the day the server may still be building
+    // its instruments cache, and a transient failure would otherwise leave only
+    // the current month in the dropdown.
+    requestMonths()
+      .catch((err) => {
+        if (isAbortError(err) || stale) throw err;
+        return new Promise<void>((resolve) => { retryTimer = setTimeout(resolve, 3000); })
+          .then(() => {
+            if (stale) throw new DOMException('Superseded', 'AbortError');
+            return requestMonths();
+          });
+      })
       .then((json) => {
+        if (stale) return;
         if (json.status === 'ok') {
           const months: string[] = json.months || [];
           if (months.length > 0) {
@@ -1510,11 +1525,16 @@ const OiHistory: React.FC = () => {
         }
       })
       .catch((err) => {
-        if (isAbortError(err)) return;
+        if (isAbortError(err) || stale) return;
         setExpiryMonthOptions([{ value: current, label: formatMonthLabel(current) }]);
         setSelectedExpiryMonth(current);
         setFetchError(err instanceof Error ? err.message : 'Failed to load expiry months');
       });
+    return () => {
+      // A newer scrip's request supersedes this one.
+      stale = true;
+      if (retryTimer) clearTimeout(retryTimer);
+    };
   }, [scrip]);
 
   // Fetch available F&O symbols on mount
