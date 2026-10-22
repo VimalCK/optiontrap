@@ -1584,9 +1584,9 @@ const OiHistory: React.FC = () => {
           return apiClient.get<OiHistoryRow[]>(`/api/oi-history?${params}`, { signal: pageSignal });
         }),
       );
-      // Futures follow the same current-through-selected month range as the OI Snapshot.
+      // Futures follow the same months as OI history, including stored M-1 rows.
       const futuresResults = await Promise.all(
-        fetchableExpiryMonths.map(async (month) => {
+        includedExpiryMonths.map(async (month) => {
           const futuresParams = new URLSearchParams({ scrip, expiryMonth: month });
           return apiClient.get<FuturesHistoryRow[]>(`/api/oi-history/futures?${futuresParams}`, { signal: pageSignal });
         }),
@@ -1605,7 +1605,7 @@ const OiHistory: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [scrip, includedExpiryMonths, fetchableExpiryMonths, pageSignal]);
+  }, [scrip, includedExpiryMonths, pageSignal]);
 
   /** Stream a single expiry-month fetch from Kite via SSE. Returns on stream end. */
   const fetchExpiryMonth = useCallback(async (month: string, monthLabel: string) => {
@@ -2504,7 +2504,7 @@ const OiHistory: React.FC = () => {
     }
   }, [scrip]);
 
-  /** Futures contracts loaded for the current-through-selected month range, nearest first. */
+  /** Futures contracts loaded for M-1 (if stored) and the current-through-selected month range, oldest first. */
   const futuresContracts = useMemo(() => {
     const contracts = new Map<string, string>();
     for (const row of futuresData) {
@@ -2896,9 +2896,7 @@ const OiHistory: React.FC = () => {
                     </g>
                   );
                 })()}
-                {futuresChart.days.map((day) => (
-                  <text key={`label-${day.date}`} x={day.x} y={futuresChart.height - 20} textAnchor="middle" fontSize="5.5" fill="var(--text-secondary)">{day.date.slice(8)}</text>
-                ))}
+                <ChartXAxis dates={futuresChart.days.map((day) => day.date)} padL={futuresChart.left} plotW={futuresChart.plotWidth} h={futuresChart.height} />
               </svg>
               <div className="oi-history__chart-legend">
                 <span className="oi-history__chart-legend-item"><span className="oi-history__chart-legend-swatch" style={{ background: '#8b5cf6' }} /> Total OI</span>

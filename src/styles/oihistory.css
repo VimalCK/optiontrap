@@ -1552,21 +1552,29 @@
   color: #60a5fa;
 }
 
+/* One metric per row so large OI/volume values don't overflow the card. */
 .oi-history__buying-summary-metrics {
-  justify-content: space-between;
-  gap: 5px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
   padding-top: 7px;
   border-top: 1px solid rgba(255, 255, 255, 0.07);
 }
 
 .oi-history__buying-summary-metrics span {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
   color: var(--text-secondary);
   font-size: 9px;
 }
 
 .oi-history__buying-summary-metrics b {
-  display: block;
-  margin-top: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
   color: var(--text-primary);
   font-size: 10px;
   font-weight: 700;
