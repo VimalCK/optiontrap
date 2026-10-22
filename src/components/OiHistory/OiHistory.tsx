@@ -36,7 +36,6 @@ const OiHistory: React.FC = () => {
   const [analysisTab, setAnalysisTab] = useState<'history' | 'setup'>('history');
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [signalPerformance, setSignalPerformance] = useState<SignalPerformanceSummary | null>(null);
-  const [outcomeRefreshVersion, setOutcomeRefreshVersion] = useState(0);
   const loggedSignalKeysRef = useRef(new Set<string>());
   // Scrip the loaded `data` belongs to. Right after a scrip switch, `scrip` is
   // already new while `data` still holds the previous scrip's rows.
@@ -841,6 +840,23 @@ const OiHistory: React.FC = () => {
     const signalDate = chartData.dates[chartData.dates.length - 1];
     const expiry = chartData.premiumDecay.nearestExpiry;
     const side = optionType === 'CE' ? chartData.premiumDecay.ce : chartData.premiumDecay.pe;
+
+    // Log one setup per scrip per day: only the ATM strike on the signal date.
+    const signalDayRows = data.filter((row) => row.date === signalDate && row.strike);
+    const signalDaySpot = signalDayRows[0]?.spotClose;
+    if (!signalDaySpot) return;
+    const signalDayAtm = signalDayRows.reduce<number | null>((best, row) => (
+      best === null || Math.abs(row.strike! - signalDaySpot) < Math.abs(best - signalDaySpot) ? row.strike! : best
+    ), null);
+    if (selectedStrike !== signalDayAtm) return;
+
+    // The expiry comes from the selected date's table. When viewing an older
+    // date it can be a contract that has expired by the signal date, so take
+    // the entry premium from the signal date itself and skip if it has none.
+    const signalDayEntry = expiry ? chartData.dateMap.get(signalDate)?.get(expiry) : undefined;
+    const entryPremium = signalDayEntry ? (optionType === 'CE' ? signalDayEntry.ceClose : signalDayEntry.peClose) : 0;
+    if (!expiry || expiry < signalDate || !(entryPremium > 0)) return;
+
     const key = `${scrip}|${signalDate}|${expiry}|${selectedStrike}|${optionType}|${action}`;
     if (loggedSignalKeysRef.current.has(key)) return;
     loggedSignalKeysRef.current.add(key);
@@ -853,7 +869,7 @@ const OiHistory: React.FC = () => {
         optionType,
         action,
         status: setupStatus,
-        entryPremium: side?.latestClose ?? null,
+        entryPremium,
         spotPrice: chartData.priceTrend.endPrice ?? null,
         details: {
           priceTrend: chartData.priceTrend,
@@ -868,57 +884,7 @@ const OiHistory: React.FC = () => {
     ).catch(() => {
       // Logging must never affect the Trade Setup UI.
     });
-  }, [chartData, scrip, dataScrip, selectedStrike]);
-
-  // Refresh outcomes for older signals whenever a newer session is visible.
-  // This gives the research log a simple mark-to-market result without
-  // pretending that an order was actually executed.
-  useEffect(() => {
-    if (!chartData || chartData.dates.length === 0 || !selectedStrike || dataScrip !== scrip) return;
-    const latestDate = chartData.dates[chartData.dates.length - 1];
-    const availableExpiries = new Set(visibleTableExpiries);
-    if (availableExpiries.size === 0) return;
-
-    void (async () => {
-      try {
-        const result = await apiClient.get<{ signals?: Array<{
-          id: number; signal_date: string; expiry: string | null; strike: number; option_type: 'CE' | 'PE';
-          action: 'BUY' | 'SELL'; entry_premium: number | null; outcome_status: string | null; outcome_final: boolean;
-        }> }>(`/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=200`, { signal: pageSignal });
-        let outcomesUpdated = false;
-        for (const signal of result.signals || []) {
-          if (signal.outcome_final || signal.signal_date > latestDate || !signal.expiry || !availableExpiries.has(signal.expiry) || signal.strike !== selectedStrike) continue;
-          if (!signal.entry_premium || signal.entry_premium <= 0) continue;
-          const path = chartData.dates
-            .filter((date) => date >= signal.signal_date)
-            .map((date) => chartData.dateMap.get(date)?.get(signal.expiry!)?.[signal.option_type === 'CE' ? 'ceClose' : 'peClose'] || 0)
-            .filter((price) => price > 0);
-          // The first price is the entry day itself; without a later price there
-          // is nothing to measure, so don't record a flat 0% (which read as a Loss).
-          if (path.length < 2) continue;
-          const returns = path.map((price) => {
-            const raw = ((price - signal.entry_premium!) / signal.entry_premium!) * 100;
-            return signal.action === 'SELL' ? -raw : raw;
-          });
-          const returnPct = returns[returns.length - 1];
-          const final = latestDate >= signal.expiry;
-          await apiClient.patch(`/api/oi-history/signals/${signal.id}/outcome`, {
-              price: path[path.length - 1],
-              date: latestDate,
-              returnPct,
-              maxFavorableReturn: Math.max(...returns),
-              maxAdverseReturn: Math.min(...returns),
-              final,
-              status: final ? (returnPct > 0 ? 'Profit' : 'Loss') : 'Open',
-          }, { signal: pageSignal });
-          outcomesUpdated = true;
-        }
-        if (outcomesUpdated) setOutcomeRefreshVersion((version) => version + 1);
-      } catch {
-        // Outcome tracking must never affect the Trade Setup UI.
-      }
-    })();
-  }, [chartData, scrip, dataScrip, selectedStrike, visibleTableExpiries, pageSignal]);
+  }, [chartData, data, scrip, dataScrip, selectedStrike]);
 
   useEffect(() => {
     if (!chartData || !scrip) return;
@@ -991,7 +957,7 @@ const OiHistory: React.FC = () => {
         // Research metrics are optional and must never block the setup.
       }
     })();
-  }, [chartData, scrip, outcomeRefreshVersion, pageSignal]);
+  }, [chartData, scrip, pageSignal]);
 
   /**
    * Resolve the strike/side/optionType a trade setup recommends and place it.

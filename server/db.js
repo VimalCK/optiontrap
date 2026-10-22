@@ -1430,6 +1430,89 @@ export async function updateTradeSetupSignalOutcome(userId, signalId, outcome) {
   );
 }
 
+/**
+ * Mark-to-market every open trade setup signal (all users) from stored OI
+ * history. Runs on the server so signals are scored even when nobody opens
+ * that strike in the browser.
+ *
+ * The price path starts at the signal date's close. Once the latest stored
+ * date for the scrip reaches the expiry, the signal is final. If the option's
+ * own expiry-day close was never stored (the contract drops out of the
+ * instruments list after expiry, so a later fetch can't get it), the expiry
+ * price falls back to intrinsic value from that day's stored spot close.
+ */
+export async function evaluateTradeSetupSignalOutcomes(scrip = null) {
+  const signals = await rows(
+    `SELECT id, scrip, signal_date, expiry, strike, option_type, action, entry_premium
+     FROM trade_setup_signals
+     WHERE NOT outcome_final AND expiry IS NOT NULL AND entry_premium > 0
+       ${scrip ? 'AND scrip = $1' : ''}`,
+    scrip ? [scrip] : [],
+  );
+  if (signals.length === 0) return 0;
+
+  const latestByScrip = new Map();
+  const latestDateFor = async (name) => {
+    if (!latestByScrip.has(name)) {
+      const row = await firstRow('SELECT MAX(date) AS date FROM oi_history WHERE scrip = $1', [name]);
+      latestByScrip.set(name, row?.date || null);
+    }
+    return latestByScrip.get(name);
+  };
+
+  let updated = 0;
+  for (const signal of signals) {
+    const latestDate = await latestDateFor(signal.scrip);
+    if (!latestDate || latestDate < signal.signal_date) continue;
+
+    const path = (await rows(
+      `SELECT date, close FROM oi_history
+       WHERE scrip = $1 AND expiry = $2 AND strike = $3 AND option_type = $4
+         AND date >= $5 AND date <= $2 AND close > 0
+       ORDER BY date`,
+      [signal.scrip, signal.expiry, signal.strike, signal.option_type, signal.signal_date],
+    )).map((row) => ({ date: row.date, price: Number(row.close) }));
+
+    const expired = latestDate >= signal.expiry;
+    let settled = path.some((point) => point.date === signal.expiry);
+    if (expired && !settled) {
+      const spotRow = await firstRow(
+        'SELECT MAX(spot_close) AS spot FROM oi_history WHERE scrip = $1 AND date = $2 AND spot_close > 0',
+        [signal.scrip, signal.expiry],
+      );
+      const spot = Number(spotRow?.spot);
+      if (spot > 0) {
+        const strike = Number(signal.strike);
+        const intrinsic = signal.option_type === 'CE' ? Math.max(spot - strike, 0) : Math.max(strike - spot, 0);
+        path.push({ date: signal.expiry, price: intrinsic });
+        settled = true;
+      }
+    }
+
+    // The first point is the entry day; without a later price there is nothing to measure.
+    if (path.length < 2) continue;
+
+    const entry = Number(signal.entry_premium);
+    const returns = path.map(({ price }) => {
+      const raw = ((price - entry) / entry) * 100;
+      return signal.action === 'SELL' ? -raw : raw;
+    });
+    const last = path[path.length - 1];
+    const returnPct = returns[returns.length - 1];
+    const final = expired && settled;
+    await query(
+      `UPDATE trade_setup_signals
+       SET outcome_price = $1, outcome_date = $2, outcome_return = $3, outcome_status = $4,
+           max_favorable_return = $5, max_adverse_return = $6, outcome_final = $7
+       WHERE id = $8`,
+      [last.price, last.date, returnPct, final ? (returnPct > 0 ? 'Profit' : 'Loss') : 'Open',
+        Math.max(...returns), Math.min(...returns), final, signal.id],
+    );
+    updated += 1;
+  }
+  return updated;
+}
+
 export async function getOptionsForAtm(scripName, atmStrike, stepSize = 50, range = 15, { allExpiries = false, targetMonth = '' } = {}) {
   const lowerStrike = atmStrike - range * stepSize;
   const upperStrike = atmStrike + range * stepSize;

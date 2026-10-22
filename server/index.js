@@ -78,6 +78,7 @@ import {
   saveTradeSetupSignal,
   getTradeSetupSignals,
   updateTradeSetupSignalOutcome,
+  evaluateTradeSetupSignalOutcomes,
   getOiHistoryDatesForExpiryMonth,
   getStoredOiHistoryExpiryMonths,
   getStoredOiHistoryStrikes,
@@ -1214,6 +1215,13 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
       };
     });
 
+    // New prices may settle open signals; score them before the client reloads.
+    try {
+      await evaluateTradeSetupSignalOutcomes(scrip);
+    } catch (err) {
+      console.warn('[OI History] Signal outcome evaluation failed:', err.message);
+    }
+
     send('done', summary);
     res.end();
   } catch (err) {
@@ -1628,6 +1636,14 @@ if (IS_PROD) {
 async function start() {
   // Initialise PostgreSQL
   await initDb();
+
+  // Score open trade signals from stored prices at startup and hourly, so
+  // outcomes don't depend on someone opening that strike in the browser.
+  const evaluateSignals = () => evaluateTradeSetupSignalOutcomes()
+    .then((count) => { if (count > 0) console.log(`[OI History] Updated ${count} signal outcome(s)`); })
+    .catch((err) => console.warn('[OI History] Signal outcome evaluation failed:', err.message));
+  evaluateSignals();
+  setInterval(evaluateSignals, 60 * 60 * 1000).unref();
 
   server.listen(PORT, () => {
     console.log(`${ts()} ${GREEN}Server${RESET} OptionTrap running on port ${PORT}`);
