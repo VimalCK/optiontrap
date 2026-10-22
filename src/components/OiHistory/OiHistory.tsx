@@ -1447,6 +1447,9 @@ const OiHistory: React.FC = () => {
   const [signalPerformance, setSignalPerformance] = useState<SignalPerformanceSummary | null>(null);
   const [outcomeRefreshVersion, setOutcomeRefreshVersion] = useState(0);
   const loggedSignalKeysRef = useRef(new Set<string>());
+  // Scrip the loaded `data` belongs to. Right after a scrip switch, `scrip` is
+  // already new while `data` still holds the previous scrip's rows.
+  const [dataScrip, setDataScrip] = useState('');
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(() => new Set());
   const [showVolume, setShowVolume] = useState(false);
   const [recentScrips, setRecentScrips] = useState<string[]>(() => loadRecentScrips());
@@ -1593,6 +1596,7 @@ const OiHistory: React.FC = () => {
       );
       const merged = results.flat();
       setData(merged);
+      setDataScrip(scrip);
       setFuturesData(futuresResults.flat());
       if (merged.length > 0) {
         const dates = [...new Set(merged.map((r) => r.date))].sort();
@@ -1737,6 +1741,7 @@ const OiHistory: React.FC = () => {
 
     // Clear old data immediately so stale content isn't shown
     setData([]);
+    setDataScrip('');
     setSelectedStrike(null);
     setFilterDate('');
     setFetchResult(null);
@@ -2224,7 +2229,7 @@ const OiHistory: React.FC = () => {
   // evidence needed for later outcome tracking and backtesting without
   // creating another UI section.
   useEffect(() => {
-    if (!chartData || !selectedStrike || chartData.dates.length === 0) return;
+    if (!chartData || !selectedStrike || chartData.dates.length === 0 || dataScrip !== scrip) return;
     const selling = chartData.sellingSetup;
     const buying = chartData.tradeSetup;
     let action: 'BUY' | 'SELL' | null = null;
@@ -2272,13 +2277,13 @@ const OiHistory: React.FC = () => {
     ).catch(() => {
       // Logging must never affect the Trade Setup UI.
     });
-  }, [chartData, scrip, selectedStrike]);
+  }, [chartData, scrip, dataScrip, selectedStrike]);
 
   // Refresh outcomes for older signals whenever a newer session is visible.
   // This gives the research log a simple mark-to-market result without
   // pretending that an order was actually executed.
   useEffect(() => {
-    if (!chartData || chartData.dates.length === 0 || !selectedStrike) return;
+    if (!chartData || chartData.dates.length === 0 || !selectedStrike || dataScrip !== scrip) return;
     const latestDate = chartData.dates[chartData.dates.length - 1];
     const availableExpiries = new Set(visibleTableExpiries);
     if (availableExpiries.size === 0) return;
@@ -2297,7 +2302,9 @@ const OiHistory: React.FC = () => {
             .filter((date) => date >= signal.signal_date)
             .map((date) => chartData.dateMap.get(date)?.get(signal.expiry!)?.[signal.option_type === 'CE' ? 'ceClose' : 'peClose'] || 0)
             .filter((price) => price > 0);
-          if (path.length === 0) continue;
+          // The first price is the entry day itself; without a later price there
+          // is nothing to measure, so don't record a flat 0% (which read as a Loss).
+          if (path.length < 2) continue;
           const returns = path.map((price) => {
             const raw = ((price - signal.entry_premium!) / signal.entry_premium!) * 100;
             return signal.action === 'SELL' ? -raw : raw;
@@ -2320,7 +2327,7 @@ const OiHistory: React.FC = () => {
         // Outcome tracking must never affect the Trade Setup UI.
       }
     })();
-  }, [chartData, scrip, selectedStrike, visibleTableExpiries, pageSignal]);
+  }, [chartData, scrip, dataScrip, selectedStrike, visibleTableExpiries, pageSignal]);
 
   useEffect(() => {
     if (!chartData || !scrip) return;
@@ -2491,12 +2498,29 @@ const OiHistory: React.FC = () => {
       const result = await apiClient.get<{ signals?: Array<Record<string, unknown>> }>(`/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=500`);
       const signals = result.signals || [];
       const columns = ['signal_date', 'scrip', 'expiry', 'strike', 'option_type', 'action', 'status', 'entry_premium', 'spot_price', 'outcome_status', 'outcome_date', 'outcome_return', 'max_favorable_return', 'max_adverse_return', 'outcome_final'];
-      const escapeCsv = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
-      const csv = [columns.join(','), ...signals.map((signal) => columns.map((column) => escapeCsv(signal[column])).join(','))].join('\n');
-      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      const numericColumns = new Set(['strike', 'entry_premium', 'spot_price', 'outcome_return', 'max_favorable_return', 'max_adverse_return']);
+      // Loaded on demand so the spreadsheet library stays out of the page bundle.
+      const { default: ExcelJS } = await import('exceljs');
+      const workbook = new ExcelJS.Workbook();
+      const sheet = workbook.addWorksheet('Trade signals');
+      sheet.columns = columns.map((column) => ({ header: column, key: column, width: Math.max(column.length + 2, 12) }));
+      sheet.getRow(1).font = { bold: true };
+      sheet.views = [{ state: 'frozen', ySplit: 1 }];
+      for (const signal of signals) {
+        const row = sheet.addRow(Object.fromEntries(columns.map((column) => {
+          const value = signal[column];
+          if (value === null || value === undefined || value === '') return [column, null];
+          return [column, numericColumns.has(column) && Number.isFinite(Number(value)) ? Number(value) : String(value)];
+        })));
+        // Light red for losses, light green for profits.
+        const fill = signal.outcome_status === 'Loss' ? 'FFFDE2E2' : signal.outcome_status === 'Profit' ? 'FFDCFCE7' : null;
+        if (fill) row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
+      }
+      const buffer = await workbook.xlsx.writeBuffer();
+      const url = URL.createObjectURL(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
       const link = document.createElement('a');
       link.href = url;
-      link.download = `optiontrap-${scrip.toLowerCase()}-trade-signals.csv`;
+      link.download = `optiontrap-${scrip.toLowerCase()}-trade-signals.xlsx`;
       link.click();
       URL.revokeObjectURL(url);
     } catch {
@@ -3569,7 +3593,7 @@ const OiHistory: React.FC = () => {
                     <span>Recorded setup performance</span>
                     <div>
                       <strong>{signalPerformance.total} signals · {signalPerformance.open} open · {signalPerformance.evaluated} evaluated</strong>
-                      <button type="button" className="oi-history__signal-export" onClick={exportSignalResults}>Export CSV</button>
+                      <button type="button" className="oi-history__signal-export" onClick={exportSignalResults}>Export Excel</button>
                     </div>
                   </div>
                   <div className={`oi-history__signal-confidence ${signalPerformance.evaluated >= 20 ? 'is-ready' : ''}`}>
