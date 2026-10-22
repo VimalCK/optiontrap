@@ -935,6 +935,17 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
+  // The browser cancels the request when the user leaves the OI History tab.
+  // Stop calling Kite and skip the save — a partial save would mark those
+  // dates as already fetched and leave gaps on the next fetch.
+  const cancel = new AbortController();
+  res.on('close', () => {
+    if (!res.writableEnded) cancel.abort();
+  });
+  const throwIfCancelled = () => {
+    if (cancel.signal.aborted) throw new Error('Client cancelled the request');
+  };
+
   try {
     const { scrip, expiryMonth, strikeMode = 'atmRange', specificStrike } = req.body;
     if (!scrip || !expiryMonth) {
@@ -996,6 +1007,7 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
     const spotUrl = `https://api.kite.trade/instruments/historical/${spotToken}/day?from=${from}&to=${to}&oi=1`;
     const spotRes = await fetch(spotUrl, {
       headers: { Authorization: authHeader, 'X-Kite-Version': '3' },
+      signal: cancel.signal,
     });
     if (!spotRes.ok) {
       const body = await spotRes.text();
@@ -1056,7 +1068,7 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
         send('step', { step: 2, message: `Fetching futures OI and volume for ${futuresContract.tradingsymbol}...` });
         try {
           const futuresUrl = `https://api.kite.trade/instruments/historical/${futuresContract.instrumentToken}/day?from=${futuresFetchFrom}&to=${futuresFetchTo}&oi=1`;
-          const futuresResponse = await fetch(futuresUrl, { headers: { Authorization: authHeader, 'X-Kite-Version': '3' } });
+          const futuresResponse = await fetch(futuresUrl, { headers: { Authorization: authHeader, 'X-Kite-Version': '3' }, signal: cancel.signal });
           if (futuresResponse.ok) {
             const futuresCandles = (await futuresResponse.json())?.data?.candles || [];
             await insertOiHistoryFuturesRows(scrip, futuresCandles.map((candle) => ({
@@ -1066,6 +1078,7 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
             })));
           }
         } catch (err) {
+          if (cancel.signal.aborted) throw err;
           console.warn('[OI History] Futures fetch failed:', err.message);
         }
       }
@@ -1112,6 +1125,7 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
       const totalBatches = Math.ceil(tokenList.length / batchSize);
 
       for (let i = 0; i < tokenList.length; i += batchSize) {
+        throwIfCancelled();
         const batch = tokenList.slice(i, i + batchSize);
         const batchNum = Math.floor(i / batchSize) + 1;
         const promises = batch.map(async (token) => {
@@ -1119,6 +1133,7 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
             const url = `https://api.kite.trade/instruments/historical/${token}/day?from=${fetchFrom}&to=${fetchTo}&oi=1`;
             const response = await fetch(url, {
               headers: { Authorization: authHeader, 'X-Kite-Version': '3' },
+              signal: cancel.signal,
             });
             if (!response.ok) return;
 
@@ -1157,6 +1172,7 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
       }
 
       // Step 4: Build rows and upsert
+      throwIfCancelled();
       send('step', { step: 4, message: 'Saving to database...' });
 
       const rows = [];
@@ -1201,6 +1217,10 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
     send('done', summary);
     res.end();
   } catch (err) {
+    if (cancel.signal.aborted) {
+      console.log(`[OI History] Fetch cancelled by client for ${req.body?.scrip} ${req.body?.expiryMonth}`);
+      return;
+    }
     console.error('[OI History] Fetch error:', err.message);
     send('error', { message: err.message });
     res.end();

@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { handleKiteAuthFailure, isKiteAuthFailure } from '@/services/authSession';
-import { apiClient } from '@/services/apiClient';
+import { apiClient, isAbortError } from '@/services/apiClient';
+import { useAbortSignal } from '@/hooks/useAbortSignal';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { addPosition } from '@/services/positions';
 import { getLotSize } from '@/services/optionChain';
@@ -310,6 +311,29 @@ function addMonths(month: string, delta: number): string {
 }
 
 /** Format a month string (YYYY-MM) to label (e.g., "July 2026") */
+/** Price line colours per futures month, nearest first (OI/volume bars use purple/cyan). */
+const FUTURES_LINE_COLORS = ['#22c55e', '#f59e0b', '#ec4899', '#3b82f6'];
+
+/** Daily price/OI changes and signal for one futures contract's history. */
+function buildFuturesSeries(contractRows: FuturesHistoryRow[]) {
+  const sorted = [...contractRows].sort((a, b) => a.date.localeCompare(b.date));
+  return sorted.map((row, index) => {
+    const previous = sorted[index - 1];
+    const priceChangePct = previous?.close > 0 ? ((row.close - previous.close) / previous.close) * 100 : null;
+    const oiChangePct = previous?.oi > 0 ? ((row.oi - previous.oi) / previous.oi) * 100 : null;
+    const averageVolume = sorted.slice(Math.max(0, index - 5), index).map((item) => item.volume).filter((value) => value > 0);
+    const avgVolume = averageVolume.length ? averageVolume.reduce((sum, value) => sum + value, 0) / averageVolume.length : null;
+    let interpretation = 'New data';
+    if (priceChangePct !== null && oiChangePct !== null) {
+      if (priceChangePct >= 0 && oiChangePct >= 0) interpretation = 'Long buildup';
+      else if (priceChangePct < 0 && oiChangePct >= 0) interpretation = 'Short buildup';
+      else if (priceChangePct < 0 && oiChangePct < 0) interpretation = 'Long unwinding';
+      else interpretation = 'Short covering';
+    }
+    return { ...row, priceChangePct, oiChangePct, avgVolume, interpretation };
+  });
+}
+
 function formatMonthLabel(month: string): string {
   const [y, m] = month.split('-').map(Number);
   return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
@@ -1401,6 +1425,8 @@ const ChartXAxis: React.FC<ChartXAxisProps> = ({ dates, padL, plotW, h }) => {
 
 const OiHistory: React.FC = () => {
   const navigate = useNavigate();
+  // Cancels this tab's in-flight requests when the user navigates away.
+  const pageSignal = useAbortSignal();
   const [scrip, setScrip] = useState('NIFTY50');
   const [selectedExpiryMonth, setSelectedExpiryMonth] = useState(currentMonthIST());
   const [fetching, setFetching] = useState(false);
@@ -1415,7 +1441,7 @@ const OiHistory: React.FC = () => {
   const [showPatternInfo, setShowPatternInfo] = useState(false);
   const [showFuturesInfo, setShowFuturesInfo] = useState(false);
   const [futuresView, setFuturesView] = useState<'table' | 'chart'>('table');
-  const [futuresHover, setFuturesHover] = useState<{ date: string; close: number; oi: number; volume: number; x: number; y: number } | null>(null);
+  const [futuresHover, setFuturesHover] = useState<{ date: string; x: number; oi: number; volume: number; closes: { label: string; color: string; close: number }[] } | null>(null);
   const [analysisTab, setAnalysisTab] = useState<'history' | 'setup'>('history');
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [signalPerformance, setSignalPerformance] = useState<SignalPerformanceSummary | null>(null);
@@ -1465,7 +1491,7 @@ const OiHistory: React.FC = () => {
   useEffect(() => {
     const current = currentMonthIST();
     setFetchError(null);
-    apiClient.get<{ status: string; months?: string[]; message?: string }>(`/api/oi-history/expiry-months?scrip=${scrip}`)
+    apiClient.get<{ status: string; months?: string[]; message?: string }>(`/api/oi-history/expiry-months?scrip=${scrip}`, { signal: pageSignal })
       .then((json) => {
         if (json.status === 'ok') {
           const months: string[] = json.months || [];
@@ -1484,6 +1510,7 @@ const OiHistory: React.FC = () => {
         }
       })
       .catch((err) => {
+        if (isAbortError(err)) return;
         setExpiryMonthOptions([{ value: current, label: formatMonthLabel(current) }]);
         setSelectedExpiryMonth(current);
         setFetchError(err instanceof Error ? err.message : 'Failed to load expiry months');
@@ -1492,7 +1519,7 @@ const OiHistory: React.FC = () => {
 
   // Fetch available F&O symbols on mount
   useEffect(() => {
-    apiClient.get<string[]>('/api/fno-symbols')
+    apiClient.get<string[]>('/api/fno-symbols', { signal: pageSignal })
       .then((symbols) => {
         if (symbols.length > 0) {
           const options = symbols.map((name: string) => ({
@@ -1534,14 +1561,19 @@ const OiHistory: React.FC = () => {
       const results = await Promise.all(
         includedExpiryMonths.map(async (month) => {
           const params = new URLSearchParams({ scrip, expiryMonth: month });
-          return apiClient.get<OiHistoryRow[]>(`/api/oi-history?${params}`);
+          return apiClient.get<OiHistoryRow[]>(`/api/oi-history?${params}`, { signal: pageSignal });
         }),
       );
-      const futuresParams = new URLSearchParams({ scrip, expiryMonth: selectedExpiryMonth });
-      const futuresResult = await apiClient.get<FuturesHistoryRow[]>(`/api/oi-history/futures?${futuresParams}`);
+      // Futures follow the same current-through-selected month range as the OI Snapshot.
+      const futuresResults = await Promise.all(
+        fetchableExpiryMonths.map(async (month) => {
+          const futuresParams = new URLSearchParams({ scrip, expiryMonth: month });
+          return apiClient.get<FuturesHistoryRow[]>(`/api/oi-history/futures?${futuresParams}`, { signal: pageSignal });
+        }),
+      );
       const merged = results.flat();
       setData(merged);
-      setFuturesData(futuresResult);
+      setFuturesData(futuresResults.flat());
       if (merged.length > 0) {
         const dates = [...new Set(merged.map((r) => r.date))].sort();
         const current = currentMonthIST();
@@ -1549,11 +1581,11 @@ const OiHistory: React.FC = () => {
         setFilterDate((visibleDates[visibleDates.length - 1] || dates[dates.length - 1]) as string);
       }
     } catch (err) {
-      console.error('[OiHistory] Load error:', err);
+      if (!isAbortError(err)) console.error('[OiHistory] Load error:', err);
     } finally {
       setLoading(false);
     }
-  }, [scrip, includedExpiryMonths, selectedExpiryMonth]);
+  }, [scrip, includedExpiryMonths, fetchableExpiryMonths, pageSignal]);
 
   /** Stream a single expiry-month fetch from Kite via SSE. Returns on stream end. */
   const fetchExpiryMonth = useCallback(async (month: string, monthLabel: string) => {
@@ -1566,6 +1598,7 @@ const OiHistory: React.FC = () => {
         strikeMode: strikeRange === -1 ? 'specific' : strikeRange === 0 ? 'allStored' : 'atmRange',
         specificStrike: strikeRange === -1 ? specificStrikeValue : undefined,
       },
+      signal: pageSignal,
     });
 
     if (!res.ok) {
@@ -1634,7 +1667,7 @@ const OiHistory: React.FC = () => {
       }
     }
     if (buffer.trim()) processBlock(buffer);
-  }, [scrip, strikeRange, specificStrikeValue]);
+  }, [scrip, strikeRange, specificStrikeValue, pageSignal]);
 
   /** Fetch current/future included expiry months from Kite. Historical months are loaded from DB only. */
   const handleFetch = useCallback(async () => {
@@ -1660,6 +1693,7 @@ const OiHistory: React.FC = () => {
       }
       setProgress(null);
     } catch (err) {
+      if (isAbortError(err)) return;
       const message = err instanceof Error ? err.message : 'Network error';
       if (isKiteAuthFailure(message)) {
         handleKiteAuthFailure();
@@ -1670,9 +1704,9 @@ const OiHistory: React.FC = () => {
       setProgress(null);
     } finally {
       setFetching(false);
-      loadData();
+      if (!pageSignal.aborted) loadData();
     }
-  }, [fetchableExpiryMonths, fetchExpiryMonth, loadData, navigate, strikeRange, specificStrikeValue]);
+  }, [fetchableExpiryMonths, fetchExpiryMonth, loadData, navigate, strikeRange, specificStrikeValue, pageSignal]);
 
   // When scrip or expiry month changes, load existing data from the DB only.
   // Fetching fresh data from Kite is an explicit action via the Fetch button.
@@ -2234,7 +2268,7 @@ const OiHistory: React.FC = () => {
         const result = await apiClient.get<{ signals?: Array<{
           id: number; signal_date: string; expiry: string | null; strike: number; option_type: 'CE' | 'PE';
           action: 'BUY' | 'SELL'; entry_premium: number | null; outcome_status: string | null; outcome_final: boolean;
-        }> }>(`/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=200`);
+        }> }>(`/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=200`, { signal: pageSignal });
         let outcomesUpdated = false;
         for (const signal of result.signals || []) {
           if (signal.outcome_final || signal.signal_date > latestDate || !signal.expiry || !availableExpiries.has(signal.expiry) || signal.strike !== selectedStrike) continue;
@@ -2258,7 +2292,7 @@ const OiHistory: React.FC = () => {
               maxAdverseReturn: Math.min(...returns),
               final,
               status: final ? (returnPct > 0 ? 'Profit' : 'Loss') : 'Open',
-          });
+          }, { signal: pageSignal });
           outcomesUpdated = true;
         }
         if (outcomesUpdated) setOutcomeRefreshVersion((version) => version + 1);
@@ -2266,7 +2300,7 @@ const OiHistory: React.FC = () => {
         // Outcome tracking must never affect the Trade Setup UI.
       }
     })();
-  }, [chartData, scrip, selectedStrike, visibleTableExpiries]);
+  }, [chartData, scrip, selectedStrike, visibleTableExpiries, pageSignal]);
 
   useEffect(() => {
     if (!chartData || !scrip) return;
@@ -2274,7 +2308,7 @@ const OiHistory: React.FC = () => {
       try {
         const result = await apiClient.get<{
           signals?: Array<{ action: 'BUY' | 'SELL'; option_type: 'CE' | 'PE'; outcome_status: string | null; outcome_return: number | null; max_favorable_return: number | null; max_adverse_return: number | null }>;
-        }>(`/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=500`);
+        }>(`/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=500`, { signal: pageSignal });
         const signals = result.signals || [];
         const openSignals = signals.filter((signal) => signal.outcome_status === 'Open' || signal.outcome_status === null);
         const openReturns = openSignals
@@ -2339,7 +2373,7 @@ const OiHistory: React.FC = () => {
         // Research metrics are optional and must never block the setup.
       }
     })();
-  }, [chartData, scrip, outcomeRefreshVersion]);
+  }, [chartData, scrip, outcomeRefreshVersion, pageSignal]);
 
   /**
    * Resolve the strike/side/optionType a trade setup recommends and place it.
@@ -2450,28 +2484,36 @@ const OiHistory: React.FC = () => {
     }
   }, [scrip]);
 
-  const futuresTableRows = useMemo(() => {
-    const sorted = [...futuresData].sort((a, b) => a.date.localeCompare(b.date));
-    return sorted.map((row, index) => {
-      const previous = sorted[index - 1];
-      const priceChangePct = previous?.close > 0 ? ((row.close - previous.close) / previous.close) * 100 : null;
-      const oiChangePct = previous?.oi > 0 ? ((row.oi - previous.oi) / previous.oi) * 100 : null;
-      const averageVolume = sorted.slice(Math.max(0, index - 5), index).map((item) => item.volume).filter((value) => value > 0);
-      const avgVolume = averageVolume.length ? averageVolume.reduce((sum, value) => sum + value, 0) / averageVolume.length : null;
-      let interpretation = 'New data';
-      if (priceChangePct !== null && oiChangePct !== null) {
-        if (priceChangePct >= 0 && oiChangePct >= 0) interpretation = 'Long buildup';
-        else if (priceChangePct < 0 && oiChangePct >= 0) interpretation = 'Short buildup';
-        else if (priceChangePct < 0 && oiChangePct < 0) interpretation = 'Long unwinding';
-        else interpretation = 'Short covering';
-      }
-      return { ...row, priceChangePct, oiChangePct, avgVolume, interpretation };
-    });
+  /** Futures contracts loaded for the current-through-selected month range, nearest first. */
+  const futuresContracts = useMemo(() => {
+    const contracts = new Map<string, string>();
+    for (const row of futuresData) {
+      if (row.expiry && !contracts.has(row.expiry)) contracts.set(row.expiry, row.tradingsymbol);
+    }
+    return [...contracts].map(([expiry, tradingsymbol]) => ({ expiry, tradingsymbol })).sort((a, b) => a.expiry.localeCompare(b.expiry));
   }, [futuresData]);
 
+  // Changes are computed within each contract so rollover days don't show false jumps.
+  const futuresRowsByContract = useMemo(() => {
+    const byContract = new Map<string, ReturnType<typeof buildFuturesSeries>>();
+    for (const { expiry } of futuresContracts) {
+      byContract.set(expiry, buildFuturesSeries(futuresData.filter((row) => row.expiry === expiry)));
+    }
+    return byContract;
+  }, [futuresData, futuresContracts]);
+
+  /** Table view shows every contract on the selected date, like the OI Snapshot. */
+  const futuresDateRows = useMemo(() => {
+    return futuresContracts
+      .map(({ expiry }) => futuresRowsByContract.get(expiry)?.find((row) => row.date === filterDate))
+      .filter((row): row is NonNullable<typeof row> => Boolean(row));
+  }, [futuresContracts, futuresRowsByContract, filterDate]);
+
+  /** Chart view plots every month's price on a shared date axis; bars are total OI/volume across months. */
   const futuresChart = useMemo(() => {
-    if (futuresTableRows.length === 0) return null;
-    const prices = futuresTableRows.map((row) => row.close).filter((price) => Number.isFinite(price) && price > 0);
+    const dates = [...new Set(futuresData.map((row) => row.date))].sort();
+    if (dates.length === 0) return null;
+    const prices = futuresData.map((row) => row.close).filter((price) => Number.isFinite(price) && price > 0);
     if (prices.length === 0) return null;
     const min = Math.min(...prices);
     const max = Math.max(...prices);
@@ -2487,16 +2529,35 @@ const OiHistory: React.FC = () => {
     const height = 162;
     const plotWidth = width - left - right;
     const plotHeight = height - top - bottom;
-    const maxOi = Math.max(1, ...futuresTableRows.map((row) => row.oi || 0));
-    const maxVolume = Math.max(1, ...futuresTableRows.map((row) => row.volume || 0));
-    const stepX = plotWidth / futuresTableRows.length;
-    const points = futuresTableRows.map((row, index) => ({
-      ...row,
-      x: left + (index + 0.5) * stepX,
-      y: top + ((high - row.close) / (high - low)) * plotHeight,
+    const stepX = plotWidth / dates.length;
+    const xByDate = new Map(dates.map((date, index) => [date, left + (index + 0.5) * stepX]));
+    const toY = (close: number) => top + ((high - close) / (high - low)) * plotHeight;
+    const lines = futuresContracts.map(({ expiry, tradingsymbol }, index) => ({
+      expiry,
+      tradingsymbol,
+      label: formatMonthLabel(expiry.slice(0, 7)),
+      color: FUTURES_LINE_COLORS[index % FUTURES_LINE_COLORS.length],
+      points: (futuresRowsByContract.get(expiry) || [])
+        .filter((row) => row.close > 0)
+        .map((row) => ({ date: row.date, close: row.close, x: xByDate.get(row.date)!, y: toY(row.close) })),
     }));
-    return { points, low, high, left, right, top, bottom, width, height, plotWidth, plotHeight, maxOi, maxVolume };
-  }, [futuresTableRows]);
+    const days = dates.map((date) => {
+      const rows = futuresData.filter((row) => row.date === date);
+      return {
+        date,
+        x: xByDate.get(date)!,
+        oi: rows.reduce((sum, row) => sum + (row.oi || 0), 0),
+        volume: rows.reduce((sum, row) => sum + (row.volume || 0), 0),
+        closes: lines.flatMap((line) => {
+          const point = line.points.find((item) => item.date === date);
+          return point ? [{ label: line.label, color: line.color, close: point.close }] : [];
+        }),
+      };
+    });
+    const maxOi = Math.max(1, ...days.map((day) => day.oi));
+    const maxVolume = Math.max(1, ...days.map((day) => day.volume));
+    return { lines, days, low, high, left, right, top, bottom, width, height, plotWidth, plotHeight, maxOi, maxVolume };
+  }, [futuresData, futuresContracts, futuresRowsByContract]);
 
   return (
     <div className="oi-history">
@@ -2666,44 +2727,6 @@ const OiHistory: React.FC = () => {
         {fetchError && !progress && (
           <div className="oi-history__status oi-history__status--error">{fetchError}</div>
         )}
-
-        {showPatternInfo && (
-          <div className="trap-info-detail" style={{ marginTop: 12 }}>
-            <h4>Pattern Definitions</h4>
-            <p>Patterns classify <strong>who</strong> is active at each strike based on day-over-day OI change and option price movement.</p>
-
-            <h5>OI + Price Signals (single expiry / monthly scrips)</h5>
-            <ul>
-              <li><strong style={{ color: '#22c55e' }}>Long Buildup</strong> — OI ↑ + Price ↑ — New buyers entering aggressively. Bullish for the option.</li>
-              <li><strong style={{ color: '#ef4444' }}>Short Buildup</strong> — OI ↑ + Price ↓ — New sellers entering aggressively. Bearish for the option.</li>
-              <li><strong style={{ color: '#ef4444' }}>Long Unwinding</strong> — OI ↓ + Price ↓ — Buyers exiting, giving up. Weakness in that direction.</li>
-              <li><strong style={{ color: '#22c55e' }}>Short Covering</strong> — OI ↓ + Price ↑ — Sellers exiting, bears retreating. Bullish reversal signal.</li>
-            </ul>
-
-            <h5>Rollover Patterns (multiple expiries / weekly scrips)</h5>
-            <ul>
-              <li><strong style={{ color: 'var(--accent)' }}>Rolling Over (Short)</strong> — Writers moving positions to next expiry. Strike is being actively defended.</li>
-              <li><strong style={{ color: 'var(--accent)' }}>Rolling Over (Long)</strong> — Buyers moving to next expiry. Directional conviction maintained.</li>
-              <li><strong style={{ color: '#ef4444' }}>Exiting (Long Unwind)</strong> — Buyers closing out, no new positions. Support/resistance weakening.</li>
-              <li><strong style={{ color: '#ef4444' }}>Exiting (Short Cover)</strong> — Sellers closing out, the wall is being abandoned.</li>
-              <li><strong style={{ color: '#22c55e' }}>Fresh Build (Short)</strong> — New sellers at far expiry. New wall being established.</li>
-              <li><strong style={{ color: '#22c55e' }}>Fresh Build (Long)</strong> — New buyers at far expiry. New directional bet.</li>
-              <li><strong style={{ color: '#22c55e' }}>Doubling Down (Long)</strong> — OI rising across multiple expiries while option price is rising. Buyers are adding conviction across expiries.</li>
-              <li><strong style={{ color: '#ef4444' }}>Doubling Down (Short)</strong> — OI rising across multiple expiries while option price is falling. Sellers are adding conviction across expiries.</li>
-              <li><strong style={{ color: '#ef4444' }}>Unwinding</strong> — OI falling across all expiries because existing positions are being closed. No meaningful new positions are replacing them.</li>
-              <li><strong style={{ color: 'var(--text-secondary)' }}>Stable</strong> — No significant change (&lt;2%). Positions held steady.</li>
-            </ul>
-
-            <h5>How to Read</h5>
-            <ul>
-              <li><strong>CE Short Buildup</strong> at 1800 = call sellers adding positions, expecting price won't cross 1800. Resistance forming.</li>
-              <li><strong>PE Long Buildup</strong> at 1700 = put buyers entering, expecting price to fall below 1700. Bearish bet.</li>
-              <li><strong>PE Short Covering</strong> at 1700 = put sellers exiting, support at 1700 weakening.</li>
-              <li><strong>CE Long Unwinding</strong> at 1800 = call buyers giving up on 1800 breakout.</li>
-            </ul>
-            <p>Dimmed rows have OI below 5% of the max — less significant strikes. Click any row to see its OI &amp; price chart across dates.</p>
-          </div>
-        )}
       </div>
 
       {/* Date filter — grouped by month */}
@@ -2732,14 +2755,16 @@ const OiHistory: React.FC = () => {
         </div>
       )}
 
-      {futuresTableRows.length > 0 && (
+      {futuresContracts.length > 0 && (
         <div className="oi-history__table-wrap card" style={{ marginBottom: 16 }}>
           <div className="oi-history__table-header">
             <div className="oi-history__table-header-left">
               <div>
                 <div className="oi-history__table-title">Futures Context</div>
                 <div className="oi-history__table-subtitle">
-                  {futuresTableRows[0].tradingsymbol} · Daily price, OI, and volume confirmation
+                  {futuresView === 'chart'
+                    ? `${futuresContracts.length} month${futuresContracts.length === 1 ? '' : 's'} · Daily price, OI, and volume history`
+                    : <>{filterDate ? formatFullDateLabel(filterDate) : 'Select a date'}<span>Daily price, OI, and volume confirmation</span></>}
                 </div>
               </div>
             </div>
@@ -2793,11 +2818,11 @@ const OiHistory: React.FC = () => {
             </div>
           )}
           {futuresView === 'chart' && futuresChart ? (
-            <div className="oi-history__chart-wrap">
+            <div className="oi-history__chart-wrap oi-history__chart-wrap--futures">
               <div className="oi-history__chart-header">
                 <div className="oi-history__chart-title">Futures Price History</div>
               </div>
-              <svg className="oi-history__chart-svg" viewBox={`0 0 ${futuresChart.width} ${futuresChart.height}`} role="img" aria-label={`${futuresTableRows[0].tradingsymbol} futures price chart`}>
+              <svg className="oi-history__chart-svg" viewBox={`0 0 ${futuresChart.width} ${futuresChart.height}`} role="img" aria-label={`${scrip} futures price chart by month`}>
                 {[0, 0.5, 1].map((fraction) => {
                   const y = futuresChart.top + fraction * futuresChart.plotHeight;
                   const value = futuresChart.high - fraction * (futuresChart.high - futuresChart.low);
@@ -2810,55 +2835,66 @@ const OiHistory: React.FC = () => {
                 })}
                 <line x1={futuresChart.left} x2={futuresChart.width - futuresChart.right} y1={futuresChart.top + futuresChart.plotHeight} y2={futuresChart.top + futuresChart.plotHeight} stroke="var(--text-secondary)" strokeWidth="0.5" opacity="0.5" />
                 <line x1={futuresChart.left} x2={futuresChart.width - futuresChart.right} y1={futuresChart.top + futuresChart.plotHeight} y2={futuresChart.top + futuresChart.plotHeight} stroke="var(--text-secondary)" strokeWidth="0.5" opacity="0.5" />
-                {futuresChart.points.map((point) => {
-                  const slotWidth = futuresChart.plotWidth / futuresChart.points.length;
+                {futuresChart.days.map((day) => {
+                  const slotWidth = futuresChart.plotWidth / futuresChart.days.length;
                   const barWidth = Math.min(slotWidth * 0.32, 6);
-                  const oiHeight = (point.oi / futuresChart.maxOi) * futuresChart.plotHeight;
-                  const volumeHeight = (point.volume / futuresChart.maxVolume) * futuresChart.plotHeight;
+                  const oiHeight = (day.oi / futuresChart.maxOi) * futuresChart.plotHeight;
+                  const volumeHeight = (day.volume / futuresChart.maxVolume) * futuresChart.plotHeight;
                   return (
-                    <g key={`bars-${point.date}`} onMouseEnter={() => setFuturesHover(point)} onMouseLeave={() => setFuturesHover(null)}>
-                      <rect x={point.x - barWidth} y={futuresChart.top + futuresChart.plotHeight - oiHeight} width={Math.max(barWidth, 0.5)} height={oiHeight} fill="#8b5cf6" opacity="0.45" rx="1">
-                        <title>{`${formatFullDateLabel(point.date)} OI: ${formatOiCompact(point.oi)}`}</title>
+                    <g key={`bars-${day.date}`} onMouseEnter={() => setFuturesHover(day)} onMouseLeave={() => setFuturesHover(null)}>
+                      <rect x={day.x - barWidth} y={futuresChart.top + futuresChart.plotHeight - oiHeight} width={Math.max(barWidth, 0.5)} height={oiHeight} fill="#8b5cf6" opacity="0.45" rx="1">
+                        <title>{`${formatFullDateLabel(day.date)} Total OI: ${formatOiCompact(day.oi)}`}</title>
                       </rect>
-                      <rect x={point.x} y={futuresChart.top + futuresChart.plotHeight - volumeHeight} width={Math.max(barWidth, 0.5)} height={volumeHeight} fill="#06b6d4" opacity="0.45" rx="1">
-                        <title>{`${formatFullDateLabel(point.date)} Volume: ${formatOiCompact(point.volume)}`}</title>
+                      <rect x={day.x} y={futuresChart.top + futuresChart.plotHeight - volumeHeight} width={Math.max(barWidth, 0.5)} height={volumeHeight} fill="#06b6d4" opacity="0.45" rx="1">
+                        <title>{`${formatFullDateLabel(day.date)} Total volume: ${formatOiCompact(day.volume)}`}</title>
                       </rect>
                     </g>
                   );
                 })}
-                <polyline points={futuresChart.points.map((point) => `${point.x},${point.y}`).join(' ')} fill="none" stroke="var(--green, #22c55e)" strokeWidth="1.2" strokeLinejoin="round" />
-                {futuresChart.points.map((point) => (
-                  <circle key={point.date} cx={point.x} cy={point.y} r="3" fill="var(--green, #22c55e)" onMouseEnter={() => setFuturesHover(point)} onMouseLeave={() => setFuturesHover(null)}>
-                    <title>{`${formatFullDateLabel(point.date)}: ${point.close.toLocaleString('en-IN')}`}</title>
-                  </circle>
+                {futuresChart.lines.map((line) => (
+                  <g key={`line-${line.expiry}`}>
+                    <polyline points={line.points.map((point) => `${point.x},${point.y}`).join(' ')} fill="none" stroke={line.color} strokeWidth="1.2" strokeLinejoin="round" />
+                    {line.points.map((point) => (
+                      <circle key={point.date} cx={point.x} cy={point.y} r="2.5" fill={line.color} onMouseEnter={() => setFuturesHover(futuresChart.days.find((day) => day.date === point.date) || null)} onMouseLeave={() => setFuturesHover(null)}>
+                        <title>{`${line.label} · ${formatFullDateLabel(point.date)}: ${point.close.toLocaleString('en-IN')}`}</title>
+                      </circle>
+                    ))}
+                  </g>
                 ))}
                 {futuresHover && (() => {
                   const tooltipWidth = 150;
+                  const tooltipHeight = 28 + futuresHover.closes.length * 12;
                   const tooltipX = Math.min(Math.max(futuresHover.x - tooltipWidth / 2, futuresChart.left), futuresChart.width - futuresChart.right - tooltipWidth);
                   return (
                     <g pointerEvents="none">
-                      <rect x={tooltipX} y={futuresChart.top + 3} width={tooltipWidth} height="40" rx="3" fill="var(--card-bg-solid, #111827)" stroke="var(--card-border)" />
+                      <rect x={tooltipX} y={futuresChart.top + 3} width={tooltipWidth} height={tooltipHeight} rx="3" fill="var(--card-bg-solid, #111827)" stroke="var(--card-border)" />
                       <text x={tooltipX + 7} y={futuresChart.top + 14} fontSize="8" fill="var(--text-primary)">{formatFullDateLabel(futuresHover.date)}</text>
-                      <text x={tooltipX + 7} y={futuresChart.top + 26} fontSize="8" fill="var(--green, #22c55e)">Close: {futuresHover.close.toLocaleString('en-IN')}</text>
-                      <text x={tooltipX + 7} y={futuresChart.top + 38} fontSize="8" fill="var(--text-secondary)">OI: {formatOiCompact(futuresHover.oi)} · Vol: {formatOiCompact(futuresHover.volume)}</text>
+                      {futuresHover.closes.map((item, index) => (
+                        <text key={item.label} x={tooltipX + 7} y={futuresChart.top + 26 + index * 12} fontSize="8" fill={item.color}>{item.label}: {item.close.toLocaleString('en-IN')}</text>
+                      ))}
+                      <text x={tooltipX + 7} y={futuresChart.top + 26 + futuresHover.closes.length * 12} fontSize="8" fill="var(--text-secondary)">Total OI: {formatOiCompact(futuresHover.oi)} · Vol: {formatOiCompact(futuresHover.volume)}</text>
                     </g>
                   );
                 })()}
-                {futuresChart.points.map((point) => (
-                  <text key={`label-${point.date}`} x={point.x} y={futuresChart.height - 20} textAnchor="middle" fontSize="5.5" fill="var(--text-secondary)">{point.date.slice(8)}</text>
+                {futuresChart.days.map((day) => (
+                  <text key={`label-${day.date}`} x={day.x} y={futuresChart.height - 20} textAnchor="middle" fontSize="5.5" fill="var(--text-secondary)">{day.date.slice(8)}</text>
                 ))}
               </svg>
               <div className="oi-history__chart-legend">
-                <span className="oi-history__chart-legend-item"><span className="oi-history__chart-legend-swatch" style={{ background: '#8b5cf6' }} /> OI</span>
-                <span className="oi-history__chart-legend-item"><span className="oi-history__chart-legend-swatch" style={{ background: '#06b6d4' }} /> Volume</span>
-                <span className="oi-history__chart-legend-item"><span className="oi-history__chart-legend-swatch" style={{ background: 'var(--green, #22c55e)' }} /> Price</span>
+                <span className="oi-history__chart-legend-item"><span className="oi-history__chart-legend-swatch" style={{ background: '#8b5cf6' }} /> Total OI</span>
+                <span className="oi-history__chart-legend-item"><span className="oi-history__chart-legend-swatch" style={{ background: '#06b6d4' }} /> Total volume</span>
+                {futuresChart.lines.map((line) => (
+                  <span key={line.expiry} className="oi-history__chart-legend-item" title={line.tradingsymbol}><span className="oi-history__chart-legend-swatch" style={{ background: line.color }} /> {line.label}</span>
+                ))}
               </div>
             </div>
+          ) : futuresDateRows.length === 0 ? (
+            <div className="oi-history__status">No futures data for {filterDate ? formatFullDateLabel(filterDate) : 'the selected date'}.</div>
           ) : (
           <div className="oi-history__table-scroll">
             <table className="oi-history__table oi-history__futures-table">
               <thead><tr>
-                <th className="oi-history__futures-th--date">Date</th>
+                <th className="oi-history__futures-th--date">Month</th>
                 <th className="oi-history__futures-th--price">Close</th>
                 <th className="oi-history__futures-th--price">Price</th>
                 <th className="oi-history__futures-th--oi">OI</th>
@@ -2866,9 +2902,9 @@ const OiHistory: React.FC = () => {
                 <th className="oi-history__futures-th--volume">Volume</th>
                 <th className="oi-history__futures-th--signal">Signal</th>
               </tr></thead>
-              <tbody>{futuresTableRows.map((row) => (
-                <tr key={row.date}>
-                  <td className="oi-history__futures-date">{formatFullDateLabel(row.date)}</td>
+              <tbody>{futuresDateRows.map((row) => (
+                <tr key={row.expiry}>
+                  <td className="oi-history__futures-date" title={row.tradingsymbol}>{formatMonthLabel(row.expiry.slice(0, 7))}</td>
                   <td className="oi-history__futures-close">{row.close?.toLocaleString('en-IN') || '-'}</td>
                   <td className={row.priceChangePct !== null && row.priceChangePct >= 0 ? 'oi-history__futures-positive' : 'oi-history__futures-negative'}>
                     <span className="oi-history__cell-primary">{row.priceChangePct === null ? '-' : `${row.priceChangePct >= 0 ? '+' : ''}${row.priceChangePct.toFixed(2)}%`}</span>
@@ -2927,6 +2963,44 @@ const OiHistory: React.FC = () => {
               </button>
             </div>
           </div>
+
+        {showPatternInfo && (
+          <div className="trap-info-detail" style={{ marginBottom: 12 }}>
+            <h4>Pattern Definitions</h4>
+            <p>Patterns classify <strong>who</strong> is active at each strike based on day-over-day OI change and option price movement.</p>
+
+            <h5>OI + Price Signals (single expiry / monthly scrips)</h5>
+            <ul>
+              <li><strong style={{ color: '#22c55e' }}>Long Buildup</strong> — OI ↑ + Price ↑ — New buyers entering aggressively. Bullish for the option.</li>
+              <li><strong style={{ color: '#ef4444' }}>Short Buildup</strong> — OI ↑ + Price ↓ — New sellers entering aggressively. Bearish for the option.</li>
+              <li><strong style={{ color: '#ef4444' }}>Long Unwinding</strong> — OI ↓ + Price ↓ — Buyers exiting, giving up. Weakness in that direction.</li>
+              <li><strong style={{ color: '#22c55e' }}>Short Covering</strong> — OI ↓ + Price ↑ — Sellers exiting, bears retreating. Bullish reversal signal.</li>
+            </ul>
+
+            <h5>Rollover Patterns (multiple expiries / weekly scrips)</h5>
+            <ul>
+              <li><strong style={{ color: 'var(--accent)' }}>Rolling Over (Short)</strong> — Writers moving positions to next expiry. Strike is being actively defended.</li>
+              <li><strong style={{ color: 'var(--accent)' }}>Rolling Over (Long)</strong> — Buyers moving to next expiry. Directional conviction maintained.</li>
+              <li><strong style={{ color: '#ef4444' }}>Exiting (Long Unwind)</strong> — Buyers closing out, no new positions. Support/resistance weakening.</li>
+              <li><strong style={{ color: '#ef4444' }}>Exiting (Short Cover)</strong> — Sellers closing out, the wall is being abandoned.</li>
+              <li><strong style={{ color: '#22c55e' }}>Fresh Build (Short)</strong> — New sellers at far expiry. New wall being established.</li>
+              <li><strong style={{ color: '#22c55e' }}>Fresh Build (Long)</strong> — New buyers at far expiry. New directional bet.</li>
+              <li><strong style={{ color: '#22c55e' }}>Doubling Down (Long)</strong> — OI rising across multiple expiries while option price is rising. Buyers are adding conviction across expiries.</li>
+              <li><strong style={{ color: '#ef4444' }}>Doubling Down (Short)</strong> — OI rising across multiple expiries while option price is falling. Sellers are adding conviction across expiries.</li>
+              <li><strong style={{ color: '#ef4444' }}>Unwinding</strong> — OI falling across all expiries because existing positions are being closed. No meaningful new positions are replacing them.</li>
+              <li><strong style={{ color: 'var(--text-secondary)' }}>Stable</strong> — No significant change (&lt;2%). Positions held steady.</li>
+            </ul>
+
+            <h5>How to Read</h5>
+            <ul>
+              <li><strong>CE Short Buildup</strong> at 1800 = call sellers adding positions, expecting price won't cross 1800. Resistance forming.</li>
+              <li><strong>PE Long Buildup</strong> at 1700 = put buyers entering, expecting price to fall below 1700. Bearish bet.</li>
+              <li><strong>PE Short Covering</strong> at 1700 = put sellers exiting, support at 1700 weakening.</li>
+              <li><strong>CE Long Unwinding</strong> at 1800 = call buyers giving up on 1800 breakout.</li>
+            </ul>
+            <p>Dimmed rows have OI below 5% of the max — less significant strikes. Click any row to see its OI &amp; price chart across dates.</p>
+          </div>
+        )}
 
           <div className="oi-history__table-scroll">
             <table className="oi-history__table">

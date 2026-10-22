@@ -6,16 +6,19 @@ export interface QuoteData {
   volume: number; oi_day_high?: number; oi_day_low?: number;
 }
 
-export async function fetchQuotes(instruments: string[]): Promise<Map<string, QuoteData>> {
+export async function fetchQuotes(instruments: string[], signal?: AbortSignal): Promise<Map<string, QuoteData>> {
   const results = new Map<string, QuoteData>();
   for (let i = 0; i < instruments.length; i += 40) {
     const params = instruments.slice(i, i + 40).map((instrument) => `i=${encodeURIComponent(instrument)}`).join('&');
     try {
-      const data = await apiClient.get<Record<string, QuoteData>>(`/api/quote?${params}`);
+      const data = await apiClient.get<Record<string, QuoteData>>(`/api/quote?${params}`, { signal });
       for (const [key, value] of Object.entries(data || {})) {
         results.set(key, { ...value, last_price: value.last_price || 0, oi: value.oi || 0, volume: value.volume || 0, ohlc: value.ohlc || { open: 0, high: 0, low: 0, close: 0 } });
       }
-    } catch (error) { console.warn(`[fetchQuotes] Batch ${i / 40 + 1} failed`, error); }
+    } catch (error) {
+      if (signal?.aborted) throw error;
+      console.warn(`[fetchQuotes] Batch ${i / 40 + 1} failed`, error);
+    }
   }
   return results;
 }

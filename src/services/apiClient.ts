@@ -12,6 +12,11 @@ export class ApiError extends Error {
   }
 }
 
+/** True when a request was cancelled via its AbortSignal (e.g. the page unmounted). */
+export function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
 export type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   body?: BodyInit | object | null;
 };

@@ -24,9 +24,9 @@ let instrumentsCache: any[] | null = null;
  * Fetch options for a given symbol from the server's shared instrument cache.
  * The server fetches from Kite once per day and caches in SQLite.
  */
-export async function fetchOptions(symbol: string): Promise<OptionInstrument[]> {
+export async function fetchOptions(symbol: string, signal?: AbortSignal): Promise<OptionInstrument[]> {
   if (!instrumentsCache) {
-    instrumentsCache = await apiClient.get<any[]>('/instruments');
+    instrumentsCache = await apiClient.get<any[]>('/instruments', { signal });
   }
 
   // Filter for the given symbol's CE/PE options
@@ -76,11 +76,13 @@ export function getLotSize(instrumentToken: number): number {
 /**
  * Fetch the list of available F&O symbols.
  */
-export async function fetchFnoSymbols(): Promise<string[]> {
+export async function fetchFnoSymbols(signal?: AbortSignal): Promise<string[]> {
   try {
-    const symbols = await apiClient.get<string[]>('/api/fno-symbols');
+    const symbols = await apiClient.get<string[]>('/api/fno-symbols', { signal });
     if (symbols.length > 0) return symbols;
-  } catch { /* fallback */ }
+  } catch (err) {
+    if (signal?.aborted) throw err;
+  }
   return ['NIFTY', 'BANKNIFTY'];
 }
 

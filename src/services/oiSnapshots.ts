@@ -60,11 +60,12 @@ export async function saveOiSnapshot(
   }
 }
 
-export async function getTodaySnapshots(): Promise<OiSnapshot[]> {
+export async function getTodaySnapshots(signal?: AbortSignal): Promise<OiSnapshot[]> {
   try {
-    const snapshots = await apiClient.get<OiSnapshot[]>('/api/oi-snapshots');
+    const snapshots = await apiClient.get<OiSnapshot[]>('/api/oi-snapshots', { signal });
     return snapshots.sort((a, b) => a.timestamp - b.timestamp);
-  } catch {
+  } catch (err) {
+    if (signal?.aborted) throw err;
     return [];
   }
 }
@@ -75,12 +76,13 @@ export async function cleanOldSnapshots(): Promise<void> {
   } catch { /* silently fail */ }
 }
 
-export async function shouldTakeSnapshot(): Promise<boolean> {
+export async function shouldTakeSnapshot(signal?: AbortSignal): Promise<boolean> {
   try {
-    const latest = (await apiClient.get<OiSnapshot | null>('/api/oi-snapshots/latest'))?.timestamp;
+    const latest = (await apiClient.get<OiSnapshot | null>('/api/oi-snapshots/latest', { signal }))?.timestamp;
     if (!latest) return true;
     return (Date.now() - latest) >= SNAPSHOT_INTERVAL_MS;
-  } catch {
+  } catch (err) {
+    if (signal?.aborted) throw err;
     return true; // on error, allow snapshot
   }
 }

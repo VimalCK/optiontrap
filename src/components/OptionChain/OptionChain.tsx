@@ -60,6 +60,8 @@ const TrapInfoDetail: React.FC = () => (
 );
 
 import { fetchQuotes, fetchPreviousDayOI } from '@/services/kiteApi';
+import { isAbortError } from '@/services/apiClient';
+import { useAbortSignal } from '@/hooks/useAbortSignal';
 import {
   fetchOptions,
   fetchFnoSymbols,
@@ -95,6 +97,8 @@ function saveRecentOptionSymbols(symbols: string[]): void {
 }
 
 const OptionChain: React.FC = () => {
+  // Cancels this tab's in-flight requests when the user navigates away.
+  const signal = useAbortSignal();
   const [selectedSymbol, setSelectedSymbol] = useState<string>('NIFTY');
   const [recentSymbols, setRecentSymbols] = useState<string[]>(() => loadRecentOptionSymbols());
   const [symbolOptions, setSymbolOptions] = useState<{ value: string | number; label: string }[]>([
@@ -135,6 +139,17 @@ const OptionChain: React.FC = () => {
   const snapshotIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const toastIdRef = useRef(0);
   const chainCardRef = useRef<HTMLDivElement>(null);
+  const [oiChartWidth, setOiChartWidth] = useState(0);
+  const oiChartObserverRef = useRef<ResizeObserver | null>(null);
+  // Callback ref: the OI chart mounts/unmounts with loading state, so observe whenever it appears.
+  const oiChartBarsRef = useCallback((el: HTMLDivElement | null) => {
+    oiChartObserverRef.current?.disconnect();
+    oiChartObserverRef.current = null;
+    if (!el) return;
+    const observer = new ResizeObserver(([entry]) => setOiChartWidth(entry.contentRect.width));
+    observer.observe(el);
+    oiChartObserverRef.current = observer;
+  }, []);
   const chainCardLockedHeight = useRef<number | null>(null);
 
   const selectSymbol = useCallback((nextSymbol: string) => {
@@ -259,13 +274,13 @@ const OptionChain: React.FC = () => {
 
   // Load F&O symbols on mount
   useEffect(() => {
-    fetchFnoSymbols().then((symbols) => {
+    fetchFnoSymbols(signal).then((symbols) => {
       const opts = symbols.map((name) => ({
         value: name,
         label: name === 'NIFTY' ? 'NIFTY 50' : name === 'BANKNIFTY' ? 'BANK NIFTY' : name,
       }));
       setSymbolOptions(opts);
-    });
+    }).catch(() => { /* cancelled */ });
   }, []);
 
   // Load options when symbol changes
@@ -279,7 +294,7 @@ const OptionChain: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchOptions(selectedSymbol);
+      const data = await fetchOptions(selectedSymbol, signal);
       setOptions(data);
       const expiries = getExpiries(data);
       if (expiries.length > 0) {
@@ -289,6 +304,7 @@ const OptionChain: React.FC = () => {
       const token = getSpotToken(selectedSymbol);
       if (token) setSpotToken(token);
     } catch (err) {
+      if (isAbortError(err)) return;
       const msg = err instanceof Error ? err.message : 'Failed to load option chain';
       setError(msg);
     } finally {
@@ -453,27 +469,31 @@ const OptionChain: React.FC = () => {
   // OI Snapshots: load existing snapshots always, capture new ones only during market hours
   useEffect(() => {
     // Load snapshots (old ones are cleaned automatically when a new snapshot is saved)
-    getTodaySnapshots().then((snaps) => {
+    getTodaySnapshots(signal).then((snaps) => {
       setSnapshots(snaps);
       // Calculate initial velocity
       if (oiData.size > 0 && snaps.length > 0) {
         setOiVelocity(calculateVelocity(oiData, snaps));
       }
-    });
+    }).catch(() => { /* cancelled */ });
 
     if (!isMarketLive()) return;
 
     // Set up interval to capture snapshots
     const capture = async () => {
-      if (!isMarketLive() || oiData.size === 0) return;
-      if (await shouldTakeSnapshot()) {
-         await saveOiSnapshot(oiData, livePrices, closePrices, spotPrice || undefined, volumeData);
-      }
-      // Recalculate velocity
-      const latestSnaps = await getTodaySnapshots();
-      setSnapshots(latestSnaps);
-      if (latestSnaps.length > 0) {
-        setOiVelocity(calculateVelocity(oiData, latestSnaps));
+      if (signal.aborted || !isMarketLive() || oiData.size === 0) return;
+      try {
+        if (await shouldTakeSnapshot(signal)) {
+           await saveOiSnapshot(oiData, livePrices, closePrices, spotPrice || undefined, volumeData);
+        }
+        // Recalculate velocity
+        const latestSnaps = await getTodaySnapshots(signal);
+        setSnapshots(latestSnaps);
+        if (latestSnaps.length > 0) {
+          setOiVelocity(calculateVelocity(oiData, latestSnaps));
+        }
+      } catch (err) {
+        if (!isAbortError(err)) console.error('[OI Snapshots] Capture failed:', err);
       }
     };
 
@@ -543,7 +563,7 @@ const OptionChain: React.FC = () => {
 
     console.log(`[Trades] Fetching quotes for ${instruments.length} instruments (strikes ${strikes[0]?.strike}–${strikes[strikes.length - 1]?.strike})`);
 
-    fetchQuotes(instruments).then((quotes) => {
+    fetchQuotes(instruments, signal).then((quotes) => {
       const priceMap = new Map<number, number>();
       const oiMap = new Map<number, number>();
       const closeMap = new Map<number, number>();
@@ -582,11 +602,12 @@ const OptionChain: React.FC = () => {
 
       console.log(`[Trades] Got quotes for ${priceMap.size} options, spot: ${spotQuote?.last_price}`);
     }).catch((err) => {
+      if (isAbortError(err)) return;
       console.error('[Trades] Failed to fetch quotes:', err);
       // Reset so it can retry
       quoteFetchedRef.current = '';
       // Fallback to latest server OI snapshot
-      getTodaySnapshots().then((snaps) => {
+      getTodaySnapshots(signal).then((snaps) => {
         if (snaps.length > 0) {
           const latest = snaps[snaps.length - 1];
           if (latest.prices) setLivePrices(new Map(Object.entries(latest.prices).map(([k, v]) => [Number(k), v])));
@@ -594,7 +615,7 @@ const OptionChain: React.FC = () => {
           if (latest.close) setClosePrices(new Map(Object.entries(latest.close).map(([k, v]) => [Number(k), v])));
           if (latest.spot) setSpotPrice(latest.spot);
         }
-      });
+      }).catch(() => { /* cancelled */ });
     });
   }, [chain, atmStrike, selectedExpiry, selectedSymbol]);
 
@@ -628,6 +649,9 @@ const OptionChain: React.FC = () => {
     return { pct, color };
   };
 
+  // Strike columns shrink to the card width, so thin out strike labels to avoid overlap.
+  const chartColWidth = oiChartWidth > 0 && visibleChain.length > 0 ? oiChartWidth / visibleChain.length : 0;
+  const strikeLabelStep = chartColWidth > 0 ? Math.max(2, Math.ceil(36 / chartColWidth)) : 2;
 
   return (
     <div>
@@ -981,7 +1005,7 @@ const OptionChain: React.FC = () => {
                 })}
               </div>
               <div className="oc-chart__main">
-              <div className="oc-chart__bars" onClick={() => setSelectedChartStrike(null)}>
+              <div className="oc-chart__bars" ref={oiChartBarsRef} onClick={() => setSelectedChartStrike(null)}>
                 <div className="oc-chart__gridlines">
                   {[...Array(9)].map((_, i) => (
                     <div key={i} className="oc-chart__gridline" style={{ top: `${(i / 8) * 100}%` }} />
@@ -1218,7 +1242,7 @@ const OptionChain: React.FC = () => {
             <div className="oc-chart__strike-labels">
               {visibleChain.map((row, idx) => (
                 <span key={row.strike} className="oc-chart__strike-labels-item">
-                  {idx % 2 === 0 ? row.strike : ''}
+                  {idx % strikeLabelStep === 0 ? row.strike : ''}
                 </span>
               ))}
             </div>

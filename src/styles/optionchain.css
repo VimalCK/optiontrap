@@ -417,7 +417,7 @@
   align-items: center;
   justify-content: flex-end;
   flex: 1;
-  min-width: 28px;
+  min-width: 0;
   position: relative;
   align-self: stretch;
   cursor: pointer;
@@ -482,15 +482,18 @@
   width: 100%;
 }
 
+/* Bars are 6px wide but shrink when many strikes share a narrow card. */
 .oc-chart__bar-wrapper {
   position: relative;
   display: flex;
   align-items: flex-end;
   height: 100%;
+  flex: 0 1 6px;
+  min-width: 0;
 }
 
 .oc-chart__bar {
-  width: 6px;
+  width: 100%;
   border-radius: 2px 2px 0 0;
   position: relative;
   min-height: 2px;
@@ -542,7 +545,9 @@
 .oc-chart__bar-prev {
   position: absolute;
   bottom: 0;
-  width: 6px;
+  left: 0;
+  width: 100%;
+  box-sizing: border-box;
   border: 1px solid;
   border-bottom: none;
   border-radius: 2px 2px 0 0;
@@ -605,7 +610,7 @@
 
 .oc-chart__heatmap-cell {
   flex: 1;
-  min-width: 28px;
+  min-width: 0;
   height: 4px;
   border-radius: 0;
   background: transparent;
@@ -625,7 +630,7 @@
 
 .oc-chart__strike-labels-item {
   flex: 1;
-  min-width: 28px;
+  min-width: 0;
   font-size: 9px;
   color: var(--text-secondary);
   text-align: center;
