@@ -1,20 +1,22 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useKiteSession } from '@/hooks/useKiteSession';
 import { tickerConnect, tickerDisconnect } from '@/services/tickerSingleton';
 import { apiClient } from '@/services/apiClient';
 import FeedbackButton from '@/components/Feedback/FeedbackButton';
 import Sidebar from './components/Sidebar/Sidebar';
-import Holdings from './pages/Holdings';
-import Dashboard from './pages/Dashboard';
-import Analytics from './pages/Analytics';
-import Watchlist from './pages/Watchlist';
-import Profile from './pages/Profile';
-import Settings from './pages/Settings';
-import Redirect from './pages/Redirect';
-import Login from './pages/Login';
-import Subscribe from './pages/Subscribe';
-import Admin from './pages/Admin';
+
+// Pages load on first visit so each route only downloads its own code.
+const Holdings = lazy(() => import('./pages/Holdings'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Analytics = lazy(() => import('./pages/Analytics'));
+const Watchlist = lazy(() => import('./pages/Watchlist'));
+const Profile = lazy(() => import('./pages/Profile'));
+const Settings = lazy(() => import('./pages/Settings'));
+const Redirect = lazy(() => import('./pages/Redirect'));
+const Login = lazy(() => import('./pages/Login'));
+const Subscribe = lazy(() => import('./pages/Subscribe'));
+const Admin = lazy(() => import('./pages/Admin'));
 import './styles/content.css';
 import './styles/redirect.css';
 import './styles/login.css';
@@ -65,6 +67,7 @@ const App: React.FC = () => {
   }
 
   return (
+    <Suspense fallback={null}>
     <Routes>
       {/* Public routes — no sidebar, no auth required */}
       <Route path="/login" element={isAuthenticated ? <Navigate to={hasAccess ? '/portfolio' : '/subscribe'} replace /> : <Login />} />
@@ -83,6 +86,8 @@ const App: React.FC = () => {
                 <Sidebar collapsed={sidebarCollapsed} onToggle={handleToggleSidebar} session={session} />
                 <main className={`content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
                   <div className="content__inner">
+                    {/* Inner boundary keeps the sidebar and footer visible while a page loads. */}
+                    <Suspense fallback={null}>
                     <Routes>
                       <Route path="/" element={<Navigate to="/portfolio" replace />} />
                       <Route path="/portfolio" element={<Holdings />} />
@@ -94,6 +99,7 @@ const App: React.FC = () => {
                       {isAdmin && <Route path="/admin" element={<Admin />} />}
                       <Route path="*" element={<Navigate to="/portfolio" replace />} />
                     </Routes>
+                    </Suspense>
                   </div>
                   <footer className="content__footer">&copy; 2026 OptionTrap <span className="content__footer-version">· v{appVersion}</span></footer>
                 </main>
@@ -106,6 +112,7 @@ const App: React.FC = () => {
         }
       />
     </Routes>
+    </Suspense>
   );
 };
 

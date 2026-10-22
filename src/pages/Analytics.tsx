@@ -1,9 +1,11 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AnalyticsIcon } from '@/components/icons/Icons';
-import OptionChain from '@/components/OptionChain/OptionChain';
-import TradeJournal from '@/components/TradeJournal/TradeJournal';
-import OiHistory from '@/components/OiHistory/OiHistory';
+
+// Each tab is large; load it only when the tab is opened.
+const OptionChain = lazy(() => import('@/components/OptionChain/OptionChain'));
+const TradeJournal = lazy(() => import('@/components/TradeJournal/TradeJournal'));
+const OiHistory = lazy(() => import('@/components/OiHistory/OiHistory'));
 import '@/styles/analytics.css';
 
 type AnalyticsTab = 'analyzer' | 'journal' | 'winloss' | 'history';
@@ -52,6 +54,7 @@ const Analytics: React.FC = () => {
       </div>
 
       <div className="analytics-content">
+        <Suspense fallback={null}>
         {tab === 'analyzer' && <OptionChain />}
         {tab === 'journal'  && (
           <TradeJournal
@@ -71,6 +74,7 @@ const Analytics: React.FC = () => {
           </div>
         )}
         {tab === 'history' && <OiHistory />}
+        </Suspense>
       </div>
     </div>
   );
