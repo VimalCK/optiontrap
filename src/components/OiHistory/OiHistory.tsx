@@ -1443,12 +1443,8 @@ const OiHistory: React.FC = () => {
                   const volumeHeight = (day.volume / futuresChart.maxVolume) * futuresChart.plotHeight;
                   return (
                     <g key={`bars-${day.date}`} onMouseEnter={() => setFuturesHover(day)} onMouseLeave={() => setFuturesHover(null)}>
-                      <rect x={day.x - barWidth} y={futuresChart.top + futuresChart.plotHeight - oiHeight} width={Math.max(barWidth, 0.5)} height={oiHeight} fill="#8b5cf6" opacity="0.45" rx="1">
-                        <title>{`${formatFullDateLabel(day.date)} Total OI: ${formatOiCompact(day.oi)}`}</title>
-                      </rect>
-                      <rect x={day.x} y={futuresChart.top + futuresChart.plotHeight - volumeHeight} width={Math.max(barWidth, 0.5)} height={volumeHeight} fill="#06b6d4" opacity="0.45" rx="1">
-                        <title>{`${formatFullDateLabel(day.date)} Total volume: ${formatOiCompact(day.volume)}`}</title>
-                      </rect>
+                      <rect x={day.x - barWidth} y={futuresChart.top + futuresChart.plotHeight - oiHeight} width={Math.max(barWidth, 0.5)} height={oiHeight} fill="#8b5cf6" opacity="0.45" rx="1" />
+                      <rect x={day.x} y={futuresChart.top + futuresChart.plotHeight - volumeHeight} width={Math.max(barWidth, 0.5)} height={volumeHeight} fill="#06b6d4" opacity="0.45" rx="1" />
                     </g>
                   );
                 })}
@@ -1456,9 +1452,7 @@ const OiHistory: React.FC = () => {
                   <g key={`line-${line.expiry}`}>
                     <polyline points={line.points.map((point) => `${point.x},${point.y}`).join(' ')} fill="none" stroke={line.color} strokeWidth="1.2" strokeLinejoin="round" />
                     {line.points.map((point) => (
-                      <circle key={point.date} cx={point.x} cy={point.y} r="2.5" fill={line.color} onMouseEnter={() => setFuturesHover(futuresChart.days.find((day) => day.date === point.date) || null)} onMouseLeave={() => setFuturesHover(null)}>
-                        <title>{`${line.label} · ${formatFullDateLabel(point.date)}: ${point.close.toLocaleString('en-IN')}`}</title>
-                      </circle>
+                      <circle key={point.date} cx={point.x} cy={point.y} r="2.5" fill={line.color} onMouseEnter={() => setFuturesHover(futuresChart.days.find((day) => day.date === point.date) || null)} onMouseLeave={() => setFuturesHover(null)} />
                     ))}
                   </g>
                 ))}
