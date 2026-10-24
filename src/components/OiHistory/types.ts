@@ -235,3 +235,44 @@ export interface OptionMomentumSummary {
   ce: OptionMomentumSide | null;
   pe: OptionMomentumSide | null;
 }
+
+/** One strike × expiry cell of the OI Snapshot table. */
+export interface OiCellData {
+  ceOi: number;
+  peOi: number;
+  cePrevOi: number | undefined;
+  pePrevOi: number | undefined;
+  ceClose: number;
+  peClose: number;
+  cePrevClose: number | undefined;
+  pePrevClose: number | undefined;
+  ceToken: number | undefined;
+  peToken: number | undefined;
+  ceTradingsymbol: string | undefined;
+  peTradingsymbol: string | undefined;
+  ceExpiry: string | undefined;
+  peExpiry: string | undefined;
+}
+
+/** One strike row of the OI Snapshot table. */
+export interface OiTableRow {
+  strike: number;
+  cells: Map<string, OiCellData>;
+  cePattern: RolloverPattern;
+  pePattern: RolloverPattern;
+  ceConsolidatedOi: number;
+  peConsolidatedOi: number;
+  dimmed: boolean;
+}
+
+/** Setup summaries for the selected strike, shown on the Trade Setup tab. */
+export interface TradeSetupData {
+  tradeSetup: TradeSetupSummary;
+  sellingSetup: SellingSetupSummary;
+  optionMomentum: OptionMomentumSummary;
+  premiumDecay: PremiumDecaySummary;
+  priceTrend: PriceTrendSummary;
+  biasSummary: StrikeBiasSummary;
+  tradeLevels: TradeLevelContext;
+  tradeBias: TradeBiasSummary;
+}
