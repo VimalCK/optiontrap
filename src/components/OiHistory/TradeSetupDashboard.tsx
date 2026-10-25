@@ -1,5 +1,5 @@
 import React from 'react';
-import type { SignalPerformanceSummary, TradeSetupData } from './types';
+import type { SignalPerformanceSummary, TradeSetupData, TradeSignalRow } from './types';
 import { formatPct, formatPcr } from './helpers';
 import { checklistStatusText, sortChecklistByStatus, readinessScore, setupReadinessLabel, setupReadinessWidth, expiryLabel } from './analysis';
 
@@ -10,19 +10,62 @@ interface TradeSetupDashboardProps {
   expiries: string[];
   isMonthlyExpiry: (expiry: string) => boolean;
   signalPerformance: SignalPerformanceSummary | null;
+  signalRows: TradeSignalRow[];
   onTrade: (mode: 'buy' | 'sell') => void;
-  onExport: () => void;
 }
 
-/** Recorded signal outcomes for the scrip: win rate, returns and Excel export. */
-const SignalPerformancePanel: React.FC<{ signalPerformance: SignalPerformanceSummary; onExport: () => void }> = ({ signalPerformance, onExport }) => (
+const formatReturn = (value: number | null) => (value === null ? '-' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`);
+const formatPrice = (value: number | null) => (value === null || !(value > 0) ? '-' : value.toFixed(2));
+const shortDate = (date: string | null) => (date ? expiryLabel(date.slice(0, 10), false) : '-');
+
+/** Every logged signal for the scrip, newest first. Loss rows are tinted red, profit rows green. */
+export const SignalResultsGrid: React.FC<{ rows: TradeSignalRow[] }> = ({ rows }) => (
+  <div className="oi-history__signal-grid-scroll">
+    <table className="oi-history__signal-grid">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Signal</th>
+          <th>Expiry</th>
+          <th>Entry</th>
+          <th>Last</th>
+          <th>Return</th>
+          <th>Best</th>
+          <th>Worst</th>
+          <th>Result</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => {
+          const status = row.outcome_status || 'Open';
+          return (
+            <tr key={row.id} className={status === 'Loss' ? 'is-loss' : status === 'Profit' ? 'is-profit' : ''}>
+              <td>{shortDate(row.signal_date)}</td>
+              <td className="oi-history__signal-grid-signal">{row.action} {row.option_type} {row.strike}</td>
+              <td>{shortDate(row.expiry)}</td>
+              <td>{formatPrice(row.entry_premium)}</td>
+              <td title={row.outcome_date ? `as of ${row.outcome_date}` : undefined}>{formatPrice(row.outcome_price)}</td>
+              <td className={row.outcome_return === null ? '' : row.outcome_return >= 0 ? 'is-up' : 'is-down'}>{formatReturn(row.outcome_return)}</td>
+              <td>{formatReturn(row.max_favorable_return)}</td>
+              <td>{formatReturn(row.max_adverse_return)}</td>
+              <td>
+                {status}
+                {status !== 'Open' && !row.outcome_final && <small> · live</small>}
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  </div>
+);
+
+/** Recorded signal outcomes for the scrip: win rate, returns and every signal. */
+const SignalPerformancePanel: React.FC<{ signalPerformance: SignalPerformanceSummary; signalRows: TradeSignalRow[] }> = ({ signalPerformance, signalRows }) => (
   <div className="oi-history__signal-performance oi-history__signal-performance--dashboard">
     <div className="oi-history__signal-performance-head">
       <span>Recorded setup performance</span>
-      <div>
-        <strong>{signalPerformance.total} signals · {signalPerformance.open} open · {signalPerformance.evaluated} evaluated</strong>
-        <button type="button" className="oi-history__signal-export" onClick={onExport}>Export Excel</button>
-      </div>
+      <strong>{signalPerformance.total} signals · {signalPerformance.open} open · {signalPerformance.evaluated} evaluated</strong>
     </div>
     <div className={`oi-history__signal-confidence ${signalPerformance.evaluated >= 20 ? 'is-ready' : ''}`}>
       {signalPerformance.evaluated >= 20
@@ -55,6 +98,7 @@ const SignalPerformancePanel: React.FC<{ signalPerformance: SignalPerformanceSum
       <span>Avg loss <strong>{signalPerformance.averageLoss === null ? '-' : `${signalPerformance.averageLoss.toFixed(1)}%`}</strong></span>
       <span>Profit factor <strong>{signalPerformance.profitFactor === null ? '-' : signalPerformance.profitFactor === Infinity ? '∞' : signalPerformance.profitFactor.toFixed(2)}</strong></span>
     </div>
+    {signalRows.length > 0 && <SignalResultsGrid rows={signalRows} />}
   </div>
 );
 
@@ -66,8 +110,8 @@ export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
   expiries,
   isMonthlyExpiry,
   signalPerformance,
+  signalRows,
   onTrade,
-  onExport,
 }) => (
   <div className={`oi-history__setup-dashboard oi-history__setup-dashboard--${setup.tradeSetup.status.toLowerCase()}`}>
     <div className="oi-history__setup-titlebar">
@@ -227,7 +271,7 @@ export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
       </div>
     </div>
 
-    {signalPerformance && <SignalPerformancePanel signalPerformance={signalPerformance} onExport={onExport} />}
+    {signalPerformance && <SignalPerformancePanel signalPerformance={signalPerformance} signalRows={signalRows} />}
 
     <div className="oi-history__market-context" aria-label="Market context">
       <span className="oi-history__market-context-title">Market context</span>

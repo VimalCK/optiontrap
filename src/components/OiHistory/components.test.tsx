@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import type { FuturesHistoryRow, OiCellData, OiTableRow, StrikeHistoryEntry } from './types';
+import type { FuturesHistoryRow, OiCellData, OiTableRow, StrikeHistoryEntry, TradeSignalRow } from './types';
 import { FuturesContext } from './FuturesContext';
 import { OiSnapshotTable } from './OiSnapshotTable';
 import { StrikeOiChart } from './StrikeOiChart';
+import { SignalResultsGrid } from './TradeSetupDashboard';
 
 const futuresRow = (date: string, expiry: string, close: number, oi: number): FuturesHistoryRow => ({
   date,
@@ -118,5 +119,50 @@ describe('StrikeOiChart', () => {
 
   it('renders nothing without OI', () => {
     expect(renderToStaticMarkup(<StrikeOiChart optionType="CE" maxPrice={111} {...props} maxOi={0} />)).toBe('');
+  });
+});
+
+describe('SignalResultsGrid', () => {
+  const signal = (overrides: Partial<TradeSignalRow>): TradeSignalRow => ({
+    id: 1,
+    signal_date: '2026-10-14',
+    expiry: '2026-10-19',
+    strike: 22700,
+    option_type: 'CE',
+    action: 'SELL',
+    entry_premium: 122.3,
+    outcome_price: null,
+    outcome_date: null,
+    outcome_status: null,
+    outcome_return: null,
+    max_favorable_return: null,
+    max_adverse_return: null,
+    outcome_final: false,
+    ...overrides,
+  });
+
+  it('lists each signal with its outcome and tints profit and loss rows', () => {
+    const html = renderToStaticMarkup(
+      <SignalResultsGrid
+        rows={[
+          signal({ id: 1, outcome_price: 55.6, outcome_status: 'Profit', outcome_return: 54.53, max_favorable_return: 60, max_adverse_return: -5, outcome_final: true }),
+          signal({ id: 2, action: 'BUY', option_type: 'PE', strike: 22500, outcome_price: 60, outcome_status: 'Loss', outcome_return: -12.5 }),
+          signal({ id: 3 }),
+        ]}
+      />,
+    ).replace(/<!-- -->/g, '');
+
+    expect(html.match(/<tr class="is-profit">/g)).toHaveLength(1);
+    expect(html.match(/<tr class="is-loss">/g)).toHaveLength(1);
+    expect(html).toContain('SELL CE 22700');
+    expect(html).toContain('BUY PE 22500');
+    expect(html).toContain('Oct 14');
+    expect(html).toContain('122.30');
+    expect(html).toContain('+54.5%');
+    expect(html).toContain('-12.5%');
+    // Final profit has no live marker; the unsettled loss does; the unscored signal is Open.
+    expect(html).toContain('<td>Profit</td>');
+    expect(html).toContain('Loss<small> · live</small>');
+    expect(html).toContain('<td>Open</td>');
   });
 });

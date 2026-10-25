@@ -9,7 +9,7 @@ import { getLotSize } from '@/services/optionChain';
 import { fetchQuotes } from '@/services/kiteApi';
 import { loadInstruments, getLotSizeByToken } from '@/services/instruments';
 import '@/styles/oihistory.css';
-import type { OiHistoryRow, FuturesHistoryRow, FetchProgress, SignalPerformanceSummary, TradeSetupStatus, StrikeHistoryEntry, OiCellData, OiTableRow } from './types';
+import type { OiHistoryRow, FuturesHistoryRow, FetchProgress, SignalPerformanceSummary, TradeSetupStatus, StrikeHistoryEntry, OiCellData, OiTableRow, TradeSignalRow } from './types';
 import { DEFAULT_SCRIP_OPTIONS, MAX_RECENT_SCRIPS, loadRecentScrips, saveRecentScrips, currentMonthIST, addMonths, formatMonthLabel, formatMonthShortLabel, formatFullDateLabel } from './helpers';
 import { summarizePriceTrend, summarizeTradeBias, summarizeTradeLevels, summarizeOptionMomentum, summarizeTradeSetup, summarizePremiumDecay, summarizeSellingSetup, summarizeStrikeBias, classifyPattern, expiryLabel, computeMonthlyExpiries } from './analysis';
 import { FuturesContext } from './FuturesContext';
@@ -35,6 +35,7 @@ const OiHistory: React.FC = () => {
   const [analysisTab, setAnalysisTab] = useState<'history' | 'setup'>('history');
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [signalPerformance, setSignalPerformance] = useState<SignalPerformanceSummary | null>(null);
+  const [signalRows, setSignalRows] = useState<TradeSignalRow[]>([]);
   const loggedSignalKeysRef = useRef(new Set<string>());
   // Scrip the loaded `data` belongs to. Right after a scrip switch, `scrip` is
   // already new while `data` still holds the previous scrip's rows.
@@ -864,10 +865,12 @@ const OiHistory: React.FC = () => {
     if (!chartData || !scrip) return;
     void (async () => {
       try {
-        const result = await apiClient.get<{
-          signals?: Array<{ action: 'BUY' | 'SELL'; option_type: 'CE' | 'PE'; outcome_status: string | null; outcome_return: number | null; max_favorable_return: number | null; max_adverse_return: number | null }>;
-        }>(`/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=500`, { signal: pageSignal });
+        const result = await apiClient.get<{ signals?: TradeSignalRow[] }>(
+          `/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=500`,
+          { signal: pageSignal },
+        );
         const signals = result.signals || [];
+        setSignalRows(signals);
         const openSignals = signals.filter((signal) => signal.outcome_status === 'Open' || signal.outcome_status === null);
         const openReturns = openSignals
           .map((signal) => signal.outcome_return)
@@ -1023,41 +1026,6 @@ const OiHistory: React.FC = () => {
       return next;
     });
   };
-
-  const exportSignalResults = useCallback(async () => {
-    try {
-      const result = await apiClient.get<{ signals?: Array<Record<string, unknown>> }>(`/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=500`);
-      const signals = result.signals || [];
-      const columns = ['signal_date', 'scrip', 'expiry', 'strike', 'option_type', 'action', 'status', 'entry_premium', 'spot_price', 'outcome_status', 'outcome_date', 'outcome_return', 'max_favorable_return', 'max_adverse_return', 'outcome_final'];
-      const numericColumns = new Set(['strike', 'entry_premium', 'spot_price', 'outcome_return', 'max_favorable_return', 'max_adverse_return']);
-      // Loaded on demand so the spreadsheet library stays out of the page bundle.
-      const { default: ExcelJS } = await import('exceljs');
-      const workbook = new ExcelJS.Workbook();
-      const sheet = workbook.addWorksheet('Trade signals');
-      sheet.columns = columns.map((column) => ({ header: column, key: column, width: Math.max(column.length + 2, 12) }));
-      sheet.getRow(1).font = { bold: true };
-      sheet.views = [{ state: 'frozen', ySplit: 1 }];
-      for (const signal of signals) {
-        const row = sheet.addRow(Object.fromEntries(columns.map((column) => {
-          const value = signal[column];
-          if (value === null || value === undefined || value === '') return [column, null];
-          return [column, numericColumns.has(column) && Number.isFinite(Number(value)) ? Number(value) : String(value)];
-        })));
-        // Light red for losses, light green for profits.
-        const fill = signal.outcome_status === 'Loss' ? 'FFFDE2E2' : signal.outcome_status === 'Profit' ? 'FFDCFCE7' : null;
-        if (fill) row.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: fill } };
-      }
-      const buffer = await workbook.xlsx.writeBuffer();
-      const url = URL.createObjectURL(new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `optiontrap-${scrip.toLowerCase()}-trade-signals.xlsx`;
-      link.click();
-      URL.revokeObjectURL(url);
-    } catch {
-      // Export is optional and must not affect the setup UI.
-    }
-  }, [scrip]);
 
   return (
     <div className="oi-history">
@@ -1357,7 +1325,7 @@ const OiHistory: React.FC = () => {
               isMonthlyExpiry={isMonthlyExpiry}
               signalPerformance={signalPerformance}
               onTrade={tradeFromSetup}
-              onExport={exportSignalResults}
+              signalRows={signalRows}
             />
           )}
         </div>

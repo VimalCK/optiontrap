@@ -276,3 +276,21 @@ export interface TradeSetupData {
   tradeLevels: TradeLevelContext;
   tradeBias: TradeBiasSummary;
 }
+
+/** A logged trade setup signal and its scored outcome, as returned by /api/oi-history/signals. */
+export interface TradeSignalRow {
+  id: number;
+  signal_date: string;
+  expiry: string | null;
+  strike: number;
+  option_type: 'CE' | 'PE';
+  action: 'BUY' | 'SELL';
+  entry_premium: number | null;
+  outcome_price: number | null;
+  outcome_date: string | null;
+  outcome_status: string | null;
+  outcome_return: number | null;
+  max_favorable_return: number | null;
+  max_adverse_return: number | null;
+  outcome_final: boolean | null;
+}
