@@ -50,7 +50,6 @@ export interface SignalPerformanceSummary {
   sellWinRate: number | null;
   buyEvaluated: number;
   buyWinRate: number | null;
-  optionBreakdown: Array<{ label: string; evaluated: number; winRate: number | null; averageReturn: number | null }>;
 }
 
 export type RolloverPattern =
@@ -285,6 +284,9 @@ export interface TradeSignalRow {
   strike: number;
   option_type: 'CE' | 'PE';
   action: 'BUY' | 'SELL';
+  /** Setup strength when logged: Confirmed or Watch. */
+  status: string;
+  details: TradeSignalDetails | null;
   entry_premium: number | null;
   outcome_price: number | null;
   outcome_date: string | null;
@@ -293,4 +295,28 @@ export interface TradeSignalRow {
   max_favorable_return: number | null;
   max_adverse_return: number | null;
   outcome_final: boolean | null;
+}
+
+/** Context saved with a signal when it was logged. Older signals lack the newer fields. */
+export interface TradeSignalDetails {
+  priceTrend?: { direction?: string } | null;
+  decay?: { daysToExpiry?: number | null } | null;
+  /** Option-flow bias at the strike (Upward / Downward / Neutral). */
+  flowBias?: string;
+  /** OI pattern of the traded option at the strike on the signal date. */
+  strikePattern?: string;
+}
+
+export type SignalVerdict = 'Working' | 'Mixed' | 'Losing' | 'Too few';
+
+/** Outcome stats for one slice of the logged signals, e.g. "Setup: SELL CE". */
+export interface SignalBreakdownRow {
+  group: string;
+  label: string;
+  total: number;
+  scored: number;
+  winRate: number | null;
+  averageReturn: number | null;
+  averageMaxAdverse: number | null;
+  verdict: SignalVerdict;
 }

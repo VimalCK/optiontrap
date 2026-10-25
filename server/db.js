@@ -1392,7 +1392,8 @@ export async function saveTradeSetupSignal(userId, signal) {
      DO UPDATE SET status = EXCLUDED.status,
                    entry_premium = EXCLUDED.entry_premium,
                    spot_price = EXCLUDED.spot_price,
-                   details = EXCLUDED.details
+                   -- Merge so a re-log without the OI pattern keeps the one recorded earlier.
+                   details = trade_setup_signals.details || EXCLUDED.details
      RETURNING id, signal_date, strike, option_type, action, status`,
     [userId, signal.scrip, signal.signalDate, signal.expiry || null, signal.strike,
       signal.optionType, signal.action, signal.status, signal.entryPremium ?? null,

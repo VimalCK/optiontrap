@@ -1,5 +1,6 @@
 import React from 'react';
 import type { SignalPerformanceSummary, TradeSetupData, TradeSignalRow } from './types';
+import { summarizeSignalBreakdown, MIN_SCORED_FOR_VERDICT } from './signalStats';
 import { formatPct, formatPcr } from './helpers';
 import { checklistStatusText, sortChecklistByStatus, readinessScore, setupReadinessLabel, setupReadinessWidth, expiryLabel } from './analysis';
 
@@ -60,6 +61,65 @@ export const SignalResultsGrid: React.FC<{ rows: TradeSignalRow[] }> = ({ rows }
   </div>
 );
 
+/**
+ * Which setups make money: win rate, average return and average worst move
+ * per slice (action, setup, strength, OI pattern, flow, trend, days to expiry).
+ */
+export const SignalBreakdownTable: React.FC<{ signals: TradeSignalRow[] }> = ({ signals }) => {
+  const rows = summarizeSignalBreakdown(signals);
+  const groups = [...new Set(rows.map((row) => row.group))];
+  const hasPatterns = groups.includes('OI pattern');
+
+  return (
+    <div className="oi-history__signal-breakdown-wrap">
+      <div className="oi-history__signal-breakdown-title">
+        <strong>What works</strong>
+        <span>
+          Drop a slice that stays Losing. Verdicts need {MIN_SCORED_FOR_VERDICT}+ scored signals.
+          {!hasPatterns && ' OI pattern and flow are recorded on new signals from now on.'}
+        </span>
+      </div>
+      <div className="oi-history__signal-grid-scroll oi-history__signal-grid-scroll--auto">
+        <table className="oi-history__signal-grid oi-history__signal-breakdown-table">
+          <thead>
+            <tr>
+              <th>Slice</th>
+              <th>Signals</th>
+              <th>Scored</th>
+              <th>Win rate</th>
+              <th>Avg return</th>
+              <th>Avg worst</th>
+              <th>Verdict</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((group) => (
+              <React.Fragment key={group}>
+                <tr className="is-group">
+                  <td colSpan={7}>{group}</td>
+                </tr>
+                {rows.filter((row) => row.group === group).map((row) => (
+                  <tr key={`${group}-${row.label}`}>
+                    <td>{row.label}</td>
+                    <td>{row.total}</td>
+                    <td>{row.scored}</td>
+                    <td>{row.winRate === null ? '-' : `${row.winRate.toFixed(0)}%`}</td>
+                    <td className={row.averageReturn === null ? '' : row.averageReturn >= 0 ? 'is-up' : 'is-down'}>{formatReturn(row.averageReturn)}</td>
+                    <td>{formatReturn(row.averageMaxAdverse)}</td>
+                    <td>
+                      <span className={`oi-history__signal-verdict oi-history__signal-verdict--${row.verdict.replace(' ', '-').toLowerCase()}`}>{row.verdict}</span>
+                    </td>
+                  </tr>
+                ))}
+              </React.Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
 /** Recorded signal outcomes for the scrip: win rate, returns and every signal. */
 const SignalPerformancePanel: React.FC<{ signalPerformance: SignalPerformanceSummary; signalRows: TradeSignalRow[] }> = ({ signalPerformance, signalRows }) => (
   <div className="oi-history__signal-performance oi-history__signal-performance--dashboard">
@@ -84,20 +144,12 @@ const SignalPerformancePanel: React.FC<{ signalPerformance: SignalPerformanceSum
       <span>Sell <strong>{signalPerformance.sellWinRate === null ? '-' : `${signalPerformance.sellWinRate.toFixed(0)}% (${signalPerformance.sellEvaluated})`}</strong></span>
       <span>Buy <strong>{signalPerformance.buyWinRate === null ? '-' : `${signalPerformance.buyWinRate.toFixed(0)}% (${signalPerformance.buyEvaluated})`}</strong></span>
     </div>
-    <div className="oi-history__signal-breakdown">
-      {signalPerformance.optionBreakdown.map((item) => (
-        <span key={item.label}>
-          {item.label}
-          <strong>{item.winRate === null ? '-' : `${item.winRate.toFixed(0)}%`}</strong>
-          <small>{item.evaluated} evaluated{item.averageReturn === null ? '' : ` · ${item.averageReturn >= 0 ? '+' : ''}${item.averageReturn.toFixed(1)}% avg`}</small>
-        </span>
-      ))}
-    </div>
     <div className="oi-history__signal-quality">
       <span>Avg win <strong>{signalPerformance.averageWin === null ? '-' : `+${signalPerformance.averageWin.toFixed(1)}%`}</strong></span>
       <span>Avg loss <strong>{signalPerformance.averageLoss === null ? '-' : `${signalPerformance.averageLoss.toFixed(1)}%`}</strong></span>
       <span>Profit factor <strong>{signalPerformance.profitFactor === null ? '-' : signalPerformance.profitFactor === Infinity ? '∞' : signalPerformance.profitFactor.toFixed(2)}</strong></span>
     </div>
+    {signalRows.length > 0 && <SignalBreakdownTable signals={signalRows} />}
     {signalRows.length > 0 && <SignalResultsGrid rows={signalRows} />}
   </div>
 );

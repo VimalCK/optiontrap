@@ -836,6 +836,12 @@ const OiHistory: React.FC = () => {
     if (loggedSignalKeysRef.current.has(key)) return;
     loggedSignalKeysRef.current.add(key);
 
+    // The table shows the selected date, so its OI pattern only describes the
+    // signal when that date is the signal date. Otherwise leave it out; the
+    // server merges details, so a pattern recorded earlier is kept.
+    const strikeRow = filterDate === signalDate ? tableData.find((row) => row.strike === selectedStrike) : undefined;
+    const strikePattern = strikeRow ? (optionType === 'CE' ? strikeRow.cePattern : strikeRow.pePattern) : null;
+
     void apiClient.post('/api/oi-history/signals', {
         scrip,
         signalDate,
@@ -854,12 +860,14 @@ const OiHistory: React.FC = () => {
           buyingStatus: buying.status,
           buyingMomentum: optionType === 'CE' ? chartData.optionMomentum.ce : chartData.optionMomentum.pe,
           decay: side ? { decayPct: side.decayPct, score: side.score, daysToExpiry: side.daysToExpiry, latestVolume: side.latestVolume } : null,
+          flowBias: chartData.biasSummary.bias,
+          ...(strikePattern && strikePattern !== '-' ? { strikePattern } : {}),
         },
       },
     ).catch(() => {
       // Logging must never affect the Trade Setup UI.
     });
-  }, [chartData, data, scrip, dataScrip, selectedStrike]);
+  }, [chartData, data, scrip, dataScrip, selectedStrike, filterDate, tableData]);
 
   useEffect(() => {
     if (!chartData || !scrip) return;
@@ -900,17 +908,6 @@ const OiHistory: React.FC = () => {
         };
         const sells = byAction('SELL');
         const buys = byAction('BUY');
-        const optionBreakdown = (['BUY CE', 'BUY PE', 'SELL CE', 'SELL PE'] as const).map((label) => {
-          const [action, optionType] = label.split(' ') as ['BUY' | 'SELL', 'CE' | 'PE'];
-          const rows = evaluated.filter((signal) => signal.action === action && signal.option_type === optionType);
-          const rowWins = rows.filter((signal) => signal.outcome_status === 'Profit').length;
-          return {
-            label,
-            evaluated: rows.length,
-            winRate: rows.length ? (rowWins / rows.length) * 100 : null,
-            averageReturn: rows.length ? rows.reduce((sum, signal) => sum + Number(signal.outcome_return || 0), 0) / rows.length : null,
-          };
-        });
         setSignalPerformance({
           total: signals.length,
           open: openSignals.length,
@@ -928,7 +925,6 @@ const OiHistory: React.FC = () => {
           sellWinRate: sells.count ? (sells.wins / sells.count) * 100 : null,
           buyEvaluated: buys.count,
           buyWinRate: buys.count ? (buys.wins / buys.count) * 100 : null,
-          optionBreakdown,
         });
       } catch {
         // Research metrics are optional and must never block the setup.

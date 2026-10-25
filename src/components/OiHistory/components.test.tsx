@@ -4,7 +4,7 @@ import type { FuturesHistoryRow, OiCellData, OiTableRow, StrikeHistoryEntry, Tra
 import { FuturesContext } from './FuturesContext';
 import { OiSnapshotTable } from './OiSnapshotTable';
 import { StrikeOiChart } from './StrikeOiChart';
-import { SignalResultsGrid } from './TradeSetupDashboard';
+import { SignalBreakdownTable, SignalResultsGrid } from './TradeSetupDashboard';
 
 const futuresRow = (date: string, expiry: string, close: number, oi: number): FuturesHistoryRow => ({
   date,
@@ -130,6 +130,8 @@ describe('SignalResultsGrid', () => {
     strike: 22700,
     option_type: 'CE',
     action: 'SELL',
+    status: 'Confirmed',
+    details: null,
     entry_premium: 122.3,
     outcome_price: null,
     outcome_date: null,
@@ -164,5 +166,43 @@ describe('SignalResultsGrid', () => {
     expect(html).toContain('<td>Profit</td>');
     expect(html).toContain('Loss<small> · live</small>');
     expect(html).toContain('<td>Open</td>');
+  });
+});
+
+describe('SignalBreakdownTable', () => {
+  const scored = (id: number, ret: number, overrides: Partial<TradeSignalRow> = {}): TradeSignalRow => ({
+    id, signal_date: '2026-10-14', expiry: '2026-10-19', strike: 22700, option_type: 'CE', action: 'SELL',
+    status: 'Confirmed', details: { priceTrend: { direction: 'Downward' }, decay: { daysToExpiry: 3 } },
+    entry_premium: 100, outcome_price: 100 - ret, outcome_date: '2026-10-19',
+    outcome_status: ret > 0 ? 'Profit' : 'Loss', outcome_return: ret,
+    max_favorable_return: Math.max(ret, 0), max_adverse_return: -10, outcome_final: true,
+    ...overrides,
+  });
+
+  it('shows a verdict per slice and notes that OI patterns are not recorded yet', () => {
+    const signals = [
+      ...[1, 2, 3, 4, 5].map((id) => scored(id, 20)),
+      ...[6, 7, 8, 9, 10].map((id) => scored(id, -25, { action: 'BUY', option_type: 'PE', status: 'Watch' })),
+    ];
+    const html = renderToStaticMarkup(<SignalBreakdownTable signals={signals} />).replace(/<!-- -->/g, '');
+
+    expect(html).toContain('What works');
+    expect(html).toMatch(/<tr class="is-group"><td [^>]*>Setup<\/td>/);
+    expect(html).toContain('oi-history__signal-verdict--working');
+    expect(html).toContain('oi-history__signal-verdict--losing');
+    expect(html).toContain('<td>SELL CE</td>');
+    expect(html).toContain('+20.0%');
+    expect(html).toContain('-25.0%');
+    expect(html).toContain('OI pattern and flow are recorded on new signals');
+  });
+
+  it('includes the OI pattern slice once signals carry it', () => {
+    const html = renderToStaticMarkup(
+      <SignalBreakdownTable signals={[scored(1, 10, { details: { strikePattern: 'Short Buildup', flowBias: 'Downward' } })]} />,
+    );
+    expect(html).toContain('OI pattern');
+    expect(html).toContain('Short Buildup');
+    expect(html).toContain('oi-history__signal-verdict--too-few');
+    expect(html).not.toContain('recorded on new signals');
   });
 });
