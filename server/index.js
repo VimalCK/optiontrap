@@ -77,6 +77,7 @@ import {
   updateTradeSetupSignalOutcome,
   evaluateTradeSetupSignalOutcomes,
   getScheduledJobRuns,
+  deleteTradeSetupSignal,
   getStoredOiHistoryExpiryMonths,
   deleteOiHistoryByMonth,
   deleteOiHistoryByExpiryMonth,
@@ -1069,6 +1070,21 @@ app.get('/api/oi-history/signals', requireAuth, requireSubscription, async (req,
   } catch (err) {
     console.error('[OI History] Signal list error:', err.message);
     res.status(500).json({ status: 'error', message: 'Failed to load trade setup signals' });
+  }
+});
+
+app.delete('/api/oi-history/signals/:id', requireAuth, requireSubscription, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isInteger(id) || id <= 0) {
+      return res.status(400).json({ status: 'error', message: 'Invalid signal id' });
+    }
+    const deleted = await deleteTradeSetupSignal(req.session.kiteSession.userId, id);
+    if (!deleted) return res.status(404).json({ status: 'error', message: 'Signal not found' });
+    res.json({ status: 'ok' });
+  } catch (err) {
+    console.error('[OI History] Signal delete error:', err.message);
+    res.status(500).json({ status: 'error', message: 'Failed to delete signal' });
   }
 });
 

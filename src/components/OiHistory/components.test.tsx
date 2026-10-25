@@ -4,7 +4,7 @@ import type { FuturesHistoryRow, OiCellData, OiTableRow, StrikeHistoryEntry, Tra
 import { FuturesContext } from './FuturesContext';
 import { OiSnapshotTable } from './OiSnapshotTable';
 import { StrikeOiChart } from './StrikeOiChart';
-import { SignalBreakdownTable, SignalResultsGrid } from './TradeSetupDashboard';
+import { SignalBreakdownTable, SignalResultsGrid, upcomingSignals } from './TradeSetupDashboard';
 
 const futuresRow = (date: string, expiry: string, close: number, oi: number): FuturesHistoryRow => ({
   date,
@@ -151,6 +151,7 @@ describe('SignalResultsGrid', () => {
           signal({ id: 2, action: 'BUY', option_type: 'PE', strike: 22500, outcome_price: 60, outcome_status: 'Loss', outcome_return: -12.5 }),
           signal({ id: 3 }),
         ]}
+        today="2026-10-19"
       />,
     ).replace(/<!-- -->/g, '');
 
@@ -166,6 +167,55 @@ describe('SignalResultsGrid', () => {
     expect(html).toContain('<td>Profit</td>');
     expect(html).toContain('Loss<small> · live</small>');
     expect(html).toContain('<td>Open</td>');
+  });
+
+  it('shows only upcoming expiries by default, counting the rest under All', () => {
+    const html = renderToStaticMarkup(
+      <SignalResultsGrid
+        rows={[
+          signal({ id: 1, expiry: '2026-10-27', strike: 22800 }),
+          signal({ id: 2, expiry: '2026-10-23', strike: 22600 }),   // expiry day itself: still upcoming
+          signal({ id: 3, expiry: '2026-10-20', strike: 22400 }),   // expired
+        ]}
+        today="2026-10-23"
+      />,
+    ).replace(/<!-- -->/g, '');
+
+    expect(html).toContain('SELL CE 22800');
+    expect(html).toContain('SELL CE 22600');
+    expect(html).not.toContain('SELL CE 22400');
+    expect(html).toContain('2 signals on upcoming expiries');
+    expect(html).toContain('All (3)');
+  });
+
+  it('says where the signals are when every expiry has passed', () => {
+    const html = renderToStaticMarkup(<SignalResultsGrid rows={[signal({ id: 1 }), signal({ id: 2 })]} today="2026-10-25" />)
+      .replace(/<!-- -->/g, '');
+
+    expect(html).toContain('No signals on upcoming expiries. 2 expired signals are under All.');
+    expect(html).not.toContain('<table');
+  });
+
+  it('adds a delete button per row only when deleting is allowed', () => {
+    const rows = [signal({ id: 1 }), signal({ id: 2, strike: 22800 })];
+    const withDelete = renderToStaticMarkup(<SignalResultsGrid rows={rows} today="2026-10-19" onDelete={() => {}} />);
+    const without = renderToStaticMarkup(<SignalResultsGrid rows={rows} today="2026-10-19" />);
+
+    expect(withDelete.match(/class="oi-history__signal-delete"/g)).toHaveLength(2);
+    expect(withDelete).toContain('aria-label="Delete SELL CE 22800 signal"');
+    expect(without).not.toContain('oi-history__signal-delete');
+  });
+});
+
+describe('upcomingSignals', () => {
+  it('keeps expiries from today on, and signals without an expiry', () => {
+    const rows = [
+      { id: 1, expiry: '2026-10-27' },
+      { id: 2, expiry: '2026-10-23' },
+      { id: 3, expiry: '2026-10-20' },
+      { id: 4, expiry: null },
+    ] as TradeSignalRow[];
+    expect(upcomingSignals(rows, '2026-10-23').map((r) => r.id)).toEqual([1, 2, 4]);
   });
 });
 

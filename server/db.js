@@ -1406,16 +1406,27 @@ export async function getTradeSetupSignals(userId, { scrip = null, limit = 100 }
   const safeLimit = Math.min(Math.max(Number(limit) || 100, 1), 500);
   if (scrip) {
     return rows(
-      `SELECT * FROM trade_setup_signals WHERE user_id = $1 AND scrip = $2
+      `SELECT * FROM trade_setup_signals WHERE user_id = $1 AND scrip = $2 AND deleted_at IS NULL
        ORDER BY signal_date DESC, created_at DESC LIMIT $3`,
       [userId, scrip, safeLimit],
     );
   }
   return rows(
-    `SELECT * FROM trade_setup_signals WHERE user_id = $1
+    `SELECT * FROM trade_setup_signals WHERE user_id = $1 AND deleted_at IS NULL
      ORDER BY signal_date DESC, created_at DESC LIMIT $2`,
     [userId, safeLimit],
   );
+}
+
+/** Hide one of the user's signals from the grid and stats. Returns false if it wasn't theirs or is already deleted. */
+export async function deleteTradeSetupSignal(userId, signalId) {
+  const row = await firstRow(
+    `UPDATE trade_setup_signals SET deleted_at = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+     WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL
+     RETURNING id`,
+    [signalId, userId],
+  );
+  return Boolean(row);
 }
 
 export async function updateTradeSetupSignalOutcome(userId, signalId, outcome) {
@@ -1446,7 +1457,7 @@ export async function evaluateTradeSetupSignalOutcomes(scrip = null) {
   const signals = await rows(
     `SELECT id, scrip, signal_date, expiry, strike, option_type, action, entry_premium
      FROM trade_setup_signals
-     WHERE NOT outcome_final AND expiry IS NOT NULL AND entry_premium > 0
+     WHERE NOT outcome_final AND expiry IS NOT NULL AND entry_premium > 0 AND deleted_at IS NULL
        ${scrip ? 'AND scrip = $1' : ''}`,
     scrip ? [scrip] : [],
   );

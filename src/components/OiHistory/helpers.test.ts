@@ -4,6 +4,7 @@ import {
   formatOiCompact,
   formatOiWithChg,
   addMonths,
+  todayIST,
   formatMonthLabel,
   formatMonthShortLabel,
   formatFullDateLabel,
@@ -165,5 +166,12 @@ describe('buildFuturesSeries', () => {
     expect(series[0].avgVolume).toBeNull();
     expect(series[2].avgVolume).toBe(100);               // [100, 0]
     expect(series[6].avgVolume).toBe((300 + 400 + 500 + 600) / 4); // [0, 300, 400, 500, 600]
+  });
+});
+
+describe('todayIST', () => {
+  it('uses the IST calendar date, which turns over at 18:30 UTC', () => {
+    expect(todayIST(new Date('2026-10-23T18:29:00Z'))).toBe('2026-10-23');
+    expect(todayIST(new Date('2026-10-23T18:30:00Z'))).toBe('2026-10-24');
   });
 });

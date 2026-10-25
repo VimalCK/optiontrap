@@ -1,7 +1,7 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { SignalPerformanceSummary, TradeSetupData, TradeSignalRow } from './types';
 import { summarizeSignalBreakdown, MIN_SCORED_FOR_VERDICT } from './signalStats';
-import { formatPct, formatPcr } from './helpers';
+import { formatPct, formatPcr, todayIST } from './helpers';
 import { checklistStatusText, sortChecklistByStatus, readinessScore, setupReadinessLabel, setupReadinessWidth, expiryLabel } from './analysis';
 
 interface TradeSetupDashboardProps {
@@ -12,6 +12,7 @@ interface TradeSetupDashboardProps {
   isMonthlyExpiry: (expiry: string) => boolean;
   signalPerformance: SignalPerformanceSummary | null;
   signalRows: TradeSignalRow[];
+  onDeleteSignal?: (id: number) => void;
   onTrade: (mode: 'buy' | 'sell') => void;
 }
 
@@ -19,47 +20,88 @@ const formatReturn = (value: number | null) => (value === null ? '-' : `${value 
 const formatPrice = (value: number | null) => (value === null || !(value > 0) ? '-' : value.toFixed(2));
 const shortDate = (date: string | null) => (date ? expiryLabel(date.slice(0, 10), false) : '-');
 
-/** Every logged signal for the scrip, newest first. Loss rows are tinted red, profit rows green. */
-export const SignalResultsGrid: React.FC<{ rows: TradeSignalRow[] }> = ({ rows }) => (
-  <div className="oi-history__signal-grid-scroll">
-    <table className="oi-history__signal-grid">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Signal</th>
-          <th>Expiry</th>
-          <th>Entry</th>
-          <th>Last</th>
-          <th>Return</th>
-          <th>Best</th>
-          <th>Worst</th>
-          <th>Result</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((row) => {
-          const status = row.outcome_status || 'Open';
-          return (
-            <tr key={row.id} className={status === 'Loss' ? 'is-loss' : status === 'Profit' ? 'is-profit' : ''}>
-              <td>{shortDate(row.signal_date)}</td>
-              <td className="oi-history__signal-grid-signal">{row.action} {row.option_type} {row.strike}</td>
-              <td>{shortDate(row.expiry)}</td>
-              <td>{formatPrice(row.entry_premium)}</td>
-              <td title={row.outcome_date ? `as of ${row.outcome_date}` : undefined}>{formatPrice(row.outcome_price)}</td>
-              <td className={row.outcome_return === null ? '' : row.outcome_return >= 0 ? 'is-up' : 'is-down'}>{formatReturn(row.outcome_return)}</td>
-              <td>{formatReturn(row.max_favorable_return)}</td>
-              <td>{formatReturn(row.max_adverse_return)}</td>
-              <td>
-                {status}
-                {status !== 'Open' && !row.outcome_final && <small> · live</small>}
-              </td>
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  </div>
-);
+/** Signals on an expiry that hasn't passed yet (expiry today counts as upcoming). */
+export function upcomingSignals(rows: TradeSignalRow[], today: string): TradeSignalRow[] {
+  return rows.filter((row) => !row.expiry || row.expiry >= today);
+}
+
+/**
+ * Logged signals for the scrip, newest first. Shows signals on upcoming
+ * expiries by default; All adds the expired ones. Loss rows are tinted red,
+ * profit rows green. With onDelete, each row gets a × that deletes it.
+ */
+export const SignalResultsGrid: React.FC<{ rows: TradeSignalRow[]; today?: string; onDelete?: (id: number) => void }> = ({ rows, today = todayIST(), onDelete }) => {
+  const [showExpired, setShowExpired] = useState(false);
+  const upcoming = upcomingSignals(rows, today);
+  const expiredCount = rows.length - upcoming.length;
+  const visibleRows = showExpired ? rows : upcoming;
+
+  return (
+    <div className="oi-history__signal-grid-wrap">
+      <div className="oi-history__signal-grid-toolbar">
+        <span>
+          {showExpired
+            ? `All ${rows.length} signals`
+            : `${upcoming.length} signal${upcoming.length === 1 ? '' : 's'} on upcoming expiries`}
+        </span>
+        <div className="oi-history__metric-toggle" role="group" aria-label="Signals to show">
+          <button type="button" className={`oi-history__volume-toggle ${!showExpired ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setShowExpired(false)} aria-pressed={!showExpired}>Upcoming</button>
+          <button type="button" className={`oi-history__volume-toggle ${showExpired ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setShowExpired(true)} aria-pressed={showExpired}>All{expiredCount > 0 ? ` (${rows.length})` : ''}</button>
+        </div>
+      </div>
+      {visibleRows.length === 0 ? (
+        <div className="oi-history__signal-grid-empty">
+          No signals on upcoming expiries.{expiredCount > 0 ? ` ${expiredCount} expired signal${expiredCount === 1 ? ' is' : 's are'} under All.` : ''}
+        </div>
+      ) : (
+        <div className="oi-history__signal-grid-scroll">
+          <table className="oi-history__signal-grid">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Signal</th>
+                <th>Expiry</th>
+                <th>Entry</th>
+                <th>Last</th>
+                <th>Return</th>
+                <th>Best</th>
+                <th>Worst</th>
+                <th>Result</th>
+                {onDelete && <th aria-label="Delete" />}
+              </tr>
+            </thead>
+            <tbody>
+              {visibleRows.map((row) => {
+                const status = row.outcome_status || 'Open';
+                return (
+                  <tr key={row.id} className={status === 'Loss' ? 'is-loss' : status === 'Profit' ? 'is-profit' : ''}>
+                    <td>{shortDate(row.signal_date)}</td>
+                    <td className="oi-history__signal-grid-signal">{row.action} {row.option_type} {row.strike}</td>
+                    <td>{shortDate(row.expiry)}</td>
+                    <td>{formatPrice(row.entry_premium)}</td>
+                    <td title={row.outcome_date ? `as of ${row.outcome_date}` : undefined}>{formatPrice(row.outcome_price)}</td>
+                    <td className={row.outcome_return === null ? '' : row.outcome_return >= 0 ? 'is-up' : 'is-down'}>{formatReturn(row.outcome_return)}</td>
+                    <td>{formatReturn(row.max_favorable_return)}</td>
+                    <td>{formatReturn(row.max_adverse_return)}</td>
+                    <td>
+                      {status}
+                      {status !== 'Open' && !row.outcome_final && <small> · live</small>}
+                    </td>
+                    {onDelete && (
+                      <td className="oi-history__signal-grid-delete">
+                        <button type="button" className="oi-history__signal-delete" onClick={() => onDelete(row.id)} title="Delete this signal" aria-label={`Delete ${row.action} ${row.option_type} ${row.strike} signal`}>×</button>
+                      </td>
+                    )}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+};
 
 /**
  * Which setups make money: win rate, average return and average worst move
@@ -121,7 +163,7 @@ export const SignalBreakdownTable: React.FC<{ signals: TradeSignalRow[] }> = ({ 
 };
 
 /** Recorded signal outcomes for the scrip: win rate, returns and every signal. */
-const SignalPerformancePanel: React.FC<{ signalPerformance: SignalPerformanceSummary; signalRows: TradeSignalRow[] }> = ({ signalPerformance, signalRows }) => (
+const SignalPerformancePanel: React.FC<{ signalPerformance: SignalPerformanceSummary; signalRows: TradeSignalRow[]; onDeleteSignal?: (id: number) => void }> = ({ signalPerformance, signalRows, onDeleteSignal }) => (
   <div className="oi-history__signal-performance oi-history__signal-performance--dashboard">
     <div className="oi-history__signal-performance-head">
       <span>Recorded setup performance</span>
@@ -150,7 +192,7 @@ const SignalPerformancePanel: React.FC<{ signalPerformance: SignalPerformanceSum
       <span>Profit factor <strong>{signalPerformance.profitFactor === null ? '-' : signalPerformance.profitFactor === Infinity ? '∞' : signalPerformance.profitFactor.toFixed(2)}</strong></span>
     </div>
     {signalRows.length > 0 && <SignalBreakdownTable signals={signalRows} />}
-    {signalRows.length > 0 && <SignalResultsGrid rows={signalRows} />}
+    {signalRows.length > 0 && <SignalResultsGrid rows={signalRows} onDelete={onDeleteSignal} />}
   </div>
 );
 
@@ -163,6 +205,7 @@ export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
   isMonthlyExpiry,
   signalPerformance,
   signalRows,
+  onDeleteSignal,
   onTrade,
 }) => (
   <div className={`oi-history__setup-dashboard oi-history__setup-dashboard--${setup.tradeSetup.status.toLowerCase()}`}>
@@ -323,7 +366,7 @@ export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
       </div>
     </div>
 
-    {signalPerformance && <SignalPerformancePanel signalPerformance={signalPerformance} signalRows={signalRows} />}
+    {signalPerformance && <SignalPerformancePanel signalPerformance={signalPerformance} signalRows={signalRows} onDeleteSignal={onDeleteSignal} />}
 
     <div className="oi-history__market-context" aria-label="Market context">
       <span className="oi-history__market-context-title">Market context</span>

@@ -56,6 +56,11 @@ export function currentMonthIST(): string {
   return `${y}-${m}`;
 }
 
+/** Get today's date in YYYY-MM-DD (IST) */
+export function todayIST(now = new Date()): string {
+  return now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+}
+
 export function addMonths(month: string, delta: number): string {
   const [year, monthIndex] = month.split('-').map(Number);
   const date = new Date(year, monthIndex - 1 + delta, 1);

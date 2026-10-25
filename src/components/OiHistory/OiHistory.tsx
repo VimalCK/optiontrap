@@ -36,6 +36,8 @@ const OiHistory: React.FC = () => {
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [signalPerformance, setSignalPerformance] = useState<SignalPerformanceSummary | null>(null);
   const [signalRows, setSignalRows] = useState<TradeSignalRow[]>([]);
+  // Bumped after a signal is deleted so the performance stats reload.
+  const [signalsVersion, setSignalsVersion] = useState(0);
   const loggedSignalKeysRef = useRef(new Set<string>());
   // Scrip the loaded `data` belongs to. Right after a scrip switch, `scrip` is
   // already new while `data` still holds the previous scrip's rows.
@@ -930,7 +932,17 @@ const OiHistory: React.FC = () => {
         // Research metrics are optional and must never block the setup.
       }
     })();
-  }, [chartData, scrip, pageSignal]);
+  }, [chartData, scrip, pageSignal, signalsVersion]);
+
+  const deleteSignal = useCallback(async (id: number) => {
+    try {
+      await apiClient.delete(`/api/oi-history/signals/${id}`);
+      setSignalRows((rows) => rows.filter((row) => row.id !== id));
+      setSignalsVersion((version) => version + 1);
+    } catch {
+      showToast('Failed to delete signal', 'red');
+    }
+  }, [showToast]);
 
   /**
    * Resolve the strike/side/optionType a trade setup recommends and place it.
@@ -1322,6 +1334,7 @@ const OiHistory: React.FC = () => {
               signalPerformance={signalPerformance}
               onTrade={tradeFromSetup}
               signalRows={signalRows}
+              onDeleteSignal={deleteSignal}
             />
           )}
         </div>

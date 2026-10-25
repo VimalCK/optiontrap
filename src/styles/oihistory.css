@@ -1733,6 +1733,34 @@
   color: #fca5a5;
 }
 
+.oi-history__signal-grid-wrap {
+  margin-top: 12px;
+}
+
+.oi-history__signal-grid-wrap .oi-history__signal-grid-scroll {
+  margin-top: 6px;
+}
+
+.oi-history__signal-grid-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px 10px;
+  color: var(--text-secondary);
+  font-size: 9px;
+}
+
+.oi-history__signal-grid-empty {
+  margin-top: 6px;
+  padding: 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  font-size: 10px;
+  text-align: center;
+}
+
 .oi-history__signal-grid-scroll--auto {
   max-height: none;
 }
@@ -3133,4 +3161,26 @@ span.oi-history__chart-legend-item:hover {
 .oi-history__loading-text {
   font-size: 13px;
   color: var(--text-secondary);
+}
+
+.oi-history__signal-grid-delete {
+  white-space: nowrap;
+  text-align: right;
+}
+
+.oi-history__signal-delete {
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-secondary, #94a3b8);
+  line-height: 1;
+  padding: 3px 6px;
+  cursor: pointer;
+  font-size: 15px;
+  opacity: 0.6;
+}
+
+.oi-history__signal-delete:hover {
+  opacity: 1;
+  color: #ef4444;
 }
