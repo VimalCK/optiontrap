@@ -1666,6 +1666,80 @@ export async function getStoredOiHistoryExpiryMonths(scrip) {
   return result.map((r) => r.month);
 }
 
+/** Scrips with OI history stored on or after `sinceDate` (YYYY-MM-DD) — the ones being tracked. */
+export async function getRecentOiHistoryScrips(sinceDate) {
+  const result = await rows(
+    'SELECT DISTINCT scrip FROM oi_history WHERE date >= $1 ORDER BY scrip',
+    [sinceDate],
+  );
+  return result.map((r) => r.scrip);
+}
+
+// ---------------------------------------------------------------------------
+// Scheduled jobs
+// ---------------------------------------------------------------------------
+
+/**
+ * Kite sessions of admins that haven't expired, newest login first. Scheduled
+ * jobs fetch shared market data with an admin's token, never another user's.
+ */
+export async function getAdminKiteSessions() {
+  const result = await rows('SELECT data FROM sessions WHERE expires > $1', [Date.now()]);
+  return result
+    .map((r) => {
+      try {
+        return JSON.parse(r.data)?.kiteSession;
+      } catch {
+        return null;
+      }
+    })
+    .filter((kite) => kite?.isAdmin && kite.apiKey && kite.accessToken)
+    .sort((a, b) => String(b.loginTime || '').localeCompare(String(a.loginTime || '')));
+}
+
+/**
+ * Claim today's run of a job. Returns false when it already finished, or is
+ * running elsewhere and started within the last two hours. A failed or
+ * stale run is claimed again.
+ */
+export async function claimScheduledJobRun(job, runDate) {
+  const row = await firstRow(
+    `INSERT INTO scheduled_job_runs (job, run_date, status)
+     VALUES ($1, $2, 'running')
+     ON CONFLICT (job, run_date) DO UPDATE
+       SET status = 'running', detail = '{}'::jsonb, finished_at = NULL,
+           started_at = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+     WHERE scheduled_job_runs.status = 'failed'
+        OR (scheduled_job_runs.status = 'running'
+            AND scheduled_job_runs.started_at < to_char(now() - interval '2 hours', 'YYYY-MM-DD HH24:MI:SS'))
+     RETURNING job`,
+    [job, runDate],
+  );
+  return Boolean(row);
+}
+
+/** Status of a job's run for a date ('running' | 'done' | 'failed'), or null if it hasn't run. */
+export async function getScheduledJobStatus(job, runDate) {
+  const row = await firstRow('SELECT status FROM scheduled_job_runs WHERE job = $1 AND run_date = $2', [job, runDate]);
+  return row?.status ?? null;
+}
+
+export async function finishScheduledJobRun(job, runDate, status, detail = {}) {
+  await query(
+    `UPDATE scheduled_job_runs
+     SET status = $3, detail = $4, finished_at = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+     WHERE job = $1 AND run_date = $2`,
+    [job, runDate, status, JSON.stringify(detail)],
+  );
+}
+
+export async function getScheduledJobRuns(job, limit = 10) {
+  return rows(
+    'SELECT run_date, status, detail, started_at, finished_at FROM scheduled_job_runs WHERE job = $1 ORDER BY run_date DESC LIMIT $2',
+    [job, limit],
+  );
+}
+
 export async function getOiHistoryExpiryMonths(scrip, minExpiryDate, limit = 3) {
   const scripName = scrip === 'NIFTY50' ? 'NIFTY' : scrip;
   const result = await rows(
