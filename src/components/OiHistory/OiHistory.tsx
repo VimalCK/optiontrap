@@ -17,6 +17,25 @@ import { OiSnapshotTable } from './OiSnapshotTable';
 import { StrikeOiChart } from './StrikeOiChart';
 import { TradeSetupDashboard } from './TradeSetupDashboard';
 import { computeFlowReadings, marketCloseIST, type FlowInput, type FlowReading } from '@/services/oiFlow';
+import { computeFairValues, realizedVol, volVerdict, REALIZED_WINDOW, type FairInput, type FairValueResult } from '@/services/fairValue';
+
+/** When a day's prices were taken: the close, or now for today's rows, which are a live snapshot until the close. */
+function snapshotTime(date: string): Date {
+  const close = marketCloseIST(date);
+  return date === todayIST() ? new Date(Math.min(Date.now(), close.getTime())) : close;
+}
+
+/** Fair-value inputs for one day's rows, optionally limited to one expiry. */
+function fairInputs(rows: OiHistoryRow[], date: string, expiry?: string): FairInput[] {
+  const asOf = snapshotTime(date);
+  const inputs: FairInput[] = [];
+  for (const r of rows) {
+    if (!r.strike || !r.expiry || (r.optionType !== 'CE' && r.optionType !== 'PE') || !(r.spotClose > 0) || !(r.close > 0)) continue;
+    if (expiry && r.expiry !== expiry) continue;
+    inputs.push({ token: r.instrumentToken, optionType: r.optionType, strike: r.strike, expiry: r.expiry, price: r.close, spot: r.spotClose, asOf, volume: r.volume });
+  }
+  return inputs;
+}
 
 const OiHistory: React.FC = () => {
   const navigate = useNavigate();
@@ -45,6 +64,9 @@ const OiHistory: React.FC = () => {
   const [dataScrip, setDataScrip] = useState('');
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(() => new Set());
   const [showVolume, setShowVolume] = useState(false);
+  // Fair-value view: the strike chart shows one expiry with its fair-value line.
+  const [showFairValue, setShowFairValue] = useState(false);
+  const [fairExpiry, setFairExpiry] = useState<string | null>(null);
   const [recentScrips, setRecentScrips] = useState<string[]>(() => loadRecentScrips());
   const [scripOptions, setScripOptions] = useState(DEFAULT_SCRIP_OPTIONS);
   const [expiryMonthOptions, setExpiryMonthOptions] = useState<{ value: string; label: string }[]>(() => {
@@ -573,9 +595,7 @@ const OiHistory: React.FC = () => {
     if (idx <= 0) return new Map<number, FlowReading>();
     const prevDate = availableDates[idx - 1];
     const prevSpot = prevDateRows.find((r) => r.spotClose > 0)?.spotClose;
-    // Today's rows are a live snapshot until the close, so measure time left from now.
-    const close = marketCloseIST(filterDate);
-    const asOf = filterDate === todayIST() ? new Date(Math.min(Date.now(), close.getTime())) : close;
+    const asOf = snapshotTime(filterDate);
     const prevAsOf = marketCloseIST(prevDate);
 
     const inputs: FlowInput[] = [];
@@ -603,6 +623,51 @@ const OiHistory: React.FC = () => {
     }
     return computeFlowReadings(inputs);
   }, [filteredRows, prevDateRows, prevDayOi, prevDayClose, oiSeriesByToken, availableDates, filterDate]);
+
+  /** Fair value for every option on the selected date (logged with signals, and the chart summary). */
+  const fairToday = useMemo(() => computeFairValues(fairInputs(filteredRows, filterDate)), [filteredRows, filterDate]);
+
+  /** Expiry the fair-value chart shows: the picked one if still visible, else the nearest. */
+  const chartFairExpiry = useMemo(() => {
+    if (!showFairValue) return null;
+    return fairExpiry && visibleTableExpiries.includes(fairExpiry) ? fairExpiry : visibleTableExpiries[0] ?? null;
+  }, [showFairValue, fairExpiry, visibleTableExpiries]);
+
+  const chartExpiries = useMemo(
+    () => (chartFairExpiry ? [chartFairExpiry] : visibleTableExpiries),
+    [chartFairExpiry, visibleTableExpiries],
+  );
+
+  /** Rows and spot close per date. */
+  const rowsByDate = useMemo(() => {
+    const map = new Map<string, OiHistoryRow[]>();
+    for (const r of data) {
+      const list = map.get(r.date);
+      if (list) list.push(r);
+      else map.set(r.date, [r]);
+    }
+    return map;
+  }, [data]);
+
+  /** Fair values of the chart's expiry on every date; only computed while the fair-value view is on. */
+  const fairByDate = useMemo(() => {
+    const map = new Map<string, FairValueResult>();
+    if (!chartFairExpiry) return map;
+    for (const [date, rows] of rowsByDate) map.set(date, computeFairValues(fairInputs(rows, date, chartFairExpiry)));
+    return map;
+  }, [rowsByDate, chartFairExpiry]);
+
+  /** Chain context for the fair-value view: ATM IV vs realised vol and the expected move. */
+  const fairSummary = useMemo(() => {
+    if (!chartFairExpiry || !filterDate) return null;
+    const stats = fairToday.byExpiry.get(chartFairExpiry) ?? null;
+    const spotCloses = availableDates
+      .filter((date) => date <= filterDate)
+      .map((date) => rowsByDate.get(date)?.find((r) => r.spotClose > 0)?.spotClose ?? 0);
+    const realized = realizedVol(spotCloses);
+    const spot = filteredRows.find((r) => r.spotClose > 0)?.spotClose ?? null;
+    return { stats, realized, verdict: volVerdict(stats?.atmIv ?? null, realized), spot };
+  }, [chartFairExpiry, filterDate, fairToday, availableDates, rowsByDate, filteredRows]);
 
   /** ATM strike for the selected date */
   const atmStrike = useMemo(() => {
@@ -804,14 +869,21 @@ const OiHistory: React.FC = () => {
         });
       }
       const entry = expMap.get(r.expiry)!;
+      const fair = fairByDate.get(r.date)?.byToken.get(r.instrumentToken);
       if (r.optionType === 'CE') {
         entry.ceOi = r.oi;
         entry.ceClose = r.close;
         entry.ceVolume = r.volume;
+        entry.ceFair = fair?.fairPrice ?? null;
+        entry.ceRichPct = fair?.richPct ?? null;
+        entry.ceFairLabel = fair?.label ?? null;
       } else {
         entry.peOi = r.oi;
         entry.peClose = r.close;
         entry.peVolume = r.volume;
+        entry.peFair = fair?.fairPrice ?? null;
+        entry.peRichPct = fair?.richPct ?? null;
+        entry.peFairLabel = fair?.label ?? null;
       }
     }
 
@@ -827,21 +899,23 @@ const OiHistory: React.FC = () => {
     const tradeSetup = summarizeTradeSetup(priceTrend, biasSummary, selectedStrike, tradeLevels, optionMomentum);
     const sellingSetup = summarizeSellingSetup(priceTrend, biasSummary, selectedStrike, tradeLevels, premiumDecay);
 
-    // Find max values for axis scaling
+    // Find max values for axis scaling (prices only over the expiries the chart draws)
+    const drawnExpiries = new Set(chartExpiries);
     let maxOi = 0;
     let maxCePrice = 0;
     let maxPePrice = 0;
     for (const [, expMap] of dateMap) {
-      for (const [, v] of expMap) {
+      for (const [exp, v] of expMap) {
         if (v.ceOi > maxOi) maxOi = v.ceOi;
         if (v.peOi > maxOi) maxOi = v.peOi;
-        if (v.ceClose > maxCePrice) maxCePrice = v.ceClose;
-        if (v.peClose > maxPePrice) maxPePrice = v.peClose;
+        if (!drawnExpiries.has(exp)) continue;
+        maxCePrice = Math.max(maxCePrice, v.ceClose, v.ceFair ?? 0);
+        maxPePrice = Math.max(maxPePrice, v.peClose, v.peFair ?? 0);
       }
     }
 
     return { dates, dateMap, maxOi, maxCePrice, maxPePrice, biasSummary, priceTrend, tradeBias, tradeSetup, tradeLevels, optionMomentum, premiumDecay, sellingSetup };
-  }, [data, selectedStrike, availableDates, visibleTableExpiries, selectedSpotClose, tableData]);
+  }, [data, selectedStrike, availableDates, visibleTableExpiries, selectedSpotClose, tableData, fairByDate, chartExpiries]);
 
   // Persist each actionable setup once per session/date. This creates the
   // evidence needed for later outcome tracking and backtesting without
@@ -897,6 +971,7 @@ const OiHistory: React.FC = () => {
     const strikeCell = strikeRow?.cells.get(expiry);
     const flowToken = strikeCell ? (optionType === 'CE' ? strikeCell.ceToken : strikeCell.peToken) : undefined;
     const ivFlow = flowToken !== undefined ? flowByToken.get(flowToken)?.label : undefined;
+    const fair = flowToken !== undefined ? fairToday.byToken.get(flowToken) : undefined;
 
     void apiClient.post('/api/oi-history/signals', {
         scrip,
@@ -919,12 +994,13 @@ const OiHistory: React.FC = () => {
           flowBias: chartData.biasSummary.bias,
           ...(strikePattern && strikePattern !== '-' ? { strikePattern } : {}),
           ...(ivFlow && ivFlow !== '-' ? { ivFlow } : {}),
+          ...(fair?.label ? { fairValue: fair.label, fairRichPct: fair.richPct !== null ? Math.round(fair.richPct * 1000) / 10 : null } : {}),
         },
       },
     ).catch(() => {
       // Logging must never affect the Trade Setup UI.
     });
-  }, [chartData, data, scrip, dataScrip, selectedStrike, filterDate, tableData, flowByToken]);
+  }, [chartData, data, scrip, dataScrip, selectedStrike, filterDate, tableData, flowByToken, fairToday]);
 
   useEffect(() => {
     if (!chartData || !scrip) return;
@@ -1073,6 +1149,17 @@ const OiHistory: React.FC = () => {
     expiries.forEach((exp, i) => map.set(exp, palette[i % palette.length]));
     return map;
   }, [expiries]);
+
+  /** In the fair-value view the legend picks the one expiry the chart shows. */
+  const selectFairExpiry = (expiry: string) => {
+    setFairExpiry(expiry);
+    setHiddenExpiries((prev) => {
+      if (!prev.has(expiry)) return prev;
+      const next = new Set(prev);
+      next.delete(expiry);
+      return next;
+    });
+  };
 
   const toggleExpiryVisibility = (expiry: string) => {
     setHiddenExpiries((prev) => {
@@ -1345,38 +1432,89 @@ const OiHistory: React.FC = () => {
           {analysisTab === 'history' && (
             <>
           <div className="oi-history__chart-pair">
-            <StrikeOiChart optionType="CE" dates={chartData.dates} dateMap={chartData.dateMap} maxOi={chartData.maxOi} maxPrice={chartData.maxCePrice} expiries={visibleTableExpiries} expiryColors={expiryColors} showVolume={showVolume} />
-            <StrikeOiChart optionType="PE" dates={chartData.dates} dateMap={chartData.dateMap} maxOi={chartData.maxOi} maxPrice={chartData.maxPePrice} expiries={visibleTableExpiries} expiryColors={expiryColors} showVolume={showVolume} />
+            <StrikeOiChart optionType="CE" dates={chartData.dates} dateMap={chartData.dateMap} maxOi={chartData.maxOi} maxPrice={chartData.maxCePrice} expiries={chartExpiries} expiryColors={expiryColors} showVolume={showVolume} showFair={chartFairExpiry !== null} />
+            <StrikeOiChart optionType="PE" dates={chartData.dates} dateMap={chartData.dateMap} maxOi={chartData.maxOi} maxPrice={chartData.maxPePrice} expiries={chartExpiries} expiryColors={expiryColors} showVolume={showVolume} showFair={chartFairExpiry !== null} />
           </div>
 
-          {/* Legend */}
+          {/* Legend: toggles expiries, or picks the single expiry in the fair-value view */}
           <div className="oi-history__chart-legend">
             {tableExpiries.map((exp) => {
-              const isHidden = hiddenExpiries.has(exp);
+              const label = expiryLabel(exp, isMonthlyExpiry(exp));
+              const isOff = chartFairExpiry !== null ? exp !== chartFairExpiry : hiddenExpiries.has(exp);
               return (
               <button
                 key={exp}
                 type="button"
-                className={`oi-history__chart-legend-item ${isHidden ? 'oi-history__chart-legend-item--hidden' : ''}`}
-                onClick={() => toggleExpiryVisibility(exp)}
-                aria-pressed={!isHidden}
-                title={`${isHidden ? 'Show' : 'Hide'} ${expiryLabel(exp, isMonthlyExpiry(exp))} in table and chart`}
+                className={`oi-history__chart-legend-item ${isOff ? 'oi-history__chart-legend-item--hidden' : ''}`}
+                onClick={() => (chartFairExpiry !== null ? selectFairExpiry(exp) : toggleExpiryVisibility(exp))}
+                aria-pressed={!isOff}
+                title={chartFairExpiry !== null ? `Show fair value for ${label}` : `${isOff ? 'Show' : 'Hide'} ${label} in table and chart`}
               >
                 <span className="oi-history__chart-legend-swatch" style={{ background: expiryColors.get(exp) }} />
-                {expiryLabel(exp, isMonthlyExpiry(exp))}
+                {label}
               </button>
               );
             })}
-            <span className="oi-history__chart-legend-item">
-              <span className="oi-history__chart-legend-bar" /> OI
-            </span>
+            {chartFairExpiry === null && (
+              <span className="oi-history__chart-legend-item">
+                <span className="oi-history__chart-legend-bar" /> {showVolume ? 'Volume' : 'OI'}
+              </span>
+            )}
+            {chartFairExpiry !== null && (
+              <>
+                <span className="oi-history__chart-legend-item">
+                  <span className="oi-history__chart-legend-dash" /> Fair value
+                </span>
+                <span className="oi-history__chart-legend-item">
+                  <span className="oi-history__chart-legend-tick oi-history__chart-legend-tick--rich" /> Expensive
+                </span>
+                <span className="oi-history__chart-legend-item">
+                  <span className="oi-history__chart-legend-tick oi-history__chart-legend-tick--cheap" /> Cheap
+                </span>
+              </>
+            )}
           </div>
           <div className="oi-history__chart-metric-row">
-            <div className="oi-history__metric-toggle" role="group" aria-label="Chart bar metric">
-              <button type="button" className={`oi-history__volume-toggle ${!showVolume ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setShowVolume(false)} aria-pressed={!showVolume}>OI</button>
-              <button type="button" className={`oi-history__volume-toggle ${showVolume ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setShowVolume(true)} aria-pressed={showVolume}>Volume</button>
+            {/* In the fair-value view the bars show rich / cheap %, so the bar metric does not apply */}
+            {!showFairValue && (
+              <div className="oi-history__metric-toggle" role="group" aria-label="Chart bar metric">
+                <button type="button" className={`oi-history__volume-toggle ${!showVolume ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setShowVolume(false)} aria-pressed={!showVolume}>OI</button>
+                <button type="button" className={`oi-history__volume-toggle ${showVolume ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setShowVolume(true)} aria-pressed={showVolume}>Volume</button>
+              </div>
+            )}
+            <div className="oi-history__metric-toggle" role="group" aria-label="Chart view">
+              <button type="button" className={`oi-history__volume-toggle ${!showFairValue ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setShowFairValue(false)} aria-pressed={!showFairValue}>All expiries</button>
+              <button type="button" className={`oi-history__volume-toggle ${showFairValue ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setShowFairValue(true)} aria-pressed={showFairValue} title="Show one expiry with its fair value from the IV curve">Fair value</button>
             </div>
           </div>
+          {chartFairExpiry !== null && fairSummary && (
+            <div className="oi-history__fair-summary">
+              <span className="oi-history__fair-stat">
+                <span>ATM IV</span>
+                <strong>{fairSummary.stats?.atmIv != null ? `${(fairSummary.stats.atmIv * 100).toFixed(1)}%` : '-'}</strong>
+              </span>
+              <span className="oi-history__fair-stat">
+                <span>Realised ({REALIZED_WINDOW}d)</span>
+                <strong>{fairSummary.realized !== null ? `${(fairSummary.realized * 100).toFixed(1)}%` : '-'}</strong>
+              </span>
+              {fairSummary.verdict && (
+                <span className={`oi-history__fair-verdict oi-history__fair-verdict--${fairSummary.verdict === 'Options expensive' ? 'rich' : fairSummary.verdict === 'Options cheap' ? 'cheap' : 'fair'}`}>
+                  {fairSummary.verdict}
+                </span>
+              )}
+              <span className="oi-history__fair-stat">
+                <span>Expected move</span>
+                <strong>
+                  {fairSummary.stats?.straddle != null
+                    ? `±${Math.round(fairSummary.stats.straddle)}${fairSummary.spot ? ` (${((fairSummary.stats.straddle / fairSummary.spot) * 100).toFixed(1)}%)` : ''}`
+                    : '-'}
+                </strong>
+              </span>
+              <span className="oi-history__fair-note">
+                Grey line = price at the expiry&apos;s fitted IV curve; the gap to the price is shaded. Above it is expensive, below is cheap.
+              </span>
+            </div>
+          )}
             </>
           )}
 

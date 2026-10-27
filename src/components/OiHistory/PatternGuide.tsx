@@ -45,6 +45,14 @@ const EXAMPLES: GuideTerm[] = [
   { term: 'CE Long Unwinding @ 1800', meaning: 'Call buyers giving up on the 1800 breakout.' },
 ];
 
+const FAIR_VALUE: GuideTerm[] = [
+  { term: 'One expiry', meaning: 'With Fair value on, the chart shows one expiry; click an expiry in the legend to switch' },
+  { term: 'Grey line', meaning: 'Price at the IV curve fitted through the whole expiry, so normal put-side skew is not flagged; the gap to the price line is shaded grey' },
+  { term: 'Expensive / Cheap', meaning: 'Amber when the premium sits over 1 IV point above the curve, blue when below; in this view the bars show the % gap per date in place of OI / volume, and gaps of 5% or less are left out' },
+  { term: 'ATM IV vs realised', meaning: 'IV over 1.25× the last 20 sessions’ actual movement reads as options expensive overall; under 0.9× as cheap' },
+  { term: 'Expected move', meaning: 'ATM straddle price: the move the market prices in by expiry' },
+];
+
 /** Explains the OI Snapshot pattern labels, IV flow and hover measures. */
 export const PatternGuide: React.FC = () => (
   <InfoGuide
@@ -66,6 +74,9 @@ export const PatternGuide: React.FC = () => (
       </GuideSection>
       <GuideSection title="Examples" subtitle="How to read a label">
         <GuideTerms terms={EXAMPLES} />
+      </GuideSection>
+      <GuideSection title="Fair value" subtitle="Strike chart · Fair value toggle" wide>
+        <GuideTerms terms={FAIR_VALUE} />
       </GuideSection>
     </GuideGrid>
     <GuideNote>

@@ -150,6 +150,41 @@ describe('StrikeOiChart', () => {
   it('renders nothing without OI', () => {
     expect(renderToStaticMarkup(<StrikeOiChart optionType="CE" maxPrice={111} {...props} maxOi={0} />)).toBe('');
   });
+
+  it('draws the fair-value line with rich/cheap labels only in the fair-value view', () => {
+    const fairMap = new Map<string, Map<string, StrikeHistoryEntry>>([
+      ['2026-10-22', new Map([['2026-10-27', { ...entry(101, 202), ceFair: 90, ceRichPct: 0.122, ceFairLabel: 'Expensive' }]])],
+      ['2026-10-23', new Map([['2026-10-27', { ...entry(111, 222), ceFair: 120, ceRichPct: -0.075, ceFairLabel: 'Cheap' }]])],
+      ['2026-10-24', new Map([['2026-10-27', { ...entry(105, 210), ceFair: 101, ceRichPct: 0.04, ceFairLabel: 'Expensive' }]])],
+    ]);
+    const render = (showFair: boolean) =>
+      renderToStaticMarkup(<StrikeOiChart optionType="CE" maxPrice={120} {...props} dates={[...props.dates, '2026-10-24']} dateMap={fairMap} showFair={showFair} />).replace(/<!-- -->/g, '');
+
+    const off = render(false);
+    expect(off).not.toContain('stroke="#cbd5e1"');
+    expect(off).not.toContain('+12%');
+    expect(off).not.toContain('<polygon');
+    expect(off).toContain('>avg</text>');
+
+    const on = render(true);
+    expect(on).not.toContain('stroke-dasharray');
+    expect(on.match(/<svg/g)).toHaveLength(1);
+    // Bars switch from OI to the rich / cheap gap, with a % scale on the right axis.
+    expect(on).not.toContain('opacity="0.25"');
+    expect(on).toContain('>12%</text>');
+    expect(on).toContain('+12%');
+    expect(on).toContain('-8%');
+    expect(on).toContain('#f59e0b');
+    expect(on).toContain('#38bdf8');
+    // Gaps of 5% or less get no bar, and there are no connectors from price to fair value.
+    expect(on).not.toContain('+4%');
+    expect(on.match(/<rect /g)?.length).toBe(2);
+    expect(on).not.toContain('stroke-width="1.6"');
+    // Fair line is light grey and the gap to the price line is one grey shaded area.
+    expect(on).toContain('stroke="#cbd5e1"');
+    expect(on.match(/<polygon /g)?.length).toBe(1);
+    expect(on).not.toContain('>avg</text>');
+  });
 });
 
 describe('SignalResultsGrid', () => {

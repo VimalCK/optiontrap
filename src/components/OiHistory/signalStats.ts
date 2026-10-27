@@ -25,6 +25,7 @@ const SLICES: { group: string; label: (signal: TradeSignalRow) => string | null 
   { group: 'Strength', label: (s) => s.status, order: ['Confirmed', 'Watch'] },
   { group: 'OI pattern', label: (s) => s.details?.strikePattern },
   { group: 'IV flow', label: (s) => s.details?.ivFlow, order: ['Buyers Adding', 'Writers Adding', 'Buyers Exiting', 'Writers Covering', 'Unclear', 'Stable'] },
+  { group: 'Fair value', label: (s) => s.details?.fairValue, order: ['Expensive', 'Fair', 'Cheap'] },
   { group: 'Option flow', label: (s) => s.details?.flowBias, order: ['Upward', 'Neutral', 'Downward'] },
   { group: 'Price trend', label: (s) => s.details?.priceTrend?.direction, order: ['Upward', 'Sideways', 'Downward', 'Unknown'] },
   { group: 'Days to expiry', label: (s) => dteBucket(s.details?.decay?.daysToExpiry), order: ['0–2 days', '3–7 days', '8+ days'] },

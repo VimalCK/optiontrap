@@ -1,3 +1,5 @@
+import type { Richness } from '@/services/fairValue';
+
 export interface OiHistoryRow {
   date: string;
   instrumentToken: number;
@@ -192,6 +194,14 @@ export interface StrikeHistoryEntry {
   peClose: number;
   ceVolume: number;
   peVolume: number;
+  /** Fair value at the IV curve, filled only while the chart's fair-value view is on. */
+  ceFair?: number | null;
+  peFair?: number | null;
+  /** (close − fair) ÷ fair. */
+  ceRichPct?: number | null;
+  peRichPct?: number | null;
+  ceFairLabel?: Richness | null;
+  peFairLabel?: Richness | null;
 }
 
 export interface PremiumDecaySide {
@@ -307,6 +317,10 @@ export interface TradeSignalDetails {
   strikePattern?: string;
   /** IV-based flow label of the traded contract on the signal date (see services/oiFlow). */
   ivFlow?: string;
+  /** Rich / Fair / Cheap against the IV curve on the signal date (see services/fairValue). */
+  fairValue?: string;
+  /** Premium vs fair value, in %. */
+  fairRichPct?: number | null;
 }
 
 export type SignalVerdict = 'Working' | 'Mixed' | 'Losing' | 'Too few';
