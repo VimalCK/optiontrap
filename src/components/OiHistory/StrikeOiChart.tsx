@@ -154,7 +154,7 @@ export const StrikeOiChart: React.FC<StrikeOiChartProps> = ({ optionType, dates,
         ))}
 
         {/* Average price line */}
-        {!showFair && (() => {
+        {(() => {
           const allPrices = priceLines.flatMap((l) => l.pts.map((p) => p.price));
           if (allPrices.length === 0) return null;
           const avg = allPrices.reduce((s, v) => s + v, 0) / allPrices.length;

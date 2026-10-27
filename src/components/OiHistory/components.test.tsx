@@ -167,7 +167,7 @@ describe('StrikeOiChart', () => {
     expect(off).toContain('>avg</text>');
 
     const on = render(true);
-    expect(on).not.toContain('stroke-dasharray');
+    expect(on).toContain('stroke="#cbd5e1" stroke-width="1" opacity="0.9"');
     expect(on.match(/<svg/g)).toHaveLength(1);
     // Bars switch from OI to the rich / cheap gap, with a % scale on the right axis.
     expect(on).not.toContain('opacity="0.25"');
@@ -183,7 +183,7 @@ describe('StrikeOiChart', () => {
     // Fair line is light grey and the gap to the price line is one grey shaded area.
     expect(on).toContain('stroke="#cbd5e1"');
     expect(on.match(/<polygon /g)?.length).toBe(1);
-    expect(on).not.toContain('>avg</text>');
+    expect(on).toContain('>avg</text>');
   });
 });
 
