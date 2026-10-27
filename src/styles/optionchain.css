@@ -693,6 +693,17 @@
   z-index: 10;
 }
 
+/* .card:hover adds a transform, which traps the tooltip inside the card's own
+   stacking context; lift the whole card so a tooltip that spills past its
+   edge stays above the cards after it. */
+.oc-chart-card {
+  position: relative;
+}
+
+.oc-chart-card--tooltip-open {
+  z-index: 30;
+}
+
 .oc-chart__tooltip {
   position: absolute;
   left: 50%;
