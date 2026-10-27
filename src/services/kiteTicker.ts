@@ -180,6 +180,15 @@ export class KiteTicker {
 
     const tick: Tick = { instrumentToken, lastPrice };
 
+    // Index quote / full mode: 28 / 32 bytes — OHLC only, no volume or OI
+    if (length === 28 || length === 32) {
+      tick.highPrice = data.getInt32(start + 8) / divisor;
+      tick.lowPrice = data.getInt32(start + 12) / divisor;
+      tick.openPrice = data.getInt32(start + 16) / divisor;
+      tick.closePrice = data.getInt32(start + 20) / divisor;
+      return tick;
+    }
+
     // LTP mode: 8 bytes
     if (length >= 44) {
       // Quote mode: 44 bytes
