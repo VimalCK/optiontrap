@@ -3,6 +3,7 @@ import type { OiCellData, OiTableRow } from './types';
 import { formatOiWithChg, formatFullDateLabel } from './helpers';
 import { patternColor, expiryLabel } from './analysis';
 import { describeFlow, flowColor, type FlowReading } from '@/services/oiFlow';
+import { PatternGuide } from './PatternGuide';
 
 interface OiSnapshotTableProps {
   rows: OiTableRow[];
@@ -69,55 +70,7 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
         </div>
       </div>
 
-    {showPatternInfo && (
-      <div className="trap-info-detail" style={{ marginBottom: 12 }}>
-        <h4>Pattern Definitions</h4>
-        <p>Patterns classify <strong>who</strong> is active at each strike based on day-over-day OI change and option price movement.</p>
-
-        <h5>OI + Price Signals (single expiry / monthly scrips)</h5>
-        <ul>
-          <li><strong style={{ color: '#22c55e' }}>Long Buildup</strong> — OI ↑ + Price ↑ — New buyers entering aggressively. Bullish for the option.</li>
-          <li><strong style={{ color: '#ef4444' }}>Short Buildup</strong> — OI ↑ + Price ↓ — New sellers entering aggressively. Bearish for the option.</li>
-          <li><strong style={{ color: '#ef4444' }}>Long Unwinding</strong> — OI ↓ + Price ↓ — Buyers exiting, giving up. Weakness in that direction.</li>
-          <li><strong style={{ color: '#22c55e' }}>Short Covering</strong> — OI ↓ + Price ↑ — Sellers exiting, bears retreating. Bullish reversal signal.</li>
-        </ul>
-
-        <h5>IV Flow (second line, nearest expiry)</h5>
-        <p>Option premiums also move with spot, time decay and chain-wide IV, so OI + Price can mislabel. IV Flow solves implied volatility from each premium and compares the strike&apos;s IV change with the ATM IV change of the same expiry, leaving only strike-specific demand or supply.</p>
-        <ul>
-          <li><strong style={{ color: '#22c55e' }}>Buyers Adding</strong> — OI ↑ + IV ↑ vs ATM — buyers are paying up for this strike.</li>
-          <li><strong style={{ color: '#ef4444' }}>Writers Adding</strong> — OI ↑ + IV ↓ vs ATM — writers are pressing premiums down.</li>
-          <li><strong style={{ color: '#ef4444' }}>Buyers Exiting</strong> — OI ↓ + IV ↓ vs ATM — longs closing out.</li>
-          <li><strong style={{ color: '#22c55e' }}>Writers Covering</strong> — OI ↓ + IV ↑ vs ATM — shorts buying back.</li>
-          <li><strong style={{ color: 'var(--text-secondary)' }}>Unclear</strong> — OI moved but IV did not move against ATM (under 0.5 pts).</li>
-          <li><strong style={{ color: 'var(--text-secondary)' }}>Stable</strong> — OI change is normal for this strike (under 1.5× its usual daily change, or under 2% without enough history).</li>
-        </ul>
-        <p>Hover a CE or PE cell for its IV, delta-weighted OI change (50K at ATM outweighs 50K far OTM), how unusual the change is for that strike, OI change as a share of volume (low means intraday churn), and how much of the OI was added in the last 3 sessions. OI never shows why a position exists — covered calls, spread legs, hedges and arbitrage look the same — so treat these as hints, not verdicts.</p>
-
-        <h5>Rollover Patterns (multiple expiries / weekly scrips)</h5>
-        <ul>
-          <li><strong style={{ color: 'var(--accent)' }}>Rolling Over (Short)</strong> — Writers moving positions to next expiry. Strike is being actively defended.</li>
-          <li><strong style={{ color: 'var(--accent)' }}>Rolling Over (Long)</strong> — Buyers moving to next expiry. Directional conviction maintained.</li>
-          <li><strong style={{ color: '#ef4444' }}>Exiting (Long Unwind)</strong> — Buyers closing out, no new positions. Support/resistance weakening.</li>
-          <li><strong style={{ color: '#ef4444' }}>Exiting (Short Cover)</strong> — Sellers closing out, the wall is being abandoned.</li>
-          <li><strong style={{ color: '#22c55e' }}>Fresh Build (Short)</strong> — New sellers at far expiry. New wall being established.</li>
-          <li><strong style={{ color: '#22c55e' }}>Fresh Build (Long)</strong> — New buyers at far expiry. New directional bet.</li>
-          <li><strong style={{ color: '#22c55e' }}>Doubling Down (Long)</strong> — OI rising across multiple expiries while option price is rising. Buyers are adding conviction across expiries.</li>
-          <li><strong style={{ color: '#ef4444' }}>Doubling Down (Short)</strong> — OI rising across multiple expiries while option price is falling. Sellers are adding conviction across expiries.</li>
-          <li><strong style={{ color: '#ef4444' }}>Unwinding</strong> — OI falling across all expiries because existing positions are being closed. No meaningful new positions are replacing them.</li>
-          <li><strong style={{ color: 'var(--text-secondary)' }}>Stable</strong> — No significant change (&lt;2%). Positions held steady.</li>
-        </ul>
-
-        <h5>How to Read</h5>
-        <ul>
-          <li><strong>CE Short Buildup</strong> at 1800 = call sellers adding positions, expecting price won't cross 1800. Resistance forming.</li>
-          <li><strong>PE Long Buildup</strong> at 1700 = put buyers entering, expecting price to fall below 1700. Bearish bet.</li>
-          <li><strong>PE Short Covering</strong> at 1700 = put sellers exiting, support at 1700 weakening.</li>
-          <li><strong>CE Long Unwinding</strong> at 1800 = call buyers giving up on 1800 breakout.</li>
-        </ul>
-        <p>Dimmed rows have OI below 5% of the max — less significant strikes. Click any row to see its OI &amp; price chart across dates.</p>
-      </div>
-    )}
+    {showPatternInfo && <PatternGuide />}
 
       <div className="oi-history__table-scroll">
         <table className="oi-history__table">
@@ -145,8 +98,10 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
               const isPeItm = spotClose !== null && spotClose > 0 && strike > spotClose;
               const ceBarWidth = maxConsolidatedOi > 0 ? (ceConsolidatedOi / maxConsolidatedOi) * 50 : 0;
               const peBarWidth = maxConsolidatedOi > 0 ? (peConsolidatedOi / maxConsolidatedOi) * 50 : 0;
-              const ceFlowExpiry = expiries.find((exp) => cells.get(exp)?.ceToken !== undefined);
-              const peFlowExpiry = expiries.find((exp) => cells.get(exp)?.peToken !== undefined);
+              // Nearest expiry with a usable reading; a contract on its expiry day has no IV.
+              const hasFlow = (token: number | undefined) => { const label = flowFor(token)?.label; return label !== undefined && label !== '-'; };
+              const ceFlowExpiry = expiries.find((exp) => hasFlow(cells.get(exp)?.ceToken));
+              const peFlowExpiry = expiries.find((exp) => hasFlow(cells.get(exp)?.peToken));
               const ceFlow = ceFlowExpiry ? flowFor(cells.get(ceFlowExpiry)?.ceToken) : undefined;
               const peFlow = peFlowExpiry ? flowFor(cells.get(peFlowExpiry)?.peToken) : undefined;
               const flowHeading = (side: string, exp: string | undefined) =>

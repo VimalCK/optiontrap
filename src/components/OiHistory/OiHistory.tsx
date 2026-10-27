@@ -10,7 +10,7 @@ import { fetchQuotes } from '@/services/kiteApi';
 import { loadInstruments, getLotSizeByToken } from '@/services/instruments';
 import '@/styles/oihistory.css';
 import type { OiHistoryRow, FuturesHistoryRow, FetchProgress, SignalPerformanceSummary, TradeSetupStatus, StrikeHistoryEntry, OiCellData, OiTableRow, TradeSignalRow } from './types';
-import { DEFAULT_SCRIP_OPTIONS, MAX_RECENT_SCRIPS, loadRecentScrips, saveRecentScrips, currentMonthIST, addMonths, formatMonthLabel, formatMonthShortLabel, formatFullDateLabel } from './helpers';
+import { DEFAULT_SCRIP_OPTIONS, MAX_RECENT_SCRIPS, loadRecentScrips, saveRecentScrips, currentMonthIST, todayIST, addMonths, formatMonthLabel, formatMonthShortLabel, formatFullDateLabel } from './helpers';
 import { summarizePriceTrend, summarizeTradeBias, summarizeTradeLevels, summarizeOptionMomentum, summarizeTradeSetup, summarizePremiumDecay, summarizeSellingSetup, summarizeStrikeBias, classifyPattern, expiryLabel, computeMonthlyExpiries } from './analysis';
 import { FuturesContext } from './FuturesContext';
 import { OiSnapshotTable } from './OiSnapshotTable';
@@ -573,7 +573,9 @@ const OiHistory: React.FC = () => {
     if (idx <= 0) return new Map<number, FlowReading>();
     const prevDate = availableDates[idx - 1];
     const prevSpot = prevDateRows.find((r) => r.spotClose > 0)?.spotClose;
-    const asOf = marketCloseIST(filterDate);
+    // Today's rows are a live snapshot until the close, so measure time left from now.
+    const close = marketCloseIST(filterDate);
+    const asOf = filterDate === todayIST() ? new Date(Math.min(Date.now(), close.getTime())) : close;
     const prevAsOf = marketCloseIST(prevDate);
 
     const inputs: FlowInput[] = [];
