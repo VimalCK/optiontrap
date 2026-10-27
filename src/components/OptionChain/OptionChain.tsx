@@ -5,7 +5,7 @@ import { calculateExpectedMove } from '@/services/edgeScore';
 import { saveOiSnapshot, getTodaySnapshots, calculateVelocity, shouldTakeSnapshot, analyzeVelocityPattern, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
 import { computeStrikeSignals } from '@/services/combinedSignal';
 import { addPosition } from '@/services/positions';
-import { computeLiveFlow, describeFlow, flowColor, type FlowReading } from '@/services/oiFlow';
+import { computeLiveFlow, describeFlow, flowColor } from '@/services/oiFlow';
 
 type PaperTradeSide = 'BUY' | 'SELL';
 
@@ -665,14 +665,63 @@ const OptionChain: React.FC = () => {
     return { pct, color };
   };
 
-  // Tooltip row for an option's IV flow; hover it for IV and freshness details.
-  const renderFlowRow = (side: 'CE' | 'PE', reading: FlowReading | undefined) => {
-    if (!reading || reading.label === '-') return null;
-    const rel = reading.relIvChange !== null ? ` (${reading.relIvChange >= 0 ? '+' : ''}${(reading.relIvChange * 100).toFixed(1)} vs ATM)` : '';
+  // One CE or PE section of the OI chart tooltip.
+  const renderTooltipSide = (
+    side: 'CE' | 'PE',
+    option: OptionChainRow['ce'],
+    oi: number,
+    prevOi: number,
+    velocity: OiVelocity | undefined,
+  ) => {
+    const flow = option ? flowByToken.get(option.instrumentToken) : undefined;
+    const pattern = option && velocity ? analyzeVelocityPattern(option.instrumentToken, velocity.currentOi, snapshots) : null;
+    const chgPct = prevOi > 0 ? ((oi - prevOi) / prevOi) * 100 : null;
+    const sideClass = side === 'CE' ? 'ce' : 'pe';
     return (
-      <div className="oc-chart__tooltip-row" title={describeFlow(reading).join('\n')}>
-        <span className={side === 'CE' ? 'oc-chart__tooltip-ce' : 'oc-chart__tooltip-pe'}>{side} Flow:</span>
-        <span style={{ color: flowColor(reading.label) }}>{reading.label}{rel}</span>
+      <div className={`oc-tip__side oc-tip__side--${sideClass}`}>
+        <div className="oc-tip__side-title">{side === 'CE' ? 'Calls' : 'Puts'}</div>
+        <div className="oc-tip__row">
+          <span>OI</span>
+          <span>{oi.toLocaleString('en-IN')}</span>
+        </div>
+        {chgPct !== null && (
+          <div className="oc-tip__row">
+            <span>Chg</span>
+            <span className={chgPct >= 0 ? 'positive' : 'negative'}>{chgPct >= 0 ? '+' : ''}{chgPct.toFixed(2)}%</span>
+          </div>
+        )}
+        {flow && flow.label !== '-' && (
+          <div className="oc-tip__row oc-tip__row--flow" title={describeFlow(flow).join('\n')}>
+            <span>IV flow</span>
+            <span className="oc-tip__flow">
+              <span style={{ color: flowColor(flow.label) }}>{flow.label}</span>
+              {flow.relIvChange !== null && (
+                <span className="oc-tip__sub">{flow.relIvChange >= 0 ? '+' : ''}{(flow.relIvChange * 100).toFixed(1)} IV vs ATM</span>
+              )}
+            </span>
+          </div>
+        )}
+        {velocity && (
+          <div className="oc-tip__row">
+            <span>Velocity</span>
+            <span className={velocity.changePct >= 0 ? 'positive' : 'negative'}>{velocity.changePct >= 0 ? '+' : ''}{velocity.changePct.toFixed(2)}% / {velocity.intervalMinutes}m</span>
+          </div>
+        )}
+        {pattern && (
+          <div className="oc-tip__pattern">
+            <svg className="oc-chart__sparkline" viewBox="0 0 60 20" preserveAspectRatio="none">
+              <polyline
+                points={pattern.series.map((v, i) => `${(i / (pattern.series.length - 1)) * 60},${(1 - v) * 20}`).join(' ')}
+                fill="none"
+                stroke={pattern.direction === 'up' ? '#4ade80' : pattern.direction === 'down' ? '#f87171' : '#94a3b8'}
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+            </svg>
+            <span className={`oc-chart__pattern-label oc-chart__pattern-label--${pattern.direction}`}>{pattern.label}</span>
+          </div>
+        )}
       </div>
     );
   };
@@ -1098,98 +1147,29 @@ const OptionChain: React.FC = () => {
                       const bottomPx = (maxBarPct / 100) * 180 + 16;
                       return (
                       <div className="oc-chart__tooltip" style={{ bottom: `${bottomPx}px` }}>
-                        <div className="oc-chart__tooltip-title">{row.strike}</div>
-                        <div className="oc-chart__tooltip-row">
-                          <span className="oc-chart__tooltip-ce">CE OI:</span>
-                          <span>{ceOi.toLocaleString('en-IN')}</span>
+                        <div className="oc-tip__header">
+                          <span className="oc-tip__strike">{row.strike}{isAtm && <span className="oc-tip__atm">ATM</span>}</span>
+                          <span className="oc-tip__pcr">PCR <strong>{ceOi > 0 ? (peOi / ceOi).toFixed(2) : '-'}</strong></span>
                         </div>
-                        {cePrevOi > 0 && <div className="oc-chart__tooltip-row">
-                          <span className="oc-chart__tooltip-ce">CE Chg:</span>
-                          <span className={ceOi >= cePrevOi ? 'positive' : 'negative'}>{ceOi >= cePrevOi ? '+' : ''}{(((ceOi - cePrevOi) / cePrevOi) * 100).toFixed(2)}%</span>
-                        </div>}
-                        {row.ce && renderFlowRow('CE', flowByToken.get(row.ce.instrumentToken))}
-                        {ceVelocity && (() => {
-                           const cePattern = row.ce ? analyzeVelocityPattern(row.ce.instrumentToken, ceVelocity.currentOi, snapshots) : null;
-                           return (
-                             <>
-                               <div className="oc-chart__tooltip-row">
-                                 <span className="oc-chart__tooltip-ce">CE Vel:</span>
-                                 <span className={ceVelocity.changePct >= 0 ? 'positive' : 'negative'}>{ceVelocity.changePct >= 0 ? '+' : ''}{ceVelocity.changePct.toFixed(2)}% / {ceVelocity.intervalMinutes}m</span>
-                               </div>
-                               {cePattern && (
-                                 <div className="oc-chart__tooltip-pattern oc-chart__tooltip-pattern--ce">
-                                   <svg className="oc-chart__sparkline" viewBox={`0 0 60 20`} preserveAspectRatio="none">
-                                     <polyline
-                                       points={cePattern.series.map((v, i) => `${(i / (cePattern.series.length - 1)) * 60},${(1 - v) * 20}`).join(' ')}
-                                       fill="none"
-                                       stroke={cePattern.direction === 'up' ? '#4ade80' : cePattern.direction === 'down' ? '#f87171' : '#94a3b8'}
-                                       strokeWidth="1.5"
-                                       strokeLinejoin="round"
-                                       strokeLinecap="round"
-                                     />
-                                   </svg>
-                                   <span className={`oc-chart__pattern-label oc-chart__pattern-label--${cePattern.direction}`}>{cePattern.label}</span>
-                                 </div>
-                               )}
-                             </>
-                           );
-                         })()}
-                        <div className="oc-chart__tooltip-row">
-                          <span className="oc-chart__tooltip-pe">PE OI:</span>
-                          <span>{peOi.toLocaleString('en-IN')}</span>
-                        </div>
-                        {pePrevOi > 0 && <div className="oc-chart__tooltip-row">
-                          <span className="oc-chart__tooltip-pe">PE Chg:</span>
-                          <span className={peOi >= pePrevOi ? 'positive' : 'negative'}>{peOi >= pePrevOi ? '+' : ''}{(((peOi - pePrevOi) / pePrevOi) * 100).toFixed(2)}%</span>
-                        </div>}
-                        {row.pe && renderFlowRow('PE', flowByToken.get(row.pe.instrumentToken))}
-                        {peVelocity && (() => {
-                           const pePattern = row.pe ? analyzeVelocityPattern(row.pe.instrumentToken, peVelocity.currentOi, snapshots) : null;
-                           return (
-                             <>
-                               <div className="oc-chart__tooltip-row">
-                                 <span className="oc-chart__tooltip-pe">PE Vel:</span>
-                                 <span className={peVelocity.changePct >= 0 ? 'positive' : 'negative'}>{peVelocity.changePct >= 0 ? '+' : ''}{peVelocity.changePct.toFixed(2)}% / {peVelocity.intervalMinutes}m</span>
-                               </div>
-                               {pePattern && (
-                                 <div className="oc-chart__tooltip-pattern oc-chart__tooltip-pattern--pe">
-                                   <svg className="oc-chart__sparkline" viewBox={`0 0 60 20`} preserveAspectRatio="none">
-                                     <polyline
-                                       points={pePattern.series.map((v, i) => `${(i / (pePattern.series.length - 1)) * 60},${(1 - v) * 20}`).join(' ')}
-                                       fill="none"
-                                       stroke={pePattern.direction === 'up' ? '#4ade80' : pePattern.direction === 'down' ? '#f87171' : '#94a3b8'}
-                                       strokeWidth="1.5"
-                                       strokeLinejoin="round"
-                                       strokeLinecap="round"
-                                     />
-                                   </svg>
-                                   <span className={`oc-chart__pattern-label oc-chart__pattern-label--${pePattern.direction}`}>{pePattern.label}</span>
-                                 </div>
-                               )}
-                             </>
-                           );
-                         })()}
-                        <div className="oc-chart__tooltip-row">
-                          <span>PCR:</span>
-                          <span>{ceOi > 0 ? (peOi / ceOi).toFixed(2) : '-'}</span>
-                        </div>
+                        {renderTooltipSide('CE', row.ce, ceOi, cePrevOi, ceVelocity)}
+                        {renderTooltipSide('PE', row.pe, peOi, pePrevOi, peVelocity)}
                         {(() => {
                           const signal = strikeSignals.get(row.strike);
                           return signal ? (
-                            <>
-                              <div className="oc-chart__tooltip-row oc-chart__tooltip-signal">
-                                <span>Signal:</span>
-                                <span style={{ color: signal.color }}>{signal.label}</span>
+                            <div className="oc-tip__signal">
+                              <div className="oc-tip__row">
+                                <span>Signal</span>
+                                <span style={{ color: signal.color, fontWeight: 600 }}>{signal.label}</span>
                               </div>
                               {signal.confidence && (
-                                <div className="oc-chart__tooltip-row oc-chart__tooltip-signal">
-                                  <span>Vol:</span>
+                                <div className="oc-tip__row">
+                                  <span>Volume</span>
                                   <span className={`oc-chart__tooltip-confidence oc-chart__tooltip-confidence--${signal.confidence}`}>
                                     {signal.confidence === 'high' ? 'Confirmed' : signal.confidence === 'medium' ? 'Normal' : 'Low Vol'}
                                   </span>
                                 </div>
                               )}
-                            </>
+                            </div>
                           ) : null;
                         })()}
                         {orderMode === 'paper' && (
