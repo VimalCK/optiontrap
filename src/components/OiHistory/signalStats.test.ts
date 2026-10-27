@@ -88,13 +88,14 @@ describe('summarizeSignalBreakdown', () => {
 
   it('slices by recorded context and skips signals without it', () => {
     const rows = summarizeSignalBreakdown([
-      signal({ details: { priceTrend: { direction: 'Downward' }, decay: { daysToExpiry: 1 }, strikePattern: 'Short Buildup', flowBias: 'Downward' } }),
-      signal({ details: { priceTrend: { direction: 'Upward' }, decay: { daysToExpiry: 5 } } }),
+      signal({ details: { priceTrend: { direction: 'Downward' }, decay: { daysToExpiry: 1 }, strikePattern: 'Short Buildup', flowBias: 'Downward', ivFlow: 'Writers Adding' } }),
+      signal({ details: { priceTrend: { direction: 'Upward' }, decay: { daysToExpiry: 5 }, ivFlow: 'Buyers Adding' } }),
       signal({ details: { decay: { daysToExpiry: 20 } } }),
       signal({ details: null }),
     ]);
 
     expect(rows.filter((r) => r.group === 'OI pattern').map((r) => [r.label, r.total])).toEqual([['Short Buildup', 1]]);
+    expect(rows.filter((r) => r.group === 'IV flow').map((r) => r.label)).toEqual(['Buyers Adding', 'Writers Adding']);
     expect(rows.filter((r) => r.group === 'Option flow').map((r) => r.label)).toEqual(['Downward']);
     expect(rows.filter((r) => r.group === 'Price trend').map((r) => r.label)).toEqual(['Upward', 'Downward']);
     expect(rows.filter((r) => r.group === 'Days to expiry').map((r) => r.label)).toEqual(['0–2 days', '3–7 days', '8+ days']);

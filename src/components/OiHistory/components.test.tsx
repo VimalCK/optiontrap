@@ -79,6 +79,7 @@ describe('OiSnapshotTable', () => {
         atmStrike={22500}
         spotClose={22450}
         maxConsolidatedOi={1_900_000}
+        flowByToken={new Map()}
         selectedStrike={22500}
         onSelectStrike={() => {}}
         onTrade={() => {}}
@@ -91,6 +92,35 @@ describe('OiSnapshotTable', () => {
     expect(html).toContain('Oct 27 (M)');
     expect(html).toContain('oi-history__row--atm');
     expect(html.match(/oi-history__action-btn--buy/g)).toHaveLength(2);
+    expect(html).not.toContain('oi-history__flow-label');
+  });
+
+  it('shows the IV flow under the pattern with its details on hover', () => {
+    const flowByToken = new Map([[11, {
+      label: 'Writers Adding' as const,
+      iv: 0.14, prevIv: 0.16, ivChange: -0.02, atmIvChange: -0.005, relIvChange: -0.015,
+      delta: 0.45, oiChange: 900_000, deltaOiChange: 405_000, churn: 0.6, unusual: 3.2, recentShare: 0.55,
+    }]]);
+    const html = renderToStaticMarkup(
+      <OiSnapshotTable
+        rows={rows}
+        expiries={['2026-10-27']}
+        isMonthlyExpiry={() => true}
+        filterDate="2026-10-23"
+        atmStrike={22500}
+        spotClose={22450}
+        maxConsolidatedOi={1_900_000}
+        flowByToken={flowByToken}
+        selectedStrike={22500}
+        onSelectStrike={() => {}}
+        onTrade={() => {}}
+      />,
+    );
+    expect(html).toContain('IV: Writers Adding');
+    expect(html).toContain('IV 14.0% (-2.0 pts, -1.5 vs ATM)');
+    expect(html).toContain('Delta-weighted OI chg +405.0K (delta 0.45)');
+    expect(html).toContain('3.2× this strike');
+    expect(html).toContain('55% of OI added in last 3 sessions');
   });
 });
 

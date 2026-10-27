@@ -305,6 +305,8 @@ export interface TradeSignalDetails {
   flowBias?: string;
   /** OI pattern of the traded option at the strike on the signal date. */
   strikePattern?: string;
+  /** IV-based flow label of the traded contract on the signal date (see services/oiFlow). */
+  ivFlow?: string;
 }
 
 export type SignalVerdict = 'Working' | 'Mixed' | 'Losing' | 'Too few';

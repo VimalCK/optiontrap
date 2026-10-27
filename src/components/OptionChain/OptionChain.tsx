@@ -5,6 +5,7 @@ import { calculateExpectedMove } from '@/services/edgeScore';
 import { saveOiSnapshot, getTodaySnapshots, calculateVelocity, shouldTakeSnapshot, analyzeVelocityPattern, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
 import { computeStrikeSignals } from '@/services/combinedSignal';
 import { addPosition } from '@/services/positions';
+import { computeLiveFlow, describeFlow, flowColor, type FlowReading } from '@/services/oiFlow';
 
 type PaperTradeSide = 'BUY' | 'SELL';
 
@@ -24,6 +25,7 @@ const TrapInfoDetail: React.FC = () => (
       <li><strong>Long Unwinding</strong> — OI ↓ + Price ↓ — Buyers exiting, giving up (bearish)</li>
       <li><strong>Short Covering</strong> — OI ↓ + Price ↑ — Sellers exiting, bears giving up (bullish)</li>
     </ul>
+    <p><strong>IV Flow</strong> is shown next to it. An option premium also moves with spot, time decay and chain-wide IV, so IV Flow compares the strike&apos;s implied-volatility change with the ATM change instead: OI ↑ + IV ↑ = Buyers Adding, OI ↑ + IV ↓ = Writers Adding, OI ↓ + IV ↓ = Buyers Exiting, OI ↓ + IV ↑ = Writers Covering. It is shown for comparison and does not change the trap score yet.</p>
 
     <h5>3. PCR (Put-Call Ratio)</h5>
     <p>Total PE OI divided by Total CE OI across all strikes.</p>
@@ -116,6 +118,7 @@ const OptionChain: React.FC = () => {
   const [volumeData, setVolumeData] = useState<Map<number, number>>(new Map());
   const [prevDayOi, setPrevDayOi] = useState<Map<number, number>>(new Map());
   const [spotPrice, setSpotPrice] = useState<number>(0);
+  const [spotPrevClose, setSpotPrevClose] = useState<number>(0);
   const [selectedChartStrike, setSelectedChartStrike] = useState<number | null>(null);
   const [showOiChartInfo, setShowOiChartInfo] = useState(false);
   const [showSellStrategyInfo, setShowSellStrategyInfo] = useState(false);
@@ -236,7 +239,10 @@ const OptionChain: React.FC = () => {
   const handleTicks = useCallback((ticks: Tick[]) => {
     // Update spot price eagerly (not a Map, no clone needed)
     const spotTick = ticks.find((t) => t.instrumentToken === spotToken);
-    if (spotTick) setSpotPrice(spotTick.lastPrice);
+    if (spotTick) {
+      setSpotPrice(spotTick.lastPrice);
+      if (spotTick.closePrice && spotTick.closePrice > 0) setSpotPrevClose(spotTick.closePrice);
+    }
 
     const priceTicks = ticks.filter((t) => t.instrumentToken !== spotToken);
 
@@ -303,6 +309,7 @@ const OptionChain: React.FC = () => {
       // Update spot token for the selected symbol
       const token = getSpotToken(selectedSymbol);
       if (token) setSpotToken(token);
+      setSpotPrevClose(0);
     } catch (err) {
       if (isAbortError(err)) return;
       const msg = err instanceof Error ? err.message : 'Failed to load option chain';
@@ -377,6 +384,12 @@ const OptionChain: React.FC = () => {
     });
     return count > 0 ? total / count : 0;
   }, [visibleChain, volumeData]);
+
+  // IV-based flow per option against the previous close (shown alongside OI + Price, not scored)
+  const flowByToken = useMemo(
+    () => computeLiveFlow(chain, oiData, prevDayOi, livePrices, closePrices, spotPrice, spotPrevClose || undefined, volumeData),
+    [chain, oiData, prevDayOi, livePrices, closePrices, spotPrice, spotPrevClose, volumeData],
+  );
 
   // Compute combined CE+PE market stance signal per strike
   const strikeSignals = useMemo(
@@ -590,7 +603,10 @@ const OptionChain: React.FC = () => {
       setClosePrices(closeMap);
 
       const spotQuote = quotes.get(spotQuoteKey);
-      if (spotQuote) setSpotPrice(spotQuote.last_price);
+      if (spotQuote) {
+        setSpotPrice(spotQuote.last_price);
+        if (spotQuote.ohlc.close > 0) setSpotPrevClose(spotQuote.ohlc.close);
+      }
 
       // Log any missing instruments
       const missing: string[] = [];
@@ -647,6 +663,18 @@ const OptionChain: React.FC = () => {
     const pct = ((currentOi - prevOi) / prevOi) * 100;
     const color = pct > 0 ? 'positive' : pct < 0 ? 'negative' : '';
     return { pct, color };
+  };
+
+  // Tooltip row for an option's IV flow; hover it for IV and freshness details.
+  const renderFlowRow = (side: 'CE' | 'PE', reading: FlowReading | undefined) => {
+    if (!reading || reading.label === '-') return null;
+    const rel = reading.relIvChange !== null ? ` (${reading.relIvChange >= 0 ? '+' : ''}${(reading.relIvChange * 100).toFixed(1)} vs ATM)` : '';
+    return (
+      <div className="oc-chart__tooltip-row" title={describeFlow(reading).join('\n')}>
+        <span className={side === 'CE' ? 'oc-chart__tooltip-ce' : 'oc-chart__tooltip-pe'}>{side} Flow:</span>
+        <span style={{ color: flowColor(reading.label) }}>{reading.label}{rel}</span>
+      </div>
+    );
   };
 
   // Strike columns shrink to the card width, so thin out strike labels to avoid overlap.
@@ -1079,6 +1107,7 @@ const OptionChain: React.FC = () => {
                           <span className="oc-chart__tooltip-ce">CE Chg:</span>
                           <span className={ceOi >= cePrevOi ? 'positive' : 'negative'}>{ceOi >= cePrevOi ? '+' : ''}{(((ceOi - cePrevOi) / cePrevOi) * 100).toFixed(2)}%</span>
                         </div>}
+                        {row.ce && renderFlowRow('CE', flowByToken.get(row.ce.instrumentToken))}
                         {ceVelocity && (() => {
                            const cePattern = row.ce ? analyzeVelocityPattern(row.ce.instrumentToken, ceVelocity.currentOi, snapshots) : null;
                            return (
@@ -1113,6 +1142,7 @@ const OptionChain: React.FC = () => {
                           <span className="oc-chart__tooltip-pe">PE Chg:</span>
                           <span className={peOi >= pePrevOi ? 'positive' : 'negative'}>{peOi >= pePrevOi ? '+' : ''}{(((peOi - pePrevOi) / pePrevOi) * 100).toFixed(2)}%</span>
                         </div>}
+                        {row.pe && renderFlowRow('PE', flowByToken.get(row.pe.instrumentToken))}
                         {peVelocity && (() => {
                            const pePattern = row.pe ? analyzeVelocityPattern(row.pe.instrumentToken, peVelocity.currentOi, snapshots) : null;
                            return (
@@ -1345,6 +1375,7 @@ const OptionChain: React.FC = () => {
             onModeChange={setStrategyMode}
             volumeData={volumeData}
             avgVolume={avgVolume}
+            flowByToken={flowByToken}
           />
         </div>
       )}

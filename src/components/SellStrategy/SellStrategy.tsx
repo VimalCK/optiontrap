@@ -13,6 +13,7 @@ import { calculateMaxPain, calculatePCR } from '@/services/trapAnalysis';
 import { calculateExpectedMove } from '@/services/edgeScore';
 import { addPosition } from '@/services/positions';
 import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
+import type { FlowReading } from '@/services/oiFlow';
 import '@/styles/sellstrategy.css';
 
 export type StrategyMode = 'sell' | 'buy' | 'analyzer';
@@ -34,6 +35,8 @@ interface SellStrategyProps {
   onModeChange: (mode: StrategyMode) => void;
   volumeData: Map<number, number>;
   avgVolume: number;
+  /** IV-based flow per option token, shown in the trap analyzer. */
+  flowByToken?: Map<number, FlowReading>;
 }
 
 function scoreColorClass(score: number): string {
@@ -107,6 +110,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
   onModeChange,
   volumeData,
   avgVolume,
+  flowByToken,
 }) => {
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
@@ -303,6 +307,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
             daysToExpiry={daysToExpiry}
             maxPain={maxPain}
             expectedMove={expectedMove}
+            flowByToken={flowByToken}
           />
         ) : (
           <div className="sell-strategy__empty">
@@ -330,6 +335,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           daysToExpiry={daysToExpiry}
           maxPain={maxPain}
           expectedMove={expectedMove}
+          flowByToken={flowByToken}
         />
       ) : recommendations.length === 0 ? (
         <div className="sell-strategy__empty">

@@ -730,6 +730,13 @@
   min-width: 80px;
 }
 
+.oi-history__flow-label {
+  margin-top: 2px;
+  font-size: 9px;
+  font-weight: 500;
+  opacity: 0.85;
+}
+
 .oi-history__cell--ce,
 .oi-history__cell--pe {
   vertical-align: middle;

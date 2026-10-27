@@ -16,6 +16,7 @@ import { FuturesContext } from './FuturesContext';
 import { OiSnapshotTable } from './OiSnapshotTable';
 import { StrikeOiChart } from './StrikeOiChart';
 import { TradeSetupDashboard } from './TradeSetupDashboard';
+import { computeFlowReadings, marketCloseIST, type FlowInput, type FlowReading } from '@/services/oiFlow';
 
 const OiHistory: React.FC = () => {
   const navigate = useNavigate();
@@ -553,6 +554,54 @@ const OiHistory: React.FC = () => {
     return map;
   }, [prevDateRows]);
 
+  /** Daily OI per token, oldest first, for judging how unusual and how recent an OI change is. */
+  const oiSeriesByToken = useMemo(() => {
+    const map = new Map<number, { date: string; oi: number }[]>();
+    for (const r of data) {
+      if (!r.optionType) continue;
+      const list = map.get(r.instrumentToken);
+      if (list) list.push({ date: r.date, oi: r.oi });
+      else map.set(r.instrumentToken, [{ date: r.date, oi: r.oi }]);
+    }
+    for (const list of map.values()) list.sort((a, b) => a.date.localeCompare(b.date));
+    return map;
+  }, [data]);
+
+  /** IV-based flow for every option on the selected date, keyed by instrument token. */
+  const flowByToken = useMemo(() => {
+    const idx = availableDates.indexOf(filterDate);
+    if (idx <= 0) return new Map<number, FlowReading>();
+    const prevDate = availableDates[idx - 1];
+    const prevSpot = prevDateRows.find((r) => r.spotClose > 0)?.spotClose;
+    const asOf = marketCloseIST(filterDate);
+    const prevAsOf = marketCloseIST(prevDate);
+
+    const inputs: FlowInput[] = [];
+    for (const r of filteredRows) {
+      if (!r.strike || !r.expiry || (r.optionType !== 'CE' && r.optionType !== 'PE') || !(r.spotClose > 0)) continue;
+      const oiHistory = (oiSeriesByToken.get(r.instrumentToken) ?? [])
+        .filter((entry) => entry.date < filterDate)
+        .map((entry) => entry.oi);
+      inputs.push({
+        token: r.instrumentToken,
+        optionType: r.optionType,
+        strike: r.strike,
+        expiry: r.expiry,
+        oi: r.oi,
+        prevOi: prevDayOi.get(r.instrumentToken),
+        price: r.close,
+        prevPrice: prevDayClose.get(r.instrumentToken),
+        spot: r.spotClose,
+        prevSpot,
+        asOf,
+        prevAsOf,
+        volume: r.volume,
+        oiHistory,
+      });
+    }
+    return computeFlowReadings(inputs);
+  }, [filteredRows, prevDateRows, prevDayOi, prevDayClose, oiSeriesByToken, availableDates, filterDate]);
+
   /** ATM strike for the selected date */
   const atmStrike = useMemo(() => {
     if (filteredRows.length === 0) return null;
@@ -843,6 +892,9 @@ const OiHistory: React.FC = () => {
     // server merges details, so a pattern recorded earlier is kept.
     const strikeRow = filterDate === signalDate ? tableData.find((row) => row.strike === selectedStrike) : undefined;
     const strikePattern = strikeRow ? (optionType === 'CE' ? strikeRow.cePattern : strikeRow.pePattern) : null;
+    const strikeCell = strikeRow?.cells.get(expiry);
+    const flowToken = strikeCell ? (optionType === 'CE' ? strikeCell.ceToken : strikeCell.peToken) : undefined;
+    const ivFlow = flowToken !== undefined ? flowByToken.get(flowToken)?.label : undefined;
 
     void apiClient.post('/api/oi-history/signals', {
         scrip,
@@ -864,12 +916,13 @@ const OiHistory: React.FC = () => {
           decay: side ? { decayPct: side.decayPct, score: side.score, daysToExpiry: side.daysToExpiry, latestVolume: side.latestVolume } : null,
           flowBias: chartData.biasSummary.bias,
           ...(strikePattern && strikePattern !== '-' ? { strikePattern } : {}),
+          ...(ivFlow && ivFlow !== '-' ? { ivFlow } : {}),
         },
       },
     ).catch(() => {
       // Logging must never affect the Trade Setup UI.
     });
-  }, [chartData, data, scrip, dataScrip, selectedStrike, filterDate, tableData]);
+  }, [chartData, data, scrip, dataScrip, selectedStrike, filterDate, tableData, flowByToken]);
 
   useEffect(() => {
     if (!chartData || !scrip) return;
@@ -1251,6 +1304,7 @@ const OiHistory: React.FC = () => {
           atmStrike={atmStrike}
           spotClose={selectedSpotClose}
           maxConsolidatedOi={maxConsolidatedOi}
+          flowByToken={flowByToken}
           selectedStrike={selectedStrike}
           onSelectStrike={setSelectedStrike}
           onTrade={handleTrade}

@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { OptionChainRow } from '@/services/optionChain';
 import { analyzeTrap, buildTrapContext, TrapAnalysis } from '@/services/trapAnalysis';
 import AppSelect from '@/components/AppSelect/AppSelect';
+import { describeFlow, flowColor, type FlowReading } from '@/services/oiFlow';
 import '@/styles/trapanalyzer.css';
 
 interface TrapAnalyzerProps {
@@ -15,6 +16,8 @@ interface TrapAnalyzerProps {
   daysToExpiry?: number;
   maxPain: number;
   expectedMove: number;
+  /** IV-based flow per option token; shown next to the OI signal, not scored. */
+  flowByToken?: Map<number, FlowReading>;
 }
 
 type PositionSide = 'buy' | 'sell';
@@ -31,6 +34,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   daysToExpiry,
   maxPain,
   expectedMove,
+  flowByToken,
 }) => {
   const [positionSide, setPositionSide] = useState<PositionSide>('sell');
   const [selectedStrike, setSelectedStrike] = useState<number>(atmStrike);
@@ -87,8 +91,11 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
     setView('single');
   };
 
-  const renderVerdict = (analysis: TrapAnalysis, label: string) => {
+  const renderVerdict = (analysis: TrapAnalysis, label: 'CE' | 'PE') => {
     const verdictClass = `trap-verdict--${analysis.verdict}`;
+    const row = chain.find((r) => r.strike === selectedStrike);
+    const option = label === 'CE' ? row?.ce : row?.pe;
+    const flow = option ? flowByToken?.get(option.instrumentToken) : undefined;
     return (
       <div className={`trap-verdict ${verdictClass}`}>
         <div className="trap-verdict__header">
@@ -107,6 +114,15 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
               {analysis.oiSignal.label}
             </span>
           </div>
+          {flow && flow.label !== '-' && (
+            <div className="trap-detail" title={describeFlow(flow).join('\n')}>
+              <span className="trap-detail__label">IV Flow</span>
+              <span className="trap-detail__value" style={{ color: flowColor(flow.label) }}>
+                {flow.label}
+                {flow.relIvChange !== null && ` (${flow.relIvChange >= 0 ? '+' : ''}${(flow.relIvChange * 100).toFixed(1)} IV vs ATM)`}
+              </span>
+            </div>
+          )}
           <div className="trap-detail">
             <span className="trap-detail__label">Max Pain</span>
             <span className="trap-detail__value">

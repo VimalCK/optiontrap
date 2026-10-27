@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { OiCellData, OiTableRow } from './types';
 import { formatOiWithChg, formatFullDateLabel } from './helpers';
 import { patternColor, expiryLabel } from './analysis';
+import { describeFlow, flowColor, type FlowReading } from '@/services/oiFlow';
 
 interface OiSnapshotTableProps {
   rows: OiTableRow[];
@@ -11,6 +12,8 @@ interface OiSnapshotTableProps {
   atmStrike: number | null;
   spotClose: number | null;
   maxConsolidatedOi: number;
+  /** IV-based flow per instrument token for the selected date. */
+  flowByToken: Map<number, FlowReading>;
   selectedStrike: number | null;
   onSelectStrike: (strike: number) => void;
   onTrade: (cell: OiCellData, optionType: 'CE' | 'PE', side: 'BUY' | 'SELL', strike: number, expiry: string) => void;
@@ -25,11 +28,16 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
   atmStrike,
   spotClose,
   maxConsolidatedOi,
+  flowByToken,
   selectedStrike,
   onSelectStrike,
   onTrade,
 }) => {
   const [showPatternInfo, setShowPatternInfo] = useState(false);
+
+  const flowFor = (token: number | undefined) => (token !== undefined ? flowByToken.get(token) : undefined);
+  const flowTitle = (heading: string, reading: FlowReading | undefined) =>
+    reading ? [`${heading}: ${reading.label}`, ...describeFlow(reading)].join('\n') : '';
 
   return (
     <div className="oi-history__table-wrap card">
@@ -73,6 +81,18 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
           <li><strong style={{ color: '#ef4444' }}>Long Unwinding</strong> — OI ↓ + Price ↓ — Buyers exiting, giving up. Weakness in that direction.</li>
           <li><strong style={{ color: '#22c55e' }}>Short Covering</strong> — OI ↓ + Price ↑ — Sellers exiting, bears retreating. Bullish reversal signal.</li>
         </ul>
+
+        <h5>IV Flow (second line, nearest expiry)</h5>
+        <p>Option premiums also move with spot, time decay and chain-wide IV, so OI + Price can mislabel. IV Flow solves implied volatility from each premium and compares the strike&apos;s IV change with the ATM IV change of the same expiry, leaving only strike-specific demand or supply.</p>
+        <ul>
+          <li><strong style={{ color: '#22c55e' }}>Buyers Adding</strong> — OI ↑ + IV ↑ vs ATM — buyers are paying up for this strike.</li>
+          <li><strong style={{ color: '#ef4444' }}>Writers Adding</strong> — OI ↑ + IV ↓ vs ATM — writers are pressing premiums down.</li>
+          <li><strong style={{ color: '#ef4444' }}>Buyers Exiting</strong> — OI ↓ + IV ↓ vs ATM — longs closing out.</li>
+          <li><strong style={{ color: '#22c55e' }}>Writers Covering</strong> — OI ↓ + IV ↑ vs ATM — shorts buying back.</li>
+          <li><strong style={{ color: 'var(--text-secondary)' }}>Unclear</strong> — OI moved but IV did not move against ATM (under 0.5 pts).</li>
+          <li><strong style={{ color: 'var(--text-secondary)' }}>Stable</strong> — OI change is normal for this strike (under 1.5× its usual daily change, or under 2% without enough history).</li>
+        </ul>
+        <p>Hover a CE or PE cell for its IV, delta-weighted OI change (50K at ATM outweighs 50K far OTM), how unusual the change is for that strike, OI change as a share of volume (low means intraday churn), and how much of the OI was added in the last 3 sessions. OI never shows why a position exists — covered calls, spread legs, hedges and arbitrage look the same — so treat these as hints, not verdicts.</p>
 
         <h5>Rollover Patterns (multiple expiries / weekly scrips)</h5>
         <ul>
@@ -125,6 +145,12 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
               const isPeItm = spotClose !== null && spotClose > 0 && strike > spotClose;
               const ceBarWidth = maxConsolidatedOi > 0 ? (ceConsolidatedOi / maxConsolidatedOi) * 50 : 0;
               const peBarWidth = maxConsolidatedOi > 0 ? (peConsolidatedOi / maxConsolidatedOi) * 50 : 0;
+              const ceFlowExpiry = expiries.find((exp) => cells.get(exp)?.ceToken !== undefined);
+              const peFlowExpiry = expiries.find((exp) => cells.get(exp)?.peToken !== undefined);
+              const ceFlow = ceFlowExpiry ? flowFor(cells.get(ceFlowExpiry)?.ceToken) : undefined;
+              const peFlow = peFlowExpiry ? flowFor(cells.get(peFlowExpiry)?.peToken) : undefined;
+              const flowHeading = (side: string, exp: string | undefined) =>
+                `${side} IV flow (${exp ? expiryLabel(exp, isMonthlyExpiry(exp)) : '-'})`;
               return (
                 <tr
                   key={strike}
@@ -135,9 +161,12 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
                   <td
                     className="oi-history__cell--pattern oi-history__cell--pattern-ce"
                     style={{ color: patternColor(cePattern) }}
-                    title={`CE pattern: ${cePattern}`}
+                    title={[`CE pattern: ${cePattern}`, flowTitle(flowHeading('CE', ceFlowExpiry), ceFlow)].filter(Boolean).join('\n\n')}
                   >
                     {cePattern}
+                    {ceFlow && ceFlow.label !== '-' && (
+                      <div className="oi-history__flow-label" style={{ color: flowColor(ceFlow.label) }}>IV: {ceFlow.label}</div>
+                    )}
                   </td>
 
                   {/* CE data per expiry */}
@@ -146,7 +175,7 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
                     const { text, chgCls } = formatOiWithChg(cell?.ceOi || 0, cell?.cePrevOi);
                     const closePrice = cell?.ceClose || 0;
                     return (
-                      <td key={`ce-${exp}`} className={`oi-history__cell--ce oi-history__cell--tradeable ${isCeItm ? 'oi-history__cell--itm-ce' : ''} ${chgCls}`}>
+                      <td key={`ce-${exp}`} title={flowTitle('CE IV flow', flowFor(cell?.ceToken)) || undefined} className={`oi-history__cell--ce oi-history__cell--tradeable ${isCeItm ? 'oi-history__cell--itm-ce' : ''} ${chgCls}`}>
                         <div className="oi-history__cell-content">
                           <span className="oi-history__cell-primary">{text}</span>
                           {closePrice > 0 && <span className="oi-history__cell-price">₹{closePrice.toFixed(closePrice < 10 ? 2 : closePrice < 100 ? 1 : 0)}</span>}
@@ -176,7 +205,7 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
                     const { text, chgCls } = formatOiWithChg(cell?.peOi || 0, cell?.pePrevOi);
                     const closePrice = cell?.peClose || 0;
                     return (
-                      <td key={`pe-${exp}`} className={`oi-history__cell--pe oi-history__cell--tradeable ${isPeItm ? 'oi-history__cell--itm-pe' : ''} ${chgCls}`}>
+                      <td key={`pe-${exp}`} title={flowTitle('PE IV flow', flowFor(cell?.peToken)) || undefined} className={`oi-history__cell--pe oi-history__cell--tradeable ${isPeItm ? 'oi-history__cell--itm-pe' : ''} ${chgCls}`}>
                         <div className="oi-history__cell-content">
                           <span className="oi-history__cell-primary">{text}</span>
                           {closePrice > 0 && <span className="oi-history__cell-price">₹{closePrice.toFixed(closePrice < 10 ? 2 : closePrice < 100 ? 1 : 0)}</span>}
@@ -195,9 +224,12 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
                   <td
                     className="oi-history__cell--pattern oi-history__cell--pattern-pe"
                     style={{ color: patternColor(pePattern) }}
-                    title={`PE pattern: ${pePattern}`}
+                    title={[`PE pattern: ${pePattern}`, flowTitle(flowHeading('PE', peFlowExpiry), peFlow)].filter(Boolean).join('\n\n')}
                   >
                     {pePattern}
+                    {peFlow && peFlow.label !== '-' && (
+                      <div className="oi-history__flow-label" style={{ color: flowColor(peFlow.label) }}>IV: {peFlow.label}</div>
+                    )}
                   </td>
                 </tr>
               );
