@@ -140,9 +140,9 @@
 }
 
 /* Fixed column widths — prevents layout recalc on live data updates */
-.option-chain-table col.oc-col-oi    { width: 25%; }
+.option-chain-table col.oc-col-oi    { width: 24%; }
 .option-chain-table col.oc-col-ltp   { width: 22%; }
-.option-chain-table col.oc-col-strike { width: 6%; }
+.option-chain-table col.oc-col-strike { width: 8%; }
 
 .option-chain-table th {
   text-align: center;
@@ -184,6 +184,19 @@
 .oc-header-strike {
   text-align: center;
   background: var(--sidebar-hover);
+}
+
+/* The strike column is narrow; small side padding keeps the label and value
+   inside it so they stay centred instead of spilling to the right. */
+.option-chain-table th.oc-header-strike,
+.option-chain-table td.oc-cell-strike {
+  padding-left: 2px;
+  padding-right: 2px;
+}
+
+/* Uppercase letter-spacing trails after the last letter; pull it back so the label centres. */
+.option-chain-table th.oc-header-strike {
+  text-indent: 0.5px;
 }
 
 .option-chain-table tbody tr:hover {
@@ -253,8 +266,9 @@
 .oc-strike-bars {
   position: absolute;
   bottom: 0;
-  left: -780%;
-  right: -780%;
+  /* Spans the OI + LTP columns on each side: 46% of the table ÷ 8% strike column */
+  left: -575%;
+  right: -575%;
   height: 3px;
   pointer-events: none;
   overflow: visible;
