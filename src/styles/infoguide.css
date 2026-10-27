@@ -1,0 +1,228 @@
+/* ── Info guide: the explainer panels behind the ⓘ buttons ─────────────── */
+.info-guide {
+  margin-bottom: 14px;
+  padding: 16px;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.info-guide p {
+  margin: 0;
+}
+
+.info-guide__intro {
+  margin-bottom: 14px;
+  max-width: 760px;
+}
+
+.info-guide__title {
+  margin: 0 0 4px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.info-guide__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.info-guide__section {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.info-guide__section--wide {
+  grid-column: 1 / -1;
+}
+
+.info-guide__section-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.info-guide__section-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--text-primary);
+}
+
+.info-guide__section-subtitle {
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.info-guide__section > p + p,
+.info-guide__section > p + .info-guide__rows,
+.info-guide__section > .info-guide__rows + p,
+.info-guide__section > .info-guide__terms + p {
+  margin-top: 8px;
+}
+
+.info-guide__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.info-guide__row {
+  display: grid;
+  grid-template-columns: 128px 132px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.info-guide__rows--no-rule .info-guide__row {
+  grid-template-columns: 152px minmax(0, 1fr);
+}
+
+.info-guide__rows--two-col {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 20px;
+}
+
+.info-guide__chip {
+  justify-self: start;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.info-guide__chip--bull {
+  color: #22c55e;
+  background: rgba(34, 197, 94, 0.12);
+}
+
+.info-guide__chip--bear {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.info-guide__chip--warn {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.info-guide__chip--violet {
+  color: #a78bfa;
+  background: rgba(167, 139, 250, 0.12);
+}
+
+.info-guide__chip--accent {
+  color: var(--accent);
+  background: var(--sidebar-active);
+}
+
+.info-guide__chip--muted {
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.info-guide__chip--plain {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.info-guide__rule {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.info-guide__meaning {
+  color: var(--text-secondary);
+}
+
+.info-guide__terms {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 6px 12px;
+  margin: 0;
+}
+
+.info-guide__terms dt {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.info-guide__terms dd {
+  margin: 0;
+}
+
+.info-guide__note {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border-left: 3px solid #f59e0b;
+  border-radius: 4px;
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.info-guide__note--info {
+  border-left-color: var(--accent);
+  background: var(--sidebar-active);
+}
+
+.info-guide__section .info-guide__note {
+  margin-top: 10px;
+}
+
+.info-guide__note strong {
+  color: var(--text-primary);
+}
+
+.info-guide__footer {
+  margin-top: 10px !important;
+  font-size: 11px;
+}
+
+@media (max-width: 900px) {
+  .info-guide__grid,
+  .info-guide__rows--two-col {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .info-guide__row,
+  .info-guide__rows--no-rule .info-guide__row {
+    grid-template-columns: max-content minmax(0, 1fr);
+  }
+
+  .info-guide__rule {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .info-guide__row .info-guide__meaning {
+    grid-column: 1 / -1;
+  }
+
+  .info-guide__terms {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .info-guide__terms dd {
+    margin-bottom: 6px;
+  }
+}

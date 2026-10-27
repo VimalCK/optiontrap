@@ -1,13 +1,5 @@
 import React from 'react';
-
-type Tone = 'bull' | 'bear' | 'accent' | 'muted';
-
-interface GuideRow {
-  label: string;
-  tone: Tone;
-  rule?: string;
-  meaning: string;
-}
+import { InfoGuide, GuideGrid, GuideSection, GuideRows, GuideTerms, GuideNote, GuideFooter, type GuideRow, type GuideTerm } from '@/components/InfoGuide/InfoGuide';
 
 const OI_PRICE: GuideRow[] = [
   { label: 'Long Buildup', tone: 'bull', rule: 'OI ↑ · Price ↑', meaning: 'New buyers entering. Bullish for the option.' },
@@ -16,7 +8,7 @@ const OI_PRICE: GuideRow[] = [
   { label: 'Short Covering', tone: 'bull', rule: 'OI ↓ · Price ↑', meaning: 'Sellers exiting, bears retreating.' },
 ];
 
-const IV_FLOW: GuideRow[] = [
+export const IV_FLOW_ROWS: GuideRow[] = [
   { label: 'Buyers Adding', tone: 'bull', rule: 'OI ↑ · IV ↑ vs ATM', meaning: 'Buyers are paying up for this strike.' },
   { label: 'Writers Adding', tone: 'bear', rule: 'OI ↑ · IV ↓ vs ATM', meaning: 'Writers are pressing premiums down.' },
   { label: 'Buyers Exiting', tone: 'bear', rule: 'OI ↓ · IV ↓ vs ATM', meaning: 'Longs closing out.' },
@@ -38,100 +30,47 @@ const ROLLOVER: GuideRow[] = [
   { label: 'Stable', tone: 'muted', meaning: 'No significant change (under 2%).' },
 ];
 
-const HOVER_MEASURES: { name: string; meaning: string }[] = [
-  { name: 'IV', meaning: 'Implied volatility, its change, and the change against ATM' },
-  { name: 'Delta-weighted OI', meaning: '50K at ATM outweighs 50K far OTM' },
-  { name: 'Unusual', meaning: 'OI change vs this strike’s usual daily change' },
-  { name: 'Share of volume', meaning: 'Low means intraday churn, not new positions' },
-  { name: 'Recent OI', meaning: 'Share of OI added in the last 3 sessions' },
+const HOVER_MEASURES: GuideTerm[] = [
+  { term: 'IV', meaning: 'Implied volatility, its change, and the change against ATM' },
+  { term: 'Delta-weighted OI', meaning: '50K at ATM outweighs 50K far OTM' },
+  { term: 'Unusual', meaning: 'OI change vs this strike’s usual daily change' },
+  { term: 'Share of volume', meaning: 'Low means intraday churn, not new positions' },
+  { term: 'Recent OI', meaning: 'Share of OI added in the last 3 sessions' },
 ];
 
-const EXAMPLES: { tag: string; text: string }[] = [
-  { tag: 'CE Short Buildup @ 1800', text: 'Call sellers adding, expecting price to stay below 1800. Resistance forming.' },
-  { tag: 'PE Long Buildup @ 1700', text: 'Put buyers entering, expecting a fall below 1700. Bearish bet.' },
-  { tag: 'PE Short Covering @ 1700', text: 'Put sellers exiting. Support at 1700 weakening.' },
-  { tag: 'CE Long Unwinding @ 1800', text: 'Call buyers giving up on the 1800 breakout.' },
+const EXAMPLES: GuideTerm[] = [
+  { term: 'CE Short Buildup @ 1800', meaning: 'Call sellers adding, expecting price to stay below 1800. Resistance forming.' },
+  { term: 'PE Long Buildup @ 1700', meaning: 'Put buyers entering, expecting a fall below 1700. Bearish bet.' },
+  { term: 'PE Short Covering @ 1700', meaning: 'Put sellers exiting. Support at 1700 weakening.' },
+  { term: 'CE Long Unwinding @ 1800', meaning: 'Call buyers giving up on the 1800 breakout.' },
 ];
-
-const Rows: React.FC<{ rows: GuideRow[]; compact?: boolean }> = ({ rows, compact }) => (
-  <ul className={`oi-guide__rows ${compact ? 'oi-guide__rows--compact' : ''}`}>
-    {rows.map((row) => (
-      <li key={row.label} className="oi-guide__row">
-        <span className={`oi-guide__chip oi-guide__chip--${row.tone}`}>{row.label}</span>
-        {row.rule && <span className="oi-guide__rule">{row.rule}</span>}
-        <span className="oi-guide__meaning">{row.meaning}</span>
-      </li>
-    ))}
-  </ul>
-);
 
 /** Explains the OI Snapshot pattern labels, IV flow and hover measures. */
 export const PatternGuide: React.FC = () => (
-  <div className="oi-guide">
-    <div className="oi-guide__intro">
-      <h4 className="oi-guide__title">Reading the patterns</h4>
-      <p>Each strike shows who looks active, from the day-over-day OI change. The first line uses option price; the second line (IV) is for the nearest expiry and corrects for spot, time decay and chain-wide IV moves.</p>
-    </div>
-
-    <div className="oi-guide__grid">
-      <section className="oi-guide__section">
-        <header>
-          <h5>OI + Price</h5>
-          <span>Single expiry · first line</span>
-        </header>
-        <Rows rows={OI_PRICE} />
-      </section>
-
-      <section className="oi-guide__section">
-        <header>
-          <h5>IV Flow</h5>
-          <span>Nearest expiry · second line</span>
-        </header>
-        <Rows rows={IV_FLOW} />
-      </section>
-
-      <section className="oi-guide__section oi-guide__section--wide">
-        <header>
-          <h5>Rollover</h5>
-          <span>Several expiries visible · first line</span>
-        </header>
-        <Rows rows={ROLLOVER} compact />
-      </section>
-
-      <section className="oi-guide__section">
-        <header>
-          <h5>Hover a CE / PE cell</h5>
-          <span>Freshness of the OI</span>
-        </header>
-        <dl className="oi-guide__measures">
-          {HOVER_MEASURES.map((m) => (
-            <React.Fragment key={m.name}>
-              <dt>{m.name}</dt>
-              <dd>{m.meaning}</dd>
-            </React.Fragment>
-          ))}
-        </dl>
-      </section>
-
-      <section className="oi-guide__section">
-        <header>
-          <h5>Examples</h5>
-          <span>How to read a label</span>
-        </header>
-        <ul className="oi-guide__examples">
-          {EXAMPLES.map((e) => (
-            <li key={e.tag}>
-              <span className="oi-guide__example-tag">{e.tag}</span>
-              <span className="oi-guide__meaning">{e.text}</span>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </div>
-
-    <p className="oi-guide__note">
+  <InfoGuide
+    title="Reading the patterns"
+    intro="Each strike shows who looks active, from the day-over-day OI change. The first line uses option price; the second line (IV) is for the nearest expiry and corrects for spot, time decay and chain-wide IV moves."
+  >
+    <GuideGrid>
+      <GuideSection title="OI + Price" subtitle="Single expiry · first line">
+        <GuideRows rows={OI_PRICE} />
+      </GuideSection>
+      <GuideSection title="IV Flow" subtitle="Nearest expiry · second line">
+        <GuideRows rows={IV_FLOW_ROWS} />
+      </GuideSection>
+      <GuideSection title="Rollover" subtitle="Several expiries visible · first line" wide>
+        <GuideRows rows={ROLLOVER} twoCol />
+      </GuideSection>
+      <GuideSection title="Hover a CE / PE cell" subtitle="Freshness of the OI">
+        <GuideTerms terms={HOVER_MEASURES} />
+      </GuideSection>
+      <GuideSection title="Examples" subtitle="How to read a label">
+        <GuideTerms terms={EXAMPLES} />
+      </GuideSection>
+    </GuideGrid>
+    <GuideNote>
       OI never shows <strong>why</strong> a position exists: covered calls, spread legs, hedges and arbitrage look the same. Treat labels as hints, not verdicts.
-    </p>
-    <p className="oi-guide__footer">Dimmed rows have OI below 5% of the max. Click a row to chart its OI and price across dates.</p>
-  </div>
+    </GuideNote>
+    <GuideFooter>Dimmed rows have OI below 5% of the max. Click a row to chart its OI and price across dates.</GuideFooter>
+  </InfoGuide>
 );

@@ -6,60 +6,9 @@ import { saveOiSnapshot, getTodaySnapshots, calculateVelocity, shouldTakeSnapsho
 import { computeStrikeSignals } from '@/services/combinedSignal';
 import { addPosition } from '@/services/positions';
 import { computeLiveFlow, describeFlow, flowColor } from '@/services/oiFlow';
+import { OiChartGuide, SellStrategyGuide, BuyStrategyGuide, PositionAnalyzerGuide } from './AnalyzerGuides';
 
 type PaperTradeSide = 'BUY' | 'SELL';
-
-const TrapInfoDetail: React.FC = () => (
-  <div className="trap-info-detail">
-    <h4>How Position Analyzer Works</h4>
-    <p>The analyzer combines multiple data points to determine if your option position is at risk of getting trapped by smart money.</p>
-
-    <h5>1. Max Pain</h5>
-    <p>The strike price where maximum options expire worthless. Option sellers (institutions) benefit most at this price. NIFTY tends to gravitate toward max pain near expiry. If your position profits only far from max pain, you face "gravitational pull" risk.</p>
-
-    <h5>2. OI + Price Signal</h5>
-    <p>Combines Open Interest change with price movement to classify market activity:</p>
-    <ul>
-      <li><strong>Long Buildup</strong> — OI ↑ + Price ↑ — New buyers entering aggressively (bullish)</li>
-      <li><strong>Short Buildup</strong> — OI ↑ + Price ↓ — New sellers entering aggressively (bearish)</li>
-      <li><strong>Long Unwinding</strong> — OI ↓ + Price ↓ — Buyers exiting, giving up (bearish)</li>
-      <li><strong>Short Covering</strong> — OI ↓ + Price ↑ — Sellers exiting, bears giving up (bullish)</li>
-    </ul>
-    <p><strong>IV Flow</strong> is shown next to it. An option premium also moves with spot, time decay and chain-wide IV, so IV Flow compares the strike&apos;s implied-volatility change with the ATM change instead: OI ↑ + IV ↑ = Buyers Adding, OI ↑ + IV ↓ = Writers Adding, OI ↓ + IV ↓ = Buyers Exiting, OI ↓ + IV ↑ = Writers Covering. It is shown for comparison and does not change the trap score yet.</p>
-
-    <h5>3. PCR (Put-Call Ratio)</h5>
-    <p>Total PE OI divided by Total CE OI across all strikes.</p>
-    <ul>
-      <li><strong>PCR &gt; 1.5</strong> — Heavy put selling, market unlikely to fall much (bullish bias)</li>
-      <li><strong>PCR &lt; 0.7</strong> — Heavy call selling, market unlikely to rise much (bearish bias)</li>
-      <li><strong>PCR ~1.0</strong> — Balanced, no strong directional bias</li>
-    </ul>
-
-    <h5>4. OI Walls (Support & Resistance)</h5>
-    <p>Strikes with significantly higher OI than average indicate levels where option sellers have large positions. They will defend these levels:</p>
-    <ul>
-      <li><strong>High CE OI at a strike</strong> = Resistance — call sellers will defend this level from being breached upward</li>
-      <li><strong>High PE OI at a strike</strong> = Support — put sellers will defend this level from being breached downward</li>
-    </ul>
-
-    <h5>Verdict Scoring</h5>
-    <p>Each factor contributes to a trap score (0–9 scale). The final verdict is:</p>
-    <ul>
-      <li><strong>Safe (0–1)</strong> — No significant signals against your position</li>
-      <li><strong>Caution (2–3)</strong> — Some factors suggest risk, but not conclusive</li>
-      <li><strong>Likely Trapped (4+)</strong> — Multiple strong signals indicate your position may face headwinds</li>
-    </ul>
-
-    <h5>Score Breakdown (max 9)</h5>
-    <ul>
-      <li><strong>Max Pain</strong> — Strike on wrong side of max pain: +2</li>
-      <li><strong>OI Wall</strong> — Heavy OI wall blocking your direction: +2</li>
-      <li><strong>PCR</strong> — Put-Call Ratio skewed against you: +1</li>
-      <li><strong>OI Signal</strong> — Bearish/bullish activity against your position: +2</li>
-      <li><strong>Time Pressure</strong> — Within 3 days of expiry: +1, Expiry day: +2</li>
-    </ul>
-  </div>
-);
 
 import { fetchQuotes, fetchPreviousDayOI } from '@/services/kiteApi';
 import { isAbortError } from '@/services/apiClient';
@@ -996,77 +945,7 @@ const OptionChain: React.FC = () => {
               </button>
             </div>
           </div>
-          {showOiChartInfo && (
-            <div className="trap-info-detail">
-              <h4>How to Read the OI Chart</h4>
-              <p>This chart shows Open Interest (OI) for each strike as vertical bars. Higher bars mean more contracts are open at that strike.</p>
-
-              <h5>Bar Colors</h5>
-              <ul>
-                <li><strong>Green bars (left)</strong> — CE (Call) Open Interest</li>
-                <li><strong>Red bars (right)</strong> — PE (Put) Open Interest</li>
-              </ul>
-
-              <h5>OI Change Indicators</h5>
-              <ul>
-                <li><strong>Cross-hatched top section</strong> — OI added since yesterday's close (new positions built today)</li>
-                <li><strong>Dashed marker above a shorter bar</strong> — OI decreased from yesterday (positions unwound)</li>
-              </ul>
-
-              <h5>Glow Effect</h5>
-              <p>Bars with a glowing border are <strong>volume-confirmed</strong> — both OI changed significantly AND high trading volume backs it. These are real institutional moves, not noise.</p>
-
-              <h5>Velocity Arrows (▲/▼)</h5>
-              <p>Appear during live market when OI changes rapidly (5%+ in 10 minutes). Green ▲ = fast buildup. Red ▼ = fast unwinding.</p>
-
-              <h5>Signal Heatmap (colored row below bars)</h5>
-              <p>Combines CE and PE OI+Price signals from 10-minute snapshots to show the combined market stance at each strike. Unlike velocity arrows (OI-only), this accounts for whether OI changes are buyer-driven or seller-driven.</p>
-              <ul>
-                <li><strong style={{ color: '#4ade80' }}>Green</strong> — Bullish (CE buyers + PE sellers, or strong bullish)</li>
-                <li><strong style={{ color: '#f87171' }}>Red</strong> — Bearish (CE sellers + PE buyers, or strong bearish)</li>
-                <li><strong style={{ color: '#f59e0b' }}>Amber</strong> — Pinning/Range (sellers both sides — price trapped)</li>
-                <li><strong style={{ color: '#a78bfa' }}>Purple</strong> — High Volatility or Breakout Setup (buyers both sides, or sellers exiting)</li>
-                <li><strong style={{ color: '#94a3b8' }}>Gray</strong> — De-risking or Transitional (mixed/conflicting signals)</li>
-              </ul>
-              <p>The strip only appears after the first 10-minute snapshot with price data is captured. Signals with &lt;2% OI change or &lt;0.5% price change are filtered as noise.</p>
-
-              <h5>Shaded Zone (Expected Range)</h5>
-              <p>The lightly tinted area with dashed borders shows where NIFTY is expected to stay (based on ATM straddle premium). OI walls <strong>outside</strong> this zone are stronger — price is unlikely to reach them.</p>
-
-              <h5>Bar Tooltip (click any bar)</h5>
-              <p>Clicking a strike's bar group opens a tooltip with detailed data for that strike:</p>
-              <ul>
-                <li><strong>CE/PE OI</strong> — Current open interest</li>
-                <li><strong>CE/PE Chg</strong> — OI change vs yesterday's close (%)</li>
-                <li><strong>CE/PE Vel</strong> — Intraday OI velocity: how fast OI changed in the last interval (% / minutes)</li>
-                <li><strong>Velocity Pattern</strong> — Trend analysis across all intraday snapshots (taken every 10 min):
-                  <ul>
-                    <li>A mini sparkline shows the OI curve since market open</li>
-                    <li><strong style={{ color: '#4ade80' }}>Accelerating Buildup</strong> — OI growing and speeding up (strong institutional accumulation)</li>
-                    <li><strong style={{ color: '#4ade80' }}>Steady Buildup</strong> — OI growing at a consistent pace</li>
-                    <li><strong style={{ color: '#4ade80' }}>Slowing Buildup</strong> — OI still growing but momentum is fading</li>
-                    <li><strong style={{ color: '#f87171' }}>Accelerating Unwind</strong> — OI falling and speeding up (institutions exiting fast)</li>
-                    <li><strong style={{ color: '#f87171' }}>Steady Unwind</strong> — OI falling at a consistent pace</li>
-                    <li><strong style={{ color: '#f87171' }}>Slowing Unwind</strong> — OI falling but momentum is fading (possible reversal)</li>
-                    <li><strong style={{ color: '#94a3b8' }}>Volatile</strong> — OI alternating up/down with no clear trend</li>
-                    <li><strong style={{ color: '#94a3b8' }}>Stable</strong> — OI barely moved all day</li>
-                  </ul>
-                </li>
-                <li><strong>PCR</strong> — Put/Call ratio for that specific strike</li>
-                <li><strong>Sell PE / Sell CE buttons</strong> — Quick paper position entry at current LTP</li>
-              </ul>
-
-              <h5>Key Takeaways</h5>
-              <ul>
-                <li><strong>Tallest CE bar</strong> = strongest resistance (call sellers defending that level)</li>
-                <li><strong>Tallest PE bar</strong> = strongest support (put sellers defending that level)</li>
-                <li><strong>ATM dashed line</strong> = current NIFTY spot position</li>
-                <li><strong>Glowing + velocity ▲</strong> = wall being built RIGHT NOW by institutions</li>
-                <li><strong>Accelerating Buildup pattern</strong> = institutional conviction — wall is strengthening fast</li>
-                <li><strong>Slowing Unwind pattern</strong> = sellers stopping — wall may hold despite earlier exits</li>
-              </ul>
-            </div>
-          )}
+          {showOiChartInfo && <OiChartGuide />}
           <div className="oc-chart">
             <div className="oc-chart__body">
               <div className="oc-chart__yaxis">
@@ -1281,62 +1160,9 @@ const OptionChain: React.FC = () => {
             </div>
           </div>
           {showSellStrategyInfo && (
-            <div className="sell-strategy__info">
-              {strategyMode === 'sell' ? (
-                <>
-                  <h5>How Sell Strategy Works</h5>
-                  <p>Scores each OTM strike across 5 factors to find the best option selling opportunities. Requires 20+ minutes of OI snapshot data.</p>
-                  <h5>Scoring Factors (0–100)</h5>
-                  <ul>
-                    <li><strong>Pinning (0–25)</strong> — Spot hovering near max pain with balanced PCR. Sellers defend both sides, price stays range-bound.</li>
-                    <li><strong>OI Wall (0–25)</strong> — Heavy OI wall at/near the strike with fresh short buildup confirmation. Walls on high volume are boosted; thin volume walls are penalized.</li>
-                    <li><strong>Velocity (0–20)</strong> — OI buildup trend over intraday snapshots. Volume-confirmed buildup scores higher. Low volume buildup is penalized.</li>
-                    <li><strong>PCR Extreme (0–15)</strong> — Sustained extreme PCR favouring the sell side. Low PCR for selling calls, high PCR for selling puts.</li>
-                    <li><strong>Theta Decay (0–15)</strong> — Days to expiry bonus. Closer to expiry = more theta working for sellers.</li>
-                  </ul>
-                  <h5>Recommendation Types</h5>
-                  <ul>
-                    <li><strong>Sell CE</strong> — Sell a call at an OTM strike above spot</li>
-                    <li><strong>Sell PE</strong> — Sell a put at an OTM strike below spot</li>
-                    <li><strong>Straddle</strong> — Sell both CE and PE at the same near-ATM strike (pinning setup)</li>
-                    <li><strong>Strangle</strong> — Sell OTM CE and OTM PE at different strikes</li>
-                  </ul>
-                </>
-              ) : strategyMode === 'buy' ? (
-                <>
-                  <h5>How Buy Strategy Works</h5>
-                  <p>Scores ATM and slightly OTM strikes across 5 factors to find the best directional buying opportunities. Requires 20+ minutes of OI snapshot data.</p>
-                  <h5>Scoring Factors (0–100)</h5>
-                  <ul>
-                    <li><strong>Breakout (0–25)</strong> — OI walls weakening or cracking. Breakout on surge volume scores higher. Low volume breakout is penalized (possible fake breakout).</li>
-                    <li><strong>Directional OI (0–25)</strong> — Sustained Long Buildup (OI up + Price up) across nearby strikes. Strong buyer conviction.</li>
-                    <li><strong>Momentum (0–20)</strong> — Velocity acceleration on the buy side with opposite side unwinding. Trend strengthening.</li>
-                    <li><strong>PCR Shift (0–15)</strong> — PCR trending in a direction that favours the buy. Rising PCR for CE, falling PCR for PE.</li>
-                    <li><strong>Risk/Reward (0–15)</strong> — Strike distance vs expected move and premium ratio. Near ATM with low breakeven is best.</li>
-                  </ul>
-                  <h5>Recommendation Types</h5>
-                  <ul>
-                    <li><strong>Buy CE</strong> — Buy a call near ATM for bullish directional bet</li>
-                    <li><strong>Buy PE</strong> — Buy a put near ATM for bearish directional bet</li>
-                    <li><strong>Straddle</strong> — Buy both CE and PE at ATM (volatility expansion play)</li>
-                    <li><strong>Strangle</strong> — Buy OTM CE and OTM PE at different strikes (cheaper volatility play)</li>
-                  </ul>
-                </>
-              ) : (
-                <TrapInfoDetail />
-              )}
-              {strategyMode !== 'analyzer' && (
-                <>
-                  <h5>Score Scale</h5>
-                  <div className="sell-strategy__color-scale">
-                    <span className="sell-strategy__color-item"><span className="sell-strategy__color-dot" style={{ background: '#f87171' }}></span> 0–30 Weak</span>
-                    <span className="sell-strategy__color-item"><span className="sell-strategy__color-dot" style={{ background: '#f59e0b' }}></span> 30–60 Moderate</span>
-                    <span className="sell-strategy__color-item"><span className="sell-strategy__color-dot" style={{ background: '#4ade80' }}></span> 60–80 Strong</span>
-                    <span className="sell-strategy__color-item"><span className="sell-strategy__color-dot" style={{ background: '#22c55e' }}></span> 80–100 Very Strong</span>
-                  </div>
-                </>
-              )}
-            </div>
+            strategyMode === 'sell' ? <SellStrategyGuide />
+              : strategyMode === 'buy' ? <BuyStrategyGuide />
+                : <PositionAnalyzerGuide />
           )}
           <SellStrategy
             chain={visibleChain}
