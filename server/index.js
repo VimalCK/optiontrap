@@ -91,6 +91,7 @@ import { cached } from './cache.js';
 import { getOrFetchInstruments } from './instruments.js';
 import { fetchOiHistoryMonth, OiHistoryFetchError, todayIST } from './oiHistoryFetch.js';
 import { OI_HISTORY_JOB, startOiHistoryScheduler } from './oiHistoryScheduler.js';
+import { checkSubscriptionAccess, inactiveSubscription } from './subscriptionAccess.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -118,14 +119,7 @@ function ts() {
 const app = express();
 const server = createServer(app);
 
-const inactiveSubscription = {
-  status: 'inactive',
-  active: false,
-  planId: null,
-  plan: null,
-  startsAt: null,
-  expiresAt: null,
-};
+const accessDeps = { getUserSubscription, isUserAdmin };
 
 async function getSubscriptionSummary(userId) {
   const subscription = await getUserSubscription(userId);
@@ -425,10 +419,6 @@ const requireAuth = (req, res, next) => {
   next();
 };
 
-const adminSubscription = {
-  status: 'admin', active: true, planId: null, plan: null, startsAt: null, expiresAt: null,
-};
-
 const requireAdmin = async (req, res, next) => {
   const userId = req.session?.kiteSession?.userId;
 
@@ -450,32 +440,23 @@ const requireAdmin = async (req, res, next) => {
 };
 
 const requireSubscription = async (req, res, next) => {
-  const userId = req.session?.kiteSession?.userId;
-
-  if (!userId) {
-    return res.status(401).json({ status: 'error', message: 'Not authenticated' });
-  }
-
   try {
-    const subscription = await getSubscriptionSummary(userId);
+    const access = await checkSubscriptionAccess(req.session?.kiteSession?.userId, accessDeps);
 
-    // Fast path: active subscribers pass with a single query.
-    if (subscription.active) {
-      req.subscription = subscription;
+    if (access.allowed) {
+      req.subscription = access.subscription;
       return next();
     }
 
-    // No active subscription — admins are the ultimate role and pass anyway.
-    if (await isUserAdmin(userId)) {
-      req.subscription = adminSubscription;
-      return next();
+    if (access.reason === 'unauthenticated') {
+      return res.status(401).json({ status: 'error', message: 'Not authenticated' });
     }
 
     return res.status(402).json({
       status: 'error',
       code: 'SUBSCRIPTION_REQUIRED',
       message: 'An active subscription is required',
-      data: subscription,
+      data: access.subscription,
     });
   } catch (err) {
     console.error(`${ts()} ${RED}SUBSCRIPTION${RESET} gate error:`, err);
@@ -1276,10 +1257,10 @@ server.on('upgrade', (request, socket, head) => {
       return;
     }
 
-    getSubscriptionSummary(sessionData.kiteSession.userId)
-      .then(async (subscription) => {
-        // Mirror requireSubscription: admins pass without an active subscription.
-        if (!subscription.active && !(await isUserAdmin(sessionData.kiteSession.userId))) {
+    // Same rule as requireSubscription (admins pass without a subscription).
+    checkSubscriptionAccess(sessionData.kiteSession.userId, accessDeps)
+      .then((access) => {
+        if (!access.allowed) {
           socket.write('HTTP/1.1 402 Payment Required\r\n\r\n');
           socket.destroy();
           return;
