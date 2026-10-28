@@ -3,9 +3,16 @@
  *
  * A strike's IV is compared with a smooth volatility curve fitted through the
  * whole expiry, not with one flat IV: OTM puts normally carry more IV than
- * calls, and a flat IV would mark them all as "rich". The curve is a quadratic
- * in log-moneyness k = ln(K / F) fitted to the out-of-the-money side of each
- * strike (the liquid side). Fair value is the option's price at the curve's IV.
+ * calls, and a flat IV would mark them all as "rich". The curve is fitted to
+ * the out-of-the-money side of each strike (the liquid side), over
+ * log-moneyness k = ln(K / F). Fair value is the option's price at the curve's IV.
+ *
+ * The curve is SVI ("stochastic volatility inspired"), the market-standard
+ * smile shape: variance = a + b(ρ(k − m) + √((k − m)² + σ²)). Unlike a
+ * parabola it can be steep on the put side and flat on the call side, and its
+ * wings grow linearly rather than blowing up, so it is trusted a little beyond
+ * the last fitted strike. Chains with too few points fall back to a quadratic,
+ * which is only used inside the fitted range.
  *
  * Pricing is Black-76 on each expiry's forward rather than Black-Scholes on
  * spot. The forward is implied from put-call parity (see impliedForward in
@@ -24,6 +31,10 @@ export const RICH_IV_GAP = 0.01;
 /** Premiums below this are too coarse (tick-sized) to fit the curve. */
 const MIN_FIT_PRICE = 0.5;
 const MIN_FIT_POINTS = 5;
+/** SVI has five parameters; with fewer points than this it would just thread them, so use the quadratic. */
+const MIN_SVI_POINTS = 7;
+/** How far past the fitted strikes an SVI curve is trusted, as a share of the fitted k range on each side. */
+const SVI_WING_EXTENSION = 0.25;
 export const REALIZED_WINDOW = 20;
 const MIN_RETURNS = 5;
 const TRADING_DAYS = 252;
@@ -83,52 +94,149 @@ export interface FairValueResult {
   byExpiry: Map<string, ExpiryStats>;
 }
 
-/** Least-squares quadratic iv = a + b·k + c·k². Returns null when the system is singular. */
-function fitQuadratic(points: { k: number; iv: number }[]): [number, number, number] | null {
-  let s0 = 0, s1 = 0, s2 = 0, s3 = 0, s4 = 0, t0 = 0, t1 = 0, t2 = 0;
-  for (const { k, iv } of points) {
-    const k2 = k * k;
-    s0 += 1; s1 += k; s2 += k2; s3 += k2 * k; s4 += k2 * k2;
-    t0 += iv; t1 += iv * k; t2 += iv * k2;
+type SmilePoint = { k: number; iv: number };
+type Coef3 = [number, number, number];
+
+/** A fitted curve: IV at k with no range check, and how far past the data it may be used (share of the k range). */
+interface Curve {
+  iv: (k: number) => number | null;
+  wing: number;
+}
+
+/** Least squares y ≈ c0·x0 + c1·x1 + c2·x2 by Cramer's rule on the 3×3 normal equations. Null when singular. */
+function leastSquares3(rows: { x: Coef3; y: number }[]): Coef3 | null {
+  const m = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  const t = [0, 0, 0];
+  for (const { x, y } of rows) {
+    for (let i = 0; i < 3; i++) {
+      t[i] += x[i] * y;
+      for (let j = 0; j < 3; j++) m[i][j] += x[i] * x[j];
+    }
   }
-  // Cramer's rule on the 3×3 normal equations.
-  const det = (m: number[][]) =>
-    m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1])
-    - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
-    + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]);
-  const a = [[s0, s1, s2], [s1, s2, s3], [s2, s3, s4]];
-  const t = [t0, t1, t2];
-  const d = det(a);
-  if (Math.abs(d) < 1e-18) return null;
-  const solve = (col: number) => det(a.map((row, i) => row.map((v, j) => (j === col ? t[i] : v)))) / d;
+  const det = (a: number[][]) =>
+    a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
+    - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+    + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
+  const d = det(m);
+  // Relative test: the matrix entries scale with k², k⁴, so an absolute cutoff would misjudge narrow chains.
+  if (!(Math.abs(d) > 1e-12 * Math.abs(m[0][0] * m[1][1] * m[2][2]))) return null;
+  const solve = (col: number) => det(m.map((row, i) => row.map((v, j) => (j === col ? t[i] : v)))) / d;
   return [solve(0), solve(1), solve(2)];
 }
 
-/**
- * Fit a volatility curve over log-moneyness, dropping outliers once.
- * The result only answers inside the fitted range: extrapolated wings are not trusted.
- */
-export function fitSmile(points: { k: number; iv: number }[]): ((k: number) => number | null) | null {
-  if (points.length < MIN_FIT_POINTS) return null;
-  let coef = fitQuadratic(points);
-  if (!coef) return null;
+/** Quadratic iv = a + b·k + c·k², trusted only inside the fitted range. */
+function fitQuadratic(points: SmilePoint[]): Curve | null {
+  const c = leastSquares3(points.map(({ k, iv }) => ({ x: [1, k, k * k], y: iv })));
+  if (!c) return null;
+  return {
+    iv: (k) => {
+      const iv = c[0] + c[1] * k + c[2] * k * k;
+      return iv > 0 ? iv : null;
+    },
+    wing: 0,
+  };
+}
 
-  const residuals = points.map(({ k, iv }) => iv - (coef![0] + coef![1] * k + coef![2] * k * k));
+interface SviCandidate {
+  m: number;
+  s: number;
+  coef: Coef3;
+  sse: number;
+}
+
+/**
+ * SVI with its minimum at m and width σ fixed. With y = (k − m)/σ the variance is
+ * linear in the rest, v = a + d·y + c·√(y² + 1) (d = bρσ, c = bσ), so it is one
+ * least-squares solve. Null when the result breaks SVI's no-arbitrage basics.
+ */
+function sviAt(points: SmilePoint[], m: number, s: number): SviCandidate | null {
+  const rows = points.map(({ k, iv }) => {
+    const y = (k - m) / s;
+    return { x: [1, y, Math.sqrt(y * y + 1)] as Coef3, y: iv * iv };
+  });
+  const coef = leastSquares3(rows);
+  if (!coef) return null;
+  const [a, d, c] = coef;
+  // b > 0, |ρ| < 1, and variance stays positive at its minimum a + √(c² − d²).
+  if (!(c > 0) || Math.abs(d) >= c || a + Math.sqrt(c * c - d * d) <= 0) return null;
+  let sse = 0;
+  for (const { x, y } of rows) sse += (a + d * x[1] + c * x[2] - y) ** 2;
+  return { m, s, coef, sse };
+}
+
+function better(best: SviCandidate | null, points: SmilePoint[], m: number, s: number): SviCandidate | null {
+  const candidate = sviAt(points, m, s);
+  return candidate && (!best || candidate.sse < best.sse) ? candidate : best;
+}
+
+/** Fit SVI by a coarse grid over (m, σ), then repeated finer grids around the best. */
+function fitSvi(points: SmilePoint[]): Curve | null {
+  const ks = points.map((p) => p.k);
+  const lo = Math.min(...ks);
+  const span = Math.max(Math.max(...ks) - lo, 1e-4);
+  const GRID = 16;
+
+  // m from one span below the data to one above; σ from span/300 to 3×span, log-spaced.
+  let best: SviCandidate | null = null;
+  for (let i = 0; i <= GRID; i++) {
+    for (let j = 0; j <= GRID; j++) best = better(best, points, lo - span + (3 * span * i) / GRID, span * 10 ** (-2.5 + (3 * j) / GRID));
+  }
+  if (!best) return null;
+
+  let mStep = (3 * span) / GRID;
+  let sStep = 10 ** (3 / GRID);
+  for (let round = 0; round < 6; round++) {
+    const { m, s } = best!;
+    for (let i = -2; i <= 2; i++) {
+      for (let j = -2; j <= 2; j++) best = better(best, points, m + (i * mStep) / 2, s * sStep ** (j / 2));
+    }
+    mStep /= 2;
+    sStep = Math.sqrt(sStep);
+  }
+
+  const { m, s, coef: [a, d, c] } = best!;
+  return {
+    iv: (k) => {
+      const y = (k - m) / s;
+      const variance = a + d * y + c * Math.sqrt(y * y + 1);
+      return variance > 0 ? Math.sqrt(variance) : null;
+    },
+    wing: SVI_WING_EXTENSION,
+  };
+}
+
+const fitCurve = (points: SmilePoint[]): Curve | null =>
+  (points.length >= MIN_SVI_POINTS ? fitSvi(points) : null) ?? fitQuadratic(points);
+
+/**
+ * Fit a volatility curve over log-moneyness, dropping outliers once. The result
+ * answers inside the fitted range, plus a short wing extension for SVI fits.
+ */
+export function fitSmile(points: SmilePoint[]): ((k: number) => number | null) | null {
+  if (points.length < MIN_FIT_POINTS) return null;
+  let curve = fitCurve(points);
+  if (!curve) return null;
+
+  const first = curve;
+  const residuals = points.map(({ k, iv }) => iv - (first.iv(k) ?? 0));
   const sorted = residuals.map(Math.abs).sort((x, y) => x - y);
   const mad = sorted[Math.floor(sorted.length / 2)];
   const limit = Math.max(3 * 1.4826 * mad, 0.005);
   const kept = points.filter((_, i) => Math.abs(residuals[i]) <= limit);
-  if (kept.length >= MIN_FIT_POINTS && kept.length < points.length) coef = fitQuadratic(kept) ?? coef;
+  let used = points;
+  if (kept.length >= MIN_FIT_POINTS && kept.length < points.length) {
+    const refit = fitCurve(kept);
+    if (refit) {
+      curve = refit;
+      used = kept;
+    }
+  }
 
-  const [a, b, c] = coef;
-  const used = kept.length >= MIN_FIT_POINTS ? kept : points;
+  const final = curve;
   const minK = Math.min(...used.map((p) => p.k));
   const maxK = Math.max(...used.map((p) => p.k));
-  return (k: number) => {
-    if (k < minK - 1e-9 || k > maxK + 1e-9) return null;
-    const iv = a + b * k + c * k * k;
-    return iv > 0 ? iv : null;
-  };
+  const ext = final.wing * (maxK - minK);
+  return (k: number) => (k < minK - ext - 1e-9 || k > maxK + ext + 1e-9 ? null : final.iv(k));
 }
 
 const liquid = (option: FairInput | undefined): option is FairInput =>

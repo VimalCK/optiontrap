@@ -39,6 +39,27 @@ describe('fitSmile', () => {
     expect(fit(0.08)).toBeNull();
   });
 
+  /** A steep index-style skew in SVI form (variance, not IV): put wing far steeper than the call wing. */
+  const sviIv = (k: number) => {
+    const x = k - 0.01;
+    return Math.sqrt(0.01 + 0.4 * (-0.7 * x + Math.sqrt(x * x + 0.03 ** 2)));
+  };
+  const sviPoints = Array.from({ length: 15 }, (_, i) => -0.08 + i * 0.01).map((k) => ({ k, iv: sviIv(k) }));
+
+  it('fits an SVI skew across the strikes, between them, and a little past the last one', () => {
+    const fit = fitSmile(sviPoints)!;
+    for (let k = -0.08; k <= 0.06; k += 0.005) expect(Math.abs(fit(k)! - sviIv(k))).toBeLessThan(1e-4);
+    // Wings are trusted 25% of the fitted range beyond each end, and no further.
+    expect(Math.abs(fit(-0.1)! - sviIv(-0.1))).toBeLessThan(1e-3);
+    expect(fit(-0.15)).toBeNull();
+  });
+
+  it('keeps an SVI fit when one strike is a bad print', () => {
+    const noisy = sviPoints.map((p) => (Math.abs(p.k + 0.03) < 1e-9 ? { ...p, iv: p.iv + 0.05 } : p));
+    const fit = fitSmile(noisy)!;
+    expect(Math.abs(fit(-0.03)! - sviIv(-0.03))).toBeLessThan(1e-3);
+  });
+
   it('needs at least five points', () => {
     expect(fitSmile([{ k: 0, iv: 0.1 }, { k: 0.01, iv: 0.1 }])).toBeNull();
   });
