@@ -1,9 +1,12 @@
-import React, { useState } from 'react';
+import React, { useLayoutEffect, useRef, useState } from 'react';
 import type { OiCellData, OiTableRow } from './types';
 import { formatOiWithChg, formatFullDateLabel } from './helpers';
 import { patternColor, expiryLabel } from './analysis';
 import { describeFlow, flowColor, type FlowReading } from '@/services/oiFlow';
 import { PatternGuide } from './PatternGuide';
+
+/** Strikes shown above and below ATM before the grid scrolls vertically. */
+const STRIKES_EACH_SIDE = 10;
 
 interface OiSnapshotTableProps {
   rows: OiTableRow[];
@@ -35,6 +38,22 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
   onTrade,
 }) => {
   const [showPatternInfo, setShowPatternInfo] = useState(false);
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Size the grid to ATM ± STRIKES_EACH_SIDE rows and centre ATM in it. Keyed on the
+  // date and ATM (not every row update) so live data doesn't yank the scroll position.
+  const atmIndex = rows.findIndex((row) => row.strike === atmStrike);
+  useLayoutEffect(() => {
+    const scroller = scrollRef.current;
+    const table = scroller?.querySelector('table');
+    const bodyRows = table?.tBodies[0]?.rows;
+    if (!scroller || !table || !bodyRows || bodyRows.length === 0) return;
+    const headHeight = table.tHead?.offsetHeight ?? 0;
+    const rowHeight = bodyRows[0].offsetHeight;
+    scroller.style.maxHeight = `${headHeight + rowHeight * (STRIKES_EACH_SIDE * 2 + 1)}px`;
+    const atmRow = atmIndex >= 0 ? bodyRows[atmIndex] : undefined;
+    if (atmRow) scroller.scrollTop = Math.max(0, atmRow.offsetTop - headHeight - rowHeight * STRIKES_EACH_SIDE);
+  }, [filterDate, atmIndex, rows.length, expiries.length]);
 
   const flowFor = (token: number | undefined) => (token !== undefined ? flowByToken.get(token) : undefined);
   const flowTitle = (heading: string, reading: FlowReading | undefined) =>
@@ -72,7 +91,7 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
 
     {showPatternInfo && <PatternGuide />}
 
-      <div className="oi-history__table-scroll">
+      <div ref={scrollRef} className="oi-history__table-scroll oi-history__table-scroll--grid">
         <table className="oi-history__table">
           <thead>
             <tr>

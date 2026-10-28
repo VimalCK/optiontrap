@@ -131,6 +131,12 @@
   font-weight: 800;
 }
 
+/* The OI grid pins its pattern and strike columns, so its headers need an
+   opaque base under the tint or scrolled headers show through them. */
+.analytics-content .oi-history__table th {
+  background: linear-gradient(rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.035)), var(--card-bg-solid);
+}
+
 .analytics-content .tj-table tbody tr,
 .analytics-content .oc-table tbody tr,
 .analytics-content .oi-history__table tbody tr {
