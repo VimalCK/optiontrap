@@ -10,3 +10,4 @@ samples/student-mcp-csharp/bin/
 samples/student-mcp-csharp/obj/
 samples/student-mcp-csharp/**/students.db
 samples/student-mcp-csharp/.vs/
+*.tsbuildinfo
