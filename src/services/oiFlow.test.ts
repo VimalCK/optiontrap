@@ -8,6 +8,8 @@ import {
   marketCloseIST,
   previousSessionClose,
   yearsToExpiry,
+  impliedForward,
+  RISK_FREE_RATE,
   type FlowInput,
 } from './oiFlow';
 
@@ -130,5 +132,59 @@ describe('computeFlowReadings', () => {
     expect(unusual.churn).toBeCloseTo(0.1, 5);
     expect(unusual.recentShare).toBeCloseTo((1030 - 1000) / 1030, 5);
     expect(readings.get(3)!.label).toBe('Stable');
+  });
+});
+
+describe('impliedForward', () => {
+  const years = 20 / 365;
+  const legs = (pricingSpot: number, vol = 0.15) =>
+    [23600, 23800, 24000, 24200, 24400].flatMap((strike) =>
+      (['CE', 'PE'] as const).map((optionType) => ({ optionType, strike, price: bsPrice(optionType, pricingSpot, strike, years, vol), volume: 100 })),
+    );
+
+  it('reads a dividend out of CE − PE prices', () => {
+    const estimate = impliedForward(legs(23850), 24000, years);
+    expect(estimate.source).toBe('parity');
+    expect(estimate.pricingSpot).toBeCloseTo(23850, 6);
+    expect(estimate.forward).toBeCloseTo(23850 * Math.exp(RISK_FREE_RATE * years), 6);
+  });
+
+  it('falls back to carry without enough paired strikes, time, or plausible prices', () => {
+    expect(impliedForward(legs(24000).filter((l) => l.optionType === 'CE'), 24000, years)).toMatchObject({ source: 'carry', pricingSpot: 24000 });
+    expect(impliedForward(legs(24000), 24000, 0).source).toBe('carry');
+    expect(impliedForward(legs(18000), 24000, years).source).toBe('carry');
+  });
+
+  it('skips legs with no volume or tick-sized premiums', () => {
+    const quiet = legs(23850).map((l) => ({ ...l, volume: 0 }));
+    expect(impliedForward(quiet, 24000, years).source).toBe('carry');
+  });
+});
+
+describe('computeFlowReadings around a dividend', () => {
+  const asOf = marketCloseIST('2026-10-26');
+  const prevAsOf = marketCloseIST('2026-10-23');
+  const expiry = '2026-11-03';
+  const dividend = 150;
+
+  it('does not read a stock going ex-dividend as an IV move', () => {
+    // Yesterday spot 24000 with the dividend still to come; today it went ex and spot fell by it.
+    // Volatility is unchanged at 15%, so no strike should show an IV change.
+    const inputs: FlowInput[] = [];
+    let token = 1;
+    for (const strike of [23600, 23800, 24000, 24200, 24400]) {
+      for (const optionType of ['CE', 'PE'] as const) {
+        inputs.push({
+          token: token++, optionType, strike, expiry, oi: 1100, prevOi: 1000,
+          price: bsPrice(optionType, 24000 - dividend, strike, yearsToExpiry(asOf, expiry), 0.15),
+          prevPrice: bsPrice(optionType, 24000 - dividend, strike, yearsToExpiry(prevAsOf, expiry), 0.15),
+          spot: 24000 - dividend, prevSpot: 24000, asOf, prevAsOf, volume: 500,
+        });
+      }
+    }
+    for (const reading of computeFlowReadings(inputs).values()) {
+      expect(reading.iv!).toBeCloseTo(0.15, 4);
+      expect(reading.ivChange!).toBeCloseTo(0, 4);
+    }
   });
 });

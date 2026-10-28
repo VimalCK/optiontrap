@@ -13,14 +13,16 @@ const smile = (strike: number) => {
   return 0.13 - 0.15 * k + 1.5 * k * k;
 };
 
-function chain(overrides: Record<string, number> = {}): FairInput[] {
+/** A chain priced off the smile. `dividend` is paid before expiry, so prices use spot less its value while inputs still report the raw spot. */
+function chain(overrides: Record<string, number> = {}, dividend = 0): FairInput[] {
   const inputs: FairInput[] = [];
   let token = 1;
   for (let strike = 23200; strike <= 24800; strike += 100) {
     for (const optionType of ['CE', 'PE'] as const) {
       const key = `${strike}${optionType}`;
       const iv = overrides[key] ?? smile(strike);
-      inputs.push({ token: token++, optionType, strike, expiry, price: bsPrice(optionType, spot, strike, t, iv), spot, asOf, volume: 1000 });
+      const price = bsPrice(optionType, spot - dividend, strike, t, iv);
+      inputs.push({ token: token++, optionType, strike, expiry, price, spot, asOf, volume: 1000 });
     }
   }
   return inputs;
@@ -76,6 +78,41 @@ describe('computeFairValues', () => {
     expect(farCall.itmProb!).toBeLessThan(0.1);
     expect(farCall.moveMultiple!).toBeCloseTo(800 / stats.straddle!, 6);
     expect(describeFair(farCall).join(' ')).toContain('ITM chance');
+  });
+
+  it('prices on the parity forward, which matches carry when there is no dividend', () => {
+    const stats = computeFairValues(chain()).byExpiry.get(expiry)!;
+    expect(stats.forwardSource).toBe('parity');
+    expect(stats.forward).toBeCloseTo(forward, 6);
+  });
+
+  it('absorbs a dividend through the parity forward instead of skewing calls against puts', () => {
+    const dividend = 150;
+    const inputs = chain({}, dividend);
+    const { byToken, byExpiry } = computeFairValues(inputs);
+    expect(byExpiry.get(expiry)!.forward).toBeCloseTo((spot - dividend) * Math.exp(RISK_FREE_RATE * t), 6);
+
+    // Priced on spot alone, every call would solve to a lower IV than its put.
+    for (const strike of [23600, 24000, 24400]) {
+      const call = byToken.get(tokenOf(inputs, strike, 'CE'))!;
+      expect(call.iv!).toBeCloseTo(smile(strike), 4);
+      expect(call.pairIvGap!).toBeCloseTo(0, 4);
+      expect(call.label).toBe('Fair');
+    }
+  });
+
+  it('falls back to the carry forward when parity has too few paired strikes', () => {
+    // Only OTM legs: no strike has both a CE and a PE.
+    const inputs = chain().filter((i) => (i.optionType === 'CE' ? i.strike > 24000 : i.strike < 24000));
+    const stats = computeFairValues(inputs).byExpiry.get(expiry)!;
+    expect(stats.forwardSource).toBe('carry');
+    expect(stats.forward).toBeCloseTo(forward, 6);
+  });
+
+  it('ignores a parity forward implausibly far from carry', () => {
+    // Prices consistent with spot 20% lower than reported: bad data, not a dividend.
+    const stats = computeFairValues(chain({}, spot * 0.2)).byExpiry.get(expiry)!;
+    expect(stats.forwardSource).toBe('carry');
   });
 });
 

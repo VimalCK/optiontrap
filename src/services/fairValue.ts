@@ -4,8 +4,12 @@
  * A strike's IV is compared with a smooth volatility curve fitted through the
  * whole expiry, not with one flat IV: OTM puts normally carry more IV than
  * calls, and a flat IV would mark them all as "rich". The curve is a quadratic
- * in log-moneyness fitted to the out-of-the-money side of each strike (the
- * liquid side). Fair value is the Black-Scholes price at the curve's IV.
+ * in log-moneyness k = ln(K / F) fitted to the out-of-the-money side of each
+ * strike (the liquid side). Fair value is the option's price at the curve's IV.
+ *
+ * Pricing is Black-76 on each expiry's forward rather than Black-Scholes on
+ * spot. The forward is implied from put-call parity (see impliedForward in
+ * oiFlow), so it already carries dividends and the market's own funding rate.
  *
  * The same pass gives each option its market-implied chance of finishing in
  * the money, the CE-vs-PE IV gap at its strike (a put-call parity check), and
@@ -13,7 +17,7 @@
  * how much spot actually moved, to compare with ATM IV for the whole chain.
  */
 
-import { RISK_FREE_RATE, bsPrice, d1, impliedVol, normCdf, yearsToExpiry } from './oiFlow';
+import { bsPrice, d1, impliedForward, impliedVol, normCdf, yearsToExpiry } from './oiFlow';
 
 /** IV this far above or below the curve, as a decimal (0.01 = 1 vol point), marks a strike expensive or cheap. */
 export const RICH_IV_GAP = 0.01;
@@ -47,7 +51,7 @@ export interface FairReading {
   iv: number | null;
   /** IV of the fitted curve at this strike. */
   curveIv: number | null;
-  /** Black-Scholes price at the curve IV. */
+  /** Black-76 price at the curve IV, on the expiry's forward. */
   fairPrice: number | null;
   /** (price − fair) ÷ fair. */
   richPct: number | null;
@@ -68,6 +72,10 @@ export interface ExpiryStats {
   atmIv: number | null;
   /** ATM CE + PE premium: the move the market prices in by expiry. */
   straddle: number | null;
+  /** Forward price the expiry is priced on. */
+  forward: number;
+  /** 'parity' when implied from CE/PE prices, 'carry' when it fell back to spot × e^(rT). */
+  forwardSource: 'parity' | 'carry';
 }
 
 export interface FairValueResult {
@@ -123,16 +131,11 @@ export function fitSmile(points: { k: number; iv: number }[]): ((k: number) => n
   };
 }
 
+const liquid = (option: FairInput | undefined): option is FairInput =>
+  option !== undefined && option.price >= MIN_FIT_PRICE && option.volume !== 0;
+
 /** Fair value, richness and context for every option in one day's chain. */
 export function computeFairValues(inputs: FairInput[]): FairValueResult {
-  const ivs = new Map<number, number | null>();
-  const years = new Map<number, number>();
-  for (const input of inputs) {
-    const t = yearsToExpiry(input.asOf, input.expiry);
-    years.set(input.token, t);
-    ivs.set(input.token, impliedVol(input.optionType, input.price, input.spot, input.strike, t));
-  }
-
   const byExpiryInputs = new Map<string, FairInput[]>();
   for (const input of inputs) {
     const list = byExpiryInputs.get(input.expiry);
@@ -145,8 +148,7 @@ export function computeFairValues(inputs: FairInput[]): FairValueResult {
 
   for (const [expiry, list] of byExpiryInputs) {
     const spot = list[0].spot;
-    const t = years.get(list[0].token)!;
-    const forward = spot * Math.exp(RISK_FREE_RATE * t);
+    const t = yearsToExpiry(list[0].asOf, expiry);
 
     // Options per strike, to pair CE with PE.
     const byStrike = new Map<number, { CE?: FairInput; PE?: FairInput }>();
@@ -156,11 +158,17 @@ export function computeFairValues(inputs: FairInput[]): FairValueResult {
       byStrike.set(input.strike, entry);
     }
 
+    // Black-76 on the forward = Black-Scholes on this dividend-adjusted spot.
+    const { forward, source: forwardSource, pricingSpot } = impliedForward(list, spot, t);
+
+    const ivs = new Map<number, number | null>();
+    for (const input of list) ivs.set(input.token, impliedVol(input.optionType, input.price, pricingSpot, input.strike, t));
+
     // Curve points: the out-of-the-money side of each strike.
     const points: { k: number; iv: number }[] = [];
     for (const [strike, pair] of byStrike) {
       const otm = strike >= forward ? pair.CE : pair.PE;
-      if (!otm || otm.price < MIN_FIT_PRICE || otm.volume === 0) continue;
+      if (!liquid(otm)) continue;
       const iv = ivs.get(otm.token);
       if (iv != null) points.push({ k: Math.log(strike / forward), iv });
     }
@@ -179,19 +187,21 @@ export function computeFairValues(inputs: FairInput[]): FairValueResult {
       atmStrike,
       atmIv: atmIvs.length ? atmIvs.reduce((a, b) => a + b, 0) / atmIvs.length : null,
       straddle,
+      forward,
+      forwardSource,
     });
 
     for (const input of list) {
       const iv = ivs.get(input.token) ?? null;
       const curveIv = smile && t > 0 ? smile(Math.log(input.strike / forward)) : null;
-      const fairPrice = curveIv !== null ? bsPrice(input.optionType, input.spot, input.strike, t, curveIv) : null;
+      const fairPrice = curveIv !== null ? bsPrice(input.optionType, pricingSpot, input.strike, t, curveIv) : null;
       const richPct = fairPrice !== null && fairPrice > 0 ? (input.price - fairPrice) / fairPrice : null;
       const ivGap = iv !== null && curveIv !== null ? iv - curveIv : null;
       const label: Richness | null = ivGap === null ? null : ivGap >= RICH_IV_GAP ? 'Expensive' : ivGap <= -RICH_IV_GAP ? 'Cheap' : 'Fair';
 
       let itmProb: number | null = null;
       if (iv !== null) {
-        const d2 = d1(input.spot, input.strike, t, iv) - iv * Math.sqrt(t);
+        const d2 = d1(pricingSpot, input.strike, t, iv) - iv * Math.sqrt(t);
         itmProb = input.optionType === 'CE' ? normCdf(d2) : normCdf(-d2);
       }
 

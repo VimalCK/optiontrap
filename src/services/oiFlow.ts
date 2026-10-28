@@ -13,7 +13,9 @@
  * - OI ↓ + IV ↓ vs ATM = Buyers Exiting
  * - OI ↓ + IV ↑ vs ATM = Writers Covering
  *
- * Kite does not publish IV, so it is solved from the premium with Black-Scholes.
+ * Kite does not publish IV, so it is solved from the premium with Black-76 on
+ * each expiry's put-call parity forward (see impliedForward), which keeps
+ * dividends out of the IV.
  * Each reading also carries freshness measures that make OI changes comparable
  * across strikes: delta-weighted size, how unusual the change is for this
  * strike, how much of the day's volume opened new positions, and how much of
@@ -108,6 +110,63 @@ export function previousSessionClose(now = new Date()): Date {
 
 export function yearsToExpiry(asOf: Date, expiry: string): number {
   return (marketCloseIST(expiry.slice(0, 10)).getTime() - asOf.getTime()) / MS_PER_YEAR;
+}
+
+/** Premiums below this are too coarse (tick-sized) to read parity from. */
+const MIN_PARITY_PRICE = 0.5;
+/** Parity forwards from this many strikes nearest the money are combined by median. */
+const PARITY_STRIKES = 5;
+const MIN_PARITY_STRIKES = 3;
+/** A parity forward further than this from spot × e^(rT) is treated as bad data. */
+const MAX_FORWARD_GAP = 0.03;
+
+export interface ParityLeg {
+  optionType: 'CE' | 'PE';
+  strike: number;
+  price: number;
+  volume?: number;
+}
+
+export interface ForwardEstimate {
+  forward: number;
+  /** 'parity' when implied from CE/PE prices, 'carry' when it fell back to spot × e^(rT). */
+  source: 'parity' | 'carry';
+  /**
+   * Spot to give the Black-Scholes helpers so they price Black-76 on the forward:
+   * forward × e^(−rT). It sits below spot by the value of dividends due before expiry.
+   */
+  pricingSpot: number;
+}
+
+/**
+ * One expiry's forward, implied by put-call parity F = K + e^(rT)(C − P) as the median
+ * over the strikes nearest the money (where both legs trade most). This carries
+ * dividends and the market's own funding rate. Falls back to spot × e^(rT) when too
+ * few strikes have both legs, or when parity lands implausibly far from it.
+ */
+export function impliedForward(legs: ParityLeg[], spot: number, years: number): ForwardEstimate {
+  const growth = Math.exp(RISK_FREE_RATE * years);
+  const carry = { forward: spot * growth, source: 'carry' as const, pricingSpot: spot };
+  if (!(years > 0) || !(spot > 0)) return carry;
+
+  const byStrike = new Map<number, { CE?: number; PE?: number }>();
+  for (const leg of legs) {
+    if (!(leg.price >= MIN_PARITY_PRICE) || leg.volume === 0) continue;
+    const entry = byStrike.get(leg.strike) ?? {};
+    entry[leg.optionType] = leg.price;
+    byStrike.set(leg.strike, entry);
+  }
+  const candidates: { gap: number; forward: number }[] = [];
+  for (const [strike, { CE, PE }] of byStrike) {
+    if (CE === undefined || PE === undefined) continue;
+    candidates.push({ gap: Math.abs(CE - PE), forward: strike + growth * (CE - PE) });
+  }
+  if (candidates.length < MIN_PARITY_STRIKES) return carry;
+
+  const nearest = candidates.sort((x, y) => x.gap - y.gap).slice(0, PARITY_STRIKES).map((c) => c.forward);
+  const forward = median(nearest)!;
+  if (Math.abs(forward / carry.forward - 1) > MAX_FORWARD_GAP) return carry;
+  return { forward, source: 'parity', pricingSpot: forward / growth };
 }
 
 /** Standard normal CDF (Abramowitz & Stegun 7.1.26, error < 1.5e-7). */
@@ -213,14 +272,35 @@ export function computeFlowReadings(inputs: FlowInput[]): Map<number, FlowReadin
   const solved = new Map<number, { iv: number | null; prevIv: number | null; delta: number | null }>();
   const ivChanges = new Map<number, number>();
 
+  // Price each expiry on its parity forward, today and at the previous close, so a
+  // dividend going ex between the two doesn't read as an IV move.
+  const byExpiry = new Map<string, FlowInput[]>();
+  for (const input of inputs) {
+    const list = byExpiry.get(input.expiry);
+    if (list) list.push(input);
+    else byExpiry.set(input.expiry, [input]);
+  }
+  const pricingSpots = new Map<string, { now: number; prev: number | undefined }>();
+  for (const [expiry, list] of byExpiry) {
+    const first = list[0];
+    const now = impliedForward(list, first.spot, yearsToExpiry(first.asOf, expiry)).pricingSpot;
+    const prevSpot = list.find((i) => i.prevSpot !== undefined)?.prevSpot;
+    const prevLegs = list.flatMap((i) => (i.prevPrice !== undefined ? [{ ...i, price: i.prevPrice, volume: undefined }] : []));
+    const prev = prevSpot !== undefined
+      ? impliedForward(prevLegs, prevSpot, yearsToExpiry(first.prevAsOf, expiry)).pricingSpot
+      : undefined;
+    pricingSpots.set(expiry, { now, prev });
+  }
+
   for (const input of inputs) {
     const years = yearsToExpiry(input.asOf, input.expiry);
     const prevYears = yearsToExpiry(input.prevAsOf, input.expiry);
-    const iv = impliedVol(input.optionType, input.price, input.spot, input.strike, years);
-    const prevIv = input.prevPrice !== undefined && input.prevSpot !== undefined
-      ? impliedVol(input.optionType, input.prevPrice, input.prevSpot, input.strike, prevYears)
+    const spots = pricingSpots.get(input.expiry)!;
+    const iv = impliedVol(input.optionType, input.price, spots.now, input.strike, years);
+    const prevIv = input.prevPrice !== undefined && spots.prev !== undefined
+      ? impliedVol(input.optionType, input.prevPrice, spots.prev, input.strike, prevYears)
       : null;
-    const delta = iv !== null ? bsDelta(input.optionType, input.spot, input.strike, years, iv) : null;
+    const delta = iv !== null ? bsDelta(input.optionType, spots.now, input.strike, years, iv) : null;
     solved.set(input.token, { iv, prevIv, delta });
     if (iv !== null && prevIv !== null) ivChanges.set(input.token, iv - prevIv);
   }
