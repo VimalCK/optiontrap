@@ -959,6 +959,82 @@
   border-color: var(--accent);
 }
 
+/* Form fields. They live here, not in a page stylesheet, because the login form
+   renders before any lazily loaded page's CSS. */
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-field__label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.form-field__input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.form-field__input {
+  width: 100%;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-family: inherit;
+  color: var(--text-primary);
+  background: var(--card-bg);
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.form-field__input::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.form-field__input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-glow);
+}
+
+.form-field__input-wrapper .form-field__input {
+  padding-right: 60px;
+}
+
+.form-field__toggle-visibility {
+  position: absolute;
+  right: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--accent);
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: opacity 0.15s ease;
+}
+
+.form-field__toggle-visibility:hover {
+  opacity: 0.7;
+}
+
+/* Keep browser-autofilled credentials on the theme instead of the browser's yellow/blue fill. */
+.form-field__input:-webkit-autofill,
+.form-field__input:-webkit-autofill:hover,
+.form-field__input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--text-primary);
+  caret-color: var(--text-primary);
+  box-shadow: 0 0 0 1000px var(--card-bg-solid) inset;
+  transition: background-color 9999s ease-out;
+}
+
+.form-field__input:-webkit-autofill:focus {
+  box-shadow: 0 0 0 1000px var(--card-bg-solid) inset, 0 0 0 3px var(--accent-glow);
+}
+
 .auth-form .form-field__input {
   height: 44px;
   font-size: 14px;
