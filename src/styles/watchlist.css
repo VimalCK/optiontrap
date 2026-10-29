@@ -1068,3 +1068,204 @@
     flex-direction: column;
   }
 }
+
+/* ---- Stock setups: Setups column, zones panel, scorecard ---- */
+
+.wl-table__th--setup,
+.wl-table__td--setup { text-align: left; white-space: nowrap; }
+
+.wl-setup-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+button.wl-setup-chip { cursor: pointer; }
+button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-primary); }
+.wl-setup-chip--buy { color: #22c55e; border-color: rgba(34, 197, 94, 0.45); background: rgba(34, 197, 94, 0.1); }
+.wl-setup-chip--sell { color: #ef4444; border-color: rgba(239, 68, 68, 0.45); background: rgba(239, 68, 68, 0.1); }
+.wl-setup-chip--empty { border-style: dashed; }
+.wl-setup-chip--none { border: none; background: transparent; }
+.wl-setup-chip--falling { color: #ef4444; }
+.wl-setup-chip--stretched { color: #f59e0b; }
+.wl-setup-chip--uptrend { color: #22c55e; }
+
+.wl-sz {
+  display: flex;
+  flex-direction: column;
+  width: min(820px, 100%);
+  max-height: calc(100vh - 32px);
+  border: 1px solid var(--card-border);
+  border-radius: 14px;
+  background: var(--content-bg);
+  color: var(--text-primary);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+}
+
+.wl-sz__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--card-border);
+}
+.wl-sz__header h3 { margin: 0; font-size: 15px; font-weight: 800; }
+.wl-sz__header p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.wl-sz-state {
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--card-bg);
+  color: var(--text-secondary);
+}
+.wl-sz-state--falling { color: #ef4444; background: rgba(239, 68, 68, 0.12); }
+.wl-sz-state--stretched { color: #f59e0b; background: rgba(245, 158, 11, 0.14); }
+.wl-sz-state--turning { color: var(--accent); background: var(--sidebar-active); }
+.wl-sz-state--uptrend { color: #22c55e; background: rgba(34, 197, 94, 0.12); }
+
+.wl-sz__body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.wl-sz__footer {
+  padding: 10px 16px;
+  border-top: 1px solid var(--card-border);
+  color: var(--text-secondary);
+  font-size: 11px;
+}
+
+.wl-sz-message {
+  padding: 10px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.wl-sz-message--error { color: #ef4444; border-color: rgba(239, 68, 68, 0.45); background: rgba(239, 68, 68, 0.08); }
+.wl-sz-message--warn { color: #f59e0b; border-color: rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.08); }
+
+.wl-sz-section h4 {
+  margin: 0 0 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.wl-sz-note { margin: 0 0 4px; font-size: 13px; line-height: 1.5; }
+.wl-sz-note--muted { color: var(--text-secondary); }
+
+.wl-sz-setups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+}
+.wl-sz-setup {
+  padding: 12px;
+  border: 1px solid var(--card-border);
+  border-left-width: 3px;
+  border-radius: 8px;
+  background: var(--card-bg);
+}
+.wl-sz-setup--buy { border-left-color: #22c55e; }
+.wl-sz-setup--sell { border-left-color: #ef4444; }
+.wl-sz-setup p { margin: 8px 0 0; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.wl-sz-setup__head { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.wl-sz-setup__dir { font-size: 11px; font-weight: 800; text-transform: uppercase; }
+.wl-sz-setup--buy .wl-sz-setup__dir { color: #22c55e; }
+.wl-sz-setup--sell .wl-sz-setup__dir { color: #ef4444; }
+.wl-sz-setup__rr { margin-left: auto; color: var(--text-secondary); font-size: 11px; }
+.wl-sz-setup__levels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 8px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.wl-sz-setup__levels b { color: var(--text-primary); }
+
+.wl-sz-zones { width: 100%; border-collapse: collapse; font-size: 12px; }
+.wl-sz-zones td {
+  padding: 7px 6px;
+  border-bottom: 1px solid var(--card-border);
+  vertical-align: middle;
+}
+.wl-sz-zones tr:last-child td { border-bottom: none; }
+.wl-sz-zones__range { white-space: nowrap; font-weight: 650; font-variant-numeric: tabular-nums; }
+.wl-sz-zones__num { text-align: right; white-space: nowrap; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.wl-sz-zones__why,
+.wl-sz-zones__history { color: var(--text-secondary); }
+
+.wl-sz-tag {
+  margin-left: 6px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: var(--sidebar-active);
+  color: var(--accent);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.wl-sz-strength { display: inline-flex; gap: 3px; }
+.wl-sz-strength__dot { width: 7px; height: 7px; border-radius: 50%; background: var(--card-border); }
+.wl-sz-strength__dot--on { background: var(--accent); }
+
+.wl-sz-alert {
+  padding: 3px 9px;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+}
+.wl-sz-alert:hover { color: var(--accent); border-color: var(--accent); }
+
+.wl-sz-indicators {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--card-border);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.wl-sz-indicators b { color: var(--text-primary); }
+
+.wl-scorecard .wl-alerts__table-wrap { overflow-x: auto; }
+.wl-scorecard__recent { margin-top: 12px; }
+.wl-scorecard__status { font-size: 11px; font-weight: 700; color: var(--text-secondary); }
+.wl-scorecard__status--target { color: #22c55e; }
+.wl-scorecard__status--stop { color: #ef4444; }
+.wl-scorecard__status--open { color: var(--accent); }
+
+@media (max-width: 700px) {
+  .wl-sz-zones__why { display: none; }
+  .wl-sz-zones td { padding: 6px 4px; }
+}

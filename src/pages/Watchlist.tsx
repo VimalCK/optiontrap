@@ -24,6 +24,12 @@ import {
   loadPriceAlerts,
   savePriceAlerts,
 } from '@/services/priceAlerts';
+import { fetchStockScans, type ScanSummary } from '@/services/stockSetups';
+import { isAbortError } from '@/services/apiClient';
+import { isCashStock } from '../../shared/stockSetups.js';
+import StockSetupsPanel from '@/components/StockSetups/StockSetupsPanel';
+import SetupScorecard from '@/components/StockSetups/SetupScorecard';
+import SetupChip from '@/components/StockSetups/SetupChip';
 import '@/styles/watchlist.css';
 
 // ── Price data stored per instrument token ──
@@ -75,6 +81,11 @@ const Watchlist: React.FC = () => {
   const [alertToast, setAlertToast] = useState<string | null>(null);
   const alertToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Entry & exit zones: the open panel, and the latest scan per stock for the Setups column.
+  const [setupsItem, setSetupsItem] = useState<WatchlistItem | null>(null);
+  const [scans, setScans] = useState<Map<number, ScanSummary>>(new Map());
+  const [scansVersion, setScansVersion] = useState(0);
+
   // Active tab metadata
   const activeTab = useMemo(
     () => tabs.find((t) => t.id === activeTabId) ?? null,
@@ -125,6 +136,25 @@ const Watchlist: React.FC = () => {
   useEffect(() => {
     savePriceAlerts(alerts);
   }, [alerts]);
+
+  // Reload scans on mount and after a panel closes: opening one re-scans that stock.
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchStockScans(controller.signal)
+      .then(setScans)
+      .catch((err) => { if (!isAbortError(err)) console.error('[Watchlist] Scans load failed:', err); });
+    return () => controller.abort();
+  }, [scansVersion]);
+
+  const isStockItem = useCallback(
+    (item: WatchlistItem) => isCashStock({ ...item, instrumentType: instrumentMap.get(item.instrumentToken)?.instrumentType }),
+    [instrumentMap],
+  );
+
+  const closeSetupsPanel = useCallback(() => {
+    setSetupsItem(null);
+    setScansVersion((v) => v + 1);
+  }, []);
 
   useEffect(() => () => {
     if (alertToastTimerRef.current) clearTimeout(alertToastTimerRef.current);
@@ -343,12 +373,12 @@ const Watchlist: React.FC = () => {
     }
   };
 
-  const openAlertModal = (item: WatchlistItem) => {
+  const openAlertModal = (item: WatchlistItem, prefill?: { condition: PriceAlertCondition; value: number; note: string }) => {
     const currentPrice = livePrices.get(item.instrumentToken)?.ltp;
     setAlertDraftItem(item);
-    setAlertCondition('above');
-    setAlertValue(currentPrice ? currentPrice.toFixed(2) : '');
-    setAlertNote('');
+    setAlertCondition(prefill?.condition ?? 'above');
+    setAlertValue(prefill ? prefill.value.toFixed(2) : currentPrice ? currentPrice.toFixed(2) : '');
+    setAlertNote(prefill?.note ?? '');
     setAlertBrowserNotification(false);
   };
 
@@ -593,6 +623,7 @@ const Watchlist: React.FC = () => {
                     <th className="wl-table__th wl-table__th--num">Change %</th>
                     <th className="wl-table__th wl-table__th--num">High</th>
                     <th className="wl-table__th wl-table__th--num">Low</th>
+                    <th className="wl-table__th wl-table__th--setup" title="From the latest after-close scan of daily candles">Setups</th>
                     <th className="wl-table__th wl-table__th--action">Actions</th>
                   </tr>
                 </thead>
@@ -632,7 +663,25 @@ const Watchlist: React.FC = () => {
                         <td className="wl-table__td wl-table__td--num">
                           {price && price.low ? formatPrice(price.low) : '—'}
                         </td>
+                        <td className="wl-table__td wl-table__td--setup">
+                          {isStockItem(item) ? (
+                            <SetupChip scan={scans.get(item.instrumentToken)} onOpen={() => setSetupsItem(item)} />
+                          ) : <span className="wl-setup-chip wl-setup-chip--none">—</span>}
+                        </td>
                         <td className="wl-table__td wl-table__td--action">
+                          {isStockItem(item) && (
+                            <button
+                              className="wl-alert-btn"
+                              onClick={() => setSetupsItem(item)}
+                              title="Entry & exit zones"
+                              aria-label={`Entry and exit zones for ${item.tradingsymbol}`}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M3 3v18h18" />
+                                <path d="M7 14h4M7 9h8M7 19h11" />
+                              </svg>
+                            </button>
+                          )}
                           <button
                             className="wl-alert-btn"
                             onClick={() => openAlertModal(item)}
@@ -761,6 +810,22 @@ const Watchlist: React.FC = () => {
             No watchlists yet. Click the <strong>+</strong> button above to create one.
           </p>
         </div>
+      )}
+
+      {items.some(isStockItem) && <SetupScorecard refreshKey={scansVersion} />}
+
+      {setupsItem && (
+        <StockSetupsPanel
+          instrumentToken={setupsItem.instrumentToken}
+          tradingsymbol={setupsItem.tradingsymbol}
+          livePrice={livePrices.get(setupsItem.instrumentToken)?.ltp}
+          onClose={closeSetupsPanel}
+          onSetAlert={(condition, value, note) => {
+            const item = setupsItem;
+            closeSetupsPanel();
+            openAlertModal(item, { condition, value, note });
+          }}
+        />
       )}
 
       {alertDraftItem && (

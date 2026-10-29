@@ -84,6 +84,11 @@ import {
   deleteOiHistoryBeforeExpiryMonth,
   getFnoSymbols,
   deleteOiHistoryByScrip,
+  getNseStock,
+  getStockCandles,
+  getStockScansForUser,
+  getStockSetupStats,
+  getStockSetupSignalsForUser,
 } from './db.js';
 import { PostgresSessionStore } from './sessionStore.js';
 import { createRateLimiter } from './rateLimit.js';
@@ -92,6 +97,9 @@ import { getOrFetchInstruments } from './instruments.js';
 import { fetchOiHistoryMonth, OiHistoryFetchError, todayIST } from './oiHistoryFetch.js';
 import { OI_HISTORY_JOB, startOiHistoryScheduler } from './oiHistoryScheduler.js';
 import { checkSubscriptionAccess, inactiveSubscription } from './subscriptionAccess.js';
+import { scanStock, syncStockCandles } from './stockCandles.js';
+import { startStockSetupScheduler } from './stockSetupScheduler.js';
+import { NIFTY_50_TOKEN } from '../shared/stockSetups.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -1023,6 +1031,68 @@ app.get('/api/oi-history/futures', requireAuth, requireSubscription, async (req,
   }
 });
 
+// ---------- Watchlist stock setups ----------
+
+/** Candles as compact [date, open, high, low, close, volume] rows: about half the JSON of objects. */
+const compactCandles = (candles) => candles.map((c) => [c.date, c.open, c.high, c.low, c.close, c.volume]);
+
+// One stock's stored daily candles plus NIFTY 50's, brought up to date with the
+// user's own Kite session first. If Kite fails but candles are stored, they are
+// returned with a warning rather than an error.
+app.get('/api/stocks/:token/candles', requireAuth, requireSubscription, async (req, res) => {
+  try {
+    const token = Number(req.params.token);
+    const stock = Number.isInteger(token) ? await getNseStock(token) : null;
+    if (!stock) return res.status(400).json({ status: 'error', message: 'Entry and exit zones cover NSE cash stocks only' });
+
+    const kite = req.session.kiteSession;
+    let warning = null;
+    let synced = false;
+    try {
+      await syncStockCandles(NIFTY_50_TOKEN, kite);
+      const sync = await syncStockCandles(token, kite);
+      synced = !sync.skipped;
+    } catch (err) {
+      console.warn(`[Stocks] Candle sync failed for ${stock.tradingsymbol}:`, err.message);
+      warning = err.message;
+    }
+
+    const [candles, market] = await Promise.all([getStockCandles(token), getStockCandles(NIFTY_50_TOKEN)]);
+    if (!candles.length) {
+      return res.status(502).json({ status: 'error', message: warning || 'Kite returned no daily candles for this stock' });
+    }
+    // Keep the watchlist's Setups column in step with what the panel shows.
+    if (synced) await scanStock(stock, market).catch((err) => console.warn(`[Stocks] Scan failed for ${stock.tradingsymbol}:`, err.message));
+
+    res.json({ status: 'ok', data: { stock, candles: compactCandles(candles), market: compactCandles(market), warning } });
+  } catch (err) {
+    console.error('[Stocks] Candles GET error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// Latest scan summary for every stock in the user's watchlists (the Setups column).
+app.get('/api/stocks/scans', requireAuth, requireSubscription, async (req, res) => {
+  try {
+    res.json({ status: 'ok', data: await getStockScansForUser(req.session.kiteSession.userId) });
+  } catch (err) {
+    console.error('[Stocks] Scans GET error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// Setup scorecard: outcomes per setup type across all tracked stocks, plus recent
+// setups on the user's own watchlist stocks.
+app.get('/api/stocks/setups', requireAuth, requireSubscription, async (req, res) => {
+  try {
+    const [stats, recent] = await Promise.all([getStockSetupStats(), getStockSetupSignalsForUser(req.session.kiteSession.userId, 30)]);
+    res.json({ status: 'ok', data: { stats, recent } });
+  } catch (err) {
+    console.error('[Stocks] Setups GET error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
 app.post('/api/oi-history/signals', requireAuth, requireSubscription, async (req, res) => {
   try {
     const { scrip, signalDate, expiry, strike, optionType, action, status, entryPremium, spotPrice, details } = req.body || {};
@@ -1377,6 +1447,8 @@ async function start() {
 
   // Fetch tracked scrips' OI history after the close so no trading day is missed.
   startOiHistoryScheduler();
+  // Then update watchlist stocks' daily candles and scan them for setups.
+  startStockSetupScheduler();
 
   server.listen(PORT, () => {
     console.log(`${ts()} ${GREEN}Server${RESET} OptionTrap running on port ${PORT}`);

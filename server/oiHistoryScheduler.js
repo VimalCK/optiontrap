@@ -32,7 +32,7 @@ let lastDoneDate = null;
 let lastWaitingLogDate = null;
 
 /** The newest admin session whose Kite token still works, or null. */
-async function findWorkingAdminSession() {
+export async function findWorkingAdminSession() {
   const sessions = await getAdminKiteSessions();
   for (const kite of sessions.slice(0, 3)) {
     try {
