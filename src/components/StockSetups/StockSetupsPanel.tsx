@@ -52,6 +52,18 @@ const band = (price: number, move: number) => {
   const fmt = (v: number) => `₹${v.toLocaleString('en-IN', { maximumFractionDigits: price >= 100 ? 0 : 2 })}`;
   return `${fmt(price - move)} – ${fmt(price + move)}`;
 };
+/** A daily rupee move with its share of the price, e.g. "≈ ±₹6 a day (1.7%)". */
+const perDay = (price: number, move: number) => `≈ ±₹${move.toFixed(move >= 10 ? 0 : 1)} a day (${((move / price) * 100).toFixed(1)}%)`;
+/** Trading sessions (weekdays) after today up to and including the expiry; holidays are ignored. */
+function sessionsTo(expiry: string): number {
+  const end = new Date(`${expiry}T00:00:00Z`);
+  const day = new Date(`${new Date(Date.now() + 5.5 * 3600_000).toISOString().slice(0, 10)}T00:00:00Z`);
+  let sessions = 0;
+  for (day.setUTCDate(day.getUTCDate() + 1); day <= end; day.setUTCDate(day.getUTCDate() + 1)) {
+    if (day.getUTCDay() !== 0 && day.getUTCDay() !== 6) sessions++;
+  }
+  return sessions;
+}
 /** "2026-11-24" → "24 Nov" */
 const shortDate = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const tone = (v: number) => (v >= 0 ? 'up' : 'down');
@@ -166,9 +178,20 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
     if (annual === null) return null;
     return {
       annual,
+      daily: analysis.price * annual / Math.sqrt(TRADING_DAYS),
       monthly: analysis.price * annual * Math.sqrt(REALIZED_WINDOW / TRADING_DAYS),
     };
   }, [data, analysis]);
+
+  /**
+   * The daily move the options price in, comparable with the usual daily move. A straddle
+   * pays the average absolute move, √(2/π) ≈ 0.8 of a standard move, spread over √sessions.
+   */
+  const expectedDaily = useMemo(() => {
+    if (!expectedMove) return null;
+    const sessions = sessionsTo(expectedMove.expiry);
+    return sessions > 0 ? expectedMove.straddle / Math.sqrt(2 / Math.PI) / Math.sqrt(sessions) : null;
+  }, [expectedMove]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
@@ -362,13 +385,15 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
                   {volatility && (
                     <>
                       <div className="wl-sz-stat" title="How much the stock actually moved over the last 20 sessions, as a yearly rate">
-                        <span>Realised vol · 20d</span>
-                        <strong>{(volatility.annual * 100).toFixed(1)}%</strong>
+                        <span>Realised volatility · 20d</span>
+                        <strong>{(volatility.annual * 100).toFixed(1)}% <small>a year</small></strong>
+                        <em>≈ {((volatility.annual / Math.sqrt(TRADING_DAYS)) * 100).toFixed(1)}% a day</em>
                       </div>
                       <div className="wl-sz-stat" title="From the last 20 sessions: about 2 months in 3 stay within this">
                         <span>Usual 20-day move</span>
                         <strong>±{rs(volatility.monthly)} <small>({((volatility.monthly / analysis.price) * 100).toFixed(1)}%)</small></strong>
                         <em>{band(analysis.price, volatility.monthly)}</em>
+                        <em className="wl-sz-stat__daily">{perDay(analysis.price, volatility.daily)}</em>
                       </div>
                     </>
                   )}
@@ -377,6 +402,11 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
                       <span>Expected move · {shortDate(expectedMove.expiry)}</span>
                       <strong>±{rs(expectedMove.straddle)} <small>({((expectedMove.straddle / analysis.price) * 100).toFixed(1)}%)</small></strong>
                       <em>{band(analysis.price, expectedMove.straddle)}</em>
+                      {expectedDaily !== null && (
+                        <em className="wl-sz-stat__daily" title="The straddle prices the average move, about 0.8× a standard move, so it is scaled up to compare with the usual move">
+                          {perDay(analysis.price, expectedDaily)} · {sessionsTo(expectedMove.expiry)}d
+                        </em>
+                      )}
                     </div>
                   )}
                 </section>

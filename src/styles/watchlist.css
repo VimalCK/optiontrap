@@ -1481,6 +1481,7 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
 /* Volatility */
 .wl-sz-vol { display: grid; grid-auto-columns: minmax(0, 1fr); grid-auto-flow: column; gap: 8px; }
 .wl-sz-vol .wl-sz-stat em { color: var(--text-primary); opacity: 0.75; font-size: 11px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.wl-sz-vol .wl-sz-stat em.wl-sz-stat__daily { color: var(--text-secondary); opacity: 1; font-weight: 500; }
 .wl-sz-vol .wl-sz-stat strong small { margin-left: 2px; color: var(--text-secondary); font-size: 11px; font-weight: 600; }
 .wl-sz-vol .wl-sz-stat { align-items: center; text-align: center; }
 .wl-sz-vol .wl-sz-stat strong { font-size: 13px; }
