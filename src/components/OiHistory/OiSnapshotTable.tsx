@@ -82,7 +82,7 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
             aria-label="Explain OI Snapshot patterns"
             aria-expanded={showPatternInfo}
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
               <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
             </svg>
           </button>

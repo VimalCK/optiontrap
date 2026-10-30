@@ -627,11 +627,16 @@ const OiHistory: React.FC = () => {
   /** Fair value for every option on the selected date (logged with signals, and the chart summary). */
   const fairToday = useMemo(() => computeFairValues(fairInputs(filteredRows, filterDate)), [filteredRows, filterDate]);
 
-  /** Expiry the fair-value chart shows: the picked one if still visible, else the nearest. */
+  /**
+   * Expiry the fair-value chart shows: the picked one if still visible, else the nearest
+   * one still running after the selected date. An expiry ending that day has no time
+   * value left, so its IV is undefined and its straddle near zero.
+   */
   const chartFairExpiry = useMemo(() => {
     if (!showFairValue) return null;
-    return fairExpiry && visibleTableExpiries.includes(fairExpiry) ? fairExpiry : visibleTableExpiries[0] ?? null;
-  }, [showFairValue, fairExpiry, visibleTableExpiries]);
+    if (fairExpiry && visibleTableExpiries.includes(fairExpiry)) return fairExpiry;
+    return visibleTableExpiries.find((exp) => exp.slice(0, 10) > filterDate) ?? visibleTableExpiries[0] ?? null;
+  }, [showFairValue, fairExpiry, visibleTableExpiries, filterDate]);
 
   const chartExpiries = useMemo(
     () => (chartFairExpiry ? [chartFairExpiry] : visibleTableExpiries),
