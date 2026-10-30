@@ -17,7 +17,7 @@ BEGIN
 
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
-    WHERE table_schema = current_schema() AND table_name = 'stock_candle_sync' AND column_name = 'last_date'
+    WHERE table_name = 'stock_candle_sync' AND column_name = 'last_date'
   ) THEN
     ALTER TABLE stock_candle_sync RENAME COLUMN last_date TO latest_candle_date;
   END IF;
