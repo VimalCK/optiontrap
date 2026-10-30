@@ -3300,3 +3300,30 @@ span.oi-history__chart-legend-item:hover {
   font-size: 11px;
   color: #f59e0b;
 }
+
+.oi-history__chart-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.oi-history__zones-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+}
+
+.oi-history__zones-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--sidebar-active);
+}

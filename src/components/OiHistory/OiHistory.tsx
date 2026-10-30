@@ -16,6 +16,8 @@ import { FuturesContext } from './FuturesContext';
 import { OiSnapshotTable } from './OiSnapshotTable';
 import { StrikeOiChart } from './StrikeOiChart';
 import { TradeSetupDashboard } from './TradeSetupDashboard';
+import StockSetupsPanel from '@/components/StockSetups/StockSetupsPanel';
+import { findNseStock } from '@/services/stockSetups';
 import { computeFlowReadings, marketCloseIST, type FlowInput, type FlowReading } from '@/services/oiFlow';
 import { computeFairValues, realizedVol, volVerdict, REALIZED_WINDOW, type FairInput, type FairValueResult } from '@/services/fairValue';
 
@@ -66,6 +68,20 @@ const OiHistory: React.FC = () => {
   const [showVolume, setShowVolume] = useState(false);
   // Fair-value view: the strike chart shows one expiry with its fair-value line.
   const [showFairValue, setShowFairValue] = useState(false);
+  // Entry & exit zones of the underlying stock (null for indices).
+  const [underlyingStock, setUnderlyingStock] = useState<{ instrumentToken: number; tradingsymbol: string } | null>(null);
+  const [showZones, setShowZones] = useState(false);
+  const closeZones = useCallback(() => setShowZones(false), []);
+
+  useEffect(() => {
+    let stale = false;
+    setUnderlyingStock(null);
+    setShowZones(false);
+    findNseStock(scrip)
+      .then((stock) => { if (!stale) setUnderlyingStock(stock); })
+      .catch(() => { /* no zones button */ });
+    return () => { stale = true; };
+  }, [scrip]);
   const [fairExpiry, setFairExpiry] = useState<string | null>(null);
   const [recentScrips, setRecentScrips] = useState<string[]>(() => loadRecentScrips());
   const [scripOptions, setScripOptions] = useState(DEFAULT_SCRIP_OPTIONS);
@@ -1412,7 +1428,23 @@ const OiHistory: React.FC = () => {
       {chartData && selectedStrike && (
         <div className="oi-history__chart-wrap card">
           <div className="oi-history__chart-header">
-            <span className="oi-history__chart-title">Strike {selectedStrike}</span>
+            <span className="oi-history__chart-title">
+              Strike {selectedStrike}
+              {underlyingStock && (
+                <button
+                  type="button"
+                  className="oi-history__zones-btn"
+                  onClick={() => setShowZones(true)}
+                  title={`Entry & exit zones for ${underlyingStock.tradingsymbol}`}
+                  aria-label={`Entry and exit zones for ${underlyingStock.tradingsymbol}`}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M3 3v18h18" />
+                    <path d="M7 14h4M7 9h8M7 19h11" />
+                  </svg>
+                </button>
+              )}
+            </span>
             <div className="oi-history__chart-controls">
               <div className="oi-history__analysis-tabs" role="tablist" aria-label="OI analysis view">
                 <button
@@ -1588,6 +1620,15 @@ const OiHistory: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {showZones && underlyingStock && (
+        <StockSetupsPanel
+          instrumentToken={underlyingStock.instrumentToken}
+          tradingsymbol={underlyingStock.tradingsymbol}
+          livePrice={undefined}
+          onClose={closeZones}
+        />
       )}
     </div>
   );

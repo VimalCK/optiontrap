@@ -37,7 +37,7 @@ const MIN_SVI_POINTS = 7;
 const SVI_WING_EXTENSION = 0.25;
 export const REALIZED_WINDOW = 20;
 const MIN_RETURNS = 5;
-const TRADING_DAYS = 252;
+export const TRADING_DAYS = 252;
 /** ATM IV ÷ realised vol above / below these reads as options expensive / cheap overall. */
 export const IV_RV_RICH = 1.25;
 export const IV_RV_CHEAP = 0.9;

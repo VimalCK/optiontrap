@@ -6,7 +6,10 @@
  * column always agree.
  */
 import { apiClient } from './apiClient';
-import { parseKiteCandles, scanSummary, type Candle, type SetupType } from '../../shared/stockSetups.js';
+import { loadInstruments } from './instruments';
+import { fetchOptions } from './optionChain';
+import { fetchQuotes } from './kiteApi';
+import { isCashStock, parseKiteCandles, scanSummary, type Candle, type SetupType } from '../../shared/stockSetups.js';
 
 export interface StockCandles {
   stock: { instrumentToken: number; tradingsymbol: string };
@@ -86,6 +89,40 @@ export function fetchStockCandles(instrumentToken: number, signal?: AbortSignal)
   // Don't keep a failed request: the next open should try again.
   data.catch(() => { if (cache.get(instrumentToken)?.data === data) cache.delete(instrumentToken); });
   return untilAborted(data, signal);
+}
+
+/** The NSE cash stock an F&O underlying trades as (e.g. TATAPOWER); null for indices. */
+export async function findNseStock(symbol: string): Promise<{ instrumentToken: number; tradingsymbol: string } | null> {
+  const instruments = await loadInstruments();
+  const stock = instruments.find((i) => i.exchange === 'NSE' && i.tradingsymbol === symbol && isCashStock(i));
+  return stock ? { instrumentToken: stock.instrumentToken, tradingsymbol: stock.tradingsymbol } : null;
+}
+
+export interface ExpectedMove {
+  /** YYYY-MM-DD */
+  expiry: string;
+  strike: number;
+  /** ATM CE + PE premium: the move the options price in by expiry. */
+  straddle: number;
+}
+
+/**
+ * The option market's expected move for a stock: the ATM straddle of the nearest
+ * expiry still running after today. Null for stocks without F&O or without quotes.
+ */
+export async function fetchExpectedMove(symbol: string, price: number, signal?: AbortSignal): Promise<ExpectedMove | null> {
+  const options = await fetchOptions(symbol, signal);
+  const expiry = [...new Set(options.map((o) => o.expiry.slice(0, 10)))].filter((e) => e > istDate()).sort()[0];
+  if (!expiry) return null;
+  const chain = options.filter((o) => o.expiry.slice(0, 10) === expiry);
+  const strike = chain.reduce((best, o) => (Math.abs(o.strike - price) < Math.abs(best - price) ? o.strike : best), chain[0].strike);
+  const ce = chain.find((o) => o.strike === strike && o.instrumentType === 'CE');
+  const pe = chain.find((o) => o.strike === strike && o.instrumentType === 'PE');
+  if (!ce || !pe) return null;
+  const keys = [`NFO:${ce.tradingsymbol}`, `NFO:${pe.tradingsymbol}`];
+  const quotes = await fetchQuotes(keys, signal);
+  const [ceLtp, peLtp] = keys.map((k) => quotes.get(k)?.last_price ?? 0);
+  return ceLtp > 0 && peLtp > 0 ? { expiry, strike, straddle: ceLtp + peLtp } : null;
 }
 
 /** Latest scan per stock in the user's watchlists, by instrument token. */

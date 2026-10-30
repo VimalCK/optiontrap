@@ -1,9 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { analyzeStock, MIN_CANDLES, type StockAnalysis, type Zone, type StockState, type MarketCheck } from '../../../shared/stockSetups.js';
-import { fetchStockCandles, type StockCandles } from '@/services/stockSetups';
+import { fetchExpectedMove, fetchStockCandles, type ExpectedMove, type StockCandles } from '@/services/stockSetups';
 import { isAbortError } from '@/services/apiClient';
 import type { PriceAlertCondition } from '@/services/priceAlerts';
 import StockSetupsGuide from './StockSetupsGuide';
+import { realizedVol, REALIZED_WINDOW, TRADING_DAYS } from '@/services/fairValue';
+// Also opened from OI History, where the watchlist styles aren't otherwise loaded.
+import '@/styles/watchlist.css';
 
 interface StockSetupsPanelProps {
   instrumentToken: number;
@@ -11,7 +14,8 @@ interface StockSetupsPanelProps {
   /** Live price from the watchlist ticker; the last close is used without it. */
   livePrice: number | undefined;
   onClose: () => void;
-  onSetAlert: (condition: PriceAlertCondition, value: number, note: string) => void;
+  /** Where the zone bells lead; without it (outside the watchlist) the bells are hidden. */
+  onSetAlert?: (condition: PriceAlertCondition, value: number, note: string) => void;
 }
 
 /** Re-run the analysis only when the live price has moved this much: zones don't change tick by tick. */
@@ -43,6 +47,13 @@ const MARKET_TEXT: Record<MarketCheck['relation'], string> = {
 
 const rs = (v: number) => `₹${v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
+/** The price range a ± move spans around the price, e.g. "₹323 – ₹361". Whole rupees above ₹100. */
+const band = (price: number, move: number) => {
+  const fmt = (v: number) => `₹${v.toLocaleString('en-IN', { maximumFractionDigits: price >= 100 ? 0 : 2 })}`;
+  return `${fmt(price - move)} – ${fmt(price + move)}`;
+};
+/** "2026-11-24" → "24 Nov" */
+const shortDate = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const tone = (v: number) => (v >= 0 ? 'up' : 'down');
 
 function Strength({ value }: { value: 1 | 2 | 3 }) {
@@ -51,6 +62,14 @@ function Strength({ value }: { value: 1 | 2 | 3 }) {
       {[1, 2, 3].map((n) => <span key={n} className={n <= value ? 'wl-sz-strength__bar wl-sz-strength__bar--on' : 'wl-sz-strength__bar'} />)}
     </span>
   );
+}
+
+/** RSI as words: under 30 oversold, over 70 overbought, 45–55 neutral, normal otherwise. */
+function rsiLabel(rsi: number): { text: string; tone: 'down' | 'up' | 'neutral' } {
+  if (rsi < 30) return { text: 'Oversold', tone: 'down' };
+  if (rsi > 70) return { text: 'Overbought', tone: 'up' };
+  if (rsi >= 45 && rsi <= 55) return { text: 'Neutral', tone: 'neutral' };
+  return { text: 'Normal', tone: 'neutral' };
 }
 
 function historyText(zone: Zone): string {
@@ -103,6 +122,9 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
   const [error, setError] = useState<string | null>(null);
   const [analysisPrice, setAnalysisPrice] = useState<number | undefined>(livePrice);
   const [showGuide, setShowGuide] = useState(false);
+  // Read once for the ATM strike; ticks shouldn't refetch option quotes.
+  const livePriceRef = useRef(livePrice);
+  livePriceRef.current = livePrice;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -124,6 +146,30 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
     [data, analysisPrice],
   );
 
+  // The options' expected move, fetched once the candles give a price to pick the ATM strike.
+  const [expectedMove, setExpectedMove] = useState<ExpectedMove | null>(null);
+  useEffect(() => {
+    setExpectedMove(null);
+    const price = livePriceRef.current ?? data?.candles[data.candles.length - 1]?.close;
+    if (!price) return;
+    const controller = new AbortController();
+    fetchExpectedMove(tradingsymbol, price, controller.signal)
+      .then(setExpectedMove)
+      .catch((err) => { if (!isAbortError(err)) console.warn('[StockSetups] Expected move unavailable:', err); });
+    return () => controller.abort();
+  }, [tradingsymbol, data]);
+
+  /** Realised volatility of the daily closes, and the rupee moves it implies at the current price. */
+  const volatility = useMemo(() => {
+    if (!data || !analysis) return null;
+    const annual = realizedVol(data.candles.map((c) => c.close));
+    if (annual === null) return null;
+    return {
+      annual,
+      monthly: analysis.price * annual * Math.sqrt(REALIZED_WINDOW / TRADING_DAYS),
+    };
+  }, [data, analysis]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -139,23 +185,25 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
           <span className="wl-sz-zone__range">{rs(zone.low)} – {rs(zone.high)}</span>
           {inside ? <span className="wl-sz-tag">Price here</span> : <span className="wl-sz-zone__dist">{pct(zone.distancePct)}</span>}
           <Strength value={zone.strength} />
-          <button
-            type="button"
-            className="wl-alert-btn"
-            onClick={() => onSetAlert(
-              support ? 'below' : 'above',
-              Number((support ? zone.high : zone.low).toFixed(2)),
-              `${support ? 'Support' : 'Resistance'} zone ${rs(zone.low)}–${rs(zone.high)} (${zone.reasons.join(', ')})`,
-            )}
-            title={support ? 'Alert when price falls into this zone' : 'Alert when price rises into this zone'}
-            aria-label={`Set alert at ${support ? 'support' : 'resistance'} ${rs(zone.low)}–${rs(zone.high)}`}
-          >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7" />
-              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-              <path d="M12 4V2" />
-            </svg>
-          </button>
+          {onSetAlert && (
+            <button
+              type="button"
+              className="wl-alert-btn"
+              onClick={() => onSetAlert(
+                support ? 'below' : 'above',
+                Number((support ? zone.high : zone.low).toFixed(2)),
+                `${support ? 'Support' : 'Resistance'} zone ${rs(zone.low)}–${rs(zone.high)} (${zone.reasons.join(', ')})`,
+              )}
+              title={support ? 'Alert when price falls into this zone' : 'Alert when price rises into this zone'}
+              aria-label={`Set alert at ${support ? 'support' : 'resistance'} ${rs(zone.low)}–${rs(zone.high)}`}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7" />
+                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+                <path d="M12 4V2" />
+              </svg>
+            </button>
+          )}
         </div>
         <div className="wl-sz-zone__meta">
           <span className="wl-sz-zone__history">{historyText(zone)}</span>
@@ -309,6 +357,31 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
                 </section>
               </div>
 
+              {(volatility || expectedMove) && (
+                <section className="wl-sz-vol">
+                  {volatility && (
+                    <>
+                      <div className="wl-sz-stat" title="How much the stock actually moved over the last 20 sessions, as a yearly rate">
+                        <span>Realised vol · 20d</span>
+                        <strong>{(volatility.annual * 100).toFixed(1)}%</strong>
+                      </div>
+                      <div className="wl-sz-stat" title="From the last 20 sessions: about 2 months in 3 stay within this">
+                        <span>Usual 20-day move</span>
+                        <strong>±{rs(volatility.monthly)} <small>({((volatility.monthly / analysis.price) * 100).toFixed(1)}%)</small></strong>
+                        <em>{band(analysis.price, volatility.monthly)}</em>
+                      </div>
+                    </>
+                  )}
+                  {expectedMove && (
+                    <div className="wl-sz-stat" title={`${expectedMove.strike} CE + PE: the move the options price in by expiry`}>
+                      <span>Expected move · {shortDate(expectedMove.expiry)}</span>
+                      <strong>±{rs(expectedMove.straddle)} <small>({((expectedMove.straddle / analysis.price) * 100).toFixed(1)}%)</small></strong>
+                      <em>{band(analysis.price, expectedMove.straddle)}</em>
+                    </div>
+                  )}
+                </section>
+              )}
+
               <section className="wl-sz-indicators">
                 {([
                   ['20-day avg', analysis.indicators.sma20],
@@ -323,7 +396,11 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
                 ))}
                 <div className="wl-sz-stat">
                   <span>RSI (14)</span>
-                  <strong>{analysis.indicators.rsi === null ? '—' : analysis.indicators.rsi.toFixed(0)}</strong>
+                  {analysis.indicators.rsi === null ? <strong>—</strong> : (
+                    <strong className={`wl-sz-rsi--${rsiLabel(analysis.indicators.rsi).tone}`} title={`RSI ${analysis.indicators.rsi.toFixed(0)}`}>
+                      {rsiLabel(analysis.indicators.rsi).text}
+                    </strong>
+                  )}
                 </div>
               </section>
             </>

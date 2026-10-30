@@ -57,8 +57,11 @@ const TRADE: GuideTerm[] = [
 ];
 
 const INDICATORS: GuideTerm[] = [
-  { term: 'ATR (14)', meaning: 'Average True Range: the stock’s normal daily move in rupees. ₹14.70 on ₹685 ≈ 2% a day. Sets zone width and stop distance' },
-  { term: 'RSI (14)', meaning: 'Momentum 0–100. Under 30 oversold, over 70 overbought, ~50 neutral' },
+  { term: 'ATR (14)', meaning: 'Average True Range: the stock’s normal high-to-low swing within a day, in rupees. ₹14.70 on ₹685 ≈ 2% a day. Sets zone width and stop distance: a stop closer than 1 ATR gets hit by ordinary noise' },
+  { term: 'Realised vol · 20d', meaning: 'How much the stock actually moved over the last 20 sessions, as a yearly rate so it compares with option IV. A rate, not a distance: 27.5% doesn’t mean it moved 27.5%' },
+  { term: 'Usual 20-day move', meaning: 'That volatility in rupees at today’s price, close to close over about a month: 2 months in 3 stay within ±this. A zone further away needs an unusual month to reach' },
+  { term: 'Expected move · 24 Nov', meaning: 'What the options price in by the nearest expiry: the ATM call + put premium. Forward-looking, unlike the usual 20-day move, which looks back. Expected move much bigger than the usual move = the market expects news (results, events). Shown only for stocks with F&O' },
+  { term: 'RSI (14)', meaning: 'Momentum 0–100 over 14 days, shown as words: Oversold under 30 (fell hard, bounce likely), Overbought over 70 (rose hard), Neutral 45–55, Normal otherwise. Oversold isn’t a buy signal alone: in a strong fall it can stay oversold for weeks' },
   { term: '20 / 50 / 200d avg', meaning: 'Average close: short, medium and long-term trend. Price above = trend up' },
 ];
 
