@@ -1947,29 +1947,30 @@ export async function saveStockCandles(instrumentToken, candles, { replace = fal
   } finally { client.release(); }
 }
 
-export async function saveStockScan(instrumentToken, scanDate, summary) {
+/**
+ * Store a stock's latest scan summary on its sync row. Scans run on stored
+ * candles, and storing candles creates the row, so it always exists.
+ */
+export async function saveStockScan(instrumentToken, summary) {
   await query(
-    `INSERT INTO stock_setup_scans (instrument_token, scan_date, summary, updated_at)
-     VALUES ($1, $2, $3, $4)
-     ON CONFLICT (instrument_token) DO UPDATE SET
-       scan_date = EXCLUDED.scan_date, summary = EXCLUDED.summary, updated_at = EXCLUDED.updated_at`,
-    [instrumentToken, scanDate, JSON.stringify(summary), Date.now()],
+    'UPDATE stock_candle_sync SET scan_summary = $2 WHERE instrument_token = $1',
+    [instrumentToken, JSON.stringify(summary)],
   );
 }
 
 /** Latest scan for each stock in the user's watchlists. */
 export async function getStockScansForUser(userId) {
   const result = await rows(
-    `SELECT s.instrument_token, s.scan_date, s.summary
-     FROM stock_setup_scans s
-     WHERE s.instrument_token IN (
+    `SELECT s.instrument_token, s.scan_summary
+     FROM stock_candle_sync s
+     WHERE s.scan_summary IS NOT NULL AND s.instrument_token IN (
        SELECT wi.instrument_token FROM watchlist_items wi
        JOIN watchlists w ON w.id = wi.watchlist_id
        WHERE w.user_id = $1
      )`,
     [userId],
   );
-  return result.map((row) => ({ instrumentToken: Number(row.instrument_token), scanDate: row.scan_date, summary: row.summary }));
+  return result.map((row) => ({ instrumentToken: Number(row.instrument_token), summary: row.scan_summary }));
 }
 
 /** Record new setups; one per stock, day and type. */

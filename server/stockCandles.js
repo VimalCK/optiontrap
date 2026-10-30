@@ -133,7 +133,7 @@ export async function scanStock(stock, marketCandles) {
   const analysis = analyzeStock(candles, { market: marketCandles });
   if (!analysis) return null;
 
-  await saveStockScan(stock.instrumentToken, analysis.date, scanSummary(analysis));
+  await saveStockScan(stock.instrumentToken, scanSummary(analysis));
   await insertStockSetupSignals(analysis.setups.map((s) => ({
     instrumentToken: stock.instrumentToken,
     tradingsymbol: stock.tradingsymbol,
