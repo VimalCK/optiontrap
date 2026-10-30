@@ -17,12 +17,14 @@ export interface GuideTerm {
 }
 
 /** Explainer panel behind an ⓘ button: a title, an intro and a grid of sections. */
-export const InfoGuide: React.FC<{ title: string; intro?: React.ReactNode; children: React.ReactNode }> = ({ title, intro, children }) => (
+export const InfoGuide: React.FC<{ title?: string; intro?: React.ReactNode; children: React.ReactNode }> = ({ title, intro, children }) => (
   <div className="info-guide">
-    <div className="info-guide__intro">
-      <h4 className="info-guide__title">{title}</h4>
-      {intro && <p>{intro}</p>}
-    </div>
+    {(title || intro) && (
+      <div className="info-guide__intro">
+        {title && <h4 className="info-guide__title">{title}</h4>}
+        {intro && <p>{intro}</p>}
+      </div>
+    )}
     {children}
   </div>
 );

@@ -669,19 +669,6 @@ const Watchlist: React.FC = () => {
                           ) : <span className="wl-setup-chip wl-setup-chip--none">—</span>}
                         </td>
                         <td className="wl-table__td wl-table__td--action">
-                          {isStockItem(item) && (
-                            <button
-                              className="wl-alert-btn"
-                              onClick={() => setSetupsItem(item)}
-                              title="Entry & exit zones"
-                              aria-label={`Entry and exit zones for ${item.tradingsymbol}`}
-                            >
-                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                <path d="M3 3v18h18" />
-                                <path d="M7 14h4M7 9h8M7 19h11" />
-                              </svg>
-                            </button>
-                          )}
                           <button
                             className="wl-alert-btn"
                             onClick={() => openAlertModal(item)}
@@ -698,8 +685,14 @@ const Watchlist: React.FC = () => {
                             className="wl-remove-btn"
                             onClick={() => handleRemoveItem(item)}
                             title="Remove from watchlist"
+                            aria-label={`Remove ${item.tradingsymbol} from watchlist`}
                           >
-                            &times;
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                              <path d="M3 6h18" />
+                              <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+                              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+                              <path d="M10 11v6M14 11v6" />
+                            </svg>
                           </button>
                         </td>
                       </tr>
@@ -777,14 +770,14 @@ const Watchlist: React.FC = () => {
                                   <div className="wl-alert-actions">
                                     {alert.status === 'triggered' && (
                                       <button className="wl-alert-action" onClick={() => handleResetAlert(alert.id)} title="Reset alert" aria-label={`Reset ${alert.tradingsymbol} alert`}>
-                                        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                           <path d="M3 12a9 9 0 1 0 3-6.7" />
                                           <path d="M3 4v6h6" />
                                         </svg>
                                       </button>
                                     )}
                                     <button className="wl-alert-action wl-alert-action--delete" onClick={() => handleDeleteAlert(alert.id)} title="Delete alert" aria-label={`Delete ${alert.tradingsymbol} alert`}>
-                                      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                         <polyline points="3 6 5 6 21 6" />
                                         <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
                                         <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />

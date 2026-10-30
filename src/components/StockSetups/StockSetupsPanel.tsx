@@ -3,6 +3,7 @@ import { analyzeStock, MIN_CANDLES, type StockAnalysis, type Zone, type StockSta
 import { fetchStockCandles, type StockCandles } from '@/services/stockSetups';
 import { isAbortError } from '@/services/apiClient';
 import type { PriceAlertCondition } from '@/services/priceAlerts';
+import StockSetupsGuide from './StockSetupsGuide';
 
 interface StockSetupsPanelProps {
   instrumentToken: number;
@@ -15,6 +16,8 @@ interface StockSetupsPanelProps {
 
 /** Re-run the analysis only when the live price has moved this much: zones don't change tick by tick. */
 const REPRICE_MOVE = 0.005;
+/** Zones drawn on the price ladder on each side of the price. */
+const LADDER_ZONES = 3;
 
 const STATE_LABEL: Record<StockState, string> = {
   falling: 'Falling',
@@ -24,20 +27,28 @@ const STATE_LABEL: Record<StockState, string> = {
   sideways: 'Sideways',
 };
 
+const MARKET_LABEL: Record<MarketCheck['relation'], string> = {
+  alone: 'Falling on its own',
+  'with-market': 'Falling with the market',
+  stronger: 'Stronger than market',
+  'in-line': 'In line with market',
+};
+
 const MARKET_TEXT: Record<MarketCheck['relation'], string> = {
-  alone: 'falling on its own while the market holds: stock-specific selling, higher risk',
-  'with-market': 'falling with the market: it often recovers when the market does',
-  stronger: 'stronger than the market',
-  'in-line': 'moving in line with the market',
+  alone: 'Stock-specific selling while the market holds: higher risk.',
+  'with-market': 'Moving down with the market: it often recovers when the market does.',
+  stronger: 'Holding up better than NIFTY 50.',
+  'in-line': 'Moving with NIFTY 50.',
 };
 
 const rs = (v: number) => `₹${v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
+const tone = (v: number) => (v >= 0 ? 'up' : 'down');
 
 function Strength({ value }: { value: 1 | 2 | 3 }) {
   return (
     <span className="wl-sz-strength" title={`Strength ${value} of 3`} aria-label={`Strength ${value} of 3`}>
-      {[1, 2, 3].map((n) => <span key={n} className={n <= value ? 'wl-sz-strength__dot wl-sz-strength__dot--on' : 'wl-sz-strength__dot'} />)}
+      {[1, 2, 3].map((n) => <span key={n} className={n <= value ? 'wl-sz-strength__bar wl-sz-strength__bar--on' : 'wl-sz-strength__bar'} />)}
     </span>
   );
 }
@@ -45,10 +56,45 @@ function Strength({ value }: { value: 1 | 2 | 3 }) {
 function historyText(zone: Zone): string {
   const { tests, held, failed, avgMovePct } = zone.history;
   if (!tests) return 'No past tests';
-  const verb = zone.side === 'support' ? 'held' : 'rejected';
-  const broke = failed ? `, broke ${failed}` : '';
+  const verb = zone.side === 'support' ? 'Held' : 'Rejected';
+  const broke = failed ? ` · broke ${failed}` : '';
   const move = avgMovePct !== null ? ` · avg move ${avgMovePct.toFixed(1)}%` : '';
   return `${verb} ${held} of ${tests}${broke}${move}`;
+}
+
+/** Zones either side of the price on one scale, so their distance and width read at a glance. */
+function PriceLadder({ analysis }: { analysis: StockAnalysis }) {
+  const supports = analysis.supports.slice(0, LADDER_ZONES);
+  const resistances = analysis.resistances.slice(0, LADDER_ZONES);
+  const zones = [...supports, ...resistances];
+  if (!zones.length) return null;
+  const lo = Math.min(analysis.price, ...zones.map((z) => z.low));
+  const hi = Math.max(analysis.price, ...zones.map((z) => z.high));
+  const pad = (hi - lo) * 0.06 || analysis.price * 0.01;
+  const min = lo - pad;
+  const span = hi + pad - min;
+  const at = (v: number) => `${((v - min) / span) * 100}%`;
+  return (
+    <div className="wl-sz-ladder" aria-hidden="true">
+      <div className="wl-sz-ladder__track">
+        {zones.map((z) => (
+          <span
+            key={`${z.side}-${z.low}`}
+            className={`wl-sz-ladder__zone wl-sz-ladder__zone--${z.side} wl-sz-ladder__zone--s${z.strength}`}
+            style={{ left: at(z.low), width: `max(4px, calc(${at(z.high)} - ${at(z.low)}))` }}
+            title={`${z.side === 'support' ? 'Support' : 'Resistance'} ${rs(z.low)}–${rs(z.high)}`}
+          />
+        ))}
+        <span className="wl-sz-ladder__price" style={{ left: at(analysis.price) }}>
+          <span className="wl-sz-ladder__price-label">{rs(analysis.price)}</span>
+        </span>
+      </div>
+      <div className="wl-sz-ladder__legend">
+        <span><i className="wl-sz-ladder__key wl-sz-ladder__key--support" />Support · buy zones</span>
+        <span><i className="wl-sz-ladder__key wl-sz-ladder__key--resistance" />Resistance · exit zones</span>
+      </div>
+    </div>
+  );
 }
 
 /** Entry and exit zones, today's setups and a plan for one watchlist stock. */
@@ -56,6 +102,7 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
   const [data, setData] = useState<StockCandles | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [analysisPrice, setAnalysisPrice] = useState<number | undefined>(livePrice);
+  const [showGuide, setShowGuide] = useState(false);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -87,104 +134,180 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
     const support = zone.side === 'support';
     const inside = analysis !== null && zone.low <= analysis.price && analysis.price <= zone.high;
     return (
-      <tr key={`${zone.side}-${zone.low}`}>
-        <td className="wl-sz-zones__range">{rs(zone.low)} – {rs(zone.high)}{inside && <span className="wl-sz-tag">price here</span>}</td>
-        <td className="wl-sz-zones__num">{inside ? '—' : pct(zone.distancePct)}</td>
-        <td><Strength value={zone.strength} /></td>
-        <td className="wl-sz-zones__why">{zone.reasons.join(', ')}</td>
-        <td className="wl-sz-zones__history">{historyText(zone)}</td>
-        <td>
+      <div key={`${zone.side}-${zone.low}`} className={`wl-sz-zone wl-sz-zone--${zone.side}`}>
+        <div className="wl-sz-zone__main">
+          <span className="wl-sz-zone__range">{rs(zone.low)} – {rs(zone.high)}</span>
+          {inside ? <span className="wl-sz-tag">Price here</span> : <span className="wl-sz-zone__dist">{pct(zone.distancePct)}</span>}
+          <Strength value={zone.strength} />
           <button
             type="button"
-            className="wl-sz-alert"
+            className="wl-alert-btn"
             onClick={() => onSetAlert(
               support ? 'below' : 'above',
               Number((support ? zone.high : zone.low).toFixed(2)),
               `${support ? 'Support' : 'Resistance'} zone ${rs(zone.low)}–${rs(zone.high)} (${zone.reasons.join(', ')})`,
             )}
             title={support ? 'Alert when price falls into this zone' : 'Alert when price rises into this zone'}
+            aria-label={`Set alert at ${support ? 'support' : 'resistance'} ${rs(zone.low)}–${rs(zone.high)}`}
           >
-            Alert
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7" />
+              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+              <path d="M12 4V2" />
+            </svg>
           </button>
-        </td>
-      </tr>
+        </div>
+        <div className="wl-sz-zone__meta">
+          <span className="wl-sz-zone__history">{historyText(zone)}</span>
+          <span className="wl-sz-zone__why">
+            {zone.reasons.map((reason) => <span key={reason} className="wl-sz-reason">{reason}</span>)}
+          </span>
+        </div>
+      </div>
     );
   });
 
+  const lastDate = data?.candles[data.candles.length - 1]?.date;
+
   return (
-    <div className="wl-alert-modal-overlay" onMouseDown={onClose}>
+    <div className="wl-alert-modal-overlay wl-sz-overlay" onMouseDown={onClose}>
       <div className="wl-sz" role="dialog" aria-modal="true" aria-labelledby="wl-sz-title" onMouseDown={(e) => e.stopPropagation()}>
         <div className="wl-sz__header">
-          <div>
-            <h3 id="wl-sz-title">{tradingsymbol} · Entry &amp; exit zones</h3>
-            {analysis && (
-              <p>
-                {rs(analysis.price)} {livePrice === undefined && `(close ${analysis.date})`}
-                <span className={`wl-sz-state wl-sz-state--${analysis.state}`}>{STATE_LABEL[analysis.state]}</span>
-              </p>
-            )}
+          <div className="wl-sz__title">
+            <h3 id="wl-sz-title">{tradingsymbol}</h3>
+            <button
+              className={`wl-sz__icon-btn wl-sz__icon-btn--small ${showGuide ? 'wl-sz__icon-btn--active' : ''}`}
+              onClick={() => setShowGuide((v) => !v)}
+              aria-label={showGuide ? `Back to ${tradingsymbol}` : 'How to read this panel'}
+              title={showGuide ? `Back to ${tradingsymbol}` : 'How to read this panel'}
+            >
+              {showGuide ? (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <path d="M15 18l-6-6 6-6" />
+                </svg>
+              ) : (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9.5" />
+                  <path d="M12 11v5.5" />
+                  <path d="M12 7.5h.01" />
+                </svg>
+              )}
+            </button>
           </div>
-          <button className="wl-alert-modal__close" onClick={onClose} aria-label="Close">x</button>
+          {analysis && (
+            <div className="wl-sz__quote">
+              <span className="wl-sz__price">{rs(analysis.price)}</span>
+              <span className="wl-sz__quote-meta">
+                <span className={`wl-sz-state wl-sz-state--${analysis.state}`}>{STATE_LABEL[analysis.state]}</span>
+                {livePrice === undefined && `Close ${analysis.date}`}
+              </span>
+            </div>
+          )}
+          <button className="wl-sz__icon-btn" onClick={onClose} aria-label="Close">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
         </div>
 
-        <div className="wl-sz__body">
-          {error && <div className="wl-sz-message wl-sz-message--error">{error}</div>}
-          {!data && !error && <div className="wl-sz-message">Loading daily candles…</div>}
-          {data?.warning && <div className="wl-sz-message wl-sz-message--warn">Couldn't refresh from Kite ({data.warning}). Showing stored candles up to {data.candles[data.candles.length - 1]?.date}.</div>}
+        {showGuide && (
+          <div className="wl-sz__body">
+            <StockSetupsGuide />
+          </div>
+        )}
+
+        <div className="wl-sz__body" hidden={showGuide}>
+          {error &&<div className="wl-sz-message wl-sz-message--error">{error}</div>}
+          {!data && !error && (
+            <div className="wl-sz-loading">
+              <span className="wl-sz-loading__spinner" />
+              Loading daily candles…
+            </div>
+          )}
+          {data?.warning && <div className="wl-sz-message wl-sz-message--warn">Couldn&apos;t refresh from Kite ({data.warning}). Showing stored candles up to {lastDate}.</div>}
           {data && !analysis && <div className="wl-sz-message">Not enough history yet: zones need at least {MIN_CANDLES} trading days ({data.candles.length} stored).</div>}
 
           {analysis && (
             <>
-              <section className="wl-sz-section">
-                <p className="wl-sz-note">{analysis.stateNote}</p>
+              <section className="wl-sz-overview">
+                <p className="wl-sz-overview__note">{analysis.stateNote}</p>
                 {analysis.market && (
-                  <p className="wl-sz-note wl-sz-note--muted">
-                    Last 20 sessions: {tradingsymbol} {pct(analysis.market.stockPct)}, NIFTY 50 {pct(analysis.market.marketPct)}, {MARKET_TEXT[analysis.market.relation]}.
-                  </p>
+                  <div className="wl-sz-market">
+                    <div className="wl-sz-stat">
+                      <span>{tradingsymbol} · 20d</span>
+                      <strong className={`wl-sz-num--${tone(analysis.market.stockPct)}`}>{pct(analysis.market.stockPct)}</strong>
+                    </div>
+                    <div className="wl-sz-stat">
+                      <span>NIFTY 50 · 20d</span>
+                      <strong className={`wl-sz-num--${tone(analysis.market.marketPct)}`}>{pct(analysis.market.marketPct)}</strong>
+                    </div>
+                    <div className={`wl-sz-stat wl-sz-stat--wide wl-sz-market--${analysis.market.relation}`}>
+                      <span>{MARKET_LABEL[analysis.market.relation]}</span>
+                      <em>{MARKET_TEXT[analysis.market.relation]}</em>
+                    </div>
+                  </div>
                 )}
               </section>
+
+              <PriceLadder analysis={analysis} />
 
               {analysis.setups.length > 0 ? (
                 <section className="wl-sz-section">
                   <h4>Setups on {analysis.date}</h4>
                   <div className="wl-sz-setups">
-                    {analysis.setups.map((setup) => (
-                      <div key={setup.type} className={`wl-sz-setup wl-sz-setup--${setup.direction}`}>
-                        <div className="wl-sz-setup__head">
-                          <span className="wl-sz-setup__dir">{setup.direction === 'buy' ? 'Buy' : 'Sell / exit'}</span>
-                          <strong>{setup.label}</strong>
-                          <span className="wl-sz-setup__rr">R:R {setup.rewardRisk.toFixed(1)}</span>
+                    {analysis.setups.map((setup) => {
+                      const buy = setup.direction === 'buy';
+                      return (
+                        <div key={setup.type} className={`wl-sz-setup wl-sz-setup--${setup.direction}`}>
+                          <div className="wl-sz-setup__head">
+                            <span className="wl-sz-setup__dir">{buy ? 'Buy' : 'Sell / exit'}</span>
+                            <strong>{setup.label}</strong>
+                            <span className="wl-sz-setup__rr" title="Reward ÷ risk">R:R {setup.rewardRisk.toFixed(1)}</span>
+                          </div>
+                          <div className="wl-sz-setup__levels">
+                            <div className="wl-sz-level">
+                              <span>Entry</span>
+                              <b>{rs(setup.entry)}</b>
+                            </div>
+                            <div className="wl-sz-level wl-sz-level--stop">
+                              <span>Stop</span>
+                              <b>{rs(setup.stop)}</b>
+                              <small>{pct((setup.stop / setup.entry - 1) * 100)}</small>
+                            </div>
+                            <div className="wl-sz-level wl-sz-level--target">
+                              <span>Target</span>
+                              <b>{rs(setup.target)}</b>
+                              <small>{pct((setup.target / setup.entry - 1) * 100)}</small>
+                            </div>
+                          </div>
+                          <p>{setup.note}</p>
                         </div>
-                        <div className="wl-sz-setup__levels">
-                          <span>Entry <b>{rs(setup.entry)}</b></span>
-                          <span>Stop <b>{rs(setup.stop)}</b></span>
-                          <span>Target <b>{rs(setup.target)}</b></span>
-                        </div>
-                        <p>{setup.note}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </section>
               ) : (
-                <section className="wl-sz-section">
-                  <h4>Plan</h4>
-                  <p className="wl-sz-note">{analysis.plan}</p>
+                <section className="wl-sz-plan">
+                  <span className="wl-sz-plan__label">No setup today · Plan</span>
+                  <p>{analysis.plan}</p>
                 </section>
               )}
 
-              <section className="wl-sz-section">
-                <h4>Support · buy zones</h4>
-                {analysis.supports.length ? (
-                  <table className="wl-sz-zones"><tbody>{zoneRows(analysis.supports)}</tbody></table>
-                ) : <p className="wl-sz-note wl-sz-note--muted">No support zone below the price in the stored history.</p>}
-              </section>
+              <div className="wl-sz-columns">
+                <section className="wl-sz-section">
+                  <h4><i className="wl-sz-dot wl-sz-dot--support" />Support · buy zones</h4>
+                  {analysis.supports.length
+                    ? <div className="wl-sz-zones">{zoneRows(analysis.supports)}</div>
+                    : <p className="wl-sz-empty">No support zone below the price in the stored history.</p>}
+                </section>
 
-              <section className="wl-sz-section">
-                <h4>Resistance · sell / exit zones</h4>
-                {analysis.resistances.length ? (
-                  <table className="wl-sz-zones"><tbody>{zoneRows(analysis.resistances)}</tbody></table>
-                ) : <p className="wl-sz-note wl-sz-note--muted">No resistance zone above: the price is at or near its highs.</p>}
-              </section>
+                <section className="wl-sz-section">
+                  <h4><i className="wl-sz-dot wl-sz-dot--resistance" />Resistance · exit zones</h4>
+                  {analysis.resistances.length
+                    ? <div className="wl-sz-zones">{zoneRows(analysis.resistances)}</div>
+                    : <p className="wl-sz-empty">No resistance zone above: the price is at or near its highs.</p>}
+                </section>
+              </div>
 
               <section className="wl-sz-indicators">
                 {([
@@ -193,16 +316,22 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
                   ['200-day avg', analysis.indicators.sma200],
                   ['ATR (14)', analysis.indicators.atr],
                 ] as const).map(([label, value]) => (
-                  <span key={label}>{label} <b>{value === null ? '—' : rs(value)}</b></span>
+                  <div key={label} className="wl-sz-stat">
+                    <span>{label}</span>
+                    <strong>{value === null ? '—' : rs(value)}</strong>
+                  </div>
                 ))}
-                <span>RSI (14) <b>{analysis.indicators.rsi === null ? '—' : analysis.indicators.rsi.toFixed(0)}</b></span>
+                <div className="wl-sz-stat">
+                  <span>RSI (14)</span>
+                  <strong>{analysis.indicators.rsi === null ? '—' : analysis.indicators.rsi.toFixed(0)}</strong>
+                </div>
               </section>
             </>
           )}
         </div>
 
         <div className="wl-sz__footer">
-          Zones and counts come from {data ? `${data.candles.length} stored trading days` : 'past prices'}. They improve the odds, not certainty; sell setups on cash stocks are exits, not shorts.
+          Based on {data ? `${data.candles.length} trading days` : 'past prices'}{lastDate ? ` up to ${lastDate}` : ''}. Zones improve the odds, not certainty; sell setups on cash stocks are exits, not shorts.
         </div>
       </div>
     </div>
