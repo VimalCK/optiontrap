@@ -3295,3 +3295,8 @@ span.oi-history__chart-legend-item:hover {
   font-size: 10px;
   color: var(--text-secondary);
 }
+
+.oi-history__fair-note--warn {
+  font-size: 11px;
+  color: #f59e0b;
+}

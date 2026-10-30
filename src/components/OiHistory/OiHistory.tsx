@@ -904,6 +904,8 @@ const OiHistory: React.FC = () => {
     let maxOi = 0;
     let maxCePrice = 0;
     let maxPePrice = 0;
+    // False when the expiry never had enough traded strikes to fit an IV curve.
+    let hasFair = false;
     for (const [, expMap] of dateMap) {
       for (const [exp, v] of expMap) {
         if (v.ceOi > maxOi) maxOi = v.ceOi;
@@ -911,10 +913,11 @@ const OiHistory: React.FC = () => {
         if (!drawnExpiries.has(exp)) continue;
         maxCePrice = Math.max(maxCePrice, v.ceClose, v.ceFair ?? 0);
         maxPePrice = Math.max(maxPePrice, v.peClose, v.peFair ?? 0);
+        if (v.ceFair != null || v.peFair != null) hasFair = true;
       }
     }
 
-    return { dates, dateMap, maxOi, maxCePrice, maxPePrice, biasSummary, priceTrend, tradeBias, tradeSetup, tradeLevels, optionMomentum, premiumDecay, sellingSetup };
+    return { dates, dateMap, maxOi, maxCePrice, maxPePrice, hasFair, biasSummary, priceTrend, tradeBias, tradeSetup, tradeLevels, optionMomentum, premiumDecay, sellingSetup };
   }, [data, selectedStrike, availableDates, visibleTableExpiries, selectedSpotClose, tableData, fairByDate, chartExpiries]);
 
   // Persist each actionable setup once per session/date. This creates the
@@ -1510,9 +1513,15 @@ const OiHistory: React.FC = () => {
                     : '-'}
                 </strong>
               </span>
-              <span className="oi-history__fair-note">
-                Grey line = price at the expiry&apos;s fitted IV curve; the gap to the price is shaded. Above it is expensive, below is cheap.
-              </span>
+              {chartData.hasFair ? (
+                <span className="oi-history__fair-note">
+                  Grey line = price at the expiry&apos;s fitted IV curve; the gap to the price is shaded. Above it is expensive, below is cheap.
+                </span>
+              ) : (
+                <span className="oi-history__fair-note oi-history__fair-note--warn">
+                  No fair value for this expiry: on these dates fewer than 5 out-of-the-money strikes traded, too few to fit an IV curve. Far-month stock options are often this thin, and their prices go stale.
+                </span>
+              )}
             </div>
           )}
             </>
