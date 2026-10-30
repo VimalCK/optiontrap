@@ -1821,12 +1821,6 @@ export async function deleteOiHistoryByExpiryMonth(scrip, expiryMonth) {
   return res.rowCount;
 }
 
-export async function deleteOiHistoryBeforeExpiryMonth(scrip, cutoffExpiryMonth) {
-  const res = await query('DELETE FROM oi_history WHERE scrip = $1 AND substr(expiry, 1, 7) < $2', [scrip, cutoffExpiryMonth]);
-  await query('DELETE FROM oi_history_futures WHERE scrip = $1 AND substr(expiry, 1, 7) < $2', [scrip, cutoffExpiryMonth]);
-  return res.rowCount;
-}
-
 export async function deleteOiHistoryByDates(scrip, dates) {
   if (!dates.length) return 0;
   const placeholders = dates.map((_, i) => `$${i + 2}`).join(', ');

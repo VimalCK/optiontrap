@@ -383,11 +383,8 @@ const OiHistory: React.FC = () => {
 
   /** Delete all OI history for the selected scrip */
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [confirmCleanOld, setConfirmCleanOld] = useState(false);
   const [isDataMenuOpen, setIsDataMenuOpen] = useState(false);
   const dataMenuRef = useRef<HTMLDivElement | null>(null);
-  const cleanupCutoffMonth = addMonths(currentMonthIST(), -1);
-  const cleanupCutoffLabel = formatMonthLabel(cleanupCutoffMonth);
 
   useEffect(() => {
     if (!isDataMenuOpen) return;
@@ -429,29 +426,6 @@ const OiHistory: React.FC = () => {
       setFetchError(err instanceof Error ? err.message : 'Network error');
     }
   }, [scrip]);
-
-  const handleCleanOld = useCallback(async () => {
-    setConfirmCleanOld(false);
-    setFetchResult(null);
-    setFetchError(null);
-
-    try {
-      const params = new URLSearchParams({ scrip, beforeExpiryMonth: cleanupCutoffMonth });
-      const json = await apiClient.delete<{ status: string; deleted?: number; message?: string }>(`/api/oi-history/old?${params}`);
-      if (json.status === 'ok') {
-        const deleted = Number(json.deleted || 0);
-        setFetchResult(deleted > 0
-          ? `Deleted ${deleted} old OI history row(s) before ${cleanupCutoffLabel}.`
-          : `No old OI history rows found before ${cleanupCutoffLabel}.`);
-        lastFetchedRef.current = '';
-        loadData();
-      } else {
-        setFetchError(json.message || 'Failed to clean old data');
-      }
-    } catch (err) {
-      setFetchError(err instanceof Error ? err.message : 'Network error');
-    }
-  }, [scrip, cleanupCutoffMonth, cleanupCutoffLabel, loadData]);
 
   // Toast notifications for trade feedback
   const [toasts, setToasts] = useState<{ id: number; text: string; color: 'green' | 'red' }[]>([]);
@@ -1297,16 +1271,6 @@ const OiHistory: React.FC = () => {
               {isDataMenuOpen && (
               <div className="oi-history__data-menu-panel" role="menu">
                 <button
-                  className="oi-history__data-menu-item"
-                  onClick={() => { setIsDataMenuOpen(false); setConfirmCleanOld(true); }}
-                  disabled={fetching}
-                  role="menuitem"
-                  title={`Delete ${scrip} OI history older than ${cleanupCutoffLabel}. Keeps ${cleanupCutoffLabel} and newer.`}
-                >
-                  <strong>Clean Old</strong>
-                  <span>Keep {cleanupCutoffLabel} and newer</span>
-                </button>
-                <button
                   className="oi-history__data-menu-item oi-history__data-menu-item--danger"
                   onClick={() => { setIsDataMenuOpen(false); setConfirmDelete(true); }}
                   disabled={fetching}
@@ -1598,25 +1562,6 @@ const OiHistory: React.FC = () => {
             <div className="oi-confirm-modal__actions">
               <button className="app-btn app-btn--secondary" onClick={() => setConfirmDelete(false)}>Cancel</button>
               <button className="app-btn app-btn--danger" onClick={handleDeleteMonth}>Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Clean old confirmation modal */}
-      {confirmCleanOld && (
-        <div className="oi-confirm-overlay" onClick={() => setConfirmCleanOld(false)}>
-          <div className="oi-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h4 className="oi-confirm-modal__title">Clean Old Data</h4>
-            <p className="oi-confirm-modal__text">
-              Delete OI history for <strong>{scripOptions.find((o) => o.value === scrip)?.label || scrip}</strong> with expiry months older than <strong>{cleanupCutoffLabel}</strong>?
-            </p>
-            <p className="oi-confirm-modal__text">
-              This keeps {cleanupCutoffLabel} and newer data for current comparisons. This cannot be undone.
-            </p>
-            <div className="oi-confirm-modal__actions">
-              <button className="app-btn app-btn--secondary" onClick={() => setConfirmCleanOld(false)}>Cancel</button>
-              <button className="app-btn app-btn--danger" onClick={handleCleanOld}>Clean Old Data</button>
             </div>
           </div>
         </div>

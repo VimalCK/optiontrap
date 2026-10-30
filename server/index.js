@@ -82,7 +82,6 @@ import {
   getStoredOiHistoryExpiryMonths,
   deleteOiHistoryByMonth,
   deleteOiHistoryByExpiryMonth,
-  deleteOiHistoryBeforeExpiryMonth,
   getFnoSymbols,
   deleteOiHistoryByScrip,
   getNseStock,
@@ -1206,30 +1205,6 @@ app.delete('/api/oi-history', requireAuth, requireSubscription, async (req, res)
     res.json({ status: 'ok', deleted });
   } catch (err) {
     console.error('[OI History] DELETE error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
-  }
-});
-
-/**
- * DELETE /api/oi-history/old?scrip=NIFTY50&beforeExpiryMonth=2026-09
- * Deletes OI history rows for the scrip with expiry months older than cutoff.
- */
-app.delete('/api/oi-history/old', requireAuth, requireSubscription, async (req, res) => {
-  try {
-    const { scrip, beforeExpiryMonth } = req.query;
-
-    if (!scrip) {
-      return res.status(400).json({ status: 'error', message: 'scrip is required' });
-    }
-    if (!beforeExpiryMonth || !/^\d{4}-\d{2}$/.test(beforeExpiryMonth)) {
-      return res.status(400).json({ status: 'error', message: 'beforeExpiryMonth is required (format: YYYY-MM)' });
-    }
-
-    const deleted = await deleteOiHistoryBeforeExpiryMonth(scrip, beforeExpiryMonth);
-    console.log(`[OI History] Deleted ${deleted} old rows for ${scrip} before expiry month ${beforeExpiryMonth}`);
-    res.json({ status: 'ok', deleted });
-  } catch (err) {
-    console.error('[OI History] DELETE old error:', err.message);
     res.status(500).json({ status: 'error', message: err.message });
   }
 });
