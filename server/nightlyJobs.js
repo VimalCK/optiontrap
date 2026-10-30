@@ -35,7 +35,8 @@ import { istClock, isNightlyJobTime } from './marketClock.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const NIGHTLY_JOBS_DIR = path.join(__dirname, 'jobs', 'nightly');
 export const NIGHTLY_JOB_PREFIX = 'nightly:';
-const CHECK_INTERVAL_MS = 60 * 1000;
+/** Hourly is enough: the 22:00-midnight window always contains at least one check. */
+const CHECK_INTERVAL_MS = 60 * 60 * 1000;
 const SQL_TIMEOUT_MS = 10 * 60 * 1000;
 
 let running = false;
@@ -96,7 +97,7 @@ export async function runNightlyJobs(date) {
   }
 }
 
-/** Check now and every minute. Safe to call on every server instance. */
+/** Check now and every hour. Safe to call on every server instance. */
 export function startNightlyJobs() {
   const tick = async () => {
     if (running || !isNightlyJobTime()) return;
