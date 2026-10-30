@@ -11,15 +11,15 @@ import '@/styles/analytics.css';
 type AnalyticsTab = 'analyzer' | 'journal' | 'winloss' | 'history';
 
 const TABS: { id: AnalyticsTab; label: string }[] = [
-  { id: 'analyzer', label: 'Option Analyzer' },
   { id: 'history',  label: 'OI History'       },
+  { id: 'analyzer', label: 'Option Analyzer' },
   { id: 'journal',  label: 'Trade Journal'   },
   { id: 'winloss',  label: 'Win/Loss Patterns'},
 ];
 
 const getTabFromParams = (searchParams: URLSearchParams): AnalyticsTab => {
   const tab = searchParams.get('tab');
-  return TABS.some((item) => item.id === tab) ? tab as AnalyticsTab : 'analyzer';
+  return TABS.some((item) => item.id === tab) ? tab as AnalyticsTab : 'history';
 };
 
 const Analytics: React.FC = () => {
