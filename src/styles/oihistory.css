@@ -8,8 +8,16 @@
 
 /* ── Controls card ── */
 
+/* .card:hover adds a transform, which traps the Data menu inside the card's
+   own stacking context; lift the whole card while the menu is open so the
+   part that spills past its edge stays above the cards after it. */
 .oi-history__controls {
+  position: relative;
   padding: 16px 20px;
+}
+
+.oi-history__controls--menu-open {
+  z-index: 30;
 }
 
 .oi-history__control-row {

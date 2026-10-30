@@ -1212,7 +1212,7 @@ const OiHistory: React.FC = () => {
       )}
 
       {/* Controls */}
-      <div className="oi-history__controls card">
+      <div className={`oi-history__controls card${isDataMenuOpen ? ' oi-history__controls--menu-open' : ''}`}>
         <div className="oi-history__control-row">
           <label className="oi-history__label">
             <span>Instrument</span>
