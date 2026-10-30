@@ -5,6 +5,11 @@
  * and proxies the binary stream from wss://ws.kite.trade.
  * The client never sees credentials in the WebSocket URL.
  */
+import { apiClient } from './apiClient';
+import { handleKiteAuthFailure } from './authSession';
+
+/** Close code the server sends when Kite rejects the access token (see server/index.js). */
+const WS_SESSION_EXPIRED = 4001;
 
 export interface Tick {
   instrumentToken: number;
@@ -63,8 +68,19 @@ export class KiteTicker {
       console.error('[KiteTicker] Error:', err);
     };
 
-    this.ws.onclose = () => {
+    this.ws.onclose = (event) => {
       console.log('[KiteTicker] Disconnected');
+      if (event.code === WS_SESSION_EXPIRED) {
+        // The Kite token expired: reconnecting can't help, so go to login.
+        this.shouldReconnect = false;
+        handleKiteAuthFailure();
+        return;
+      }
+      if (event.code === 1006) {
+        // Abnormal close, e.g. the server refused the upgrade because the session
+        // is gone. A 401 here makes apiClient send the user to login.
+        apiClient.get('/auth/me').catch(() => {});
+      }
       if (this.shouldReconnect) {
         this.reconnectTimer = setTimeout(() => this.reconnect(), 5000);
       }

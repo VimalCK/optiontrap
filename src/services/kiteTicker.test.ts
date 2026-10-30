@@ -1,5 +1,7 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { KiteTicker, type Tick } from './kiteTicker';
+import { handleKiteAuthFailure } from './authSession';
+import { apiClient } from './apiClient';
 
 /** One-packet binary message with the given int32 fields (prices in paise). */
 function message(fields: number[]): ArrayBuffer {
@@ -42,5 +44,68 @@ describe('KiteTicker packet parsing', () => {
     expect(tick.volume).toBe(900);
     expect(tick.closePrice).toBe(110);
     expect(tick.oi).toBe(750);
+  });
+});
+
+vi.mock('./authSession', () => ({ handleKiteAuthFailure: vi.fn() }));
+vi.mock('./apiClient', () => ({ apiClient: { get: vi.fn(() => Promise.resolve()) } }));
+
+/** Records the sockets the ticker opens so a test can close them with a given code. */
+class FakeSocket {
+  static OPEN = 1;
+  static last: FakeSocket | null = null;
+  readyState = 0;
+  binaryType = '';
+  onopen: (() => void) | null = null;
+  onmessage: ((e: unknown) => void) | null = null;
+  onerror: ((e: unknown) => void) | null = null;
+  onclose: ((e: { code: number }) => void) | null = null;
+  constructor() { FakeSocket.last = this; }
+  send() {}
+  close() {}
+}
+
+describe('KiteTicker connection loss', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal('WebSocket', FakeSocket);
+    vi.stubGlobal('window', { location: { protocol: 'http:', host: 'localhost' } });
+    vi.mocked(handleKiteAuthFailure).mockClear();
+    vi.mocked(apiClient.get).mockClear();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('sends the user to login and stops reconnecting when the Kite session expired', () => {
+    const ticker = new KiteTicker();
+    ticker.connect([256265], () => {});
+    const first = FakeSocket.last;
+    first!.onclose!({ code: 4001 });
+    expect(handleKiteAuthFailure).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(10_000);
+    expect(FakeSocket.last).toBe(first);
+  });
+
+  it('checks the session and keeps reconnecting after an abnormal close', () => {
+    const ticker = new KiteTicker();
+    ticker.connect([256265], () => {});
+    const first = FakeSocket.last;
+    first!.onclose!({ code: 1006 });
+    expect(apiClient.get).toHaveBeenCalledWith('/auth/me');
+    expect(handleKiteAuthFailure).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(5_000);
+    expect(FakeSocket.last).not.toBe(first);
+    ticker.disconnect();
+  });
+
+  it('just reconnects after a normal close', () => {
+    const ticker = new KiteTicker();
+    ticker.connect([256265], () => {});
+    FakeSocket.last!.onclose!({ code: 1000 });
+    expect(apiClient.get).not.toHaveBeenCalled();
+    expect(handleKiteAuthFailure).not.toHaveBeenCalled();
+    ticker.disconnect();
   });
 });

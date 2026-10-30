@@ -1292,6 +1292,8 @@ app.use('/api', requireAuth, requireSubscription, apiLimiter, createProxyMiddlew
 // ---------- WebSocket Proxy ----------
 
 const wss = new WebSocketServer({ noServer: true });
+/** Close code telling the browser its Kite session has expired (mirrored in src/services/kiteTicker.ts). */
+const WS_SESSION_EXPIRED = 4001;
 
 server.on('upgrade', (request, socket, head) => {
   if (!request.url?.startsWith('/ws')) {
@@ -1338,6 +1340,7 @@ server.on('upgrade', (request, socket, head) => {
 
         wss.handleUpgrade(request, socket, head, (ws) => {
           ws._kiteSession = sessionData.kiteSession;
+          ws._sid = sid;
           wss.emit('connection', ws, request);
         });
       })
@@ -1375,6 +1378,25 @@ wss.on('connection', (clientWs) => {
       kiteWs.send(data, { binary: isBinary });
     }
     pendingMessages.length = 0;
+  });
+
+  // Kite answers an expired or revoked access token with 403 on the handshake.
+  // Clear the Kite session like the REST proxy does, and tell the client with
+  // WS_SESSION_EXPIRED so it sends the user to login instead of reconnecting.
+  kiteWs.on('unexpected-response', (_req, res) => {
+    res.resume();
+    console.log(`${ts()} ${RED}WS${RESET} upstream rejected: HTTP ${res.statusCode} ${GREY}[${userId}]${RESET}`);
+    if (res.statusCode === 403) {
+      sessionStore.get(clientWs._sid, (err, sessionData) => {
+        if (err || !sessionData?.kiteSession) return;
+        delete sessionData.kiteSession;
+        sessionStore.set(clientWs._sid, sessionData, () => {});
+      });
+      if (clientWs.readyState === WebSocket.OPEN) clientWs.close(WS_SESSION_EXPIRED, 'Kite session expired');
+    } else if (clientWs.readyState === WebSocket.OPEN) {
+      clientWs.close(1011, 'Upstream error');
+    }
+    kiteWs.terminate();
   });
 
   kiteWs.on('message', (data, isBinary) => {
