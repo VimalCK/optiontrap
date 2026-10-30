@@ -138,6 +138,9 @@ async function runMigrations() {
   }
 }
 
+/** Run a query against the pool. For nightly JS jobs; app code uses the named helpers. */
+export { query };
+
 /**
  * Close the pool cleanly. Call on process exit.
  */
@@ -1741,6 +1744,38 @@ export async function finishScheduledJobRun(job, runDate, status, detail = {}) {
      SET status = $3, detail = $4, finished_at = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
      WHERE job = $1 AND run_date = $2`,
     [job, runDate, status, JSON.stringify(detail)],
+  );
+}
+
+/**
+ * Run a SQL script (one or more statements) in a single transaction, giving
+ * up after `timeoutMs`. Returns the total rows affected.
+ */
+export async function runSqlScript(sql, timeoutMs) {
+  if (!pool) throw new Error('Database not initialised');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`SET LOCAL statement_timeout = ${Math.round(timeoutMs)}`);
+    const result = await client.query(sql);
+    await client.query('COMMIT');
+    const results = Array.isArray(result) ? result : [result];
+    return results.reduce((sum, r) => sum + (r.rowCount || 0), 0);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Runs of every job whose name starts with `prefix`, newest first. */
+export async function getScheduledJobRunsByPrefix(prefix, limit = 50) {
+  return rows(
+    `SELECT job, run_date, status, detail, started_at, finished_at FROM scheduled_job_runs
+     WHERE left(job, length($1)) = $1 ORDER BY run_date DESC, job LIMIT $2`,
+    [prefix, limit],
   );
 }
 

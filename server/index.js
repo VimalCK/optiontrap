@@ -77,6 +77,7 @@ import {
   updateTradeSetupSignalOutcome,
   evaluateTradeSetupSignalOutcomes,
   getScheduledJobRuns,
+  getScheduledJobRunsByPrefix,
   deleteTradeSetupSignal,
   getStoredOiHistoryExpiryMonths,
   deleteOiHistoryByMonth,
@@ -99,6 +100,7 @@ import { OI_HISTORY_JOB, startOiHistoryScheduler } from './oiHistoryScheduler.js
 import { checkSubscriptionAccess, inactiveSubscription } from './subscriptionAccess.js';
 import { scanStock, syncStockCandles } from './stockCandles.js';
 import { startStockSetupScheduler } from './stockSetupScheduler.js';
+import { NIGHTLY_JOB_PREFIX, startNightlyJobs } from './nightlyJobs.js';
 import { NIFTY_50_TOKEN } from '../shared/stockSetups.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -545,6 +547,16 @@ app.get('/api/admin/scheduled-jobs/oi-history', requireAuth, requireAdmin, async
   } catch (err) {
     console.error(`${ts()} ${RED}ADMIN${RESET} scheduled job runs error:`, err);
     res.status(500).json({ status: 'error', message: 'Failed to load scheduled job runs' });
+  }
+});
+
+// Recent runs of the nightly jobs (server/jobs/nightly/), newest first.
+app.get('/api/admin/scheduled-jobs/nightly', requireAuth, requireAdmin, async (req, res) => {
+  try {
+    res.json({ status: 'ok', data: await getScheduledJobRunsByPrefix(NIGHTLY_JOB_PREFIX, 100) });
+  } catch (err) {
+    console.error(`${ts()} ${RED}ADMIN${RESET} nightly job runs error:`, err);
+    res.status(500).json({ status: 'error', message: 'Failed to load nightly job runs' });
   }
 });
 
@@ -1471,6 +1483,8 @@ async function start() {
   startOiHistoryScheduler();
   // Then update watchlist stocks' daily candles and scan them for setups.
   startStockSetupScheduler();
+  // Run every file in server/jobs/nightly/ from 22:00 IST.
+  startNightlyJobs();
 
   server.listen(PORT, () => {
     console.log(`${ts()} ${GREEN}Server${RESET} OptionTrap running on port ${PORT}`);

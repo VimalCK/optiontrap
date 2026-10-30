@@ -37,6 +37,14 @@ export function isAfterCloseOnWeekday(now = new Date()) {
   return weekday >= 1 && weekday <= 5 && minutes >= AFTER_CLOSE_MINUTES;
 }
 
+/** 22:00 IST: when the nightly jobs run, every day of the week. */
+export const NIGHTLY_JOBS_MINUTES = 22 * 60;
+
+/** Whether tonight's nightly jobs are due: at or after 22:00 IST, until midnight. */
+export function isNightlyJobTime(now = new Date()) {
+  return istClock(now).minutes >= NIGHTLY_JOBS_MINUTES;
+}
+
 /** The IST date `days` before `date` (YYYY-MM-DD). */
 export function daysBefore(date, days) {
   const [y, m, d] = date.split('-').map(Number);
