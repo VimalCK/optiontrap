@@ -8,3 +8,6 @@ FROM stock_setup_scans s
 WHERE s.instrument_token = c.instrument_token;
 
 DROP TABLE IF EXISTS stock_setup_scans;
+
+-- last_date holds the date of the newest stored daily candle; say so.
+ALTER TABLE stock_candle_sync RENAME COLUMN last_date TO latest_candle_date;

@@ -1909,8 +1909,8 @@ export async function getStockCandles(instrumentToken) {
 }
 
 export async function getStockCandleSync(instrumentToken) {
-  const row = await firstRow('SELECT last_date, checked_at, full_fetched_at FROM stock_candle_sync WHERE instrument_token = $1', [instrumentToken]);
-  return row ? { lastDate: row.last_date, checkedAt: Number(row.checked_at), fullFetchedAt: Number(row.full_fetched_at) } : null;
+  const row = await firstRow('SELECT latest_candle_date, checked_at, full_fetched_at FROM stock_candle_sync WHERE instrument_token = $1', [instrumentToken]);
+  return row ? { latestCandleDate: row.latest_candle_date, checkedAt: Number(row.checked_at), fullFetchedAt: Number(row.full_fetched_at) } : null;
 }
 
 /**
@@ -1932,10 +1932,10 @@ export async function saveStockCandles(instrumentToken, candles, { replace = fal
     );
     const now = Date.now();
     await client.query(
-      `INSERT INTO stock_candle_sync (instrument_token, last_date, checked_at, full_fetched_at)
+      `INSERT INTO stock_candle_sync (instrument_token, latest_candle_date, checked_at, full_fetched_at)
        VALUES ($1, (SELECT MAX(date) FROM stock_daily_candles WHERE instrument_token = $1), $2, $2)
        ON CONFLICT (instrument_token) DO UPDATE SET
-         last_date = EXCLUDED.last_date,
+         latest_candle_date = EXCLUDED.latest_candle_date,
          checked_at = EXCLUDED.checked_at,
          full_fetched_at = CASE WHEN $3 THEN EXCLUDED.full_fetched_at ELSE stock_candle_sync.full_fetched_at END`,
       [instrumentToken, now, replace],

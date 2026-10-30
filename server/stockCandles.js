@@ -107,8 +107,8 @@ export async function syncStockCandles(instrumentToken, kite, { now = new Date()
     if (sync && sync.checkedAt >= lastSettledAt(now)) return { fetched: 0, full: false, skipped: true };
 
     const today = istClock(now).date;
-    if (sync?.lastDate) {
-      const from = daysBefore(sync.lastDate, OVERLAP_DAYS);
+    if (sync?.latestCandleDate) {
+      const from = daysBefore(sync.latestCandleDate, OVERLAP_DAYS);
       const fetched = completedCandles(await fetchKiteDaily(instrumentToken, from, today, kite, { signal }), now);
       const stored = (await getStockCandles(instrumentToken)).filter((c) => c.date >= from);
       if (!historyRewritten(stored, fetched)) {
