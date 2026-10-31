@@ -1164,8 +1164,6 @@ export async function saveOiSnapshot(snapshot) {
       );
     }
   });
-
-  await query('DELETE FROM oi_snapshots WHERE timestamp < $1', [getTodayMidnight()]);
 }
 
 export async function getTodayOiSnapshots() {

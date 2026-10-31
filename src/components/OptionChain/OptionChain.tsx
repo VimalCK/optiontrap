@@ -430,7 +430,7 @@ const OptionChain: React.FC = () => {
 
   // OI Snapshots: load existing snapshots always, capture new ones only during market hours
   useEffect(() => {
-    // Load snapshots (old ones are cleaned automatically when a new snapshot is saved)
+    // Load snapshots (older days are purged by the nightly jobs)
     getTodaySnapshots(signal).then((snaps) => {
       setSnapshots(snaps);
       // Calculate initial velocity
