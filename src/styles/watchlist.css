@@ -372,15 +372,10 @@
   cursor: pointer;
 }
 
-.wl-alert-btn:hover:not(:disabled) {
+.wl-alert-btn:hover {
   color: var(--accent);
   border-color: var(--accent);
   background: var(--sidebar-active);
-}
-
-.wl-alert-btn:disabled {
-  opacity: 0.5;
-  cursor: progress;
 }
 
 .wl-alert-toast {
@@ -1184,7 +1179,8 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
   cursor: pointer;
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
-.wl-sz__icon-btn:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.16); }
+.wl-sz__icon-btn:hover:not(:disabled) { color: var(--text-primary); background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.16); }
+.wl-sz__icon-btn:disabled { opacity: 0.5; cursor: progress; }
 .wl-sz__icon-btn--small { width: 26px; height: 26px; align-self: center; }
 .wl-sz__icon-btn--active { color: var(--accent); border-color: var(--accent); background: var(--sidebar-active); }
 

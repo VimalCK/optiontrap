@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { analyzeStock, MIN_CANDLES, type StockAnalysis, type Zone, type StockState, type MarketCheck } from '../../../shared/stockSetups.js';
-import { fetchExpectedMove, fetchStockCandles, type ExpectedMove, type StockCandles } from '@/services/stockSetups';
+import { backfillSetupHistory, fetchExpectedMove, fetchStockCandles, type ExpectedMove, type StockCandles } from '@/services/stockSetups';
 import { isAbortError } from '@/services/apiClient';
 import type { PriceAlertCondition } from '@/services/priceAlerts';
 import StockSetupsGuide from './StockSetupsGuide';
@@ -193,6 +193,26 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
     return sessions > 0 ? expectedMove.straddle / Math.sqrt(2 / Math.PI) / Math.sqrt(sessions) : null;
   }, [expectedMove]);
 
+  // Setup history: add the past year's setups, with outcomes, to the scorecard.
+  const [history, setHistory] = useState<{ running: boolean; message: string | null; error: boolean }>({ running: false, message: null, error: false });
+  useEffect(() => setHistory({ running: false, message: null, error: false }), [instrumentToken]);
+
+  const runSetupHistory = async () => {
+    setHistory({ running: true, message: null, error: false });
+    try {
+      const counts = await backfillSetupHistory(instrumentToken);
+      setHistory({
+        running: false,
+        error: false,
+        message: counts.found > 0
+          ? `Scorecard updated: ${counts.found} setup(s) in the past year — ${counts.target} target, ${counts.stop} stop, ${counts.expired} expired, ${counts.open} open.`
+          : 'No setups in the past year.',
+      });
+    } catch (err) {
+      setHistory({ running: false, error: true, message: err instanceof Error ? err.message : 'Setup history failed' });
+    }
+  };
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', onKey);
@@ -264,6 +284,19 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
                 </svg>
               )}
             </button>
+            <button
+              className="wl-sz__icon-btn wl-sz__icon-btn--small"
+              onClick={runSetupHistory}
+              disabled={history.running}
+              aria-label={`Add the past year of ${tradingsymbol} setups to the scorecard`}
+              title={history.running ? 'Adding the past year of setups…' : 'Add the past year of setups to the scorecard'}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                <path d="M3 3v5h5" />
+                <path d="M12 7v5l3 2" />
+              </svg>
+            </button>
           </div>
           {analysis && (
             <div className="wl-sz__quote">
@@ -289,6 +322,8 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
 
         <div className="wl-sz__body" hidden={showGuide}>
           {error &&<div className="wl-sz-message wl-sz-message--error">{error}</div>}
+          {history.running && <div className="wl-sz-message">Adding the past year of setups to the scorecard…</div>}
+          {history.message && <div className={`wl-sz-message${history.error ? ' wl-sz-message--error' : ''}`}>{history.message}</div>}
           {!data && !error && (
             <div className="wl-sz-loading">
               <span className="wl-sz-loading__spinner" />
