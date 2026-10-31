@@ -70,12 +70,6 @@ export async function getTodaySnapshots(signal?: AbortSignal): Promise<OiSnapsho
   }
 }
 
-export async function cleanOldSnapshots(): Promise<void> {
-  try {
-    await apiClient.delete('/api/oi-snapshots/old');
-  } catch { /* silently fail */ }
-}
-
 export async function shouldTakeSnapshot(signal?: AbortSignal): Promise<boolean> {
   try {
     const latest = (await apiClient.get<OiSnapshot | null>('/api/oi-snapshots/latest', { signal }))?.timestamp;

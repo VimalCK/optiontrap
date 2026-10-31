@@ -1194,11 +1194,6 @@ export async function getTodayOiSnapshots() {
   }));
 }
 
-export async function cleanOldOiSnapshots() {
-  const res = await query('DELETE FROM oi_snapshots WHERE timestamp < $1', [getTodayMidnight()]);
-  return res.rowCount;
-}
-
 export async function getLatestOiSnapshotTimestamp() {
   const row = await firstRow(
     'SELECT MAX(timestamp) AS ts FROM oi_snapshots WHERE timestamp >= $1',

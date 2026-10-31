@@ -67,7 +67,6 @@ import {
   clearPositions,
   saveOiSnapshot,
   getTodayOiSnapshots,
-  cleanOldOiSnapshots,
   getLatestOiSnapshotTimestamp,
   getOiHistoryData,
   getOiHistoryDataByExpiryMonth,
@@ -890,16 +889,6 @@ app.post('/api/oi-snapshots', requireAuth, requireSubscription, async (req, res)
     res.json({ status: 'ok' });
   } catch (err) {
     console.error('[OI Snapshots] POST error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
-  }
-});
-
-app.delete('/api/oi-snapshots/old', requireAuth, requireSubscription, async (req, res) => {
-  try {
-    const deleted = await cleanOldOiSnapshots();
-    res.json({ status: 'ok', deleted });
-  } catch (err) {
-    console.error('[OI Snapshots] DELETE error:', err.message);
     res.status(500).json({ status: 'error', message: err.message });
   }
 });
