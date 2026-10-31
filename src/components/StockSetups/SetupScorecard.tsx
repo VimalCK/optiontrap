@@ -39,7 +39,7 @@ const SetupScorecard: React.FC<{ instrumentToken: number; tradingsymbol: string;
       {!data ? (
         <div className="wl-alerts__empty">Loading…</div>
       ) : data.stats.length === 0 ? (
-        <div className="wl-alerts__empty">No setups tracked for {tradingsymbol} yet. They appear when the after-close scan finds one, or add the past year with the history button in its entry and exit zones panel.</div>
+        <div className="wl-alerts__empty">No setups tracked for {tradingsymbol} yet. They appear when the after-close scan finds one, or use Backtest 1Y in its entry and exit zones panel to add the past year.</div>
       ) : (
         <div className="wl-alerts__table-wrap">
           <table className="wl-alerts-table wl-scorecard__summary">

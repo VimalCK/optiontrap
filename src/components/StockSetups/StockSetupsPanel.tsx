@@ -285,17 +285,18 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
               )}
             </button>
             <button
-              className="wl-sz__icon-btn wl-sz__icon-btn--small"
+              className="wl-sz__pill-btn"
               onClick={runSetupHistory}
               disabled={history.running}
-              aria-label={`Add the past year of ${tradingsymbol} setups to the scorecard`}
-              title={history.running ? 'Adding the past year of setups…' : 'Add the past year of setups to the scorecard'}
+              aria-label={`Backtest the past year of ${tradingsymbol} setups into the scorecard`}
+              title="Replay the past year's sessions and add each setup, with how it turned out, to the scorecard"
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
-                <path d="M3 3v5h5" />
-                <path d="M12 7v5l3 2" />
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 3v18h18" />
+                <path d="M7 15l4-4 3 3 5-6" />
+                <path d="M15 8h4v4" />
               </svg>
+              {history.running ? 'Backtesting…' : 'Backtest 1Y'}
             </button>
           </div>
           {analysis && (
@@ -322,7 +323,7 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
 
         <div className="wl-sz__body" hidden={showGuide}>
           {error &&<div className="wl-sz-message wl-sz-message--error">{error}</div>}
-          {history.running && <div className="wl-sz-message">Adding the past year of setups to the scorecard…</div>}
+          {history.running && <div className="wl-sz-message">Backtesting the past year: replaying each session and adding its setups to the scorecard…</div>}
           {history.message && <div className={`wl-sz-message${history.error ? ' wl-sz-message--error' : ''}`}>{history.message}</div>}
           {!data && !error && (
             <div className="wl-sz-loading">
