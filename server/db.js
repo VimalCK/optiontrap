@@ -2007,8 +2007,8 @@ export async function updateStockSetupSignal(id, outcome) {
   );
 }
 
-/** Outcome counts per setup type across every tracked stock. */
-export async function getStockSetupStats() {
+/** Outcome counts per setup type for one stock. */
+export async function getStockSetupStats(instrumentToken) {
   const result = await rows(
     `SELECT setup_type, direction,
             COUNT(*) AS total,
@@ -2019,8 +2019,10 @@ export async function getStockSetupStats() {
             AVG(max_favorable_pct) FILTER (WHERE status <> 'open') AS avg_favorable_pct,
             AVG(max_adverse_pct) FILTER (WHERE status <> 'open') AS avg_adverse_pct
      FROM stock_setup_signals
+     WHERE instrument_token = $1
      GROUP BY setup_type, direction
      ORDER BY setup_type`,
+    [instrumentToken],
   );
   return result.map((row) => ({
     setupType: row.setup_type, direction: row.direction,
@@ -2030,20 +2032,16 @@ export async function getStockSetupStats() {
   }));
 }
 
-/** Recent setups on the stocks in the user's watchlists, newest first. */
-export async function getStockSetupSignalsForUser(userId, limit = 50) {
+/** One stock's recent setups, newest first. */
+export async function getStockSetupSignals(instrumentToken, limit = 50) {
   const result = await rows(
     `SELECT s.id, s.instrument_token, s.tradingsymbol, s.signal_date, s.setup_type, s.direction,
             s.entry, s.stop, s.target, s.status, s.resolved_date, s.sessions_held, s.max_favorable_pct, s.max_adverse_pct
      FROM stock_setup_signals s
-     WHERE s.instrument_token IN (
-       SELECT wi.instrument_token FROM watchlist_items wi
-       JOIN watchlists w ON w.id = wi.watchlist_id
-       WHERE w.user_id = $1
-     )
+     WHERE s.instrument_token = $1
      ORDER BY s.signal_date DESC, s.id DESC
      LIMIT $2`,
-    [userId, limit],
+    [instrumentToken, limit],
   );
   return result.map((row) => ({
     id: Number(row.id), instrumentToken: Number(row.instrument_token), tradingsymbol: row.tradingsymbol,

@@ -299,6 +299,9 @@
 
 .wl-table__row:last-child { border-bottom: none; }
 .wl-table__row:hover { background: var(--card-hover-bg); }
+.wl-table__row--selectable { cursor: pointer; }
+.wl-table__row--selected,
+.wl-table__row--selected:hover { background: var(--sidebar-active); box-shadow: inset 3px 0 0 var(--accent); }
 
 .wl-table__td {
   padding: 10px 14px;

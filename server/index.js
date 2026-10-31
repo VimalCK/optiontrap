@@ -87,7 +87,7 @@ import {
   getStockCandles,
   getStockScansForUser,
   getStockSetupStats,
-  getStockSetupSignalsForUser,
+  getStockSetupSignals,
 } from './db.js';
 import { PostgresSessionStore } from './sessionStore.js';
 import { createRateLimiter } from './rateLimit.js';
@@ -1107,11 +1107,12 @@ app.get('/api/stocks/scans', requireAuth, requireSubscription, async (req, res) 
   }
 });
 
-// Setup scorecard: outcomes per setup type across all tracked stocks, plus recent
-// setups on the user's own watchlist stocks.
-app.get('/api/stocks/setups', requireAuth, requireSubscription, async (req, res) => {
+// Setup scorecard for one stock: outcomes per setup type, plus its recent setups.
+app.get('/api/stocks/:token/setups', requireAuth, requireSubscription, async (req, res) => {
   try {
-    const [stats, recent] = await Promise.all([getStockSetupStats(), getStockSetupSignalsForUser(req.session.kiteSession.userId, 30)]);
+    const token = Number(req.params.token);
+    if (!Number.isInteger(token)) return res.status(400).json({ status: 'error', message: 'Invalid instrument token' });
+    const [stats, recent] = await Promise.all([getStockSetupStats(token), getStockSetupSignals(token, 30)]);
     res.json({ status: 'ok', data: { stats, recent } });
   } catch (err) {
     console.error('[Stocks] Setups GET error:', err.message);

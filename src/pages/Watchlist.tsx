@@ -83,6 +83,8 @@ const Watchlist: React.FC = () => {
 
   // Entry & exit zones: the open panel, and the latest scan per stock for the Setups column.
   const [setupsItem, setSetupsItem] = useState<WatchlistItem | null>(null);
+  // The stock row selected to show its setup scorecard; clicking it again hides the card.
+  const [scorecardToken, setScorecardToken] = useState<number | null>(null);
   const [scans, setScans] = useState<Map<number, ScanSummary>>(new Map());
   const [scansVersion, setScansVersion] = useState(0);
 
@@ -149,6 +151,12 @@ const Watchlist: React.FC = () => {
   const isStockItem = useCallback(
     (item: WatchlistItem) => isCashStock({ ...item, instrumentType: instrumentMap.get(item.instrumentToken)?.instrumentType }),
     [instrumentMap],
+  );
+
+  // Only shown while the selected stock is in the open tab.
+  const scorecardItem = useMemo(
+    () => items.find((item) => item.instrumentToken === scorecardToken && isStockItem(item)) ?? null,
+    [items, scorecardToken, isStockItem],
   );
 
   const closeSetupsPanel = useCallback(() => {
@@ -640,7 +648,16 @@ const Watchlist: React.FC = () => {
                       : '';
 
                     return (
-                      <tr key={item.id} className="wl-table__row">
+                      <tr
+                        key={item.id}
+                        className={`wl-table__row${isStockItem(item) ? ' wl-table__row--selectable' : ''}${scorecardToken === item.instrumentToken ? ' wl-table__row--selected' : ''}`}
+                        onClick={(e) => {
+                          // Buttons and links in the row keep their own actions.
+                          if (!isStockItem(item) || (e.target as HTMLElement).closest('button, a')) return;
+                          setScorecardToken((prev) => (prev === item.instrumentToken ? null : item.instrumentToken));
+                        }}
+                        aria-selected={scorecardToken === item.instrumentToken}
+                      >
                         <td className="wl-table__td wl-table__td--symbol">
                           <span className="wl-symbol">{instrumentMap.has(item.instrumentToken) ? getDisplayLabel(instrumentMap.get(item.instrumentToken)!) : item.tradingsymbol}</span>
                           <TradingViewLink symbol={item.tradingsymbol} exchange={item.exchange} />
@@ -805,7 +822,9 @@ const Watchlist: React.FC = () => {
         </div>
       )}
 
-      {items.some(isStockItem) && <SetupScorecard refreshKey={scansVersion} />}
+      {scorecardItem && (
+        <SetupScorecard key={scorecardItem.instrumentToken} instrumentToken={scorecardItem.instrumentToken} tradingsymbol={scorecardItem.tradingsymbol} refreshKey={scansVersion} />
+      )}
 
       {setupsItem && (
         <StockSetupsPanel

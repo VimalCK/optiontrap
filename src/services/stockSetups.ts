@@ -131,8 +131,9 @@ export async function fetchStockScans(signal?: AbortSignal): Promise<Map<number,
   return new Map(scans.map((s) => [s.instrumentToken, s.summary]));
 }
 
-export function fetchSetupScorecard(signal?: AbortSignal): Promise<{ stats: SetupStats[]; recent: TrackedSetup[] }> {
-  return apiClient.get('/api/stocks/setups', { signal });
+/** One stock's setup scorecard: outcomes per setup type and its recent setups. */
+export function fetchSetupScorecard(instrumentToken: number, signal?: AbortSignal): Promise<{ stats: SetupStats[]; recent: TrackedSetup[] }> {
+  return apiClient.get(`/api/stocks/${instrumentToken}/setups`, { signal });
 }
 
 /** Setups the backfill found for a stock, by outcome. */

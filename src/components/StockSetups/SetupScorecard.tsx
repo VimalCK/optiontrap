@@ -16,30 +16,30 @@ function winRate(s: SetupStats): string {
   return decided ? `${Math.round((s.target / decided) * 100)}%` : '—';
 }
 
-/** How each setup type has actually played out since tracking began. */
-const SetupScorecard: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
+/** How each setup type has actually played out on one stock since tracking began. */
+const SetupScorecard: React.FC<{ instrumentToken: number; tradingsymbol: string; refreshKey: number }> = ({ instrumentToken, tradingsymbol, refreshKey }) => {
   const [data, setData] = useState<{ stats: SetupStats[]; recent: TrackedSetup[] } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetchSetupScorecard(controller.signal)
+    fetchSetupScorecard(instrumentToken, controller.signal)
       .then(setData)
       .catch((err) => { if (!isAbortError(err)) console.error('[Watchlist] Scorecard load failed:', err); });
     return () => controller.abort();
-  }, [refreshKey]);
+  }, [instrumentToken, refreshKey]);
 
   return (
     <div className="wl-alerts wl-scorecard">
       <div className="wl-alerts__header">
         <div>
-          <h3 className="wl-alerts__title">Setup scorecard</h3>
-          <p className="wl-alerts__desc">Every setup the after-close scan finds is followed for up to 20 sessions until it hits its target or stop.</p>
+          <h3 className="wl-alerts__title">Setup scorecard · {tradingsymbol}</h3>
+          <p className="wl-alerts__desc">Every setup the after-close scan finds on {tradingsymbol} is followed for up to 20 sessions until it hits its target or stop.</p>
         </div>
       </div>
       {!data ? (
         <div className="wl-alerts__empty">Loading…</div>
       ) : data.stats.length === 0 ? (
-        <div className="wl-alerts__empty">No setups tracked yet. They appear after the first after-close scan finds one.</div>
+        <div className="wl-alerts__empty">No setups tracked for {tradingsymbol} yet. They appear when the after-close scan finds one, or add the past year with the history button in its entry and exit zones panel.</div>
       ) : (
         <div className="wl-alerts__table-wrap">
           <table className="wl-alerts-table">
@@ -77,7 +77,6 @@ const SetupScorecard: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
               <thead>
                 <tr>
                   <th>Recent</th>
-                  <th>Date</th>
                   <th>Setup</th>
                   <th className="wl-alerts-table__num">Entry</th>
                   <th className="wl-alerts-table__num">Stop</th>
@@ -88,7 +87,6 @@ const SetupScorecard: React.FC<{ refreshKey: number }> = ({ refreshKey }) => {
               <tbody>
                 {data.recent.map((s) => (
                   <tr key={s.id}>
-                    <td>{s.tradingsymbol}</td>
                     <td>{s.signalDate}</td>
                     <td>{setupLabel(s.setupType)}</td>
                     <td className="wl-alerts-table__num">{s.entry.toFixed(2)}</td>
