@@ -64,6 +64,11 @@ export async function addWatchlistItem(
   return apiClient.post<WatchlistItem>(`/api/watchlist/${watchlistId}/items`, item);
 }
 
+/** Save the order of a watchlist's items: every item id, top to bottom. */
+export async function reorderWatchlistItems(watchlistId: string, itemIds: string[]): Promise<void> {
+  await apiClient.put(`/api/watchlist/${watchlistId}/items/order`, { itemIds });
+}
+
 export async function removeWatchlistItem(
   watchlistId: string,
   itemId: string,

@@ -790,7 +790,9 @@ export async function addWatchlistItem(watchlistId, userId, { instrumentToken, t
   if (dup) return null;
 
   const id = crypto.randomUUID();
-  const sortOrder = count;
+  // After the last item; the count can collide with an existing position once items are removed or moved.
+  const lastRow = await firstRow('SELECT COALESCE(MAX(sort_order), -1) AS max_order FROM watchlist_items WHERE watchlist_id = $1', [watchlistId]);
+  const sortOrder = Number(lastRow.max_order) + 1;
 
   await query(
     `INSERT INTO watchlist_items (id, watchlist_id, instrument_token, tradingsymbol, exchange, sort_order)
@@ -799,6 +801,27 @@ export async function addWatchlistItem(watchlistId, userId, { instrumentToken, t
   );
 
   return { id, instrumentToken, tradingsymbol, exchange: exchange || 'NSE', sortOrder };
+}
+
+/**
+ * Put a watchlist's items in the given order. `itemIds` must list every item in
+ * the list exactly once; returns false otherwise or when the list isn't the user's.
+ */
+export async function reorderWatchlistItems(watchlistId, userId, itemIds) {
+  const owner = await firstRow('SELECT id FROM watchlists WHERE id = $1 AND user_id = $2', [watchlistId, userId]);
+  if (!owner) return false;
+
+  const current = await rows('SELECT id FROM watchlist_items WHERE watchlist_id = $1', [watchlistId]);
+  const ids = new Set(current.map((r) => r.id));
+  if (itemIds.length !== ids.size || new Set(itemIds).size !== ids.size || !itemIds.every((id) => ids.has(id))) return false;
+
+  await query(
+    `UPDATE watchlist_items wi SET sort_order = o.position - 1
+     FROM unnest($2::text[]) WITH ORDINALITY AS o(id, position)
+     WHERE wi.id = o.id AND wi.watchlist_id = $1`,
+    [watchlistId, itemIds],
+  );
+  return true;
 }
 
 export async function removeWatchlistItem(itemId, userId) {

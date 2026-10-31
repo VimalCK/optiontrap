@@ -7,6 +7,7 @@ import {
   deleteWatchlist as deleteWatchlistApi,
   addWatchlistItem,
   removeWatchlistItem,
+  reorderWatchlistItems,
   WatchlistMeta,
   WatchlistItem,
 } from '@/services/watchlist';
@@ -85,6 +86,11 @@ const Watchlist: React.FC = () => {
   const [setupsItem, setSetupsItem] = useState<WatchlistItem | null>(null);
   // The stock row selected to show its setup scorecard; clicking it again hides the card.
   const [scorecardToken, setScorecardToken] = useState<number | null>(null);
+  // Drag to reorder: the row whose handle is pressed (only that row is draggable), the
+  // row being dragged, and the order before the drag to compare against and restore.
+  const [dragArmedId, setDragArmedId] = useState<string | null>(null);
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const dragStartOrderRef = useRef<WatchlistItem[] | null>(null);
   const [scans, setScans] = useState<Map<number, ScanSummary>>(new Map());
   const [scansVersion, setScansVersion] = useState(0);
 
@@ -381,6 +387,44 @@ const Watchlist: React.FC = () => {
     }
   };
 
+  // Pressing a handle arms its row for dragging; releasing without a drag disarms it.
+  useEffect(() => {
+    if (!dragArmedId || draggingId) return;
+    const disarm = () => setDragArmedId(null);
+    window.addEventListener('mouseup', disarm);
+    return () => window.removeEventListener('mouseup', disarm);
+  }, [dragArmedId, draggingId]);
+
+  /** While dragging, move the dragged row to wherever the pointer is. */
+  const dragOverItem = (target: WatchlistItem) => {
+    if (!draggingId || draggingId === target.id) return;
+    setItems((prev) => {
+      const from = prev.findIndex((i) => i.id === draggingId);
+      const to = prev.findIndex((i) => i.id === target.id);
+      if (from < 0 || to < 0) return prev;
+      const next = [...prev];
+      next.splice(to, 0, next.splice(from, 1)[0]);
+      return next;
+    });
+  };
+
+  /** Save the new order when a drag ends; put the old one back if saving fails. */
+  const finishDrag = async () => {
+    const before = dragStartOrderRef.current;
+    dragStartOrderRef.current = null;
+    setDraggingId(null);
+    setDragArmedId(null);
+    if (!before || !activeTabId) return;
+    const after = items;
+    if (after.every((item, i) => item.id === before[i]?.id)) return;
+    try {
+      await reorderWatchlistItems(activeTabId, after.map((i) => i.id));
+    } catch (err) {
+      setItems(before);
+      showAlertToast(`Couldn't save the new order: ${err instanceof Error ? err.message : 'request failed'}`);
+    }
+  };
+
   const openAlertModal = (item: WatchlistItem, prefill?: { condition: PriceAlertCondition; value: number; note: string }) => {
     const currentPrice = livePrices.get(item.instrumentToken)?.ltp;
     setAlertDraftItem(item);
@@ -650,15 +694,42 @@ const Watchlist: React.FC = () => {
                     return (
                       <tr
                         key={item.id}
-                        className={`wl-table__row${isStockItem(item) ? ' wl-table__row--selectable' : ''}${scorecardToken === item.instrumentToken ? ' wl-table__row--selected' : ''}`}
+                        className={`wl-table__row${isStockItem(item) ? ' wl-table__row--selectable' : ''}${scorecardToken === item.instrumentToken ? ' wl-table__row--selected' : ''}${draggingId === item.id ? ' wl-table__row--dragging' : ''}`}
+                        draggable={dragArmedId === item.id}
+                        onDragStart={(e) => {
+                          dragStartOrderRef.current = items;
+                          setDraggingId(item.id);
+                          e.dataTransfer.effectAllowed = 'move';
+                          e.dataTransfer.setData('text/plain', item.tradingsymbol);
+                        }}
+                        onDragOver={(e) => {
+                          if (!draggingId) return;
+                          e.preventDefault();
+                          e.dataTransfer.dropEffect = 'move';
+                          dragOverItem(item);
+                        }}
+                        onDrop={(e) => e.preventDefault()}
+                        onDragEnd={finishDrag}
                         onClick={(e) => {
-                          // Buttons and links in the row keep their own actions.
-                          if (!isStockItem(item) || (e.target as HTMLElement).closest('button, a')) return;
+                          // Buttons, links and the drag handle in the row keep their own actions.
+                          if (!isStockItem(item) || (e.target as HTMLElement).closest('button, a, .wl-drag-handle')) return;
                           setScorecardToken((prev) => (prev === item.instrumentToken ? null : item.instrumentToken));
                         }}
                         aria-selected={scorecardToken === item.instrumentToken}
                       >
                         <td className="wl-table__td wl-table__td--symbol">
+                          <span
+                            className="wl-drag-handle"
+                            onMouseDown={() => setDragArmedId(item.id)}
+                            title="Drag to move"
+                            aria-hidden="true"
+                          >
+                            <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
+                              <circle cx="2.5" cy="2.5" r="1.3" /><circle cx="7.5" cy="2.5" r="1.3" />
+                              <circle cx="2.5" cy="7" r="1.3" /><circle cx="7.5" cy="7" r="1.3" />
+                              <circle cx="2.5" cy="11.5" r="1.3" /><circle cx="7.5" cy="11.5" r="1.3" />
+                            </svg>
+                          </span>
                           <span className="wl-symbol">{instrumentMap.has(item.instrumentToken) ? getDisplayLabel(instrumentMap.get(item.instrumentToken)!) : item.tradingsymbol}</span>
                           <TradingViewLink symbol={item.tradingsymbol} exchange={item.exchange} />
                           <span className="wl-exchange">{item.exchange}</span>

@@ -60,6 +60,7 @@ import {
   deleteWatchlist,
   addWatchlistItem,
   removeWatchlistItem,
+  reorderWatchlistItems,
   getPositions,
   addPosition,
   exitPositionById,
@@ -758,6 +759,26 @@ app.post('/api/watchlist/:id/items', requireAuth, requireSubscription, async (re
   }
 
   res.json({ status: 'ok', data: item });
+});
+
+// Save the order of a watchlist's items after the user drags one to a new position.
+app.put('/api/watchlist/:id/items/order', requireAuth, requireSubscription, async (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const { itemIds } = req.body || {};
+  if (!Array.isArray(itemIds) || !itemIds.every((id) => typeof id === 'string')) {
+    return res.status(400).json({ status: 'error', message: 'itemIds must be a list of item ids' });
+  }
+
+  try {
+    const saved = await reorderWatchlistItems(req.params.id, userId, itemIds);
+    if (!saved) {
+      return res.status(400).json({ status: 'error', message: 'Watchlist not found, or the items changed: reload and try again' });
+    }
+    res.json({ status: 'ok' });
+  } catch (err) {
+    console.error('[Watchlist] Reorder error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
 });
 
 app.delete('/api/watchlist/:id/items/:itemId', requireAuth, requireSubscription, async (req, res) => {

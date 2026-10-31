@@ -300,6 +300,21 @@
 .wl-table__row:last-child { border-bottom: none; }
 .wl-table__row:hover { background: var(--card-hover-bg); }
 .wl-table__row--selectable { cursor: pointer; }
+.wl-table__row--dragging { opacity: 0.45; }
+
+/* Grip to drag a row to a new position; faint until the row is hovered. */
+.wl-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 8px;
+  padding: 2px;
+  color: var(--text-secondary);
+  opacity: 0.35;
+  cursor: grab;
+  vertical-align: middle;
+}
+.wl-table__row:hover .wl-drag-handle { opacity: 0.9; }
+.wl-drag-handle:active { cursor: grabbing; }
 .wl-table__row--selected,
 .wl-table__row--selected:hover { background: var(--sidebar-active); box-shadow: inset 3px 0 0 var(--accent); }
 
