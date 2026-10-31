@@ -88,7 +88,7 @@ const SetupScorecard: React.FC<{ instrumentToken: number; tradingsymbol: string;
                 {data.recent.map((s) => (
                   <tr key={s.id}>
                     <td>{s.signalDate}</td>
-                    <td>{setupLabel(s.setupType)}</td>
+                    <td><span className={`wl-setup-chip wl-setup-chip--${s.direction}`}>{s.direction === 'buy' ? 'Buy' : 'Sell'}</span> {setupLabel(s.setupType)}</td>
                     <td className="wl-alerts-table__num">{s.entry.toFixed(2)}</td>
                     <td className="wl-alerts-table__num">{s.stop.toFixed(2)}</td>
                     <td className="wl-alerts-table__num">{s.target.toFixed(2)}</td>
