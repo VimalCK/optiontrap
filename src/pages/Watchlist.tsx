@@ -725,94 +725,6 @@ const Watchlist: React.FC = () => {
               </p>
             </div>
           )}
-
-          <div className="wl-alerts">
-            <div className="wl-alerts__header">
-              <div>
-                <h3 className="wl-alerts__title">Price Alerts</h3>
-                <p className="wl-alerts__desc">Triggered alerts stay here until you reset or delete them.</p>
-              </div>
-              <span className="wl-alerts__count">{activeAlerts.length} active / {triggeredAlerts.length} triggered</span>
-            </div>
-
-            {alerts.length === 0 ? (
-              <div className="wl-alerts__empty">No price alerts yet. Use the Alert button on a watchlist item.</div>
-            ) : (
-              <div className="wl-alerts__table-wrap">
-                <table className="wl-alerts-table">
-                  <thead>
-                    <tr>
-                      <th>Symbol</th>
-                      <th className="wl-alerts-table__center">Condition</th>
-                      <th className="wl-alerts-table__num">Tgt</th>
-                      <th className="wl-alerts-table__num">LTP</th>
-                      <th className="wl-alerts-table__center">Status</th>
-                      <th className="wl-alerts-table__center">Time</th>
-                      <th className="wl-alerts-table__center">Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {groupedAlerts.map((group) => {
-                      const groupActiveCount = group.alerts.filter((alert) => alert.status === 'active').length;
-                      const groupTriggeredCount = group.alerts.length - groupActiveCount;
-
-                      return (
-                        <React.Fragment key={group.key}>
-                          <tr className="wl-alert-group-row">
-                            <td colSpan={7}>
-                              <span className="wl-alerts-table__symbol">{group.symbol}</span>
-                              <span className="wl-alerts-table__exchange">{group.exchange}</span>
-                              <span className="wl-alert-group-row__count">
-                                {groupActiveCount} active / {groupTriggeredCount} triggered
-                              </span>
-                            </td>
-                          </tr>
-                          {group.alerts.map((alert) => {
-                            const price = livePrices.get(alert.instrumentToken);
-                            return (
-                              <tr key={alert.id}>
-                                <td>
-                                  {alert.note && <div className="wl-alerts-table__note">{alert.note}</div>}
-                                </td>
-                                <td className="wl-alerts-table__center">{alert.condition === 'above' ? 'Above' : 'Below'}</td>
-                                <td className="wl-alerts-table__num">{formatPrice(alert.value)}</td>
-                                <td className="wl-alerts-table__num">{price ? formatPrice(price.ltp) : alert.triggeredPrice ? formatPrice(alert.triggeredPrice) : '-'}</td>
-                                <td className="wl-alerts-table__center">
-                                  <span className={`wl-alert-status wl-alert-status--${alert.status}`}>
-                                    {alert.status === 'active' ? 'Active' : 'Triggered'}
-                                  </span>
-                                </td>
-                                <td className="wl-alerts-table__center">{formatDateTime(alert.triggeredAt)}</td>
-                                <td className="wl-alerts-table__center">
-                                  <div className="wl-alert-actions">
-                                    {alert.status === 'triggered' && (
-                                      <button className="wl-alert-action" onClick={() => handleResetAlert(alert.id)} title="Reset alert" aria-label={`Reset ${alert.tradingsymbol} alert`}>
-                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                          <path d="M3 12a9 9 0 1 0 3-6.7" />
-                                          <path d="M3 4v6h6" />
-                                        </svg>
-                                      </button>
-                                    )}
-                                    <button className="wl-alert-action wl-alert-action--delete" onClick={() => handleDeleteAlert(alert.id)} title="Delete alert" aria-label={`Delete ${alert.tradingsymbol} alert`}>
-                                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                        <polyline points="3 6 5 6 21 6" />
-                                        <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-                                        <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                      </svg>
-                                    </button>
-                                  </div>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </React.Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
         </div>
       ) : (
         <div className="wl-empty">
@@ -825,6 +737,94 @@ const Watchlist: React.FC = () => {
       {scorecardItem && (
         <SetupScorecard key={scorecardItem.instrumentToken} instrumentToken={scorecardItem.instrumentToken} tradingsymbol={scorecardItem.tradingsymbol} refreshKey={scansVersion} />
       )}
+
+      <div className="wl-alerts">
+        <div className="wl-alerts__header">
+          <div>
+            <h3 className="wl-alerts__title">Price Alerts</h3>
+            <p className="wl-alerts__desc">Triggered alerts stay here until you reset or delete them.</p>
+          </div>
+          <span className="wl-alerts__count">{activeAlerts.length} active / {triggeredAlerts.length} triggered</span>
+        </div>
+
+        {alerts.length === 0 ? (
+          <div className="wl-alerts__empty">No price alerts yet. Use the Alert button on a watchlist item.</div>
+        ) : (
+          <div className="wl-alerts__table-wrap">
+            <table className="wl-alerts-table">
+              <thead>
+                <tr>
+                  <th>Symbol</th>
+                  <th className="wl-alerts-table__center">Condition</th>
+                  <th className="wl-alerts-table__num">Tgt</th>
+                  <th className="wl-alerts-table__num">LTP</th>
+                  <th className="wl-alerts-table__center">Status</th>
+                  <th className="wl-alerts-table__center">Time</th>
+                  <th className="wl-alerts-table__center">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {groupedAlerts.map((group) => {
+                  const groupActiveCount = group.alerts.filter((alert) => alert.status === 'active').length;
+                  const groupTriggeredCount = group.alerts.length - groupActiveCount;
+
+                  return (
+                    <React.Fragment key={group.key}>
+                      <tr className="wl-alert-group-row">
+                        <td colSpan={7}>
+                          <span className="wl-alerts-table__symbol">{group.symbol}</span>
+                          <span className="wl-alerts-table__exchange">{group.exchange}</span>
+                          <span className="wl-alert-group-row__count">
+                            {groupActiveCount} active / {groupTriggeredCount} triggered
+                          </span>
+                        </td>
+                      </tr>
+                      {group.alerts.map((alert) => {
+                        const price = livePrices.get(alert.instrumentToken);
+                        return (
+                          <tr key={alert.id}>
+                            <td>
+                              {alert.note && <div className="wl-alerts-table__note">{alert.note}</div>}
+                            </td>
+                            <td className="wl-alerts-table__center">{alert.condition === 'above' ? 'Above' : 'Below'}</td>
+                            <td className="wl-alerts-table__num">{formatPrice(alert.value)}</td>
+                            <td className="wl-alerts-table__num">{price ? formatPrice(price.ltp) : alert.triggeredPrice ? formatPrice(alert.triggeredPrice) : '-'}</td>
+                            <td className="wl-alerts-table__center">
+                              <span className={`wl-alert-status wl-alert-status--${alert.status}`}>
+                                {alert.status === 'active' ? 'Active' : 'Triggered'}
+                              </span>
+                            </td>
+                            <td className="wl-alerts-table__center">{formatDateTime(alert.triggeredAt)}</td>
+                            <td className="wl-alerts-table__center">
+                              <div className="wl-alert-actions">
+                                {alert.status === 'triggered' && (
+                                  <button className="wl-alert-action" onClick={() => handleResetAlert(alert.id)} title="Reset alert" aria-label={`Reset ${alert.tradingsymbol} alert`}>
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                      <path d="M3 12a9 9 0 1 0 3-6.7" />
+                                      <path d="M3 4v6h6" />
+                                    </svg>
+                                  </button>
+                                )}
+                                <button className="wl-alert-action wl-alert-action--delete" onClick={() => handleDeleteAlert(alert.id)} title="Delete alert" aria-label={`Delete ${alert.tradingsymbol} alert`}>
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                    <polyline points="3 6 5 6 21 6" />
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                                    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
       {setupsItem && (
         <StockSetupsPanel

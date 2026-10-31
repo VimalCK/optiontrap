@@ -42,7 +42,7 @@ const SetupScorecard: React.FC<{ instrumentToken: number; tradingsymbol: string;
         <div className="wl-alerts__empty">No setups tracked for {tradingsymbol} yet. They appear when the after-close scan finds one, or add the past year with the history button in its entry and exit zones panel.</div>
       ) : (
         <div className="wl-alerts__table-wrap">
-          <table className="wl-alerts-table">
+          <table className="wl-alerts-table wl-scorecard__summary">
             <thead>
               <tr>
                 <th>Setup</th>
@@ -73,32 +73,34 @@ const SetupScorecard: React.FC<{ instrumentToken: number; tradingsymbol: string;
             </tbody>
           </table>
           {data.recent.length > 0 && (
-            <table className="wl-alerts-table wl-scorecard__recent">
-              <thead>
-                <tr>
-                  <th>Recent</th>
-                  <th>Setup</th>
-                  <th className="wl-alerts-table__num">Entry</th>
-                  <th className="wl-alerts-table__num">Stop</th>
-                  <th className="wl-alerts-table__num">Target</th>
-                  <th className="wl-alerts-table__center">Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {data.recent.map((s) => (
-                  <tr key={s.id}>
-                    <td>{s.signalDate}</td>
-                    <td><span className={`wl-setup-chip wl-setup-chip--${s.direction}`}>{s.direction === 'buy' ? 'Buy' : 'Sell'}</span> {setupLabel(s.setupType)}</td>
-                    <td className="wl-alerts-table__num">{s.entry.toFixed(2)}</td>
-                    <td className="wl-alerts-table__num">{s.stop.toFixed(2)}</td>
-                    <td className="wl-alerts-table__num">{s.target.toFixed(2)}</td>
-                    <td className="wl-alerts-table__center">
-                      <span className={`wl-scorecard__status wl-scorecard__status--${s.status}`}>{STATUS_TEXT[s.status]}</span>
-                    </td>
+            <div className="wl-scorecard__recent-wrap">
+              <table className="wl-alerts-table wl-scorecard__recent">
+                <thead>
+                  <tr>
+                    <th>Recent</th>
+                    <th>Setup</th>
+                    <th className="wl-alerts-table__num">Entry</th>
+                    <th className="wl-alerts-table__num">Stop</th>
+                    <th className="wl-alerts-table__num">Target</th>
+                    <th className="wl-alerts-table__center">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {data.recent.map((s) => (
+                    <tr key={s.id}>
+                      <td>{s.signalDate}</td>
+                      <td><span className={`wl-setup-chip wl-setup-chip--${s.direction}`}>{s.direction === 'buy' ? 'Buy' : 'Sell'}</span> {setupLabel(s.setupType)}</td>
+                      <td className="wl-alerts-table__num">{s.entry.toFixed(2)}</td>
+                      <td className="wl-alerts-table__num">{s.stop.toFixed(2)}</td>
+                      <td className="wl-alerts-table__num">{s.target.toFixed(2)}</td>
+                      <td className="wl-alerts-table__center">
+                        <span className={`wl-scorecard__status wl-scorecard__status--${s.status}`}>{STATUS_TEXT[s.status]}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       )}

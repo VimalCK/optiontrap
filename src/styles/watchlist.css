@@ -412,7 +412,6 @@
 }
 
 .wl-alerts {
-  margin-top: 18px;
   border: 1px solid var(--card-border);
   border-radius: 10px;
   background: var(--card-bg);
@@ -834,9 +833,9 @@
 
 /* ── Content area ── */
 
+/* Fill the page, but never shrink below the list: the scorecard and alerts cards follow it. */
 .wl-content {
-  flex: 1;
-  min-height: 0;
+  flex: 1 0 auto;
 }
 
 /* ── Premium Watchlist Skin ── */
@@ -1523,7 +1522,41 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
 }
 
 .wl-scorecard .wl-alerts__table-wrap { overflow-x: auto; }
-.wl-scorecard__recent { margin-top: 12px; }
+/* The scorecard tables have their own columns; the shared widths are the price alerts'. */
+.wl-scorecard__summary th:nth-child(1) { width: 25%; }
+.wl-scorecard__summary th:nth-child(2),
+.wl-scorecard__summary th:nth-child(3),
+.wl-scorecard__summary th:nth-child(5) { width: 9%; }
+.wl-scorecard__summary th:nth-child(4),
+.wl-scorecard__summary th:nth-child(6) { width: 8%; }
+.wl-scorecard__summary th:nth-child(7) { width: 10%; }
+.wl-scorecard__summary th:nth-child(8) { width: 22%; }
+
+.wl-scorecard__recent th:nth-child(1) { width: 15%; }
+.wl-scorecard__recent th:nth-child(2) { width: 31%; }
+.wl-scorecard__recent th:nth-child(3),
+.wl-scorecard__recent th:nth-child(4),
+.wl-scorecard__recent th:nth-child(5) { width: 13%; }
+.wl-scorecard__recent th:nth-child(6) { width: 15%; }
+
+/* Recent setups scroll inside a fixed height, header pinned, with the app's thin scrollbar. */
+.wl-scorecard__recent-wrap {
+  margin-top: 12px;
+  max-height: 320px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--card-border) transparent;
+}
+.wl-scorecard__recent-wrap::-webkit-scrollbar { width: 8px; }
+.wl-scorecard__recent-wrap::-webkit-scrollbar-track { background: transparent; }
+.wl-scorecard__recent-wrap::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 4px; }
+.wl-scorecard__recent-wrap::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+.wl-scorecard__recent th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: linear-gradient(rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.035)), var(--card-bg-solid);
+}
 .wl-scorecard__status { font-size: 11px; font-weight: 700; color: var(--text-secondary); }
 .wl-scorecard__status--target { color: #22c55e; }
 .wl-scorecard__status--stop { color: #ef4444; }
