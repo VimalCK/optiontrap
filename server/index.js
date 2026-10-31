@@ -96,7 +96,7 @@ import { getOrFetchInstruments } from './instruments.js';
 import { fetchOiHistoryMonth, OiHistoryFetchError, todayIST } from './oiHistoryFetch.js';
 import { OI_HISTORY_JOB, startOiHistoryScheduler } from './oiHistoryScheduler.js';
 import { checkSubscriptionAccess, inactiveSubscription } from './subscriptionAccess.js';
-import { scanStock, syncStockCandles } from './stockCandles.js';
+import { backfillStockSetups, scanStock, syncStockCandles } from './stockCandles.js';
 import { startStockSetupScheduler } from './stockSetupScheduler.js';
 import { NIGHTLY_JOB_PREFIX, startNightlyJobs } from './nightlyJobs.js';
 import { NIFTY_50_TOKEN } from '../shared/stockSetups.js';
@@ -1067,6 +1067,32 @@ app.get('/api/stocks/:token/candles', requireAuth, requireSubscription, async (r
     res.json({ status: 'ok', data: { stock, candles: compactCandles(candles), market: compactCandles(market), warning } });
   } catch (err) {
     console.error('[Stocks] Candles GET error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// Fill the setup scorecard from one stock's past year, so a newly added stock
+// doesn't wait weeks for the nightly scan. Candles are brought up to date first.
+app.post('/api/stocks/:token/setup-history', requireAuth, requireSubscription, async (req, res) => {
+  try {
+    const token = Number(req.params.token);
+    const stock = Number.isInteger(token) ? await getNseStock(token) : null;
+    if (!stock) return res.status(400).json({ status: 'error', message: 'Setup history covers NSE cash stocks only' });
+
+    try {
+      await syncStockCandles(token, req.session.kiteSession);
+    } catch (err) {
+      console.warn(`[Stocks] Candle sync before setup history failed for ${stock.tradingsymbol}:`, err.message);
+    }
+    if (!(await getStockCandles(token)).length) {
+      return res.status(502).json({ status: 'error', message: 'No daily candles stored for this stock and Kite could not supply them' });
+    }
+
+    const counts = await backfillStockSetups(stock);
+    console.log(`[Stocks] Setup history for ${stock.tradingsymbol}: ${counts.found} setup(s)`);
+    res.json({ status: 'ok', data: counts });
+  } catch (err) {
+    console.error('[Stocks] Setup history error:', err.message);
     res.status(500).json({ status: 'error', message: err.message });
   }
 });

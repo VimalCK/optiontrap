@@ -8,11 +8,13 @@ import {
   marketCheck,
   mergeLevels,
   parseKiteCandles,
+  replaySetups,
   relativeStrengthIndex,
   roundStep,
   stockState,
   swingLevels,
   zoneHistory,
+  MIN_CANDLES,
   SETUP_HOLD_SESSIONS,
 } from './stockSetups.js';
 
@@ -226,5 +228,28 @@ describe('evaluateSetup', () => {
     const sell = { direction: 'sell', entry: 100, stop: 105, target: 92 };
     expect(evaluateSetup(sell, [bar(1, 91, 103)]).status).toBe('target');
     expect(evaluateSetup(sell, [bar(1, 96, 106)]).status).toBe('stop');
+  });
+});
+
+describe('replaySetups', () => {
+  // A range-bound stock: dips into its support zone give buy setups along the way.
+  const candles = fromCloses(oscillate(260, 100, 120));
+
+  it('finds what the scan would have shown each session, without seeing later candles', () => {
+    const found = replaySetups(candles, day(0));
+    expect(found.length).toBeGreaterThan(0);
+    for (const setup of found) {
+      const i = candles.findIndex((c) => c.date === setup.date);
+      const { outcome, ...shown } = setup;
+      expect(analyzeStock(candles.slice(0, i + 1)).setups).toContainEqual(shown);
+      expect(outcome).toEqual(evaluateSetup(setup, candles.slice(i + 1)));
+    }
+  });
+
+  it('starts at fromDate, and never before there is enough history', () => {
+    const from = day(200);
+    expect(replaySetups(candles, from).every((s) => s.date >= from)).toBe(true);
+    expect(replaySetups(candles, day(0)).every((s) => s.date >= day(MIN_CANDLES - 1))).toBe(true);
+    expect(replaySetups(candles, day(400))).toEqual([]);
   });
 });

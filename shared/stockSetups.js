@@ -50,6 +50,8 @@ const TEST_WINDOW = 20;
 const MARKET_WINDOW = 20;
 /** Setups are tracked this many sessions before they expire. */
 export const SETUP_HOLD_SESSIONS = 20;
+/** Calendar days of past sessions the scorecard backfill replays: about 250 sessions. */
+export const SETUP_BACKFILL_DAYS = 365;
 const BREAKOUT_VOLUME_RATIO = 1.5;
 const MIN_REWARD_RISK = 1;
 
@@ -608,6 +610,28 @@ export function evaluateSetup(setup, after) {
     maxFavorablePct: sessions ? favorable * 100 : null,
     maxAdversePct: sessions ? adverse * 100 : null,
   };
+}
+
+/**
+ * Replay the after-close scan over past sessions: the setups each session from
+ * `fromDate` on would have shown, each followed through the sessions after it.
+ * Each session only sees candles up to its own close, as the nightly scan did.
+ * @param {Candle[]} candles  oldest first
+ * @param {string} fromDate  YYYY-MM-DD, first session to replay
+ * @returns {Array<Setup & { outcome: SetupOutcome }>}
+ */
+export function replaySetups(candles, fromDate) {
+  /** @type {Array<Setup & { outcome: SetupOutcome }>} */
+  const found = [];
+  const first = candles.findIndex((c) => c.date >= fromDate);
+  if (first < 0) return found;
+  for (let i = Math.max(first, MIN_CANDLES - 1); i < candles.length; i++) {
+    const analysis = analyzeStock(candles.slice(0, i + 1));
+    if (!analysis) continue;
+    const after = candles.slice(i + 1);
+    for (const setup of analysis.setups) found.push({ ...setup, outcome: evaluateSetup(setup, after) });
+  }
+  return found;
 }
 
 /**

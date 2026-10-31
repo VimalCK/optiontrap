@@ -372,10 +372,15 @@
   cursor: pointer;
 }
 
-.wl-alert-btn:hover {
+.wl-alert-btn:hover:not(:disabled) {
   color: var(--accent);
   border-color: var(--accent);
   background: var(--sidebar-active);
+}
+
+.wl-alert-btn:disabled {
+  opacity: 0.5;
+  cursor: progress;
 }
 
 .wl-alert-toast {

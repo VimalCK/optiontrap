@@ -1966,7 +1966,7 @@ export async function getStockScansForUser(userId) {
   return result.map((row) => ({ instrumentToken: Number(row.instrument_token), summary: row.scan_summary }));
 }
 
-/** Record new setups; one per stock, day and type. */
+/** Record setups, with their outcome when already known (a backfill); one per stock, day and type. Existing ones are kept. */
 export async function insertStockSetupSignals(signals) {
   if (!signals.length) return;
   const client = await pool.connect();
@@ -1974,9 +1974,14 @@ export async function insertStockSetupSignals(signals) {
     await insertInBatches(
       client,
       `INSERT INTO stock_setup_signals
-        (instrument_token, tradingsymbol, signal_date, setup_type, direction, entry, stop, target, created_at)`,
+        (instrument_token, tradingsymbol, signal_date, setup_type, direction, entry, stop, target,
+         status, resolved_date, sessions_held, max_favorable_pct, max_adverse_pct, created_at)`,
       'ON CONFLICT (instrument_token, signal_date, setup_type) DO NOTHING',
-      signals.map((s) => [s.instrumentToken, s.tradingsymbol, s.signalDate, s.setupType, s.direction, s.entry, s.stop, s.target, Date.now()]),
+      signals.map((s) => [
+        s.instrumentToken, s.tradingsymbol, s.signalDate, s.setupType, s.direction, s.entry, s.stop, s.target,
+        s.outcome?.status ?? 'open', s.outcome?.resolvedDate ?? null, s.outcome?.sessionsHeld ?? 0,
+        s.outcome?.maxFavorablePct ?? null, s.outcome?.maxAdversePct ?? null, Date.now(),
+      ]),
     );
   } finally { client.release(); }
 }

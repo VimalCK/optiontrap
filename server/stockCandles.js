@@ -24,7 +24,7 @@ import {
   withNamedAdvisoryLock,
 } from './db.js';
 import { AFTER_CLOSE_MINUTES, daysBefore, istClock } from './marketClock.js';
-import { analyzeStock, evaluateSetup, parseKiteCandles, scanSummary } from '../shared/stockSetups.js';
+import { SETUP_BACKFILL_DAYS, analyzeStock, evaluateSetup, parseKiteCandles, replaySetups, scanSummary } from '../shared/stockSetups.js';
 
 /** One day under Kite's 2000-day limit for daily candles. */
 export const HISTORY_DAYS = 1999;
@@ -150,4 +150,33 @@ export async function scanStock(stock, marketCandles) {
     if (after.length) await updateStockSetupSignal(signal.id, evaluateSetup(signal, after));
   }
   return analysis;
+}
+
+/**
+ * Fill the setup scorecard from one stock's stored history: record the setups the
+ * past year's sessions would have shown, with how each turned out. Setups already
+ * recorded are kept, so running it again only adds what's missing.
+ * @param {{ instrumentToken: number, tradingsymbol: string }} stock
+ * @returns {Promise<{ found: number, target: number, stop: number, expired: number, open: number }>}
+ */
+export async function backfillStockSetups(stock) {
+  const candles = await getStockCandles(stock.instrumentToken);
+  const latest = candles[candles.length - 1];
+  const found = latest ? replaySetups(candles, daysBefore(latest.date, SETUP_BACKFILL_DAYS)) : [];
+
+  await insertStockSetupSignals(found.map((s) => ({
+    instrumentToken: stock.instrumentToken,
+    tradingsymbol: stock.tradingsymbol,
+    signalDate: s.date,
+    setupType: s.type,
+    direction: s.direction,
+    entry: s.entry,
+    stop: s.stop,
+    target: s.target,
+    outcome: s.outcome,
+  })));
+
+  const counts = { found: found.length, target: 0, stop: 0, expired: 0, open: 0 };
+  for (const s of found) counts[s.outcome.status]++;
+  return counts;
 }

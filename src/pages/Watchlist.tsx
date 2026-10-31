@@ -24,7 +24,7 @@ import {
   loadPriceAlerts,
   savePriceAlerts,
 } from '@/services/priceAlerts';
-import { fetchStockScans, type ScanSummary } from '@/services/stockSetups';
+import { backfillSetupHistory, fetchStockScans, type ScanSummary } from '@/services/stockSetups';
 import { isAbortError } from '@/services/apiClient';
 import { isCashStock } from '../../shared/stockSetups.js';
 import StockSetupsPanel from '@/components/StockSetups/StockSetupsPanel';
@@ -165,6 +165,29 @@ const Watchlist: React.FC = () => {
     if (alertToastTimerRef.current) clearTimeout(alertToastTimerRef.current);
     alertToastTimerRef.current = setTimeout(() => setAlertToast(null), 5000);
   }, []);
+
+  // Setup history: stocks whose past year is being added to the scorecard.
+  const [backfilling, setBackfilling] = useState<Set<number>>(new Set());
+
+  const runSetupHistory = useCallback(async (item: WatchlistItem) => {
+    const token = item.instrumentToken;
+    setBackfilling((prev) => new Set(prev).add(token));
+    try {
+      const counts = await backfillSetupHistory(token);
+      showAlertToast(counts.found > 0
+        ? `${item.tradingsymbol}: ${counts.found} setup(s) in the past year — ${counts.target} target, ${counts.stop} stop, ${counts.expired} expired, ${counts.open} open`
+        : `${item.tradingsymbol}: no setups in the past year`);
+      setScansVersion((v) => v + 1);
+    } catch (err) {
+      showAlertToast(`${item.tradingsymbol}: ${err instanceof Error ? err.message : 'Setup history failed'}`);
+    } finally {
+      setBackfilling((prev) => {
+        const next = new Set(prev);
+        next.delete(token);
+        return next;
+      });
+    }
+  }, [showAlertToast]);
 
   const notifyAlertTriggered = useCallback((alert: PriceAlert, currentPrice: number) => {
     const message = `${describePriceAlert(alert)} hit. Current: ${formatPrice(currentPrice)}`;
@@ -669,6 +692,21 @@ const Watchlist: React.FC = () => {
                           ) : <span className="wl-setup-chip wl-setup-chip--none">—</span>}
                         </td>
                         <td className="wl-table__td wl-table__td--action">
+                          {isStockItem(item) && (
+                            <button
+                              className="wl-alert-btn"
+                              onClick={() => runSetupHistory(item)}
+                              disabled={backfilling.has(item.instrumentToken)}
+                              title={backfilling.has(item.instrumentToken) ? 'Adding the past year of setups…' : 'Add the past year of setups to the scorecard'}
+                              aria-label={`Add past year of setups for ${item.tradingsymbol} to the scorecard`}
+                            >
+                              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                                <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+                                <path d="M3 3v5h5" />
+                                <path d="M12 7v5l3 2" />
+                              </svg>
+                            </button>
+                          )}
                           <button
                             className="wl-alert-btn"
                             onClick={() => openAlertModal(item)}

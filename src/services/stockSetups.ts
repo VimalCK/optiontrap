@@ -134,3 +134,11 @@ export async function fetchStockScans(signal?: AbortSignal): Promise<Map<number,
 export function fetchSetupScorecard(signal?: AbortSignal): Promise<{ stats: SetupStats[]; recent: TrackedSetup[] }> {
   return apiClient.get('/api/stocks/setups', { signal });
 }
+
+/** Setups the backfill found for a stock, by outcome. */
+export interface SetupHistoryCounts { found: number; target: number; stop: number; expired: number; open: number }
+
+/** Add a stock's past year of setups, with outcomes, to the scorecard. */
+export function backfillSetupHistory(instrumentToken: number): Promise<SetupHistoryCounts> {
+  return apiClient.post(`/api/stocks/${instrumentToken}/setup-history`);
+}
