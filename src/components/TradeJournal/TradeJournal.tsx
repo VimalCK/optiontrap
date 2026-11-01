@@ -209,14 +209,6 @@ const TradeJournal: React.FC<{
           <div className="card tj-heatmap-card">
             {loading ? (
               <div className="tj-loading">Loading positions...</div>
-            ) : entries.length === 0 ? (
-              <div className="tj-empty">
-                <span className="tj-empty__icon">📭</span>
-                <p className="tj-empty__text">No exited paper trades yet.</p>
-                <p className="tj-empty__hint">
-                  Exit positions in the <strong>Paper Trading</strong> page to see them here.
-                </p>
-              </div>
             ) : (
               <PnLHeatmap
                 dailyPnL={dailyPnL}

@@ -126,32 +126,6 @@
   overflow: hidden;
 }
 
-/* ── Empty state ── */
-.tj-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 32px 0;
-  text-align: center;
-}
-
-.tj-empty__icon {
-  font-size: 32px;
-  line-height: 1;
-}
-
-.tj-empty__text {
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
-.tj-empty__hint {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
 /* ── Coming Soon (Live) ── */
 .tj-coming-soon {
   display: flex;
