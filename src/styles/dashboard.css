@@ -4,20 +4,22 @@
   gap: var(--card-gap);
 }
 
-.dashboard-header {
-  display: flex;
-  justify-content: flex-end;
-}
-
+/* Icon button in the top-right corner of the Total Net P&L card. */
 .dashboard-refresh {
-  padding: 8px 12px;
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
   border: 1px solid var(--card-border);
   border-radius: 8px;
   background: var(--card-bg);
   color: var(--text-secondary);
-  font: inherit;
-  font-size: 12px;
-  font-weight: 700;
   cursor: pointer;
 }
 
@@ -383,10 +385,6 @@
 }
 
 @media (max-width: 640px) {
-  .dashboard-refresh {
-    width: 100%;
-  }
-
   .dashboard-hero__main,
   .dashboard-panel,
   .dashboard-metric {

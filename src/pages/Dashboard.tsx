@@ -245,14 +245,22 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="dashboard">
-      <div className="dashboard-header">
-        <button className="dashboard-refresh" onClick={loadMetrics} disabled={loading}>Refresh</button>
-      </div>
-
       {error && <div className="dashboard-warning">{error}</div>}
 
       <section className="dashboard-hero">
         <div className="dashboard-hero__main">
+          <button
+            type="button"
+            className="dashboard-refresh"
+            onClick={loadMetrics}
+            disabled={loading}
+            title="Refresh dashboard"
+            aria-label="Refresh dashboard"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <path d="M23 4v6h-6" /><path d="M1 20v-6h6" /><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+            </svg>
+          </button>
           <div className="dashboard-hero__icon"><DashboardIcon /></div>
           <span className="dashboard-hero__label">Total Net P&L</span>
           <strong className={`dashboard-hero__value dashboard-tone--${getTone(totalPnl)}`}>
