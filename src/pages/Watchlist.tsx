@@ -20,13 +20,15 @@ import {
   PriceAlert,
   PriceAlertCondition,
   createPriceAlert,
+  deletePriceAlert,
   describePriceAlert,
+  fetchPriceAlerts,
   isPriceAlertTriggered,
-  loadPriceAlerts,
-  savePriceAlerts,
+  resetPriceAlert,
+  triggerPriceAlert,
 } from '@/services/priceAlerts';
 import { fetchStockScans, type ScanSummary } from '@/services/stockSetups';
-import { isAbortError } from '@/services/apiClient';
+import { ApiError, isAbortError } from '@/services/apiClient';
 import { isCashStock } from '../../shared/stockSetups.js';
 import StockSetupsPanel from '@/components/StockSetups/StockSetupsPanel';
 import SetupScorecard from '@/components/StockSetups/SetupScorecard';
@@ -73,7 +75,9 @@ const Watchlist: React.FC = () => {
 
   // Live prices
   const [livePrices, setLivePrices] = useState<Map<number, LivePrice>>(new Map());
-  const [alerts, setAlerts] = useState<PriceAlert[]>(() => loadPriceAlerts());
+  const [alerts, setAlerts] = useState<PriceAlert[]>([]);
+  // Read by the tick handler, which fires too often to re-create on every alert change.
+  const alertsRef = useRef<PriceAlert[]>([]);
   const [alertDraftItem, setAlertDraftItem] = useState<WatchlistItem | null>(null);
   const [alertCondition, setAlertCondition] = useState<PriceAlertCondition>('above');
   const [alertValue, setAlertValue] = useState('');
@@ -142,8 +146,16 @@ const Watchlist: React.FC = () => {
   }, [instruments]);
 
   useEffect(() => {
-    savePriceAlerts(alerts);
+    alertsRef.current = alerts;
   }, [alerts]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchPriceAlerts(controller.signal)
+      .then(setAlerts)
+      .catch((err) => { if (!isAbortError(err)) console.error('[Watchlist] Price alerts load failed:', err); });
+    return () => controller.abort();
+  }, []);
 
   // Reload scans on mount and after a panel closes: opening one re-scans that stock.
   useEffect(() => {
@@ -209,24 +221,34 @@ const Watchlist: React.FC = () => {
       return changed ? next : prev;
     });
 
-    setAlerts((prev) => {
-      let changed = false;
-      const priceByToken = new Map(ticks.map((t) => [t.instrumentToken, t.lastPrice]));
-      const next = prev.map((alert) => {
-        const currentPrice = priceByToken.get(alert.instrumentToken);
-        if (currentPrice === undefined || !isPriceAlertTriggered(alert, currentPrice)) return alert;
+    const priceByToken = new Map(ticks.map((t) => [t.instrumentToken, t.lastPrice]));
+    const hits = new Map<string, number>();
+    for (const alert of alertsRef.current) {
+      const currentPrice = priceByToken.get(alert.instrumentToken);
+      if (currentPrice !== undefined && isPriceAlertTriggered(alert, currentPrice)) hits.set(alert.id, currentPrice);
+    }
+    if (hits.size === 0) return;
 
-        changed = true;
-        notifyAlertTriggered(alert, currentPrice);
-        return {
-          ...alert,
-          status: 'triggered' as const,
-          triggeredAt: new Date().toISOString(),
-          triggeredPrice: currentPrice,
-        };
-      });
-      return changed ? next : prev;
-    });
+    // Mark them triggered here at once so the next tick doesn't fire them again, then save.
+    const triggeredAt = new Date().toISOString();
+    const markHits = (list: PriceAlert[]) => list.map((alert) => (hits.has(alert.id) && alert.status === 'active'
+      ? { ...alert, status: 'triggered' as const, triggeredAt, triggeredPrice: hits.get(alert.id) }
+      : alert));
+    for (const alert of alertsRef.current) {
+      const price = hits.get(alert.id);
+      if (price !== undefined) notifyAlertTriggered(alert, price);
+    }
+    alertsRef.current = markHits(alertsRef.current);
+    setAlerts(markHits);
+
+    for (const [id, price] of hits) {
+      triggerPriceAlert(id, price)
+        .then((saved) => setAlerts((prev) => prev.map((alert) => (alert.id === saved.id ? saved : alert))))
+        .catch((err) => {
+          // 404: another tab or device already triggered it, or it was deleted.
+          if (!(err instanceof ApiError && err.status === 404)) console.error('[Watchlist] Saving triggered alert failed:', err);
+        });
+    }
   }, [notifyAlertTriggered]);
 
   // Subscribe to ticks for the active tab's items only
@@ -452,18 +474,21 @@ const Watchlist: React.FC = () => {
       browserNotification = permission === 'granted';
     }
 
-    const alert = createPriceAlert({
-      instrumentToken: alertDraftItem.instrumentToken,
-      tradingsymbol: alertDraftItem.tradingsymbol,
-      exchange: alertDraftItem.exchange,
-      condition: alertCondition,
-      value,
-      note: alertNote.trim() || undefined,
-      browserNotification,
-    });
-
-    setAlerts((prev) => [alert, ...prev]);
-    closeAlertModal();
+    try {
+      const alert = await createPriceAlert({
+        instrumentToken: alertDraftItem.instrumentToken,
+        tradingsymbol: alertDraftItem.tradingsymbol,
+        exchange: alertDraftItem.exchange,
+        condition: alertCondition,
+        value,
+        note: alertNote.trim() || undefined,
+        browserNotification,
+      });
+      setAlerts((prev) => [alert, ...prev]);
+      closeAlertModal();
+    } catch (err) {
+      showAlertToast(`Couldn't save the alert: ${err instanceof Error ? err.message : 'request failed'}`);
+    }
   };
 
   const adjustAlertValue = (delta: number) => {
@@ -472,14 +497,22 @@ const Watchlist: React.FC = () => {
     setAlertValue(next.toFixed(2));
   };
 
-  const handleDeleteAlert = (id: string) => {
-    setAlerts((prev) => prev.filter((alert) => alert.id !== id));
+  const handleDeleteAlert = async (id: string) => {
+    try {
+      await deletePriceAlert(id);
+      setAlerts((prev) => prev.filter((alert) => alert.id !== id));
+    } catch (err) {
+      showAlertToast(`Couldn't delete the alert: ${err instanceof Error ? err.message : 'request failed'}`);
+    }
   };
 
-  const handleResetAlert = (id: string) => {
-    setAlerts((prev) => prev.map((alert) => alert.id === id
-      ? { ...alert, status: 'active', triggeredAt: undefined, triggeredPrice: undefined }
-      : alert));
+  const handleResetAlert = async (id: string) => {
+    try {
+      const saved = await resetPriceAlert(id);
+      setAlerts((prev) => prev.map((alert) => (alert.id === id ? saved : alert)));
+    } catch (err) {
+      showAlertToast(`Couldn't reset the alert: ${err instanceof Error ? err.message : 'request failed'}`);
+    }
   };
 
   const handleSearchKeyDown = (e: React.KeyboardEvent) => {

@@ -61,6 +61,11 @@ import {
   addWatchlistItem,
   removeWatchlistItem,
   reorderWatchlistItems,
+  getPriceAlerts,
+  createPriceAlert,
+  triggerPriceAlert,
+  resetPriceAlert,
+  deletePriceAlert,
   getPositions,
   addPosition,
   exitPositionById,
@@ -90,6 +95,7 @@ import {
   getStockSetupStats,
   getStockSetupSignals,
 } from './db.js';
+import { parsePriceAlertInput } from './priceAlerts.js';
 import { PostgresSessionStore } from './sessionStore.js';
 import { createRateLimiter } from './rateLimit.js';
 import { cached } from './cache.js';
@@ -789,6 +795,48 @@ app.delete('/api/watchlist/:id/items/:itemId', requireAuth, requireSubscription,
     return res.status(404).json({ status: 'error', message: 'Item not found' });
   }
 
+  res.json({ status: 'ok' });
+});
+
+// ---------- Price alerts ----------
+
+app.get('/api/price-alerts', requireAuth, requireSubscription, async (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  res.json({ status: 'ok', data: await getPriceAlerts(userId) });
+});
+
+app.post('/api/price-alerts', requireAuth, requireSubscription, async (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const { alert, error } = parsePriceAlertInput(req.body);
+  if (error) return res.status(400).json({ status: 'error', message: error });
+
+  res.json({ status: 'ok', data: await createPriceAlert(userId, alert) });
+});
+
+// The browser saw a tick cross the alert's price.
+app.post('/api/price-alerts/:id/trigger', requireAuth, requireSubscription, async (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const price = Number(req.body?.price);
+  if (!Number.isFinite(price) || price <= 0) {
+    return res.status(400).json({ status: 'error', message: 'price must be above 0' });
+  }
+
+  const alert = await triggerPriceAlert(req.params.id, userId, price);
+  if (!alert) return res.status(404).json({ status: 'error', message: 'Active alert not found' });
+  res.json({ status: 'ok', data: alert });
+});
+
+app.post('/api/price-alerts/:id/reset', requireAuth, requireSubscription, async (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const alert = await resetPriceAlert(req.params.id, userId);
+  if (!alert) return res.status(404).json({ status: 'error', message: 'Alert not found' });
+  res.json({ status: 'ok', data: alert });
+});
+
+app.delete('/api/price-alerts/:id', requireAuth, requireSubscription, async (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const deleted = await deletePriceAlert(req.params.id, userId);
+  if (!deleted) return res.status(404).json({ status: 'error', message: 'Alert not found' });
   res.json({ status: 'ok' });
 });
 

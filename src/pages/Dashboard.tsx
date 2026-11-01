@@ -4,7 +4,7 @@ import { DashboardIcon } from '@/components/icons/Icons';
 import { fetchHoldings, fetchPositions } from '@/services/kiteApi';
 import { getPositions, Position } from '@/services/positions';
 import { getLiveTradeEntries, getPaperTradeEntries, TradeEntry } from '@/services/tradeJournal';
-import { loadPriceAlerts } from '@/services/priceAlerts';
+import { fetchPriceAlerts } from '@/services/priceAlerts';
 import { fetchWatchlists } from '@/services/watchlist';
 import '@/styles/dashboard.css';
 
@@ -152,13 +152,14 @@ const Dashboard: React.FC = () => {
     setError(null);
 
     try {
-      const [holdingsResult, livePositionsResult, paperPositionsResult, paperTradesResult, liveTradesResult, watchlistsResult] = await Promise.allSettled([
+      const [holdingsResult, livePositionsResult, paperPositionsResult, paperTradesResult, liveTradesResult, watchlistsResult, alertsResult] = await Promise.allSettled([
         fetchHoldings(),
         fetchPositions(),
         getPositions(),
         getPaperTradeEntries(),
         getLiveTradeEntries(),
         fetchWatchlists(),
+        fetchPriceAlerts(),
       ]);
 
       const holdings = holdingsResult.status === 'fulfilled' ? holdingsResult.value : [];
@@ -172,7 +173,7 @@ const Dashboard: React.FC = () => {
         ...liveTrades.map((trade) => ({ ...trade, mode: 'live' as const })),
       ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
       const watchlists = watchlistsResult.status === 'fulfilled' ? watchlistsResult.value : [];
-      const alerts = loadPriceAlerts();
+      const alerts = alertsResult.status === 'fulfilled' ? alertsResult.value : [];
 
       const holdingRows = holdings.map((holding) => {
         const quantity = getEffectiveHoldingQty(holding);

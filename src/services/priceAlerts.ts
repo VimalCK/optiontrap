@@ -1,3 +1,9 @@
+/**
+ * Price alerts API client. Alerts are stored per user on the server; the
+ * Watchlist page checks live ticks against them and reports triggers back.
+ */
+import { apiClient } from './apiClient';
+
 export type PriceAlertCondition = 'above' | 'below';
 export type PriceAlertStatus = 'active' | 'triggered';
 
@@ -16,31 +22,26 @@ export interface PriceAlert {
   createdAt: string;
 }
 
-const STORAGE_KEY = 'optiontrap_price_alerts';
+export type NewPriceAlert = Omit<PriceAlert, 'id' | 'status' | 'triggeredAt' | 'triggeredPrice' | 'createdAt'>;
 
-export function loadPriceAlerts(): PriceAlert[] {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return [];
-
-  try {
-    const parsed = JSON.parse(raw) as PriceAlert[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+export async function fetchPriceAlerts(signal?: AbortSignal): Promise<PriceAlert[]> {
+  return apiClient.get<PriceAlert[]>('/api/price-alerts', { signal });
 }
 
-export function savePriceAlerts(alerts: PriceAlert[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(alerts));
+export async function createPriceAlert(input: NewPriceAlert): Promise<PriceAlert> {
+  return apiClient.post<PriceAlert>('/api/price-alerts', input);
 }
 
-export function createPriceAlert(input: Omit<PriceAlert, 'id' | 'status' | 'createdAt'>): PriceAlert {
-  return {
-    ...input,
-    id: crypto.randomUUID(),
-    status: 'active',
-    createdAt: new Date().toISOString(),
-  };
+export async function triggerPriceAlert(id: string, price: number): Promise<PriceAlert> {
+  return apiClient.post<PriceAlert>(`/api/price-alerts/${id}/trigger`, { price });
+}
+
+export async function resetPriceAlert(id: string): Promise<PriceAlert> {
+  return apiClient.post<PriceAlert>(`/api/price-alerts/${id}/reset`);
+}
+
+export async function deletePriceAlert(id: string): Promise<void> {
+  await apiClient.delete(`/api/price-alerts/${id}`);
 }
 
 export function isPriceAlertTriggered(alert: PriceAlert, currentPrice: number): boolean {
