@@ -934,7 +934,7 @@ const OptionChain: React.FC = () => {
 
       {/* OI Bar Chart Card */}
       {!loading && !error && visibleChain.length > 0 && (
-        <div className={`card oc-chart-card ${selectedChartStrike !== null ? 'oc-chart-card--tooltip-open' : ''}`} style={{ marginTop: 24 }}>
+        <div className={`card oc-chart-card ${selectedChartStrike !== null ? 'oc-chart-card--tooltip-open' : ''}`} style={{ marginTop: 'var(--card-gap)' }}>
           <div className="trap-card-header">
             <div className="trap-card-header__left">
               <h3 className="card__title" style={{ marginBottom: 0 }}>OI Chart <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-secondary)' }}>(daily changes)</span></h3>
@@ -1148,7 +1148,7 @@ const OptionChain: React.FC = () => {
 
       {/* Strategy (Sell / Buy / Analyzer) */}
       {!loading && !error && visibleChain.length > 0 && (
-        <div className="card" style={{ marginTop: 24 }}>
+        <div className="card" style={{ marginTop: 'var(--card-gap)' }}>
           <div className="trap-card-header">
             <div className="trap-card-header__left">
               <h3 className="card__title" style={{ marginBottom: 0 }}>Strategy</h3>

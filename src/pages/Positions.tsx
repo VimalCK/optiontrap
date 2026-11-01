@@ -496,7 +496,7 @@ const RiskPanel: React.FC<{ groups: RiskGroup[]; spotPrices: Map<string, number>
   const selected = groups.find((g) => g.key === selectedKey) || null;
 
   return (
-    <div className="card risk-panel" style={{ marginBottom: 20 }}>
+    <div className="card risk-panel" style={{ marginBottom: 'var(--card-gap)' }}>
       <h3 className="card__title">Position Risk</h3>
       <div className="risk-panel__grid">
         {groups.map((g) => (
@@ -730,7 +730,7 @@ const PaperPositions: React.FC = () => {
   return (
     <>
       {/* Summary */}
-      <div className="card" style={{ marginBottom: 20 }}>
+      <div className="card" style={{ marginBottom: 'var(--card-gap)' }}>
         <div className="positions-summary">
           <div className="positions-summary__item">
             <span className="positions-summary__label">Total P&L</span>
@@ -887,7 +887,7 @@ const LivePositions: React.FC = () => {
   const renderActiveTable = (list: KitePosition[]) => {
     if (list.length === 0) return null;
     return (
-      <div className="card" style={{ marginBottom: 16 }}>
+      <div className="card" style={{ marginBottom: 'var(--card-gap)' }}>
         <h4 className="live-positions__section-title">Active</h4>
         <div className="positions-table-scroll">
         <table className="positions-table live-positions-table">
@@ -937,7 +937,7 @@ const LivePositions: React.FC = () => {
   const renderExitedTable = (list: KitePosition[]) => {
     if (list.length === 0) return null;
     return (
-      <div className="card" style={{ marginBottom: 16 }}>
+      <div className="card" style={{ marginBottom: 'var(--card-gap)' }}>
         <h4 className="live-positions__section-title">Exited</h4>
         <div className="positions-table-scroll">
         <table className="positions-table live-positions-table">
@@ -1018,7 +1018,7 @@ const LivePositions: React.FC = () => {
       </div>
 
       {/* Summary */}
-      <div className="card" style={{ marginBottom: 16 }}>
+      <div className="card" style={{ marginBottom: 'var(--card-gap)' }}>
         <div className="positions-summary">
           <div className="positions-summary__item">
             <span className="positions-summary__label">Total P&L</span>

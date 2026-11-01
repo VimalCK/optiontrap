@@ -3,7 +3,7 @@
 .oi-history {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--card-gap);
 }
 
 /* ── Controls card ── */
@@ -821,11 +821,11 @@
 
 .oi-history__chart-wrap {
   padding: 12px 16px;
-  margin-top: 8px;
 }
 
 /* Futures chart sits inside the card, so it aligns with the card header. */
 .oi-history__chart-wrap.oi-history__chart-wrap--futures {
+  margin-top: 8px;
   padding-left: 0;
   padding-right: 0;
 }

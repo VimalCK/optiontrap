@@ -18,6 +18,7 @@
   --card-hover-border: rgba(99, 102, 241, 0.3);
   --card-shadow: rgba(0, 0, 0, 0.3);
   --radius: 12px;
+  --card-gap: 8px;                /* space between cards on every page */
   --transition-speed: 0.2s;
 }
 

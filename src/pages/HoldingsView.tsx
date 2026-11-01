@@ -172,7 +172,7 @@ const HoldingsView: React.FC = () => {
           </div>
 
           {/* Allocation */}
-          <div className="card" style={{ marginTop: 24 }}>
+          <div className="card" style={{ marginTop: 'var(--card-gap)' }}>
             <div className="allocation-header">
               <div>
                 <h3 className="card__title">Allocation</h3>
@@ -247,7 +247,7 @@ const HoldingsView: React.FC = () => {
           </div>
 
           {/* Holdings Table */}
-          <div className="card holdings-table-card" style={{ marginTop: 24, overflow: 'auto' }}>
+          <div className="card holdings-table-card" style={{ marginTop: 'var(--card-gap)', overflow: 'auto' }}>
             <h3 className="card__title" style={{ marginBottom: 16 }}>All Holdings</h3>
             <table className="holdings-table">
               <thead>

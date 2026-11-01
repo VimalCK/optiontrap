@@ -245,12 +245,7 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="dashboard">
-      <div className="page-header dashboard-header">
-        <div>
-          <span className="dashboard-eyebrow">OptionTrap Command Center</span>
-          <h1 className="page-header__title">Dashboard</h1>
-          <p className="page-header__subtitle">Portfolio health, trade quality, alert coverage, and live risk in one view.</p>
-        </div>
+      <div className="dashboard-header">
         <button className="dashboard-refresh" onClick={loadMetrics} disabled={loading}>Refresh</button>
       </div>
 

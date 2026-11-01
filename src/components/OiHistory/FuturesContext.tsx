@@ -93,7 +93,7 @@ export const FuturesContext: React.FC<FuturesContextProps> = ({ futuresData, fil
   if (futuresContracts.length === 0) return null;
 
   return (
-    <div className="oi-history__table-wrap card" style={{ marginBottom: 16 }}>
+    <div className="oi-history__table-wrap card">
       <div className="oi-history__table-header">
         <div className="oi-history__table-header-left">
           <div>

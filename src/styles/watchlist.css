@@ -848,19 +848,18 @@
 
 /* ── Content area ── */
 
-/* Fill the page, but never shrink below the list: the scorecard and alerts cards follow it. */
+/* Only as tall as the list, so the scorecard and alerts cards follow it directly. */
 .wl-content {
-  flex: 1 0 auto;
+  flex: none;
 }
 
 /* ── Premium Watchlist Skin ── */
 
 .wl {
-  gap: 18px;
+  gap: var(--card-gap);
 }
 
 .wl-tabs,
-.wl-content,
 .wl-alerts {
   border: 1px solid var(--card-border);
   background: var(--card-bg);
@@ -869,7 +868,7 @@
 
 .wl-tabs {
   align-self: flex-start;
-  margin-bottom: 0;
+  margin-bottom: 10px;            /* tabs sit a little further from the cards than cards from each other */
   padding: 5px;
   border-bottom: 1px solid var(--card-border);
   border-radius: 999px;
@@ -921,14 +920,6 @@
 
 .wl-tab--add:hover {
   background: var(--sidebar-active);
-}
-
-.wl-content {
-  padding: 20px;
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at top right, rgba(99, 102, 241, 0.08), transparent 34%),
-    var(--card-bg);
 }
 
 .wl-search {
@@ -1071,11 +1062,6 @@
   .wl-tabs {
     width: 100%;
     border-radius: 16px;
-  }
-
-  .wl-content {
-    padding: 14px;
-    border-radius: 14px;
   }
 
   .wl-search,

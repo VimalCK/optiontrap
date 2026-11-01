@@ -276,7 +276,7 @@ const Profile: React.FC = () => {
       </div>
 
       {/* Danger Zone */}
-      <div className="card profile-danger-zone" style={{ marginTop: 24 }}>
+      <div className="card profile-danger-zone" style={{ marginTop: 'var(--card-gap)' }}>
         <div className="profile-danger-zone__content">
           <div>
             <p className="profile-danger-zone__desc">

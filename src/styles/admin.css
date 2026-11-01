@@ -1,7 +1,11 @@
 .admin {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: var(--card-gap);
+}
+
+.admin > .analytics-tabs {
+  margin-bottom: 10px;
 }
 
 .admin-refresh {
@@ -483,7 +487,7 @@
 .hx-panels {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
-  gap: 16px;
+  gap: var(--card-gap);
   align-items: start;
 }
 
@@ -572,7 +576,7 @@
 .hx-metrics {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: var(--card-gap);
 }
 
 .hx-stat {
