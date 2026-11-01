@@ -1,8 +1,8 @@
 /**
  * Instrument Search Service
  *
- * Fetches the instrument list from the server (NSE equities + NIFTY F&O).
- * The server caches in SQLite, shared across all users.
+ * Fetches the instrument list from the server: NSE equities, NFO F&O, and the
+ * BSE stocks that aren't on NSE. The server caches it daily, shared across all users.
  * Provides a fast prefix-match search for the watchlist "add instrument" UI.
  */
 import { apiClient } from './apiClient';

@@ -89,7 +89,7 @@ import {
   deleteOiHistoryByExpiryMonth,
   getFnoSymbols,
   deleteOiHistoryByScrip,
-  getNseStock,
+  getCashStock,
   getStockCandles,
   getStockScansForUser,
   getStockSetupStats,
@@ -1111,8 +1111,8 @@ const compactCandles = (candles) => candles.map((c) => [c.date, c.open, c.high, 
 app.get('/api/stocks/:token/candles', requireAuth, requireSubscription, async (req, res) => {
   try {
     const token = Number(req.params.token);
-    const stock = Number.isInteger(token) ? await getNseStock(token) : null;
-    if (!stock) return res.status(400).json({ status: 'error', message: 'Entry and exit zones cover NSE cash stocks only' });
+    const stock = Number.isInteger(token) ? await getCashStock(token) : null;
+    if (!stock) return res.status(400).json({ status: 'error', message: 'Entry and exit zones cover NSE and BSE cash stocks only' });
 
     const kite = req.session.kiteSession;
     let warning = null;
@@ -1145,8 +1145,8 @@ app.get('/api/stocks/:token/candles', requireAuth, requireSubscription, async (r
 app.post('/api/stocks/:token/setup-history', requireAuth, requireSubscription, async (req, res) => {
   try {
     const token = Number(req.params.token);
-    const stock = Number.isInteger(token) ? await getNseStock(token) : null;
-    if (!stock) return res.status(400).json({ status: 'error', message: 'Setup history covers NSE cash stocks only' });
+    const stock = Number.isInteger(token) ? await getCashStock(token) : null;
+    if (!stock) return res.status(400).json({ status: 'error', message: 'Setup history covers NSE and BSE cash stocks only' });
 
     try {
       await syncStockCandles(token, req.session.kiteSession);

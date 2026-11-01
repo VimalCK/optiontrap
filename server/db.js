@@ -1965,22 +1965,22 @@ export async function getStrikeStepSize(scripName) {
 
 // ---------- Stock candles and setups (watchlist) ----------
 
-/** An NSE cash stock by token, or null for anything else (indices are stored as NSE EQ but contain a space). */
-export async function getNseStock(instrumentToken) {
+/** An NSE or BSE cash stock by token, or null for anything else (indices are stored as NSE EQ but contain a space). */
+export async function getCashStock(instrumentToken) {
   const row = await firstRow(
     `SELECT instrument_token, tradingsymbol FROM instruments
-     WHERE instrument_token = $1 AND exchange = 'NSE' AND instrument_type = 'EQ' AND tradingsymbol NOT LIKE '% %'`,
+     WHERE instrument_token = $1 AND exchange IN ('NSE', 'BSE') AND instrument_type = 'EQ' AND tradingsymbol NOT LIKE '% %'`,
     [instrumentToken],
   );
   return row ? { instrumentToken: Number(row.instrument_token), tradingsymbol: row.tradingsymbol } : null;
 }
 
-/** Every distinct NSE cash stock in any user's watchlist. */
+/** Every distinct NSE or BSE cash stock in any user's watchlist. */
 export async function getWatchlistStocks() {
   const result = await rows(
     `SELECT DISTINCT ON (instrument_token) instrument_token, tradingsymbol
      FROM watchlist_items
-     WHERE exchange = 'NSE' AND tradingsymbol NOT LIKE '% %'
+     WHERE exchange IN ('NSE', 'BSE') AND tradingsymbol NOT LIKE '% %'
      ORDER BY instrument_token`,
   );
   return result.map((row) => ({ instrumentToken: Number(row.instrument_token), tradingsymbol: row.tradingsymbol }));

@@ -1,9 +1,10 @@
 /**
  * Instruments Service — shared instrument cache with a cross-process fetch lock.
  *
- * Fetches two datasets from Kite:
- *   1. NSE instruments (filtered to EQ — stocks only)
- *   2. NFO instruments (filtered to NIFTY CE/PE/FUT only)
+ * Fetches three datasets from Kite:
+ *   1. NSE instruments (EQ: stocks, ETFs and indices)
+ *   2. NFO instruments (all CE/PE/FUT)
+ *   3. BSE stocks that aren't listed on NSE, so no stock appears twice
  *
  * Ensures only ONE fetch cycle happens per day, regardless of how many
  * concurrent users (or app replicas) request instruments simultaneously.
@@ -15,6 +16,11 @@ import { getInstrumentsDate, getInstruments, saveInstruments, withAdvisoryLock }
 
 // Arbitrary constant identifying the instruments-fetch advisory lock.
 const INSTRUMENTS_FETCH_LOCK = 573210;
+
+// Stored with the fetch date; bump it when the instrument mix changes so the
+// day's cache is refetched instead of served until tomorrow.
+const CACHE_VERSION = 'v4-bse-scrip-code';
+const cacheStamp = (date) => `${date}|${CACHE_VERSION}`;
 
 /**
  * Get today's date in IST as YYYY-MM-DD.
@@ -97,27 +103,90 @@ function parseCSV(csv, rowFilter) {
   return instruments;
 }
 
+// NSE trading series of government securities, T-bills and sovereign gold bonds.
+const NSE_DEBT_SERIES = new Set(['SG', 'GS', 'TB', 'GB']);
+
 /**
- * Filter for NSE CSV — only EQ (equity stocks).
+ * Kite lists bonds, T-bills, gold bonds and mutual fund units as EQ alongside
+ * stocks. Tell them apart from stocks, ETFs, REITs/InvITs and indices: NSE by
+ * the series suffix, BSE by the scrip code (exchangeToken), whose equity range
+ * is 500000–599999 — bonds, gold bonds and commercial paper sit at 7xxxxx–9xxxxx.
+ */
+export function isDebtOrFund({ exchange, exchangeToken, tradingsymbol, name }) {
+  // Corporate bonds, iNAVs and fund schemes carry no company name.
+  if (!name) return true;
+  // "SDL KA 6.56% 2030", "2.50%GOLDBONDS2028SR-VI", "7.95% GOI 2032"
+  if (name.includes('%') || /MUTUAL FUND/i.test(name)) return true;
+  if (exchange === 'NSE') return NSE_DEBT_SERIES.has(tradingsymbol.match(/-([A-Z0-9]+)$/)?.[1]);
+  return exchangeToken < 500000 || exchangeToken > 599999;
+}
+
+/**
+ * Filter for NSE CSV — EQ rows: stocks, ETFs and indices, without debt and fund units.
  */
 function nseFilter(cols, idx) {
   const type = cols[idx.instrument_type]?.trim();
   if (type !== 'EQ') return null;
 
   const tradingsymbol = cols[idx.tradingsymbol]?.trim();
-  if (!tradingsymbol) return null;
+  const name = cols[idx.name]?.trim();
+  if (!tradingsymbol || isDebtOrFund({ exchange: 'NSE', tradingsymbol, name })) return null;
 
   return {
     instrumentToken: parseInt(cols[idx.instrument_token], 10),
     exchangeToken: parseInt(cols[idx.exchange_token], 10) || 0,
     tradingsymbol,
-    name: cols[idx.name]?.trim() || tradingsymbol,
+    name,
     exchange: 'NSE',
     instrumentType: 'EQ',
     strike: null,
     expiry: null,
     lotSize: null,
   };
+}
+
+/**
+ * Filter for BSE CSV — stocks and ETFs. Indices, debt and fund units are skipped.
+ */
+function bseFilter(cols, idx) {
+  if (cols[idx.instrument_type]?.trim() !== 'EQ' || cols[idx.segment]?.trim() !== 'BSE') return null;
+
+  const tradingsymbol = cols[idx.tradingsymbol]?.trim();
+  const name = cols[idx.name]?.trim();
+  const exchangeToken = parseInt(cols[idx.exchange_token], 10) || 0;
+  if (!tradingsymbol || isDebtOrFund({ exchange: 'BSE', exchangeToken, tradingsymbol, name })) return null;
+
+  return {
+    instrumentToken: parseInt(cols[idx.instrument_token], 10),
+    exchangeToken,
+    tradingsymbol,
+    name,
+    exchange: 'BSE',
+    instrumentType: 'EQ',
+    strike: null,
+    expiry: null,
+    lotSize: null,
+  };
+}
+
+/** NSE marks a stock's trading series with a suffix (`-BE`, `-SM`) and BSE its group (`-B`); compare without it. */
+const baseSymbol = (symbol) => symbol.replace(/-[A-Z0-9]{1,2}$/, '');
+
+/** Company name without punctuation or a trailing (possibly truncated) "Limited". */
+const companyKey = (name) => name.toUpperCase()
+  .replace(/\b(LIMITED|LIMITE|LIMIT|LIMI|LIM|LTD|LI|L)\b\.?\s*$/, '')
+  .replace(/[^A-Z0-9]/g, '');
+
+/**
+ * The BSE stocks not also listed on NSE. Kite's lists carry no ISIN, so a BSE
+ * stock counts as listed on NSE when its symbol or company name matches an NSE stock.
+ */
+export function bseOnlyStocks(nseStocks, bseStocks) {
+  const nseSymbols = new Set(nseStocks.flatMap((s) => [s.tradingsymbol, baseSymbol(s.tradingsymbol)]));
+  const nseCompanies = new Set(nseStocks.map((s) => companyKey(s.name)).filter(Boolean));
+  return bseStocks.filter((s) => !nseSymbols.has(s.tradingsymbol)
+    && !nseSymbols.has(baseSymbol(s.tradingsymbol))
+    && !nseCompanies.has(companyKey(s.name)));
 }
 
 /**
@@ -173,21 +242,23 @@ async function fetchAndParse(url, filter, apiKey, accessToken) {
 }
 
 /**
- * Fetch both NSE + NFO instruments in parallel.
+ * Fetch NSE, NFO and BSE instruments in parallel.
  */
 async function fetchFromKite(apiKey, accessToken) {
-  const [nse, nfo] = await Promise.all([
+  const [nse, nfo, bse] = await Promise.all([
     fetchAndParse('https://api.kite.trade/instruments/NSE', nseFilter, apiKey, accessToken),
     fetchAndParse('https://api.kite.trade/instruments/NFO', nfoFilter, apiKey, accessToken),
+    fetchAndParse('https://api.kite.trade/instruments/BSE', bseFilter, apiKey, accessToken),
   ]);
+  const bseOnly = bseOnlyStocks(nse, bse);
 
-  console.log(`[Instruments] Parsed: ${nse.length} NSE stocks, ${nfo.length} NFO F&O`);
+  console.log(`[Instruments] Parsed: ${nse.length} NSE stocks, ${nfo.length} NFO F&O, ${bseOnly.length} BSE-only stocks (of ${bse.length})`);
 
   // Log unique NFO names for debugging
   const nfoNames = new Set(nfo.map((i) => i.name));
   console.log(`[Instruments] NFO unique names (${nfoNames.size}): ${[...nfoNames].slice(0, 20).join(', ')}${nfoNames.size > 20 ? '...' : ''}`);
 
-  const combined = [...nse, ...nfo];
+  const combined = [...nse, ...nfo, ...bseOnly];
 
   if (combined.length === 0) {
     throw new Error('Parsed 0 instruments from Kite — likely a format change');
@@ -216,7 +287,7 @@ export async function getOrFetchInstruments(apiKey, accessToken) {
 
   // 1. Fast path — return today's cache without locking.
   const cachedDate = await getInstrumentsDate();
-  if (cachedDate === today) {
+  if (cachedDate === cacheStamp(today)) {
     const cached = await getInstruments();
     if (cached.length > 0) return cached;
   }
@@ -239,15 +310,15 @@ async function loadWithLock(apiKey, accessToken, today) {
   return withAdvisoryLock(INSTRUMENTS_FETCH_LOCK, async () => {
     // Re-check inside the lock — another caller may have just fetched.
     const recheckDate = await getInstrumentsDate();
-    if (recheckDate === today) {
+    if (recheckDate === cacheStamp(today)) {
       const cached = await getInstruments();
       if (cached.length > 0) return cached;
     }
 
-    console.log('[Instruments] Fetching NSE + NFO instruments from Kite...');
+    console.log('[Instruments] Fetching NSE + NFO + BSE instruments from Kite...');
     const instruments = await fetchFromKite(apiKey, accessToken);
-    await saveInstruments(instruments, today);
-    console.log(`[Instruments] Cached ${instruments.length} instruments (NSE EQ + NFO F&O) for ${today}`);
+    await saveInstruments(instruments, cacheStamp(today));
+    console.log(`[Instruments] Cached ${instruments.length} instruments (NSE EQ + NFO F&O + BSE-only EQ) for ${today}`);
     return instruments;
   });
 }

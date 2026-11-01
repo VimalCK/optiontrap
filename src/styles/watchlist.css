@@ -902,6 +902,13 @@
   padding-inline: 7px;
 }
 
+/* BSE-only stocks stand out from the NSE default. */
+.wl-exchange--bse {
+  color: #f59e0b;
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(245, 158, 11, 0.1);
+}
+
 .wl-tab__delete {
   border-radius: 999px;
 }

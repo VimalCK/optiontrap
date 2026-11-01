@@ -92,12 +92,12 @@ export function parseKiteCandles(raw) {
 }
 
 /**
- * A watchlist instrument this feature covers: an NSE cash stock. Indices are stored
- * as NSE EQ too, but their names contain a space ("NIFTY 50") and stock symbols never do.
+ * A watchlist instrument this feature covers: an NSE or BSE cash stock. Indices are
+ * stored as NSE EQ too, but their names contain a space ("NIFTY 50") and stock symbols never do.
  * @param {{ exchange: string, tradingsymbol: string, instrumentType?: string }} instrument
  */
 export function isCashStock(instrument) {
-  return instrument.exchange === 'NSE'
+  return (instrument.exchange === 'NSE' || instrument.exchange === 'BSE')
     && (instrument.instrumentType === undefined || instrument.instrumentType === 'EQ')
     && !/\s/.test(instrument.tradingsymbol);
 }

@@ -51,9 +51,11 @@ describe('candles and instruments', () => {
     ]);
   });
 
-  it('covers NSE cash stocks only, not indices or F&O', () => {
+  it('covers NSE and BSE cash stocks only, not indices or F&O', () => {
     expect(isCashStock({ exchange: 'NSE', tradingsymbol: 'RELIANCE', instrumentType: 'EQ' })).toBe(true);
     expect(isCashStock({ exchange: 'NSE', tradingsymbol: 'BAJAJ-AUTO' })).toBe(true);
+    expect(isCashStock({ exchange: 'BSE', tradingsymbol: 'SPICEJET', instrumentType: 'EQ' })).toBe(true);
+    expect(isCashStock({ exchange: 'BFO', tradingsymbol: 'SENSEX26NOVFUT', instrumentType: 'FUT' })).toBe(false);
     expect(isCashStock({ exchange: 'NSE', tradingsymbol: 'NIFTY 50', instrumentType: 'EQ' })).toBe(false);
     expect(isCashStock({ exchange: 'NFO', tradingsymbol: 'RELIANCE26NOVFUT', instrumentType: 'FUT' })).toBe(false);
   });

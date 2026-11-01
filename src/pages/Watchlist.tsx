@@ -685,7 +685,7 @@ const Watchlist: React.FC = () => {
                   >
                     <span className="wl-search__result-symbol">{getDisplayLabel(inst)}</span>
                     <span className="wl-search__result-name">{inst.instrumentType === 'EQ' ? inst.name : inst.tradingsymbol}</span>
-                    <span className="wl-search__result-exchange">{inst.exchange}</span>
+                    <span className={`wl-search__result-exchange wl-exchange--${inst.exchange.toLowerCase()}`}>{inst.exchange}</span>
                   </button>
                 ))}
               </div>
@@ -765,7 +765,7 @@ const Watchlist: React.FC = () => {
                           </span>
                           <span className="wl-symbol">{instrumentMap.has(item.instrumentToken) ? getDisplayLabel(instrumentMap.get(item.instrumentToken)!) : item.tradingsymbol}</span>
                           <TradingViewLink symbol={item.tradingsymbol} exchange={item.exchange} />
-                          <span className="wl-exchange">{item.exchange}</span>
+                          <span className={`wl-exchange wl-exchange--${item.exchange.toLowerCase()}`}>{item.exchange}</span>
                         </td>
                         <td className={`wl-table__td wl-table__td--num ${changeColor}`}>
                           {price ? formatPrice(price.ltp) : '—'}
@@ -877,7 +877,7 @@ const Watchlist: React.FC = () => {
                       <tr className="wl-alert-group-row">
                         <td colSpan={7}>
                           <span className="wl-alerts-table__symbol">{group.symbol}</span>
-                          <span className="wl-alerts-table__exchange">{group.exchange}</span>
+                          <span className={`wl-alerts-table__exchange wl-exchange--${group.exchange.toLowerCase()}`}>{group.exchange}</span>
                           <span className="wl-alert-group-row__count">
                             {groupActiveCount} active / {groupTriggeredCount} triggered
                           </span>
