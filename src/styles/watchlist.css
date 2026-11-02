@@ -967,7 +967,8 @@
 }
 
 .wl-table__th {
-  background: rgba(255, 255, 255, 0.035);
+  /* Same faint tint, laid over a solid base so scrolled rows don't show through the sticky header. */
+  background: linear-gradient(rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.035)), var(--card-bg-solid);
   font-size: 10px;
   font-weight: 800;
 }
