@@ -17,7 +17,13 @@ function winRate(s: SetupStats): string {
 }
 
 /** How each setup type has actually played out on one stock since tracking began. */
-const SetupScorecard: React.FC<{ instrumentToken: number; tradingsymbol: string; refreshKey: number }> = ({ instrumentToken, tradingsymbol, refreshKey }) => {
+const SetupScorecard: React.FC<{
+  instrumentToken: number;
+  tradingsymbol: string;
+  refreshKey: number;
+  /** Shown inside the setups panel, where the backtest has already run: skip pointing back to it. */
+  inSetupsPanel?: boolean;
+}> = ({ instrumentToken, tradingsymbol, refreshKey, inSetupsPanel = false }) => {
   const [data, setData] = useState<{ stats: SetupStats[]; recent: TrackedSetup[] } | null>(null);
 
   useEffect(() => {
@@ -39,7 +45,7 @@ const SetupScorecard: React.FC<{ instrumentToken: number; tradingsymbol: string;
       {!data ? (
         <div className="wl-alerts__empty">Loading…</div>
       ) : data.stats.length === 0 ? (
-        <div className="wl-alerts__empty">No setups tracked for {tradingsymbol} yet. They appear when the after-close scan finds one, or use Backtest 1Y in its entry and exit zones panel to add the past year.</div>
+        <div className="wl-alerts__empty">No setups tracked for {tradingsymbol} yet. They appear when the after-close scan finds one{inSetupsPanel ? '.' : ', or use Backtest 1Y in its entry and exit zones panel to add the past year.'}</div>
       ) : (
         <div className="wl-alerts__table-wrap">
           <table className="wl-alerts-table wl-scorecard__summary">

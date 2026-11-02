@@ -4,6 +4,7 @@ import { backfillSetupHistory, fetchExpectedMove, fetchStockCandles, type Expect
 import { isAbortError } from '@/services/apiClient';
 import type { PriceAlertCondition } from '@/services/priceAlerts';
 import StockSetupsGuide from './StockSetupsGuide';
+import SetupScorecard from './SetupScorecard';
 import { realizedVol, REALIZED_WINDOW, TRADING_DAYS } from '@/services/fairValue';
 // Also opened from OI History, where the watchlist styles aren't otherwise loaded.
 import '@/styles/watchlist.css';
@@ -128,12 +129,20 @@ function PriceLadder({ analysis }: { analysis: StockAnalysis }) {
   );
 }
 
+/**
+ * Stocks whose 1Y backtest succeeded since the page loaded. Rerunning would only re-add
+ * the same setups, so the button opens the scorecard for these instead. In memory only.
+ */
+const backtestedTokens = new Set<number>();
+
 /** Entry and exit zones, today's setups and a plan for one watchlist stock. */
 const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tradingsymbol, livePrice, onClose, onSetAlert }) => {
   const [data, setData] = useState<StockCandles | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [analysisPrice, setAnalysisPrice] = useState<number | undefined>(livePrice);
-  const [showGuide, setShowGuide] = useState(false);
+  // The body shows the setup details, the reading guide, or the scorecard after a backtest.
+  const [view, setView] = useState<'details' | 'guide' | 'scorecard'>('details');
+  const showGuide = view === 'guide';
   // Read once for the ATM strike; ticks shouldn't refetch option quotes.
   const livePriceRef = useRef(livePrice);
   livePriceRef.current = livePrice;
@@ -195,12 +204,20 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
 
   // Setup history: add the past year's setups, with outcomes, to the scorecard.
   const [history, setHistory] = useState<{ running: boolean; message: string | null; error: boolean }>({ running: false, message: null, error: false });
-  useEffect(() => setHistory({ running: false, message: null, error: false }), [instrumentToken]);
+  const [backtested, setBacktested] = useState(() => backtestedTokens.has(instrumentToken));
+  useEffect(() => {
+    setHistory({ running: false, message: null, error: false });
+    setBacktested(backtestedTokens.has(instrumentToken));
+    setView('details');
+  }, [instrumentToken]);
 
   const runSetupHistory = async () => {
     setHistory({ running: true, message: null, error: false });
     try {
       const counts = await backfillSetupHistory(instrumentToken);
+      backtestedTokens.add(instrumentToken);
+      setBacktested(true);
+      setView('scorecard');
       setHistory({
         running: false,
         error: false,
@@ -267,12 +284,12 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
           <div className="wl-sz__title">
             <h3 id="wl-sz-title">{tradingsymbol}</h3>
             <button
-              className={`wl-sz__icon-btn wl-sz__icon-btn--small ${showGuide ? 'wl-sz__icon-btn--active' : ''}`}
-              onClick={() => setShowGuide((v) => !v)}
-              aria-label={showGuide ? `Back to ${tradingsymbol}` : 'How to read this panel'}
-              title={showGuide ? `Back to ${tradingsymbol}` : 'How to read this panel'}
+              className={`wl-sz__icon-btn wl-sz__icon-btn--small ${view !== 'details' ? 'wl-sz__icon-btn--active' : ''}`}
+              onClick={() => setView((v) => (v === 'details' ? 'guide' : 'details'))}
+              aria-label={view !== 'details' ? 'Back to setup details' : 'How to read this panel'}
+              title={view !== 'details' ? 'Back to setup details' : 'How to read this panel'}
             >
-              {showGuide ? (
+              {view !== 'details' ? (
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M15 18l-6-6 6-6" />
                 </svg>
@@ -284,20 +301,27 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
                 </svg>
               )}
             </button>
-            <button
-              className="wl-sz__pill-btn"
-              onClick={runSetupHistory}
-              disabled={history.running}
-              aria-label={`Backtest the past year of ${tradingsymbol} setups into the scorecard`}
-              title="Replay the past year's sessions and add each setup, with how it turned out, to the scorecard"
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M3 3v18h18" />
-                <path d="M7 15l4-4 3 3 5-6" />
-                <path d="M15 8h4v4" />
-              </svg>
-              {history.running ? 'Backtesting…' : 'Backtest 1Y'}
-            </button>
+            {backtested ? (
+              // Already backtested: open the scorecard rather than replaying the same year again.
+              <button
+                className={`wl-sz__pill-btn${view === 'scorecard' ? ' wl-sz__pill-btn--active' : ''}`}
+                onClick={() => setView('scorecard')}
+                aria-label={`Show the ${tradingsymbol} setup scorecard`}
+                title="Show how each setup type has played out on this stock"
+              >
+                Scorecard
+              </button>
+            ) : (
+              <button
+                className={`wl-sz__pill-btn wl-sz__pill-btn--cta${!history.running && !history.error ? ' wl-sz__pill-btn--pulse' : ''}`}
+                onClick={runSetupHistory}
+                disabled={history.running}
+                aria-label={`Backtest the past year of ${tradingsymbol} setups into the scorecard`}
+                title="Replay the past year's sessions and add each setup, with how it turned out, to the scorecard"
+              >
+                {history.running ? 'Backtesting…' : 'Backtest 1Y'}
+              </button>
+            )}
           </div>
           {analysis && (
             <div className="wl-sz__quote">
@@ -308,11 +332,6 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
               </span>
             </div>
           )}
-          <button className="wl-sz__icon-btn" onClick={onClose} aria-label="Close">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
-              <path d="M6 6l12 12M18 6L6 18" />
-            </svg>
-          </button>
         </div>
 
         {showGuide && (
@@ -321,7 +340,14 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
           </div>
         )}
 
-        <div className="wl-sz__body" hidden={showGuide}>
+        {view === 'scorecard' && (
+          <div className="wl-sz__body">
+            {history.message && <div className="wl-sz-message">{history.message}</div>}
+            <SetupScorecard instrumentToken={instrumentToken} tradingsymbol={tradingsymbol} refreshKey={0} inSetupsPanel />
+          </div>
+        )}
+
+        <div className="wl-sz__body" hidden={view !== 'details'}>
           {error &&<div className="wl-sz-message wl-sz-message--error">{error}</div>}
           {history.running && <div className="wl-sz-message">Backtesting the past year: replaying each session and adding its setups to the scorecard…</div>}
           {history.message && <div className={`wl-sz-message${history.error ? ' wl-sz-message--error' : ''}`}>{history.message}</div>}

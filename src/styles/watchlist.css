@@ -1216,6 +1216,28 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
 }
 .wl-sz__pill-btn:hover:not(:disabled) { color: var(--accent); border-color: var(--accent); background: var(--sidebar-active); }
 .wl-sz__pill-btn:disabled { opacity: 0.6; cursor: progress; }
+
+/* Backtest 1Y draws attention: accent pill, with a soft pulse until it has been run. */
+.wl-sz__pill-btn--cta {
+  color: #fff;
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.wl-sz__pill-btn--cta:hover:not(:disabled) {
+  color: #fff;
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 85%, #fff);
+}
+.wl-sz__pill-btn--pulse { animation: wl-sz-cta-pulse 2s ease-out infinite; }
+@keyframes wl-sz-cta-pulse {
+  0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--accent) 55%, transparent); }
+  70%, 100% { box-shadow: 0 0 0 7px color-mix(in srgb, var(--accent) 0%, transparent); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .wl-sz__pill-btn--pulse { animation: none; }
+}
+.wl-sz__pill-btn--active,
 .wl-sz__icon-btn--active { color: var(--accent); border-color: var(--accent); background: var(--sidebar-active); }
 
 .wl-sz-state {
