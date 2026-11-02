@@ -74,6 +74,14 @@ body,
   overflow: hidden;
 }
 
+/* Installed app (PWA): no pull-to-refresh or rubber-band bounce, like a native window. */
+@media (display-mode: standalone) {
+  html,
+  body {
+    overscroll-behavior: none;
+  }
+}
+
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
     sans-serif;
