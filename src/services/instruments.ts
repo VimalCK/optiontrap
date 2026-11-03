@@ -57,11 +57,11 @@ export function getLotSizeByToken(instrumentToken: number): number | null {
  * Format a short expiry label from a date string (e.g. "2025-06-26" → "26Jun").
  */
 function formatExpiry(expiry: string): string {
-  const d = new Date(expiry);
+  // Parsed as UTC and read back as UTC, so the browser's time zone can't shift the day.
+  const d = new Date(Date.parse(expiry.slice(0, 10)));
   if (isNaN(d.getTime())) return expiry;
-  const day = d.getDate();
   const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  return `${day}${months[d.getMonth()]}`;
+  return `${d.getUTCDate()}${months[d.getUTCMonth()]}`;
 }
 
 /**

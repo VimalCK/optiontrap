@@ -1184,10 +1184,10 @@ export async function clearPositions(userId, mode = null) {
 // OI Snapshots (shared across all users)
 // ---------------------------------------------------------------------------
 
-function getTodayMidnight() {
-  const now = new Date();
+/** Epoch ms of IST midnight starting the IST day that contains `timestamp` (default: now). */
+function getTodayMidnight(timestamp = Date.now()) {
   const istOffset = 5.5 * 60 * 60 * 1000;
-  const istNow = now.getTime() + istOffset;
+  const istNow = timestamp + istOffset;
   const istMidnight = Math.floor(istNow / (24 * 60 * 60 * 1000)) * (24 * 60 * 60 * 1000);
   return istMidnight - istOffset;
 }
@@ -1263,11 +1263,8 @@ export async function getTodayOiSnapshots() {
   const maxRow = await firstRow('SELECT MAX(timestamp) AS max_ts FROM oi_snapshots');
   if (!maxRow || maxRow.max_ts === null) return [];
 
-  const maxTs = Number(maxRow.max_ts);
-  const maxDate = new Date(maxTs);
-  const istDate = new Date(maxDate.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  istDate.setHours(0, 0, 0, 0);
-  const midnightMs = istDate.getTime();
+  // The newest snapshot's IST day, independent of the server's own time zone.
+  const midnightMs = getTodayMidnight(Number(maxRow.max_ts));
 
   const result = await rows(
     'SELECT timestamp, time_label, data, prices, close, spot, volumes FROM oi_snapshots WHERE timestamp >= $1 ORDER BY timestamp',

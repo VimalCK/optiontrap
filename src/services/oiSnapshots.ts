@@ -4,6 +4,7 @@
  * across all users); the browser only reads them.
  */
 import { apiClient } from './apiClient';
+import { istTimeLabel } from '@/utils/marketStatus';
 
 export interface OiSnapshot {
   timestamp: number;
@@ -123,9 +124,7 @@ export function analyzeVelocityPattern(
 
   // Append current OI as the latest point (with "now" label)
   if (currentOi > 0) {
-    const now = new Date();
-    const nowLabel = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
-    points.push({ oi: currentOi, timeLabel: nowLabel });
+    points.push({ oi: currentOi, timeLabel: istTimeLabel() });
   }
 
   if (points.length < 2) return null;

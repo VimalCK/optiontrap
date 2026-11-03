@@ -63,3 +63,24 @@ export function getMarketStatus(): MarketStatus {
 export function isMarketLive(): boolean {
   return getMarketStatus() === 'live';
 }
+
+/** Today's date in IST (YYYY-MM-DD), whatever the browser's time zone. */
+export function istDateString(now: Date = new Date()): string {
+  return now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+}
+
+/** HH:MM in IST, whatever the browser's time zone. */
+export function istTimeLabel(now: Date = new Date()): string {
+  return now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+}
+
+/** Whole days from today (IST) to a YYYY-MM-DD date; negative if it has passed. */
+export function istDaysUntil(date: string, now: Date = new Date()): number {
+  return Math.round((Date.parse(date.slice(0, 10)) - Date.parse(istDateString(now))) / 86_400_000);
+}
+
+/** Label a YYYY-MM-DD date without shifting it by the browser's time zone. */
+export function formatCalendarDate(date: string, options: Intl.DateTimeFormatOptions, locale = 'en-IN'): string {
+  const ms = Date.parse(date.slice(0, 10));
+  return Number.isNaN(ms) ? date : new Date(ms).toLocaleDateString(locale, { ...options, timeZone: 'UTC' });
+}

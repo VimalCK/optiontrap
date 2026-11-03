@@ -6,6 +6,7 @@ import { getPositions, Position } from '@/services/positions';
 import { getLiveTradeEntries, getPaperTradeEntries, TradeEntry } from '@/services/tradeJournal';
 import { fetchPriceAlerts } from '@/services/priceAlerts';
 import { fetchWatchlists } from '@/services/watchlist';
+import { istDateString } from '@/utils/marketStatus';
 import '@/styles/dashboard.css';
 
 type DashboardTradeEntry = TradeEntry & { mode: 'paper' | 'live' };
@@ -85,12 +86,10 @@ const getPaperPositionPnl = (position: Position) => {
     : (position.entryPrice - exitPrice) * position.quantity;
 };
 
+/** Whether a trade falls on today's IST trading day. */
 const isToday = (value: string) => {
   const date = new Date(value);
-  const now = new Date();
-  return date.getFullYear() === now.getFullYear()
-    && date.getMonth() === now.getMonth()
-    && date.getDate() === now.getDate();
+  return !Number.isNaN(date.getTime()) && istDateString(date) === istDateString();
 };
 
 const MetricCard: React.FC<{

@@ -24,7 +24,7 @@ import {
 } from '@/services/optionChain';
 import { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe, tickerUpdateTokens } from '@/services/tickerSingleton';
-import { isMarketLive } from '@/utils/marketStatus';
+import { formatCalendarDate, isMarketLive, istDaysUntil } from '@/utils/marketStatus';
 import '@/styles/optionchain.css';
 
 const RECENT_OPTION_SYMBOLS_KEY = 'optiontrap_option_analyzer_recent_symbols';
@@ -348,12 +348,7 @@ const OptionChain: React.FC = () => {
   // Calculate days to expiry
   const daysToExpiry = useMemo(() => {
     if (!selectedExpiry) return undefined;
-    const expiryDate = new Date(selectedExpiry);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    expiryDate.setHours(0, 0, 0, 0);
-    const diff = Math.ceil((expiryDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    return Math.max(0, diff);
+    return Math.max(0, istDaysUntil(selectedExpiry));
   }, [selectedExpiry]);
 
   // Calculate expected move from ATM straddle
@@ -687,7 +682,7 @@ const OptionChain: React.FC = () => {
               value={selectedExpiry}
               options={expiries.map((exp) => ({
                 value: exp,
-                label: new Date(exp).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+                label: formatCalendarDate(exp, { day: '2-digit', month: 'short', year: 'numeric' }),
               }))}
               onChange={(v) => setSelectedExpiry(String(v))}
               className="oc-expiry-select"

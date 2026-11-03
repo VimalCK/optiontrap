@@ -6,7 +6,7 @@ import { fetchQuotes, fetchPositions, KitePosition, KitePositions } from '@/serv
 import { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe } from '@/services/tickerSingleton';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
-import { isMarketLive } from '@/utils/marketStatus';
+import { formatCalendarDate, isMarketLive } from '@/utils/marketStatus';
 import {
   computeRiskGroups,
   samplePayoffCurve,
@@ -421,7 +421,7 @@ const PayoffChart: React.FC<{ group: RiskGroup; oiBars?: OiBar[]; spotPrice?: nu
 };
 
 const expiryLabel = (iso: string) =>
-  new Date(iso).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
+  formatCalendarDate(iso, { day: '2-digit', month: 'short' });
 
 /**
  * PayoffModal — full-size payoff curve in a centered overlay.
@@ -770,7 +770,7 @@ const PaperPositions: React.FC = () => {
                       <span className="positions-table__name">{pos.tradingsymbol.replace(/\d.*/,'')}</span>
                       <span className="positions-table__strike">{pos.strike}</span>
                       <span className={`positions-table__type positions-table__type--${pos.optionType.toLowerCase()}`}>{pos.optionType}</span>
-                      <span className="positions-table__expiry">{new Date(pos.expiry).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</span>
+                      <span className="positions-table__expiry">{formatCalendarDate(pos.expiry, { day: '2-digit', month: 'short' })}</span>
                       <TradingViewLink symbol={pos.tradingsymbol} exchange="NFO" />
                     </span>
                     {(pos.strategyTag || pos.confidence != null || pos.targetPrice != null || pos.stopLossPrice != null || pos.note) && (

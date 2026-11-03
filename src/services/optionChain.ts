@@ -16,6 +16,7 @@ export interface OptionChainRow {
   pe: OptionInstrument | null;
 }
 import { apiClient } from './apiClient';
+import { istDateString } from '@/utils/marketStatus';
 
 /** In-memory cache of all instruments to avoid re-fetching */
 let instrumentsCache: any[] | null = null;
@@ -90,12 +91,11 @@ export async function fetchFnoSymbols(signal?: AbortSignal): Promise<string[]> {
  * Get unique expiry dates sorted ascending
  */
 export function getExpiries(options: OptionInstrument[]): string[] {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const expiries = [...new Set(options.map((o) => o.expiry))];
-  return expiries
-    .filter((exp) => new Date(exp).getTime() >= today.getTime())
-    .sort((a, b) => new Date(a).getTime() - new Date(b).getTime());
+  // Expiries are YYYY-MM-DD, so they compare as strings against today's IST date.
+  const today = istDateString();
+  return [...new Set(options.map((o) => o.expiry))]
+    .filter((exp) => exp.slice(0, 10) >= today)
+    .sort();
 }
 
 /**
