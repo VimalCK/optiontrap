@@ -4,7 +4,8 @@
  * Source: NSE India / ClearTax
  * Update this list annually when NSE publishes the next year's calendar.
  */
-export const MARKET_HOLIDAYS_2026: string[] = [
+/** @type {string[]} */
+export const MARKET_HOLIDAYS_2026 = [
   '2026-01-15', // Maharashtra Municipal Elections
   '2026-01-26', // Republic Day
   '2026-03-03', // Holi

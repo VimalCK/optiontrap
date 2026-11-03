@@ -71,7 +71,6 @@ import {
   exitPositionById,
   removePositionById,
   clearPositions,
-  saveOiSnapshot,
   getTodayOiSnapshots,
   getLatestOiSnapshotTimestamp,
   getOiHistoryData,
@@ -102,6 +101,7 @@ import { cached } from './cache.js';
 import { getOrFetchInstruments } from './instruments.js';
 import { fetchOiHistoryMonth, OiHistoryFetchError, todayIST } from './oiHistoryFetch.js';
 import { OI_HISTORY_JOB, startOiHistoryScheduler } from './oiHistoryScheduler.js';
+import { startOiSnapshotScheduler, watchOiSnapshotSymbol } from './oiSnapshotScheduler.js';
 import { checkSubscriptionAccess, inactiveSubscription } from './subscriptionAccess.js';
 import { backfillStockSetups, scanStock, syncStockCandles } from './stockCandles.js';
 import { startStockSetupScheduler } from './stockSetupScheduler.js';
@@ -948,17 +948,19 @@ app.get('/api/oi-snapshots/latest', requireAuth, requireSubscription, async (req
   }
 });
 
-app.post('/api/oi-snapshots', requireAuth, requireSubscription, async (req, res) => {
+// Snapshot a symbol's option chain for the rest of today (NIFTY and BANKNIFTY
+// always are). The analyzer calls this when a symbol is opened; the first
+// snapshot is taken before responding so the chart has data straight away.
+app.post('/api/oi-snapshots/watch', requireAuth, requireSubscription, async (req, res) => {
+  const symbol = typeof req.body?.symbol === 'string' ? req.body.symbol.trim().toUpperCase() : '';
+  if (!/^[A-Z0-9&_-]{1,30}$/.test(symbol)) {
+    return res.status(400).json({ status: 'error', message: 'A valid symbol is required' });
+  }
   try {
-    const { timestamp, timeLabel, data, prices, close, spot, volumes } = req.body;
-    if (!timestamp || !timeLabel || !data) {
-      return res.status(400).json({ status: 'error', message: 'Missing required fields: timestamp, timeLabel, data' });
-    }
-    await saveOiSnapshot({ timestamp, timeLabel, data, prices, close, spot, volumes });
-    res.json({ status: 'ok' });
+    res.json({ status: 'ok', data: await watchOiSnapshotSymbol(symbol) });
   } catch (err) {
-    console.error('[OI Snapshots] POST error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
+    console.error(`[OI Snapshots] watch ${symbol} error:`, err.message);
+    res.status(500).json({ status: 'error', message: 'Failed to start snapshots for this symbol' });
   }
 });
 
@@ -1539,6 +1541,8 @@ async function start() {
   evaluateSignals();
   setInterval(evaluateSignals, 60 * 60 * 1000).unref();
 
+  // Snapshot NIFTY/BANKNIFTY (and symbols opened today) every 10 minutes in market hours.
+  startOiSnapshotScheduler();
   // Fetch tracked scrips' OI history after the close so no trading day is missed.
   startOiHistoryScheduler();
   // Then update watchlist stocks' daily candles and scan them for setups.

@@ -1,4 +1,4 @@
-import { MARKET_HOLIDAYS_2026 } from '@/data/marketHolidays';
+import { MARKET_HOLIDAYS_2026 } from '../../shared/marketHolidays.js';
 
 export type MarketStatus = 'live' | 'closed' | 'pre-open' | 'post-close';
 

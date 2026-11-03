@@ -3,6 +3,8 @@
  * they can be tested without waiting for the clock.
  */
 
+import { MARKET_HOLIDAYS_2026 } from '../shared/marketHolidays.js';
+
 const IST_PARTS = new Intl.DateTimeFormat('en-US', {
   timeZone: 'Asia/Kolkata',
   year: 'numeric',
@@ -22,6 +24,18 @@ export function istClock(now = new Date()) {
     weekday: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].indexOf(parts.weekday),
     minutes: Number(parts.hour) * 60 + Number(parts.minute),
   };
+}
+
+/** NSE cash/F&O session: 09:15 to 15:30 IST. */
+export const MARKET_OPEN_MINUTES = 9 * 60 + 15;
+export const MARKET_CLOSE_MINUTES = 15 * 60 + 30;
+
+/** Whether the market is in session: a weekday that isn't an NSE holiday, 09:15–15:30 IST inclusive. */
+export function isMarketOpen(now = new Date()) {
+  const { date, weekday, minutes } = istClock(now);
+  return weekday >= 1 && weekday <= 5
+    && !MARKET_HOLIDAYS_2026.includes(date)
+    && minutes >= MARKET_OPEN_MINUTES && minutes <= MARKET_CLOSE_MINUTES;
 }
 
 /** 15:45 IST: fifteen minutes after the 15:30 close, so the day's candles are final. */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { istClock, isAfterCloseOnWeekday, daysBefore } from './marketClock.js';
+import { istClock, isAfterCloseOnWeekday, isMarketOpen, daysBefore } from './marketClock.js';
 
 // IST is UTC+05:30, so 10:15 UTC is 15:45 IST.
 const utc = (iso) => new Date(`${iso}Z`);
@@ -34,5 +34,19 @@ describe('daysBefore', () => {
     expect(daysBefore('2026-10-23', 14)).toBe('2026-10-09');
     expect(daysBefore('2026-11-03', 14)).toBe('2026-10-20');
     expect(daysBefore('2026-01-05', 14)).toBe('2025-12-22');
+  });
+});
+
+describe('isMarketOpen', () => {
+  it('is open from 09:15 to 15:30 IST on trading days', () => {
+    expect(isMarketOpen(utc('2026-11-03T03:44:00'))).toBe(false); // Tue 09:14
+    expect(isMarketOpen(utc('2026-11-03T03:45:00'))).toBe(true);  // Tue 09:15
+    expect(isMarketOpen(utc('2026-11-03T10:00:00'))).toBe(true);  // Tue 15:30
+    expect(isMarketOpen(utc('2026-11-03T10:01:00'))).toBe(false); // Tue 15:31
+  });
+
+  it('is closed at weekends and on NSE holidays', () => {
+    expect(isMarketOpen(utc('2026-10-24T05:00:00'))).toBe(false); // Sat 10:30
+    expect(isMarketOpen(utc('2026-11-10T05:00:00'))).toBe(false); // Tue 10:30, Diwali Balipratipada
   });
 });

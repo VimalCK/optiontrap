@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import SellStrategy from '@/components/SellStrategy/SellStrategy';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { calculateExpectedMove } from '@/services/edgeScore';
-import { saveOiSnapshot, getTodaySnapshots, calculateVelocity, shouldTakeSnapshot, analyzeVelocityPattern, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
+import { watchSnapshotSymbol, getTodaySnapshots, getLatestSnapshotTimestamp, calculateVelocity, analyzeVelocityPattern, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
 import { computeStrikeSignals } from '@/services/combinedSignal';
 import { addPosition } from '@/services/positions';
 import { computeLiveFlow, describeFlow, flowColor } from '@/services/oiFlow';
@@ -88,7 +88,6 @@ const OptionChain: React.FC = () => {
   const [snapshots, setSnapshots] = useState<OiSnapshot[]>([]);
   const [toasts, setToasts] = useState<{ id: number; text: string; color: 'green' | 'red' }[]>([]);
   const subscribedTokensRef = useRef<number[]>([]);
-  const snapshotIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const toastIdRef = useRef(0);
   const chainCardRef = useRef<HTMLDivElement>(null);
   const [oiChartWidth, setOiChartWidth] = useState(0);
@@ -428,50 +427,35 @@ const OptionChain: React.FC = () => {
     return unsub;
   }, [visibleChain, handleTicks]);
 
-  // OI Snapshots: load existing snapshots always, capture new ones only during market hours
+  // OI snapshots are taken by the server (NIFTY/BANKNIFTY always, other symbols
+  // once opened here). Register the selected symbol, then load today's snapshots.
+  const latestSnapshotTsRef = useRef<number | null>(null);
+  const loadSnapshots = useCallback(async () => {
+    const snaps = await getTodaySnapshots(signal);
+    latestSnapshotTsRef.current = snaps.length > 0 ? snaps[snaps.length - 1].timestamp : null;
+    setSnapshots(snaps);
+  }, [signal]);
+
   useEffect(() => {
-    // Load snapshots (older days are purged by the nightly jobs)
-    getTodaySnapshots(signal).then((snaps) => {
-      setSnapshots(snaps);
-      // Calculate initial velocity
-      if (oiData.size > 0 && snaps.length > 0) {
-        setOiVelocity(calculateVelocity(oiData, snaps));
-      }
-    }).catch(() => { /* cancelled */ });
+    watchSnapshotSymbol(selectedSymbol, signal)
+      .then(loadSnapshots)
+      .catch((err) => { if (!isAbortError(err)) console.error('[OI Snapshots] Load failed:', err); });
+  }, [selectedSymbol, loadSnapshots]);
 
-    if (!isMarketLive()) return;
-
-    // Set up interval to capture snapshots
-    const capture = async () => {
-      if (signal.aborted || !isMarketLive() || oiData.size === 0) return;
+  // During market hours, pick up each new server snapshot (one per 10 minutes).
+  useEffect(() => {
+    const poll = async () => {
+      if (!isMarketLive()) return;
       try {
-        if (await shouldTakeSnapshot(signal)) {
-           await saveOiSnapshot(oiData, livePrices, closePrices, spotPrice || undefined, volumeData);
-        }
-        // Recalculate velocity
-        const latestSnaps = await getTodaySnapshots(signal);
-        setSnapshots(latestSnaps);
-        if (latestSnaps.length > 0) {
-          setOiVelocity(calculateVelocity(oiData, latestSnaps));
-        }
+        const latest = await getLatestSnapshotTimestamp(signal);
+        if (latest !== null && latest !== latestSnapshotTsRef.current) await loadSnapshots();
       } catch (err) {
-        if (!isAbortError(err)) console.error('[OI Snapshots] Capture failed:', err);
+        if (!isAbortError(err)) console.warn('[OI Snapshots] Poll failed:', err);
       }
     };
-
-    // Capture immediately if needed
-    capture();
-
-    // Check every 5 minutes if a snapshot is needed
-    snapshotIntervalRef.current = setInterval(capture, 5 * 60 * 1000);
-
-    return () => {
-      if (snapshotIntervalRef.current) {
-        clearInterval(snapshotIntervalRef.current);
-        snapshotIntervalRef.current = null;
-      }
-    };
-  }, [oiData.size > 0]);
+    const id = setInterval(poll, 60 * 1000);
+    return () => clearInterval(id);
+  }, [loadSnapshots]);
 
   // Lock option chain card height after strikes are loaded to prevent jerk
   useEffect(() => {

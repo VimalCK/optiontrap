@@ -1293,6 +1293,24 @@ export async function getLatestOiSnapshotTimestamp() {
   return row && row.ts !== null ? Number(row.ts) : null;
 }
 
+/** Add a symbol to a day's snapshot list. Returns true if it wasn't already there. */
+export async function addOiSnapshotSymbol(tradeDate, symbol) {
+  const result = await query(
+    'INSERT INTO oi_snapshot_symbols (trade_date, symbol) VALUES ($1, $2) ON CONFLICT DO NOTHING',
+    [tradeDate, symbol],
+  );
+  return result.rowCount > 0;
+}
+
+/** Symbols added to a day's snapshot list, oldest first. */
+export async function getOiSnapshotSymbols(tradeDate) {
+  const result = await rows(
+    'SELECT symbol FROM oi_snapshot_symbols WHERE trade_date = $1 ORDER BY added_at',
+    [tradeDate],
+  );
+  return result.map((r) => r.symbol);
+}
+
 // ===========================================================================
 // OI History
 // ===========================================================================

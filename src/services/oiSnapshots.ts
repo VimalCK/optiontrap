@@ -1,10 +1,9 @@
 /**
  * Intraday OI Snapshots Service
- * Uses server-side SQLite via REST API (shared across all users).
+ * The server takes the snapshots (every 10 minutes in market hours, shared
+ * across all users); the browser only reads them.
  */
 import { apiClient } from './apiClient';
-
-const SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
 export interface OiSnapshot {
   timestamp: number;
@@ -26,37 +25,16 @@ export interface OiVelocity {
   isHigh: boolean;
 }
 
-function getTimeLabel(timestamp: number): string {
-  const d = new Date(timestamp);
-  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-}
-
-export async function saveOiSnapshot(
-  oiData: Map<number, number>,
-  priceData?: Map<number, number>,
-  closeData?: Map<number, number>,
-  spot?: number,
-  volumeData?: Map<number, number>,
-): Promise<void> {
-  if (oiData.size === 0) return;
-  const timestamp = Date.now();
-  const data: Record<string, number> = {};
-  oiData.forEach((oi, token) => { data[String(token)] = oi; });
-  const prices: Record<string, number> | undefined = priceData && priceData.size > 0
-    ? (() => { const p: Record<string, number> = {}; priceData.forEach((price, token) => { p[String(token)] = price; }); return p; })()
-    : undefined;
-  const close: Record<string, number> | undefined = closeData && closeData.size > 0
-    ? (() => { const c: Record<string, number> = {}; closeData.forEach((price, token) => { c[String(token)] = price; }); return c; })()
-    : undefined;
-  const volumes: Record<string, number> | undefined = volumeData && volumeData.size > 0
-    ? (() => { const v: Record<string, number> = {}; volumeData.forEach((vol, token) => { v[String(token)] = vol; }); return v; })()
-    : undefined;
-
+/**
+ * Ask the server to snapshot `symbol` for the rest of today. NIFTY and
+ * BANKNIFTY always are. Resolves once the first snapshot (if any) is stored.
+ */
+export async function watchSnapshotSymbol(symbol: string, signal?: AbortSignal): Promise<void> {
   try {
-    await apiClient.post('/api/oi-snapshots', { timestamp, timeLabel: getTimeLabel(timestamp), data, prices, close, spot, volumes });
-    console.log(`[OI Snapshots] Saved at ${getTimeLabel(timestamp)} (${Object.keys(data).length} instruments${prices ? `, ${Object.keys(prices).length} prices` : ''})`);
+    await apiClient.post('/api/oi-snapshots/watch', { symbol }, { signal });
   } catch (err) {
-    console.error('[OI Snapshots] Failed to save:', err);
+    if (signal?.aborted) throw err;
+    console.warn(`[OI Snapshots] Could not start snapshots for ${symbol}:`, err);
   }
 }
 
@@ -70,19 +48,10 @@ export async function getTodaySnapshots(signal?: AbortSignal): Promise<OiSnapsho
   }
 }
 
-export async function shouldTakeSnapshot(signal?: AbortSignal): Promise<boolean> {
-  try {
-    const latest = (await apiClient.get<OiSnapshot | null>('/api/oi-snapshots/latest', { signal }))?.timestamp;
-    if (!latest) return true;
-    return (Date.now() - latest) >= SNAPSHOT_INTERVAL_MS;
-  } catch (err) {
-    if (signal?.aborted) throw err;
-    return true; // on error, allow snapshot
-  }
-}
-
-export function getSnapshotInterval(): number {
-  return SNAPSHOT_INTERVAL_MS;
+/** Timestamp of today's newest snapshot row, or null. Cheap to poll. */
+export async function getLatestSnapshotTimestamp(signal?: AbortSignal): Promise<number | null> {
+  const latest = await apiClient.get<{ timestamp: number | null }>('/api/oi-snapshots/latest', { signal });
+  return latest?.timestamp ?? null;
 }
 
 export function calculateVelocity(
