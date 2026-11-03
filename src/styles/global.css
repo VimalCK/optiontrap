@@ -74,6 +74,41 @@ body,
   overflow: hidden;
 }
 
+/* Dark native UI (scrollbar arrows, form controls) instead of the light OS default. */
+:root {
+  color-scheme: dark;
+}
+
+/* App-wide themed scrollbar — replaces the light Windows native one (most visible in the
+   installed app window). Components with their own scrollbar rules still override this. */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+/* Firefox has no ::-webkit-scrollbar; use the standard properties there only, since in
+   Chromium setting scrollbar-color would disable the webkit rules above. */
+@supports not selector(::-webkit-scrollbar) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  }
+}
+
 /* Installed app (PWA): no pull-to-refresh or rubber-band bounce, like a native window. */
 @media (display-mode: standalone) {
   html,
