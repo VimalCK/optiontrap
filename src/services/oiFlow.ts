@@ -23,6 +23,7 @@
  */
 
 import type { OptionChainRow } from './optionChain';
+import { addDays, marketCloseTime, marketDate } from '../../shared/marketTime.js';
 
 export const RISK_FREE_RATE = 0.065;
 
@@ -93,19 +94,18 @@ export interface FlowReading {
   recentShare: number | null;
 }
 
-/** 15:30 IST on a YYYY-MM-DD date, when NSE options close. */
+/** The market close on a YYYY-MM-DD date, when NSE options close. */
 export function marketCloseIST(date: string): Date {
-  return new Date(`${date}T15:30:00+05:30`);
+  return marketCloseTime(date);
 }
 
-/** Close of the last weekday before today in IST (exchange holidays are not known here). */
+/** Close of the last weekday before today, market time (exchange holidays are deliberately ignored). */
 export function previousSessionClose(now = new Date()): Date {
-  const ist = new Date(now.getTime() + 5.5 * 60 * 60 * 1000);
-  const day = new Date(Date.UTC(ist.getUTCFullYear(), ist.getUTCMonth(), ist.getUTCDate()));
+  let day = marketDate(now);
   do {
-    day.setUTCDate(day.getUTCDate() - 1);
-  } while (day.getUTCDay() === 0 || day.getUTCDay() === 6);
-  return marketCloseIST(day.toISOString().slice(0, 10));
+    day = addDays(day, -1);
+  } while ([0, 6].includes(new Date(Date.parse(day)).getUTCDay()));
+  return marketCloseIST(day);
 }
 
 export function yearsToExpiry(asOf: Date, expiry: string): number {

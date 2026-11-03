@@ -16,6 +16,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
+import { MARKET_TIME_ZONE, marketDayStartMs } from '../shared/marketTime.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
@@ -1184,12 +1185,9 @@ export async function clearPositions(userId, mode = null) {
 // OI Snapshots (shared across all users)
 // ---------------------------------------------------------------------------
 
-/** Epoch ms of IST midnight starting the IST day that contains `timestamp` (default: now). */
+/** Epoch ms of market-zone midnight starting the day that contains `timestamp` (default: now). */
 function getTodayMidnight(timestamp = Date.now()) {
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const istNow = timestamp + istOffset;
-  const istMidnight = Math.floor(istNow / (24 * 60 * 60 * 1000)) * (24 * 60 * 60 * 1000);
-  return istMidnight - istOffset;
+  return marketDayStartMs(timestamp);
 }
 
 function roundTo10Min(timestamp) {
@@ -1859,6 +1857,8 @@ export async function runSqlScript(sql, timeoutMs) {
   try {
     await client.query('BEGIN');
     await client.query(`SET LOCAL statement_timeout = ${Math.round(timeoutMs)}`);
+    // Scripts work in market time: now(), date_trunc and to_char use this zone.
+    await client.query(`SET LOCAL TIME ZONE '${MARKET_TIME_ZONE}'`);
     const result = await client.query(sql);
     await client.query('COMMIT');
     const results = Array.isArray(result) ? result : [result];

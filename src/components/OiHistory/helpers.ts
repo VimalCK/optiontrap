@@ -1,4 +1,5 @@
 import type { FuturesHistoryRow, RolloverPattern } from './types';
+import { marketDate, marketMonth } from '../../../shared/marketTime.js';
 
 /** Default scrip options shown before dynamic list loads */
 export const DEFAULT_SCRIP_OPTIONS = [
@@ -49,16 +50,12 @@ export function formatOiWithChg(oi: number, prev: number | undefined): { text: s
 
 /** Get current month in YYYY-MM (IST) */
 export function currentMonthIST(): string {
-  const now = new Date();
-  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const y = ist.getFullYear();
-  const m = String(ist.getMonth() + 1).padStart(2, '0');
-  return `${y}-${m}`;
+  return marketMonth();
 }
 
 /** Get today's date in YYYY-MM-DD (IST) */
 export function todayIST(now = new Date()): string {
-  return now.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+  return marketDate(now);
 }
 
 export function addMonths(month: string, delta: number): string {

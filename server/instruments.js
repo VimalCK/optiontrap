@@ -13,6 +13,7 @@
  */
 
 import { getInstrumentsDate, getInstruments, saveInstruments, withAdvisoryLock } from './db.js';
+import { marketDate } from '../shared/marketTime.js';
 
 // Arbitrary constant identifying the instruments-fetch advisory lock.
 const INSTRUMENTS_FETCH_LOCK = 573210;
@@ -26,12 +27,7 @@ const cacheStamp = (date) => `${date}|${CACHE_VERSION}`;
  * Get today's date in IST as YYYY-MM-DD.
  */
 function getTodayIST() {
-  const now = new Date();
-  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const y = ist.getFullYear();
-  const m = String(ist.getMonth() + 1).padStart(2, '0');
-  const d = String(ist.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+  return marketDate();
 }
 
 // ---------------------------------------------------------------------------

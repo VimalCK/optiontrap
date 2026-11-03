@@ -13,6 +13,7 @@
 import { addOiSnapshotSymbol, getOiSnapshotSymbols, saveOiSnapshot } from './db.js';
 import { getOrFetchInstruments } from './instruments.js';
 import { istClock, isMarketOpen } from './marketClock.js';
+import { marketTimeLabel } from '../shared/marketTime.js';
 import { findWorkingAdminSession } from './oiHistoryScheduler.js';
 
 /** Always snapshotted, whether or not anyone opens them. */
@@ -24,7 +25,6 @@ const STRIKES_EACH_SIDE = 20;
 const SLOT_MS = 10 * 60 * 1000;
 const CHECK_INTERVAL_MS = 60 * 1000;
 const QUOTE_BATCH = 500; // Kite's limit per /quote request
-
 class KiteAuthError extends Error {}
 
 let adminKite = null; // { date, kite }
@@ -42,12 +42,6 @@ function enqueue(fn) {
 
 function spotQuoteKey(symbol) {
   return INDEX_QUOTE_KEYS[symbol] || `NSE:${symbol}`;
-}
-
-/** HH:MM in IST. */
-function istTimeLabel(now) {
-  const { minutes } = istClock(now);
-  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 }
 
 /** Today's admin Kite session, cached for the day; null if none works. */
@@ -136,7 +130,7 @@ async function captureSymbols(symbols, kite, now = new Date()) {
 
   // The row has a single spot; it is NIFTY's, as the analyzer has always assumed.
   const spot = spotQuotes[spotQuoteKey('NIFTY')]?.last_price || undefined;
-  await saveOiSnapshot({ timestamp: now.getTime(), timeLabel: istTimeLabel(now), data, prices, close, volumes, spot });
+  await saveOiSnapshot({ timestamp: now.getTime(), timeLabel: marketTimeLabel(now), data, prices, close, volumes, spot });
   return Object.keys(data).length;
 }
 

@@ -1,4 +1,5 @@
 import { apiClient } from './apiClient';
+import { addDays, marketDate } from '../../shared/marketTime.js';
 
 export interface QuoteData {
   last_price: number; oi: number;
@@ -41,16 +42,13 @@ export function fetchMargins(): Promise<Margins> { return apiClient.get('/api/us
 
 export async function fetchPreviousDayOI(instrumentTokens: number[], onBatch?: (partial: Map<number, number>) => void, signal?: AbortSignal): Promise<Map<number, number>> {
   const results = new Map<number, number>();
-  const now = new Date();
-  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const today = new Date(ist.getFullYear(), ist.getMonth(), ist.getDate());
-  const from = new Date(today); from.setDate(from.getDate() - 10);
-  const date = (value: Date) => `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+  const today = marketDate();
+  const from = addDays(today, -10);
   for (let i = 0; i < instrumentTokens.length; i += 5) {
     if (signal?.aborted) break;
     await Promise.all(instrumentTokens.slice(i, i + 5).map(async (token) => {
       try {
-        const result = await apiClient.get<{ candles?: unknown[][] }>(`/api/instruments/historical/${token}/day?from=${date(from)}&to=${date(today)}&oi=1`, { signal });
+        const result = await apiClient.get<{ candles?: unknown[][] }>(`/api/instruments/historical/${token}/day?from=${from}&to=${today}&oi=1`, { signal });
         const candles = result?.candles || [];
         const oi = candles.length >= 2 ? candles[candles.length - 2][6] : undefined;
         if (typeof oi === 'number' && oi > 0) results.set(token, oi);

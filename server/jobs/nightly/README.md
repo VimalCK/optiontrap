@@ -7,7 +7,9 @@ job does — add a file to add a job.
 ## Job files
 
 **`.sql`** — runs in one transaction (10-minute statement timeout). The run
-records the rows affected.
+records the rows affected. The session time zone is the market's
+(`MARKET_TIME_ZONE` in `shared/marketTime.js`), so `now()`, `date_trunc()` and
+`to_char()` give market-time dates — don't name a time zone in the SQL.
 
 ```sql
 -- 010_purge_old_job_runs.sql

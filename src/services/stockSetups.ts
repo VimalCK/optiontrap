@@ -10,6 +10,7 @@ import { loadInstruments } from './instruments';
 import { fetchOptions } from './optionChain';
 import { fetchQuotes } from './kiteApi';
 import { isCashStock, parseKiteCandles, scanSummary, type Candle, type SetupType } from '../../shared/stockSetups.js';
+import { marketDate } from '../../shared/marketTime.js';
 
 export interface StockCandles {
   stock: { instrumentToken: number; tradingsymbol: string };
@@ -54,7 +55,7 @@ export interface TrackedSetup {
 type CompactCandle = [string, number, number, number, number, number];
 
 /** IST date: cached candles are reused for the rest of the trading day. */
-const istDate = () => new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const istDate = () => marketDate();
 const cache = new Map<number, { day: string; data: Promise<StockCandles> }>();
 
 /** Resolves like `promise`, but rejects with an AbortError as soon as `signal` aborts. */

@@ -17,15 +17,11 @@ import {
   withNamedAdvisoryLock,
 } from './db.js';
 import { getOrFetchInstruments } from './instruments.js';
+import { marketDate } from '../shared/marketTime.js';
 
 /** Get current date in IST as YYYY-MM-DD */
 export function todayIST() {
-  const now = new Date();
-  const ist = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Kolkata' }));
-  const y = ist.getFullYear();
-  const m = String(ist.getMonth() + 1).padStart(2, '0');
-  const d = String(ist.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
+  return marketDate();
 }
 
 /** A fetch that failed for a known reason; the message is safe to show the user. */
