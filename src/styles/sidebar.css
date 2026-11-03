@@ -251,7 +251,8 @@
   transition: opacity var(--transition-speed) ease;
 }
 
+/* Out of the layout when collapsed: an invisible badge still takes width and pushes the
+   centred avatar off the left edge. */
 .sidebar.collapsed .sidebar__admin-badge {
-  opacity: 0;
-  pointer-events: none;
+  display: none;
 }
