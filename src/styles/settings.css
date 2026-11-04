@@ -64,135 +64,6 @@
   flex-shrink: 0;
 }
 
-.settings-section {
-  margin-bottom: 40px;
-}
-
-.settings-section__title {
-  font-size: 18px;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-
-.settings-section__description {
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin-bottom: 20px;
-}
-
-/* Trading Mode Toggle */
-.settings-toggle-row {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  flex-wrap: wrap;
-}
-
-.settings-mode-toggle {
-  display: flex;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-.settings-mode-btn {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 8px 20px;
-  border-radius: 6px;
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.settings-mode-btn__dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: currentColor;
-  opacity: 0.4;
-  transition: opacity 0.15s;
-}
-
-.settings-mode-btn--active {
-  color: var(--text-primary);
-  font-weight: 600;
-}
-
-.settings-mode-btn--active .settings-mode-btn__dot {
-  opacity: 1;
-}
-
-.settings-mode-btn--paper.settings-mode-btn--active {
-  background: rgba(99, 102, 241, 0.12);
-  color: #818cf8;
-}
-
-.settings-mode-btn--paper.settings-mode-btn--active .settings-mode-btn__dot {
-  background: #818cf8;
-}
-
-.settings-mode-btn--live.settings-mode-btn--active {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-}
-
-.settings-mode-btn--live.settings-mode-btn--active .settings-mode-btn__dot {
-  background: #ef4444;
-}
-
-.settings-mode-hint {
-  font-size: 13px;
-  color: var(--text-secondary);
-  margin: 0;
-}
-
-/* Accent Picker */
-.settings-accent-picker {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.settings-accent-btn {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
-  border: 2px solid var(--card-border);
-  border-radius: 8px;
-  background: transparent;
-  cursor: pointer;
-  transition: all 0.15s;
-  font-family: inherit;
-}
-
-.settings-accent-btn:hover {
-  border-color: var(--swatch-color);
-}
-
-.settings-accent-btn--active {
-  border-color: var(--swatch-color);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--swatch-color) 30%, transparent);
-}
-
-.settings-accent-btn__swatch {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--swatch-color);
-}
-
-.settings-accent-btn__label {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-}
-
 /* Settings Link */
 .settings-link {
   color: var(--accent);
@@ -569,14 +440,325 @@
   border: 1px solid rgba(245, 158, 11, 0.4);
 }
 
-/* Always Snapshot */
-.settings-always-snapshot {
-  width: 100%;
-  max-width: 480px;
+/* ── Settings page: one card per setting, in the Dashboard's style ── */
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--card-gap);
 }
 
-.settings-section__error {
-  margin-top: 8px;
+/* Title row, the height of the other pages' tab bars (as on the Dashboard). */
+.settings-header {
+  height: 48px;
+  display: flex;
+  align-items: center;
+}
+
+.settings-header__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--card-gap);
+}
+
+.settings-card {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 22px;
+  border: 1px solid var(--card-border);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at top right, rgba(99, 102, 241, 0.16), transparent 34%),
+    var(--card-bg);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.14);
+}
+
+.settings-card--wide {
+  grid-column: 1 / -1;
+}
+
+.settings-card__eyebrow {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.settings-card__title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings-card__title {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 750;
+}
+
+.settings-card__description {
+  margin: 6px 0 0;
+  max-width: 720px;
+  color: var(--text-secondary);
   font-size: 13px;
+  line-height: 1.5;
+}
+
+.settings-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* Small pill labels: "Admin", "Coming soon". */
+.settings-badge {
+  padding: 3px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.04);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.settings-badge--admin {
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.4);
+}
+
+/* Trading mode: a pill toggle like the app's tab bars. */
+.settings-toggle {
+  display: inline-flex;
+  align-self: flex-start;
+  gap: 4px;
+  padding: 5px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  background: var(--card-bg);
+}
+
+.settings-toggle__option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 750;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.settings-toggle__option:hover {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.settings-toggle__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: 0.45;
+}
+
+.settings-toggle__option--active .settings-toggle__dot {
+  opacity: 1;
+}
+
+.settings-toggle__option--paper.settings-toggle__option--active {
+  color: var(--accent);
+  background: var(--sidebar-active);
+}
+
+/* Live means real money: red, so it is never mistaken for paper. */
+.settings-toggle__option--live.settings-toggle__option--active {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.settings-hint {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.settings-hint--live {
+  color: #ef4444;
+}
+
+/* Accent colour: round swatches; the chosen one has a ring. */
+.settings-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.settings-swatch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px 8px 10px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.settings-swatch:hover {
+  color: var(--text-primary);
+  border-color: var(--swatch-color);
+}
+
+.settings-swatch--active {
+  color: var(--text-primary);
+  border-color: var(--swatch-color);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--swatch-color) 28%, transparent);
+}
+
+.settings-swatch__dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--swatch-color);
+}
+
+/* Always snapshot: the picker, a count, and the chosen symbols as removable chips. */
+.settings-snapshot {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.settings-always-snapshot {
+  width: 100%;
+  max-width: 420px;
+}
+
+.settings-snapshot__count {
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.settings-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.settings-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 6px 5px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  background: var(--sidebar-active);
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings-chip__remove {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.settings-chip__remove:hover {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.settings-error {
+  margin: 0;
   color: var(--danger);
+  font-size: 13px;
+}
+
+/* Notifications: one row per channel. */
+.settings-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 0;
+  border-top: 1px solid var(--card-border);
+}
+
+.settings-row:first-child {
+  padding-top: 0;
+  border-top: none;
+}
+
+.settings-row:last-child {
+  padding-bottom: 0;
+}
+
+.settings-row__title {
+  display: block;
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.settings-row__detail {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+@media (max-width: 900px) {
+  .settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-snapshot {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
