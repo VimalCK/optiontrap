@@ -67,6 +67,8 @@ const Watchlist: React.FC = () => {
   // Inline rename state
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  // Width of the tab being renamed, so its name box starts the same size and nothing moves.
+  const [renameWidth, setRenameWidth] = useState<number | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
   // New list prompt
@@ -590,58 +592,72 @@ const Watchlist: React.FC = () => {
         className="wl-tabs"
         tabClassName="wl-tab"
         ariaLabel="Watchlists"
-        renderMeasure={(item, active) => (
-          <div key={item.id} className={`wl-tab tab-bar__tab${active ? ' wl-tab--active' : ''}`}>
-            <span className="wl-tab__label">{item.label}</span>
-          </div>
-        )}
-        renderTab={(item, active) => (
-          <div key={item.id} className={`wl-tab tab-bar__tab${active ? ' wl-tab--active' : ''}`}>
-            {renamingId === item.id ? (
-              <input
-                ref={renameInputRef}
-                className="wl-tab__rename-input"
-                value={renameValue}
-                onChange={(e) => setRenameValue(e.target.value)}
-                onBlur={handleRenameSubmit}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleRenameSubmit();
-                  if (e.key === 'Escape') setRenamingId(null);
-                }}
-              />
-            ) : (
+        renderMeasure={(item, active) => {
+          const tab = tabs.find((t) => t.id === item.id);
+          return (
+            <div key={item.id} className={`wl-tab tab-bar__tab${active ? ' wl-tab--active' : ''}`}>
+              <span className="wl-tab__label"><span className="tab-bar__text">{tab?.name}</span></span>
+              <span className="wl-tab__badge"><span className="wl-tab__count">{tab?.itemCount}</span></span>
+            </div>
+          );
+        }}
+        renderTab={(item, active) => {
+          const tab = tabs.find((t) => t.id === item.id);
+          if (renamingId === item.id) {
+            // Editing: only the name box, sized like the tab it replaces.
+            return (
+              <div key={item.id} className="wl-tab tab-bar__tab wl-tab--editing">
+                <input
+                  ref={renameInputRef}
+                  className="wl-tab__rename-input"
+                  style={renameWidth ? { minWidth: renameWidth } : undefined}
+                  value={renameValue}
+                  onChange={(e) => setRenameValue(e.target.value)}
+                  onBlur={handleRenameSubmit}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') handleRenameSubmit();
+                    if (e.key === 'Escape') setRenamingId(null);
+                  }}
+                />
+              </div>
+            );
+          }
+          return (
+            <div key={item.id} className={`wl-tab tab-bar__tab${active ? ' wl-tab--active' : ''}`}>
               <button
                 className="wl-tab__label"
                 title={item.title}
                 onClick={() => handleTabSwitch(item.id)}
-                onDoubleClick={() => {
+                onDoubleClick={(e) => {
+                  setRenameWidth((e.currentTarget.closest('.wl-tab') as HTMLElement | null)?.offsetWidth ?? null);
                   setRenamingId(item.id);
-                  setRenameValue(tabs.find((t) => t.id === item.id)?.name ?? '');
+                  setRenameValue(tab?.name ?? '');
                 }}
               >
-                {item.label}
+                <span className="tab-bar__text">{tab?.name}</span>
               </button>
-            )}
-            <button
-              className="wl-tab__delete"
-              onClick={(e) => {
-                e.stopPropagation();
-                handleDeleteList(item.id);
-              }}
-              title="Delete watchlist"
-            >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <polyline points="3 6 5 6 21 6" />
-                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-              </svg>
-            </button>
-          </div>
-        )}
+              {/* The item count; on hover it turns into the delete button, in the same space. */}
+              <button
+                className="wl-tab__badge"
+                onClick={() => handleDeleteList(item.id)}
+                title={`Delete ${tab?.name ?? 'watchlist'}`}
+                aria-label={`Delete watchlist ${tab?.name ?? ''}`}
+              >
+                <span className="wl-tab__count">{tab?.itemCount}</span>
+                <span className="wl-tab__badge-delete" aria-hidden="true">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+                    <path d="M18 6 6 18M6 6l12 12" />
+                  </svg>
+                </span>
+              </button>
+            </div>
+          );
+        }}
         trailing={showNewInput ? (
           <div className="wl-tab wl-tab--new">
             <input
               ref={newInputRef}
-              className="wl-tab__rename-input"
+              className="wl-tab__rename-input wl-tab__rename-input--new"
               placeholder="List name"
               value={newListName}
               onChange={(e) => setNewListName(e.target.value)}

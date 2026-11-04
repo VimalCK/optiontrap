@@ -91,27 +91,6 @@
   border-color: rgba(99, 102, 241, 0.2);
 }
 
-.wl-tab__delete {
-  display: flex;
-  width: 0;
-  overflow: hidden;
-  height: 20px;
-  font-size: 12px;
-  line-height: 1;
-  color: var(--text-secondary);
-  background: none;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: width 0.15s, opacity 0.15s, color 0.15s, background 0.15s;
-}
-
-.wl-tab:hover .wl-tab__delete { width: 20px; opacity: 0.7; }
-.wl-tab__delete:hover { opacity: 1; color: #ef4444; background: rgba(239, 68, 68, 0.1); }
-
 .wl-tab__rename-input {
   padding: 8px 12px;
   font-size: 13px;
@@ -909,10 +888,6 @@
   background: rgba(245, 158, 11, 0.1);
 }
 
-.wl-tab__delete {
-  border-radius: 999px;
-}
-
 .wl-tab--add {
   display: inline-flex;
   align-items: center;
@@ -1647,14 +1622,94 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
   .wl-sz .info-guide__terms dd { margin-bottom: 8px; }
 }
 
-/* A long list name is cut with "…" (components/TabBar); the item count and delete button stay whole. */
-.wl-tabs .wl-tab__label {
-  min-width: 0;
+/*
+ * Each watchlist tab is one pill: the name (cut with "…" when long, see
+ * components/TabBar), then the item count, which turns into a delete × on
+ * hover in the same space, so nothing moves.
+ */
+.wl-tabs .wl-tab {
+  gap: 0;
+  border-radius: 999px;
+  transition: background 0.15s;
 }
 
-.wl-tabs .wl-tab__count,
-.wl-tabs .wl-tab__delete {
+.wl-tabs .wl-tab--active {
+  background: var(--sidebar-active);
+}
+
+.wl-tabs .wl-tab__label,
+.wl-tabs .wl-tab--active .wl-tab__label {
+  min-width: 0;
+  padding: 10px 6px 10px 16px;
+  background: none;
+}
+
+.wl-tab__badge {
+  display: grid;
   flex-shrink: 0;
+  margin-right: 12px;
+  padding: 0;
+  font: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+/* The count and the × share one cell, so the badge is as wide as the wider of them. */
+.wl-tab__badge > * {
+  grid-area: 1 / 1;
+}
+
+.wl-tab__badge-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  border-radius: 999px;
+  visibility: hidden;
+}
+
+.wl-tab:hover .wl-tab__badge .wl-tab__count,
+.wl-tab__badge:focus-visible .wl-tab__count {
+  visibility: hidden;
+}
+
+.wl-tab:hover .wl-tab__badge-delete,
+.wl-tab__badge:focus-visible .wl-tab__badge-delete {
+  visibility: visible;
+}
+
+.wl-tab__badge:hover .wl-tab__badge-delete {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+/* Rename and new-list boxes: a pill the height of a tab, as wide as the name typed (up to the tab name cap). */
+.wl-tabs .wl-tab--new {
+  padding: 0;
+}
+
+.wl-tabs .wl-tab__rename-input {
+  box-sizing: border-box;
+  height: 38px;
+  width: 140px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 750;
+  color: var(--text-primary);
+  background: var(--sidebar-active);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+}
+
+@supports (field-sizing: content) {
+  .wl-tabs .wl-tab__rename-input {
+    field-sizing: content;
+    width: auto;
+    min-width: 72px;
+    max-width: 192px;
+  }
 }
 
 /* The shared tab bar's "+N" button (components/TabBar), sized like a watchlist tab label. */
