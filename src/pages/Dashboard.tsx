@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DashboardIcon } from '@/components/icons/Icons';
-import { fetchHoldings, fetchPositions } from '@/services/kiteApi';
+import { fetchPositions } from '@/services/kiteApi';
+import { fetchPricedHoldings, heldQuantity, holdingTotals } from '@/services/holdings';
 import { getPositions, Position } from '@/services/positions';
 import { getLiveTradeEntries, getPaperTradeStats, getPaperTrades, TradeEntry, TradeStats } from '@/services/tradeJournal';
 import { fetchPriceAlerts } from '@/services/priceAlerts';
@@ -73,11 +74,6 @@ const formatCompactMoney = (value: number, signed = false) => {
 
 const getTone = (value: number) => value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral';
 
-const getEffectiveHoldingQty = (holding: { t1_quantity: number; realised_quantity: number; used_quantity: number; collateral_quantity: number }) => {
-  const quantity = holding.t1_quantity + holding.realised_quantity - holding.used_quantity;
-  return quantity > 0 ? quantity : holding.collateral_quantity;
-};
-
 const getPaperPositionPnl = (position: Position) => {
   const exitPrice = position.exitPrice ?? position.entryPrice;
   return position.side === 'BUY'
@@ -147,7 +143,7 @@ const Dashboard: React.FC = () => {
       // Stats are totalled on the server, and only the 5 latest trades are
       // fetched, so the Dashboard never loads the full trade history.
       const [holdingsResult, livePositionsResult, paperPositionsResult, paperStatsResult, paperTradesResult, liveTradesResult, watchlistsResult, alertsResult] = await Promise.allSettled([
-        fetchHoldings(),
+        fetchPricedHoldings(),
         fetchPositions(),
         getPositions(),
         getPaperTradeStats(),
@@ -172,19 +168,17 @@ const Dashboard: React.FC = () => {
       const watchlists = watchlistsResult.status === 'fulfilled' ? watchlistsResult.value : [];
       const alerts = alertsResult.status === 'fulfilled' ? alertsResult.value : [];
 
-      const holdingRows = holdings.map((holding) => {
-        const quantity = getEffectiveHoldingQty(holding);
-        return {
-          symbol: holding.tradingsymbol,
-          value: holding.last_price * quantity,
-          investment: holding.average_price * quantity,
-          pnl: holding.pnl,
-        };
-      });
-
-      const holdingsValue = holdingRows.reduce((sum, holding) => sum + holding.value, 0);
-      const holdingsInvestment = holdingRows.reduce((sum, holding) => sum + holding.investment, 0);
-      const holdingsPnl = holdingRows.reduce((sum, holding) => sum + holding.pnl, 0);
+      // Same prices and share count as the Portfolio page.
+      const holdingRows = holdings.map((holding) => ({
+        symbol: holding.tradingsymbol,
+        value: holding.last_price * heldQuantity(holding),
+        pnl: holding.pnl,
+      }));
+      const {
+        currentValue: holdingsValue,
+        investment: holdingsInvestment,
+        pnl: holdingsPnl,
+      } = holdingTotals(holdings);
       const paperPnl = paperPositions.reduce((sum, position) => sum + getPaperPositionPnl(position), 0);
       const livePnl = livePositions.net.reduce((sum, position) => sum + position.pnl, 0);
 
