@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DashboardIcon } from '@/components/icons/Icons';
-import { fetchPositions } from '@/services/kiteApi';
 import { heldQuantity } from '@/services/holdings';
 import { useHoldings } from '@/hooks/useHoldings';
+import { useLivePositions } from '@/hooks/useLivePositions';
 import { getPositions, Position } from '@/services/positions';
 import { getLiveTradeEntries, getPaperTradeStats, getPaperTrades, TradeEntry, TradeStats } from '@/services/tradeJournal';
 import { fetchPriceAlerts } from '@/services/priceAlerts';
@@ -14,12 +14,10 @@ type DashboardTradeEntry = TradeEntry & { mode: 'paper' | 'live' };
 
 interface DashboardMetrics {
   paperPnl: number;
-  livePnl: number;
   todayTrades: number;
   watchlistCount: number;
   watchlistLists: number;
   openPaperPositions: number;
-  openLivePositions: number;
   activeAlerts: number;
   triggeredAlerts: number;
   closedTrades: number;
@@ -35,12 +33,10 @@ interface DashboardMetrics {
 
 const emptyMetrics: DashboardMetrics = {
   paperPnl: 0,
-  livePnl: 0,
   todayTrades: 0,
   watchlistCount: 0,
   watchlistLists: 0,
   openPaperPositions: 0,
-  openLivePositions: 0,
   activeAlerts: 0,
   triggeredAlerts: 0,
   closedTrades: 0,
@@ -135,9 +131,9 @@ const Dashboard: React.FC = () => {
     try {
       // Stats are totalled on the server, and only the 5 latest trades are
       // fetched, so the Dashboard never loads the full trade history.
-      // Holdings come from useHoldings, shared with the Portfolio page.
-      const [livePositionsResult, paperPositionsResult, paperStatsResult, paperTradesResult, liveTradesResult, watchlistsResult, alertsResult] = await Promise.allSettled([
-        fetchPositions(),
+      // Holdings and live positions come from useHoldings and useLivePositions,
+      // shared with the Portfolio and Positions pages.
+      const [paperPositionsResult, paperStatsResult, paperTradesResult, liveTradesResult, watchlistsResult, alertsResult] = await Promise.allSettled([
         getPositions(),
         getPaperTradeStats(),
         getPaperTrades({ limit: 5 }),
@@ -146,7 +142,6 @@ const Dashboard: React.FC = () => {
         fetchPriceAlerts(),
       ]);
 
-      const livePositions = livePositionsResult.status === 'fulfilled' ? livePositionsResult.value : { net: [], day: [] };
       const paperPositions = paperPositionsResult.status === 'fulfilled' ? paperPositionsResult.value : [];
       const paperStats: TradeStats = paperStatsResult.status === 'fulfilled'
         ? paperStatsResult.value
@@ -161,16 +156,13 @@ const Dashboard: React.FC = () => {
       const alerts = alertsResult.status === 'fulfilled' ? alertsResult.value : [];
 
       const paperPnl = paperPositions.reduce((sum, position) => sum + getPaperPositionPnl(position), 0);
-      const livePnl = livePositions.net.reduce((sum, position) => sum + position.pnl, 0);
 
       setMetrics({
         paperPnl,
-        livePnl,
         todayTrades: paperStats.todayTrades,
         watchlistCount: watchlists.reduce((sum, list) => sum + list.itemCount, 0),
         watchlistLists: watchlists.length,
         openPaperPositions: paperPositions.filter((position) => !position.exited).length,
-        openLivePositions: livePositions.net.filter((position) => position.quantity !== 0).length,
         activeAlerts: alerts.filter((alert) => alert.status === 'active').length,
         triggeredAlerts: alerts.filter((alert) => alert.status === 'triggered').length,
         closedTrades: paperStats.closedTrades,
@@ -184,7 +176,7 @@ const Dashboard: React.FC = () => {
         recentTrades,
       });
 
-      const failed = [livePositionsResult, paperPositionsResult, paperStatsResult, paperTradesResult, liveTradesResult, watchlistsResult]
+      const failed = [paperPositionsResult, paperStatsResult, paperTradesResult, liveTradesResult, watchlistsResult]
         .some((result) => result.status === 'rejected');
       setError(failed ? 'Some dashboard data could not be loaded. Showing available metrics.' : null);
     } catch (err) {
@@ -204,13 +196,19 @@ const Dashboard: React.FC = () => {
     .sort((a, b) => b.value - a.value)
     .slice(0, 5)
     .map((h) => ({ ...h, weight: holdingsValue > 0 ? (h.value / holdingsValue) * 100 : 0 }));
-  const busy = loading || holdingsData.loading;
-  const refresh = () => { loadMetrics(); holdingsData.reload(); };
-  const warning = error ?? (holdingsData.error ? 'Holdings could not be loaded. Showing available metrics.' : null);
+  // Live positions: the same source as the Positions page.
+  const liveData = useLivePositions();
+  const livePnl = liveData.netPnl;
+  const openLivePositions = liveData.openCount;
 
-  const totalPnl = holdingsPnl + metrics.paperPnl + metrics.livePnl;
+  const busy = loading || holdingsData.loading || liveData.loading;
+  const refresh = () => { loadMetrics(); holdingsData.reload(); liveData.reload(); };
+  const warning = error
+    ?? (holdingsData.error || liveData.error ? 'Some dashboard data could not be loaded. Showing available metrics.' : null);
+
+  const totalPnl = holdingsPnl + metrics.paperPnl + livePnl;
   const portfolioReturn = holdingsInvestment > 0 ? (holdingsPnl / holdingsInvestment) * 100 : 0;
-  const openPositions = metrics.openPaperPositions + metrics.openLivePositions;
+  const openPositions = metrics.openPaperPositions + openLivePositions;
   const tradeEdgeLabel = metrics.closedTrades === 0
     ? 'No closed paper trades yet'
     : `${metrics.winningTrades}W / ${metrics.losingTrades}L closed trades`;
@@ -246,7 +244,7 @@ const Dashboard: React.FC = () => {
         </div>
         <div className="dashboard-hero__side">
           <MetricCard title="Portfolio Value" value={formatCompactMoney(holdingsValue)} detail={`${portfolioReturn >= 0 ? '+' : ''}${portfolioReturn.toFixed(2)}% holdings return`} loading={busy} />
-          <MetricCard title="Open Risk" value={String(openPositions)} detail={`${metrics.openPaperPositions} paper / ${metrics.openLivePositions} live`} tone="accent" loading={loading} />
+          <MetricCard title="Open Risk" value={String(openPositions)} detail={`${metrics.openPaperPositions} paper / ${openLivePositions} live`} tone="accent" loading={loading || liveData.loading} />
           <MetricCard title="Alert Coverage" value={String(metrics.activeAlerts)} detail={`${metrics.triggeredAlerts} triggered alerts retained`} tone="accent" loading={loading} />
         </div>
       </section>
@@ -254,7 +252,7 @@ const Dashboard: React.FC = () => {
       <section className="dashboard-metrics-row">
         <MetricCard title="Holdings P&L" value={formatCompactMoney(holdingsPnl, true)} detail="Equity portfolio mark-to-market" tone={getTone(holdingsPnl)} loading={holdingsData.loading} onClick={goToHoldings} />
         <MetricCard title="Paper P&L" value={formatCompactMoney(metrics.paperPnl, true)} detail="Simulator and journal performance" tone={getTone(metrics.paperPnl)} loading={loading} onClick={goToPaperPositions} />
-        <MetricCard title="Live P&L" value={formatCompactMoney(metrics.livePnl, true)} detail="Broker net positions" tone={getTone(metrics.livePnl)} loading={loading} onClick={goToLivePositions} />
+        <MetricCard title="Live P&L" value={formatCompactMoney(livePnl, true)} detail="Broker net positions" tone={getTone(livePnl)} loading={liveData.loading} onClick={goToLivePositions} />
         <MetricCard title="Today Trades" value={String(metrics.todayTrades)} detail="Closed paper trades today" loading={loading} onClick={goToTodayTrades} />
         <MetricCard title="Watchlist" value={String(metrics.watchlistCount)} detail={`${metrics.watchlistLists} watchlist${metrics.watchlistLists === 1 ? '' : 's'}`} loading={loading} onClick={goToWatchlist} />
       </section>
@@ -271,9 +269,9 @@ const Dashboard: React.FC = () => {
             {[
               { label: 'Holdings', value: holdingsPnl },
               { label: 'Paper', value: metrics.paperPnl },
-              { label: 'Live', value: metrics.livePnl },
+              { label: 'Live', value: livePnl },
             ].map((item) => {
-              const max = Math.max(Math.abs(holdingsPnl), Math.abs(metrics.paperPnl), Math.abs(metrics.livePnl), 1);
+              const max = Math.max(Math.abs(holdingsPnl), Math.abs(metrics.paperPnl), Math.abs(livePnl), 1);
               const width = Math.max(4, (Math.abs(item.value) / max) * 100);
               return (
                 <div className="dashboard-breakdown__row" key={item.label}>

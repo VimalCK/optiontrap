@@ -2,7 +2,9 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { getPositions, exitPosition, tradeErrorMessage, Position } from '@/services/positions';
 
-import { fetchQuotes, fetchPositions, KitePosition, KitePositions } from '@/services/kiteApi';
+import { fetchQuotes, KitePosition } from '@/services/kiteApi';
+import { positionsPnl } from '@/services/livePositions';
+import { useLivePositions } from '@/hooks/useLivePositions';
 import { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe } from '@/services/tickerSingleton';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
@@ -818,44 +820,9 @@ const PaperPositions: React.FC = () => {
 type LiveView = 'net' | 'day';
 
 const LivePositions: React.FC = () => {
-  const [positions, setPositions] = useState<KitePositions | null>(null);
-  const [livePrices, setLivePrices] = useState<Map<number, number>>(new Map());
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  // Priced from quotes on load and from ticks while the market is open.
+  const { positions, loading, error, reload: load } = useLivePositions();
   const [view, setView] = useState<LiveView>('net');
-
-  const load = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchPositions();
-      setPositions(data);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Failed to load positions';
-      setError(msg);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  // Subscribe live prices via WebSocket for open positions
-  useEffect(() => {
-    if (!positions || !isMarketLive()) return;
-
-    const allPos = [...positions.net, ...positions.day];
-    const tokens = [...new Set(allPos.filter((p) => p.quantity !== 0).map((p) => p.instrument_token))];
-    if (tokens.length === 0) return;
-
-    return tickerSubscribe('live-positions', tokens, (ticks: Tick[]) => {
-      setLivePrices((prev) => {
-        const next = new Map(prev);
-        ticks.forEach((t) => next.set(t.instrumentToken, t.lastPrice));
-        return next;
-      });
-    });
-  }, [positions]);
 
   if (loading) return <div className="card"><p className="card__description">Loading live positions...</p></div>;
 
@@ -868,23 +835,11 @@ const LivePositions: React.FC = () => {
     );
   }
 
-  if (!positions) return null;
-
   const rows = view === 'net' ? positions.net : positions.day;
   const openRows   = rows.filter((p) => p.quantity !== 0);
   const closedRows = rows.filter((p) => p.quantity === 0);
 
-  // Recompute P&L from live LTP when available; fall back to API value
-  const getLivePnl = (p: KitePosition): { pnl: number; unrealised: number } => {
-    const ltp = livePrices.get(p.instrument_token);
-    if (ltp !== undefined && p.quantity !== 0) {
-      const livePnl = (ltp - p.average_price) * p.quantity;
-      return { pnl: livePnl, unrealised: livePnl - p.realised };
-    }
-    return { pnl: p.pnl, unrealised: p.unrealised };
-  };
-
-  const totalPnL    = rows.reduce((s, p) => s + getLivePnl(p).pnl, 0);
+  const totalPnL = positionsPnl(rows);
 
   const fmt = (n: number) =>
     `${n >= 0 ? '+' : ''}${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -909,8 +864,8 @@ const LivePositions: React.FC = () => {
           </thead>
           <tbody>
             {list.map((pos) => {
-              const ltp = livePrices.get(pos.instrument_token) ?? pos.last_price;
-              const { pnl: livePnl } = getLivePnl(pos);
+              const ltp = pos.last_price;
+              const livePnl = pos.pnl;
               const side = pos.quantity > 0 ? 'BUY' : 'SELL';
               return (
                 <tr key={`${pos.exchange}:${pos.tradingsymbol}`}>
@@ -954,7 +909,7 @@ const LivePositions: React.FC = () => {
           </thead>
           <tbody>
             {list.map((pos) => {
-              const { pnl: livePnl } = getLivePnl(pos);
+              const livePnl = pos.pnl;
               return (
                 <tr key={`${pos.exchange}:${pos.tradingsymbol}`} className="positions-table__row--exited">
                   <td>

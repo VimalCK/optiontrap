@@ -68,4 +68,4 @@ export interface KitePosition {
   day_buy_value: number; day_sell_quantity: number; day_sell_price: number; day_sell_value: number;
 }
 export interface KitePositions { net: KitePosition[]; day: KitePosition[] }
-export function fetchPositions(): Promise<KitePositions> { return apiClient.get('/api/portfolio/positions'); }
+export function fetchPositions(signal?: AbortSignal): Promise<KitePositions> { return apiClient.get('/api/portfolio/positions', { signal }); }
