@@ -301,110 +301,101 @@ const TradeJournal: React.FC<{
           )}
           {reportError && <div className="tj-notice tj-notice--error">{reportError}</div>}
 
-          {report === null ? (
-            <div className="card tj-empty">
-              {reportLoading ? 'Loading report…' : 'Choose a segment and date range, then press Report.'}
+          {/* The calendar always shows; it stays empty until a report fills it. */}
+          <div className="card tj-heatmap-card">
+            <PnLHeatmap
+              dailyPnL={dailyPnL}
+              endDate={new Date(report?.filters.to ?? rangeEnd)}
+              months={12}
+            />
+          </div>
+
+          {report !== null && report.days.length > 0 && (
+            <div className="card">
+              <h4 className="tj-section-title" style={{ marginBottom: 16 }}>Trade Log</h4>
+              <table className="tj-table">
+                <thead>
+                  <tr>
+                    <th>Symbol</th>
+                    <th>Segment</th>
+                    <th>Side</th>
+                    <th>Qty</th>
+                    <th>Entry</th>
+                    <th>Exit</th>
+                    <th>P&L</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.days.map((day) => {
+                    const isExpanded = expandedDates.has(day.date);
+                    const loaded = dayTrades[day.date];
+                    const shown = loaded?.trades.length ?? 0;
+                    return (
+                      <React.Fragment key={day.date}>
+                        {/* Date group header — clickable */}
+                        <tr className="tj-group-row" onClick={() => toggleDate(day.date)}>
+                          <td className="tj-group-date">
+                            <span className="tj-group-chevron">{isExpanded ? '▾' : '▸'}</span>
+                            {day.date}
+                            <span className="tj-group-count">{day.trades} trade{day.trades !== 1 ? 's' : ''}</span>
+                          </td>
+                          <td className="tj-group-empty" />
+                          <td className="tj-group-empty" />
+                          <td className="tj-group-empty" />
+                          <td className="tj-group-empty" />
+                          <td className="tj-group-empty" />
+                          <td className={`tj-group-pnl ${pnlClass(day.pnl)}`}>{formatPnl(day.pnl)}</td>
+                        </tr>
+
+                        {/* Individual trades — fetched when the day is expanded */}
+                        {isExpanded && loaded?.trades.map((t) => (
+                          <tr key={t.id} className={`tj-trade-row ${initialTradeId === t.id ? 'tj-trade-row--highlighted' : ''}`}>
+                            <td className="tj-symbol">
+                              {t.symbol}
+                              <TradingViewLink symbol={t.symbol} />
+                              {(t.strategyTag || t.confidence != null || t.targetPrice != null || t.stopLossPrice != null || t.note) && (
+                                <div className="tj-trade-meta">
+                                  {t.strategyTag && <span className="tj-trade-meta__tag">{t.strategyTag}</span>}
+                                  {t.confidence != null && <span>Conf {t.confidence}%</span>}
+                                  {t.targetPrice != null && <span>Tgt {t.targetPrice.toFixed(2)}</span>}
+                                  {t.stopLossPrice != null && <span>SL {t.stopLossPrice.toFixed(2)}</span>}
+                                  {t.note && <span className="tj-trade-meta__note">{t.note}</span>}
+                                </div>
+                              )}
+                            </td>
+                            <td><span className={`tj-badge tj-badge--${t.segment}`}>{t.segment}</span></td>
+                            <td><span className={`tj-side tj-side--${t.side.toLowerCase()}`}>{t.side}</span></td>
+                            <td>{t.quantity}</td>
+                            <td>{t.entryPrice.toFixed(2)}</td>
+                            <td>{t.exitPrice.toFixed(2)}</td>
+                            <td className={pnlClass(t.pnl)}>{formatPnl(t.pnl)}</td>
+                          </tr>
+                        ))}
+
+                        {isExpanded && loaded && (loaded.loading || loaded.error || shown < day.trades) && (
+                          <tr className="tj-day-status-row">
+                            <td colSpan={7}>
+                              {loaded.loading ? (
+                                <span className="tj-loading">Loading trades…</span>
+                              ) : loaded.error ? (
+                                <span className="tj-notice--error">{loaded.error}</span>
+                              ) : (
+                                <button
+                                  className="tj-preset-btn"
+                                  onClick={() => loadDay(report.filters, day.date, shown)}
+                                >
+                                  Load more ({shown} of {day.trades})
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
+                </tbody>
+              </table>
             </div>
-          ) : (
-            <>
-              <div className="card tj-heatmap-card">
-                <PnLHeatmap
-                  dailyPnL={dailyPnL}
-                  endDate={new Date(report.filters.to)}
-                  months={12}
-                />
-              </div>
-
-              <div className="card">
-                <h4 className="tj-section-title" style={{ marginBottom: 16 }}>Trade Log</h4>
-                {report.days.length === 0 ? (
-                  <div className="tj-empty">No closed trades between {report.filters.from} and {report.filters.to}.</div>
-                ) : (
-                  <table className="tj-table">
-                    <thead>
-                      <tr>
-                        <th>Symbol</th>
-                        <th>Segment</th>
-                        <th>Side</th>
-                        <th>Qty</th>
-                        <th>Entry</th>
-                        <th>Exit</th>
-                        <th>P&L</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {report.days.map((day) => {
-                        const isExpanded = expandedDates.has(day.date);
-                        const loaded = dayTrades[day.date];
-                        const shown = loaded?.trades.length ?? 0;
-                        return (
-                          <React.Fragment key={day.date}>
-                            {/* Date group header — clickable */}
-                            <tr className="tj-group-row" onClick={() => toggleDate(day.date)}>
-                              <td className="tj-group-date">
-                                <span className="tj-group-chevron">{isExpanded ? '▾' : '▸'}</span>
-                                {day.date}
-                                <span className="tj-group-count">{day.trades} trade{day.trades !== 1 ? 's' : ''}</span>
-                              </td>
-                              <td className="tj-group-empty" />
-                              <td className="tj-group-empty" />
-                              <td className="tj-group-empty" />
-                              <td className="tj-group-empty" />
-                              <td className="tj-group-empty" />
-                              <td className={`tj-group-pnl ${pnlClass(day.pnl)}`}>{formatPnl(day.pnl)}</td>
-                            </tr>
-
-                            {/* Individual trades — fetched when the day is expanded */}
-                            {isExpanded && loaded?.trades.map((t) => (
-                              <tr key={t.id} className={`tj-trade-row ${initialTradeId === t.id ? 'tj-trade-row--highlighted' : ''}`}>
-                                <td className="tj-symbol">
-                                  {t.symbol}
-                                  <TradingViewLink symbol={t.symbol} />
-                                  {(t.strategyTag || t.confidence != null || t.targetPrice != null || t.stopLossPrice != null || t.note) && (
-                                    <div className="tj-trade-meta">
-                                      {t.strategyTag && <span className="tj-trade-meta__tag">{t.strategyTag}</span>}
-                                      {t.confidence != null && <span>Conf {t.confidence}%</span>}
-                                      {t.targetPrice != null && <span>Tgt {t.targetPrice.toFixed(2)}</span>}
-                                      {t.stopLossPrice != null && <span>SL {t.stopLossPrice.toFixed(2)}</span>}
-                                      {t.note && <span className="tj-trade-meta__note">{t.note}</span>}
-                                    </div>
-                                  )}
-                                </td>
-                                <td><span className={`tj-badge tj-badge--${t.segment}`}>{t.segment}</span></td>
-                                <td><span className={`tj-side tj-side--${t.side.toLowerCase()}`}>{t.side}</span></td>
-                                <td>{t.quantity}</td>
-                                <td>{t.entryPrice.toFixed(2)}</td>
-                                <td>{t.exitPrice.toFixed(2)}</td>
-                                <td className={pnlClass(t.pnl)}>{formatPnl(t.pnl)}</td>
-                              </tr>
-                            ))}
-
-                            {isExpanded && loaded && (loaded.loading || loaded.error || shown < day.trades) && (
-                              <tr className="tj-day-status-row">
-                                <td colSpan={7}>
-                                  {loaded.loading ? (
-                                    <span className="tj-loading">Loading trades…</span>
-                                  ) : loaded.error ? (
-                                    <span className="tj-notice--error">{loaded.error}</span>
-                                  ) : (
-                                    <button
-                                      className="tj-preset-btn"
-                                      onClick={() => loadDay(report.filters, day.date, shown)}
-                                    >
-                                      Load more ({shown} of {day.trades})
-                                    </button>
-                                  )}
-                                </td>
-                              </tr>
-                            )}
-                          </React.Fragment>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                )}
-              </div>
-            </>
           )}
         </>
       )}

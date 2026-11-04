@@ -135,11 +135,6 @@
   color: #ef4444;
 }
 
-.tj-empty {
-  color: var(--text-secondary);
-  font-size: 13px;
-}
-
 .tj-day-status-row td {
   padding: 8px 12px;
 }
