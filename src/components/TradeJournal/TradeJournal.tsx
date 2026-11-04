@@ -14,7 +14,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PnLHeatmap from './PnLHeatmap';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
-import { addDays, daysBetween, marketDate } from '../../../shared/marketTime.js';
+import { marketDate } from '../../../shared/marketTime.js';
+import { fitRange, isDateValue, isOverYear, rangeProblem, subtractMonths } from './journalRange';
 import {
   getPaperDailyPnl,
   getPaperTrades,
@@ -29,8 +30,6 @@ type SegmentFilter = 'all' | Segment;
 
 /** Trades fetched per request when a day is expanded. */
 const DAY_PAGE_SIZE = 100;
-/** Longest range the server's daily P&L accepts. */
-const MAX_RANGE_DAYS = 366;
 
 interface ReportFilters {
   from: string;
@@ -42,26 +41,6 @@ interface DayTrades {
   trades: TradeEntry[];
   loading: boolean;
   error: string | null;
-}
-
-/** `date` ('YYYY-MM-DD') moved back `n` calendar months, clamped to month end. */
-function subtractMonths(date: string, n: number): string {
-  const [y, m, d] = date.split('-').map(Number);
-  const target = new Date(Date.UTC(y, m - 1 - n, 1));
-  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
-  target.setUTCDate(Math.min(d, lastDay));
-  return target.toISOString().slice(0, 10);
-}
-
-const isValidDateParam = (value: string | undefined): value is string =>
-  Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
-
-/** Why the range can't be reported on, or null when it's fine. */
-function rangeProblem(from: string, to: string): string | null {
-  if (!isValidDateParam(from) || !isValidDateParam(to)) return 'Pick both a From and a To date.';
-  if (from > to) return 'From must not be after To.';
-  if (daysBetween(from, to) > MAX_RANGE_DAYS) return 'Pick a range of at most one year.';
-  return null;
 }
 
 const segmentParam = (segment: SegmentFilter): Segment | undefined => (segment === 'all' ? undefined : segment);
@@ -153,7 +132,7 @@ const TradeJournal: React.FC<{
   // A link to a specific day (e.g. a trade on the Dashboard) opens that day's
   // report straight away; plain navigation to the page fetches nothing.
   useEffect(() => {
-    const targetDate = isValidDateParam(initialDate)
+    const targetDate = isDateValue(initialDate)
       ? initialDate
       : initialRange === 'today'
         ? marketDate()
@@ -179,28 +158,18 @@ const TradeJournal: React.FC<{
     localStorage.setItem('optiontrap_order_mode', initialMode);
   }, [initialMode]);
 
-  const currentFilters: ReportFilters = { from: rangeStart, to: rangeEnd, segment };
   const problem = rangeProblem(rangeStart, rangeEnd);
+  const overYear = isOverYear(rangeStart, rangeEnd);
   const isStale = report !== null && (
     report.filters.from !== rangeStart || report.filters.to !== rangeEnd || report.filters.segment !== segment
   );
 
-  // Picking one end of the range drags the other along when the range would
-  // otherwise exceed what the server reports on, so Report stays usable.
-  const pickFrom = (from: string) => {
-    setRangeStart(from);
-    if (isValidDateParam(from) && isValidDateParam(rangeEnd) && daysBetween(from, rangeEnd) > MAX_RANGE_DAYS) {
-      const today = marketDate();
-      const end = addDays(from, MAX_RANGE_DAYS);
-      setRangeEnd(end < today ? end : today);
-    }
-  };
-
-  const pickTo = (to: string) => {
-    setRangeEnd(to);
-    if (isValidDateParam(to) && isValidDateParam(rangeStart) && daysBetween(rangeStart, to) > MAX_RANGE_DAYS) {
-      setRangeStart(addDays(to, -MAX_RANGE_DAYS));
-    }
+  // The range is checked here, on Report, and not while a date is being
+  // typed (see journalRange.ts). A range over a year is cut to one year.
+  const handleReport = () => {
+    const range = fitRange(rangeStart, rangeEnd, marketDate());
+    if (range.to !== rangeEnd) setRangeEnd(range.to);
+    runReport({ ...range, segment }, expandedDates);
   };
 
   const toggleDate = (date: string) => {
@@ -253,16 +222,14 @@ const TradeJournal: React.FC<{
                 type="date"
                 className="app-date-input"
                 value={rangeStart}
-                max={rangeEnd || undefined}
-                onChange={(e) => pickFrom(e.target.value)}
+                onChange={(e) => setRangeStart(e.target.value)}
               />
               <label className="tj-date-label">To</label>
               <input
                 type="date"
                 className="app-date-input"
                 value={rangeEnd}
-                min={rangeStart || undefined}
-                onChange={(e) => pickTo(e.target.value)}
+                onChange={(e) => setRangeEnd(e.target.value)}
               />
             </div>
 
@@ -291,7 +258,7 @@ const TradeJournal: React.FC<{
               className="app-btn app-btn--primary"
               disabled={Boolean(problem) || reportLoading}
               title={problem ?? undefined}
-              onClick={() => runReport(currentFilters, expandedDates)}
+              onClick={handleReport}
             >
               Report
             </button>
@@ -314,7 +281,10 @@ const TradeJournal: React.FC<{
       {mode === 'paper' && (
         <>
           {problem && <div className="tj-notice">{problem}</div>}
-          {!problem && isStale && !reportLoading && (
+          {overYear && (
+            <div className="tj-notice">That range is over a year: Report will show one year from the From date.</div>
+          )}
+          {!problem && !overYear && isStale && !reportLoading && (
             <div className="tj-notice">Filters changed. Press Report to update the results below.</div>
           )}
           {reportError && <div className="tj-notice tj-notice--error">{reportError}</div>}
