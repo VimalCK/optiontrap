@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DashboardIcon } from '@/components/icons/Icons';
 import { fetchPositions } from '@/services/kiteApi';
-import { fetchPricedHoldings, heldQuantity, holdingTotals } from '@/services/holdings';
+import { heldQuantity } from '@/services/holdings';
+import { useHoldings } from '@/hooks/useHoldings';
 import { getPositions, Position } from '@/services/positions';
 import { getLiveTradeEntries, getPaperTradeStats, getPaperTrades, TradeEntry, TradeStats } from '@/services/tradeJournal';
 import { fetchPriceAlerts } from '@/services/priceAlerts';
@@ -12,9 +13,6 @@ import '@/styles/dashboard.css';
 type DashboardTradeEntry = TradeEntry & { mode: 'paper' | 'live' };
 
 interface DashboardMetrics {
-  holdingsValue: number;
-  holdingsInvestment: number;
-  holdingsPnl: number;
   paperPnl: number;
   livePnl: number;
   todayTrades: number;
@@ -33,13 +31,9 @@ interface DashboardMetrics {
   bestTrade?: TradeEntry;
   worstTrade?: TradeEntry;
   recentTrades: DashboardTradeEntry[];
-  topHoldings: Array<{ symbol: string; value: number; pnl: number; weight: number }>;
 }
 
 const emptyMetrics: DashboardMetrics = {
-  holdingsValue: 0,
-  holdingsInvestment: 0,
-  holdingsPnl: 0,
   paperPnl: 0,
   livePnl: 0,
   todayTrades: 0,
@@ -56,7 +50,6 @@ const emptyMetrics: DashboardMetrics = {
   avgWin: 0,
   avgLoss: 0,
   recentTrades: [],
-  topHoldings: [],
 };
 
 const formatMoney = (value: number, signed = false) => {
@@ -142,8 +135,8 @@ const Dashboard: React.FC = () => {
     try {
       // Stats are totalled on the server, and only the 5 latest trades are
       // fetched, so the Dashboard never loads the full trade history.
-      const [holdingsResult, livePositionsResult, paperPositionsResult, paperStatsResult, paperTradesResult, liveTradesResult, watchlistsResult, alertsResult] = await Promise.allSettled([
-        fetchPricedHoldings(),
+      // Holdings come from useHoldings, shared with the Portfolio page.
+      const [livePositionsResult, paperPositionsResult, paperStatsResult, paperTradesResult, liveTradesResult, watchlistsResult, alertsResult] = await Promise.allSettled([
         fetchPositions(),
         getPositions(),
         getPaperTradeStats(),
@@ -153,7 +146,6 @@ const Dashboard: React.FC = () => {
         fetchPriceAlerts(),
       ]);
 
-      const holdings = holdingsResult.status === 'fulfilled' ? holdingsResult.value : [];
       const livePositions = livePositionsResult.status === 'fulfilled' ? livePositionsResult.value : { net: [], day: [] };
       const paperPositions = paperPositionsResult.status === 'fulfilled' ? paperPositionsResult.value : [];
       const paperStats: TradeStats = paperStatsResult.status === 'fulfilled'
@@ -168,24 +160,10 @@ const Dashboard: React.FC = () => {
       const watchlists = watchlistsResult.status === 'fulfilled' ? watchlistsResult.value : [];
       const alerts = alertsResult.status === 'fulfilled' ? alertsResult.value : [];
 
-      // Same prices and share count as the Portfolio page.
-      const holdingRows = holdings.map((holding) => ({
-        symbol: holding.tradingsymbol,
-        value: holding.last_price * heldQuantity(holding),
-        pnl: holding.pnl,
-      }));
-      const {
-        currentValue: holdingsValue,
-        investment: holdingsInvestment,
-        pnl: holdingsPnl,
-      } = holdingTotals(holdings);
       const paperPnl = paperPositions.reduce((sum, position) => sum + getPaperPositionPnl(position), 0);
       const livePnl = livePositions.net.reduce((sum, position) => sum + position.pnl, 0);
 
       setMetrics({
-        holdingsValue,
-        holdingsInvestment,
-        holdingsPnl,
         paperPnl,
         livePnl,
         todayTrades: paperStats.todayTrades,
@@ -204,13 +182,9 @@ const Dashboard: React.FC = () => {
         bestTrade: paperStats.bestTrade,
         worstTrade: paperStats.worstTrade,
         recentTrades,
-        topHoldings: holdingRows
-          .sort((a, b) => b.value - a.value)
-          .slice(0, 5)
-          .map((holding) => ({ ...holding, weight: holdingsValue > 0 ? (holding.value / holdingsValue) * 100 : 0 })),
       });
 
-      const failed = [holdingsResult, livePositionsResult, paperPositionsResult, paperStatsResult, paperTradesResult, liveTradesResult, watchlistsResult]
+      const failed = [livePositionsResult, paperPositionsResult, paperStatsResult, paperTradesResult, liveTradesResult, watchlistsResult]
         .some((result) => result.status === 'rejected');
       setError(failed ? 'Some dashboard data could not be loaded. Showing available metrics.' : null);
     } catch (err) {
@@ -222,8 +196,20 @@ const Dashboard: React.FC = () => {
 
   useEffect(() => { loadMetrics(); }, [loadMetrics]);
 
-  const totalPnl = metrics.holdingsPnl + metrics.paperPnl + metrics.livePnl;
-  const portfolioReturn = metrics.holdingsInvestment > 0 ? (metrics.holdingsPnl / metrics.holdingsInvestment) * 100 : 0;
+  // Holdings: the same source as the Portfolio page, live while the market is open.
+  const holdingsData = useHoldings();
+  const { currentValue: holdingsValue, investment: holdingsInvestment, pnl: holdingsPnl } = holdingsData.totals;
+  const topHoldings = holdingsData.holdings
+    .map((h) => ({ symbol: h.tradingsymbol, value: h.last_price * heldQuantity(h), pnl: h.pnl }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 5)
+    .map((h) => ({ ...h, weight: holdingsValue > 0 ? (h.value / holdingsValue) * 100 : 0 }));
+  const busy = loading || holdingsData.loading;
+  const refresh = () => { loadMetrics(); holdingsData.reload(); };
+  const warning = error ?? (holdingsData.error ? 'Holdings could not be loaded. Showing available metrics.' : null);
+
+  const totalPnl = holdingsPnl + metrics.paperPnl + metrics.livePnl;
+  const portfolioReturn = holdingsInvestment > 0 ? (holdingsPnl / holdingsInvestment) * 100 : 0;
   const openPositions = metrics.openPaperPositions + metrics.openLivePositions;
   const tradeEdgeLabel = metrics.closedTrades === 0
     ? 'No closed paper trades yet'
@@ -235,15 +221,15 @@ const Dashboard: React.FC = () => {
       <header className="dashboard-header">
         <h1 className="dashboard-header__title">Dashboard</h1>
       </header>
-      {error && <div className="dashboard-warning">{error}</div>}
+      {warning && <div className="dashboard-warning">{warning}</div>}
 
       <section className="dashboard-hero">
         <div className="dashboard-hero__main">
           <button
             type="button"
             className="dashboard-refresh"
-            onClick={loadMetrics}
-            disabled={loading}
+            onClick={refresh}
+            disabled={busy}
             title="Refresh dashboard"
             aria-label="Refresh dashboard"
           >
@@ -254,19 +240,19 @@ const Dashboard: React.FC = () => {
           <div className="dashboard-hero__icon"><DashboardIcon /></div>
           <span className="dashboard-hero__label">Total Net P&L</span>
           <strong className={`dashboard-hero__value dashboard-tone--${getTone(totalPnl)}`}>
-            {loading ? 'Loading...' : formatCompactMoney(totalPnl, true)}
+            {busy ? 'Loading...' : formatCompactMoney(totalPnl, true)}
           </strong>
           <p className="dashboard-hero__text">Includes holdings, open/closed paper positions, and live broker positions.</p>
         </div>
         <div className="dashboard-hero__side">
-          <MetricCard title="Portfolio Value" value={formatCompactMoney(metrics.holdingsValue)} detail={`${portfolioReturn >= 0 ? '+' : ''}${portfolioReturn.toFixed(2)}% holdings return`} loading={loading} />
+          <MetricCard title="Portfolio Value" value={formatCompactMoney(holdingsValue)} detail={`${portfolioReturn >= 0 ? '+' : ''}${portfolioReturn.toFixed(2)}% holdings return`} loading={busy} />
           <MetricCard title="Open Risk" value={String(openPositions)} detail={`${metrics.openPaperPositions} paper / ${metrics.openLivePositions} live`} tone="accent" loading={loading} />
           <MetricCard title="Alert Coverage" value={String(metrics.activeAlerts)} detail={`${metrics.triggeredAlerts} triggered alerts retained`} tone="accent" loading={loading} />
         </div>
       </section>
 
       <section className="dashboard-metrics-row">
-        <MetricCard title="Holdings P&L" value={formatCompactMoney(metrics.holdingsPnl, true)} detail="Equity portfolio mark-to-market" tone={getTone(metrics.holdingsPnl)} loading={loading} onClick={goToHoldings} />
+        <MetricCard title="Holdings P&L" value={formatCompactMoney(holdingsPnl, true)} detail="Equity portfolio mark-to-market" tone={getTone(holdingsPnl)} loading={holdingsData.loading} onClick={goToHoldings} />
         <MetricCard title="Paper P&L" value={formatCompactMoney(metrics.paperPnl, true)} detail="Simulator and journal performance" tone={getTone(metrics.paperPnl)} loading={loading} onClick={goToPaperPositions} />
         <MetricCard title="Live P&L" value={formatCompactMoney(metrics.livePnl, true)} detail="Broker net positions" tone={getTone(metrics.livePnl)} loading={loading} onClick={goToLivePositions} />
         <MetricCard title="Today Trades" value={String(metrics.todayTrades)} detail="Closed paper trades today" loading={loading} onClick={goToTodayTrades} />
@@ -283,11 +269,11 @@ const Dashboard: React.FC = () => {
           </div>
           <div className="dashboard-breakdown">
             {[
-              { label: 'Holdings', value: metrics.holdingsPnl },
+              { label: 'Holdings', value: holdingsPnl },
               { label: 'Paper', value: metrics.paperPnl },
               { label: 'Live', value: metrics.livePnl },
             ].map((item) => {
-              const max = Math.max(Math.abs(metrics.holdingsPnl), Math.abs(metrics.paperPnl), Math.abs(metrics.livePnl), 1);
+              const max = Math.max(Math.abs(holdingsPnl), Math.abs(metrics.paperPnl), Math.abs(metrics.livePnl), 1);
               const width = Math.max(4, (Math.abs(item.value) / max) * 100);
               return (
                 <div className="dashboard-breakdown__row" key={item.label}>
@@ -330,8 +316,8 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
           <div className="dashboard-list">
-            {metrics.topHoldings.length === 0 && <span className="dashboard-empty">No holdings loaded.</span>}
-            {metrics.topHoldings.map((holding) => (
+            {topHoldings.length === 0 && <span className="dashboard-empty">No holdings loaded.</span>}
+            {topHoldings.map((holding) => (
               <div className="dashboard-list__item" key={holding.symbol}>
                 <div>
                   <strong>{holding.symbol}</strong>

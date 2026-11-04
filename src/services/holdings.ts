@@ -7,6 +7,7 @@
  * day change are worked out from them.
  */
 import { fetchHoldings, fetchQuotes, Holding, QuoteData } from './kiteApi';
+import type { Tick } from './kiteTicker';
 
 /**
  * Shares held, the one count used for P&L, value and day change: settled,
@@ -44,6 +45,15 @@ export function holdingTotals(holdings: Holding[]) {
     },
     { investment: 0, currentValue: 0, pnl: 0, dayChange: 0 },
   );
+}
+
+/** Holdings re-priced from live ticks; one without a tick is left as it was. */
+export function applyTicks(holdings: Holding[], ticks: Tick[]): Holding[] {
+  const byToken = new Map(ticks.map((t) => [t.instrumentToken, t]));
+  return holdings.map((h) => {
+    const tick = byToken.get(h.instrument_token);
+    return tick ? priceHolding(h, tick.lastPrice, tick.closePrice ?? h.close_price) : h;
+  });
 }
 
 /** Holdings re-priced from quotes; one without a quote keeps Kite's figures. */

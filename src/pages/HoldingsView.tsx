@@ -3,14 +3,11 @@
  * Rendered inside the Holdings & Positions tabbed page.
  */
 
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import { HoldingsIcon } from '@/components/icons/Icons';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
-import { Holding } from '@/services/kiteApi';
-import { fetchPricedHoldings, heldQuantity, holdingTotals, priceHolding } from '@/services/holdings';
-import { Tick } from '@/services/kiteTicker';
-import { tickerSubscribe } from '@/services/tickerSingleton';
-import { getMarketStatus, MarketStatus } from '@/utils/marketStatus';
+import { heldQuantity } from '@/services/holdings';
+import { useHoldings } from '@/hooks/useHoldings';
 import '@/styles/holdings.css';
 
 type AllocationView = 'bar' | 'treemap';
@@ -27,65 +24,19 @@ interface AllocationItem {
 }
 
 const HoldingsView: React.FC = () => {
-  const [holdings, setHoldings] = useState<Holding[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { holdings, totals, loading, error, reload, marketStatus } = useHoldings();
   const [allocationView, setAllocationView] = useState<AllocationView>('bar');
-  const [marketStatus, setMarketStatus] = useState<MarketStatus>(getMarketStatus);
   const [expandedStock, setExpandedStock] = useState<string | null>(null);
   const [privacyMode, setPrivacyMode] = useState(() =>
     localStorage.getItem('optiontrap_privacy_mode') === 'true'
   );
-
-  const handleTicks = useCallback((ticks: Tick[]) => {
-    setHoldings((prev) => {
-      const priceMap = new Map<number, Tick>();
-      ticks.forEach((t) => priceMap.set(t.instrumentToken, t));
-      return prev.map((h) => {
-        const tick = priceMap.get(h.instrument_token);
-        return tick ? priceHolding(h, tick.lastPrice, tick.closePrice ?? h.close_price) : h;
-      });
-    });
-  }, []);
-
-  // Cancelled when the page closes, so a load nobody will see (or StrictMode's
-  // first mount in development) never goes on to fetch quotes.
-  useEffect(() => {
-    const controller = new AbortController();
-    loadHoldings(controller.signal);
-    const statusInterval = setInterval(() => setMarketStatus(getMarketStatus()), 30000);
-    return () => { controller.abort(); clearInterval(statusInterval); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    if (holdings.length === 0 || marketStatus !== 'live') return;
-    const tokens = holdings.map((h) => h.instrument_token);
-    return tickerSubscribe('holdings', tokens, handleTicks);
-  }, [holdings, marketStatus, handleTicks]);
-
-  const loadHoldings = async (signal?: AbortSignal) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await fetchPricedHoldings(signal);
-      if (signal?.aborted) return;
-      setHoldings(data);
-    } catch (err) {
-      if (signal?.aborted) return;
-      const msg = err instanceof Error ? err.message : 'Failed to load holdings';
-      setError(msg);
-    } finally {
-      if (!signal?.aborted) setLoading(false);
-    }
-  };
 
   const {
     investment: totalInvestment,
     currentValue: totalCurrentValue,
     pnl: totalPnl,
     dayChange: totalDayChange,
-  } = holdingTotals(holdings);
+  } = totals;
 
   const allocation: AllocationItem[] = holdings
     .map((h) => {
@@ -145,7 +96,7 @@ const HoldingsView: React.FC = () => {
       {error && (
         <div className="card holdings-error">
           <p>{error}</p>
-          <button className="btn btn--primary" onClick={() => loadHoldings()} style={{ marginTop: 12 }}>Retry</button>
+          <button className="btn btn--primary" onClick={() => reload()} style={{ marginTop: 12 }}>Retry</button>
         </div>
       )}
 

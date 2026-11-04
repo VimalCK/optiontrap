@@ -4,7 +4,8 @@ import type { Holding, QuoteData } from './kiteApi';
 const apiGet = vi.hoisted(() => vi.fn());
 vi.mock('./apiClient', () => ({ apiClient: { get: apiGet } }));
 
-import { applyQuotes, fetchPricedHoldings, heldQuantity, holdingTotals, priceHolding } from './holdings';
+import type { Tick } from './kiteTicker';
+import { applyQuotes, applyTicks, fetchPricedHoldings, heldQuantity, holdingTotals, priceHolding } from './holdings';
 
 function holding(tradingsymbol: string, exchange: string, quantity: number, average_price: number,
   last_price: number, close_price: number, collateral_quantity = 0): Holding {
@@ -97,6 +98,28 @@ describe('holdingTotals', () => {
 
   it('is all zero with no holdings', () => {
     expect(holdingTotals([])).toEqual({ investment: 0, currentValue: 0, pnl: 0, dayChange: 0 });
+  });
+});
+
+describe('applyTicks', () => {
+  const withTokens = STALE.map((h, i) => ({ ...h, instrument_token: 100 + i }));
+  const tick = (instrumentToken: number, lastPrice: number, closePrice?: number) => ({ instrumentToken, lastPrice, closePrice }) as Tick;
+
+  it('re-prices only the holdings that ticked', () => {
+    const next = applyTicks(withTokens, [tick(100, 170)]); // AWL
+    expect(next[0]).toMatchObject({ last_price: 170, pnl: (170 - 348.725) * 1000 });
+    expect(next[0].day_change).toBeCloseTo(170 - 164.35, 6);
+    expect(next.slice(1)).toEqual(withTokens.slice(1));
+  });
+
+  it("uses the tick's close when it has one, otherwise the holding's", () => {
+    expect(applyTicks(withTokens, [tick(100, 170, 160)])[0].day_change).toBe(10);
+    expect(applyTicks(withTokens, [tick(100, 170)])[0].close_price).toBe(164.35);
+  });
+
+  it('gives the same figures as quotes for the same price, so both screens agree', () => {
+    const byTick = applyTicks(withTokens, withTokens.map((h) => tick(h.instrument_token, PRICES[`${h.exchange}:${h.tradingsymbol}`])));
+    expect(holdingTotals(byTick)).toEqual(holdingTotals(applyQuotes(withTokens, quotes)));
   });
 });
 
