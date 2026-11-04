@@ -2,8 +2,9 @@
  * Trade Journal
  * P&L heatmap and per-day trade log for exited paper positions.
  *
- * Nothing loads when the page opens: pick the filters and press Report, which
- * fetches one P&L total per day from the server. A day's trades are fetched
+ * Nothing loads when the page opens. A 1M / 3M / 6M / 1Y button fetches that
+ * many months up to today; after that, changing From, To or the segment
+ * fetches the new range. Each fetch is one P&L total per day from the server. A day's trades are fetched
  * only when that day is expanded, a page at a time, so the browser never
  * loads the full trade history.
  *
@@ -15,7 +16,7 @@ import PnLHeatmap from './PnLHeatmap';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import { marketDate } from '../../../shared/marketTime.js';
-import { isDateValue, rangeProblem, subtractMonths } from './journalRange';
+import { isDateValue, presetRange, rangeProblem, subtractMonths } from './journalRange';
 import {
   getPaperDailyPnl,
   getPaperTrades,
@@ -27,6 +28,9 @@ import {
 import '@/styles/tradejournal.css';
 
 type SegmentFilter = 'all' | Segment;
+
+/** Wait after the last filter change before fetching, so typing a date fetches once. */
+const FETCH_DELAY_MS = 400;
 
 /** Trades fetched per request when a day is expanded. */
 const DAY_PAGE_SIZE = 100;
@@ -70,7 +74,10 @@ const TradeJournal: React.FC<{
   const [rangeStart, setRangeStart] = useState<string>(() => subtractMonths(marketDate(), 12));
   const [rangeEnd, setRangeEnd] = useState<string>(() => marketDate());
 
-  // The last report: its filters and one row per day. null until Report is pressed.
+  // Whether the user has picked a range yet; nothing is fetched until then.
+  const [rangePicked, setRangePicked] = useState(false);
+
+  // The last report: its filters and one row per day. null until the first fetch.
   const [report, setReport] = useState<{ filters: ReportFilters; days: DailyPnl[] } | null>(null);
   const [reportLoading, setReportLoading] = useState(false);
   const [reportError, setReportError] = useState<string | null>(null);
@@ -144,9 +151,7 @@ const TradeJournal: React.FC<{
     setRangeStart(targetDate);
     setRangeEnd(targetDate);
     setExpandedDates(expand);
-    if ((initialMode ?? mode) === 'paper') {
-      runReport({ from: targetDate, to: targetDate, segment: 'all' }, expand);
-    }
+    setRangePicked(true);
     // Only when the link itself changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDate, initialRange]);
@@ -159,14 +164,18 @@ const TradeJournal: React.FC<{
   }, [initialMode]);
 
   const problem = rangeProblem(rangeStart, rangeEnd);
-  const isStale = report !== null && (
-    report.filters.from !== rangeStart || report.filters.to !== rangeEnd || report.filters.segment !== segment
-  );
 
-  // Report runs on exactly the dates picked.
-  const handleReport = () => {
-    runReport({ from: rangeStart, to: rangeEnd, segment }, expandedDates);
-  };
+  // Fetch exactly the range picked, shortly after the last change to it.
+  useEffect(() => {
+    if (!rangePicked || mode !== 'paper' || rangeProblem(rangeStart, rangeEnd)) return;
+    const timer = setTimeout(() => runReport({ from: rangeStart, to: rangeEnd, segment }, expandedDates), FETCH_DELAY_MS);
+    return () => clearTimeout(timer);
+    // Expanding a day loads that day only; it doesn't refetch the range.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rangePicked, mode, rangeStart, rangeEnd, segment, runReport]);
+
+  const pickStart = (value: string) => { setRangeStart(value); setRangePicked(true); };
+  const pickEnd = (value: string) => { setRangeEnd(value); setRangePicked(true); };
 
   const toggleDate = (date: string) => {
     const opening = !expandedDates.has(date);
@@ -218,14 +227,16 @@ const TradeJournal: React.FC<{
                 type="date"
                 className="app-date-input"
                 value={rangeStart}
-                onChange={(e) => setRangeStart(e.target.value)}
+                max={rangeEnd || undefined}
+                onChange={(e) => pickStart(e.target.value)}
               />
               <label className="tj-date-label">To</label>
               <input
                 type="date"
                 className="app-date-input"
                 value={rangeEnd}
-                onChange={(e) => setRangeEnd(e.target.value)}
+                min={rangeStart || undefined}
+                onChange={(e) => pickEnd(e.target.value)}
               />
             </div>
 
@@ -240,9 +251,10 @@ const TradeJournal: React.FC<{
                   key={label}
                   className="tj-preset-btn"
                   onClick={() => {
-                    const end = marketDate();
-                    setRangeEnd(end);
-                    setRangeStart(subtractMonths(end, months));
+                    const range = presetRange(marketDate(), months);
+                    setRangeStart(range.from);
+                    setRangeEnd(range.to);
+                    setRangePicked(true);
                   }}
                 >
                   {label}
@@ -250,14 +262,7 @@ const TradeJournal: React.FC<{
               ))}
             </div>
 
-            <button
-              className="app-btn app-btn--primary"
-              disabled={Boolean(problem) || reportLoading}
-              title={problem ?? undefined}
-              onClick={handleReport}
-            >
-              Report
-            </button>
+            {reportLoading && <span className="tj-loading">Loading…</span>}
           </>
         )}
       </div>
@@ -277,9 +282,6 @@ const TradeJournal: React.FC<{
       {mode === 'paper' && (
         <>
           {problem && <div className="tj-notice">{problem}</div>}
-          {!problem && isStale && !reportLoading && (
-            <div className="tj-notice">Filters changed. Press Report to update the results below.</div>
-          )}
           {reportError && <div className="tj-notice tj-notice--error">{reportError}</div>}
 
           {/* The calendar always shows; it stays empty until a report fills it. */}
