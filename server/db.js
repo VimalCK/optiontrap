@@ -669,11 +669,13 @@ export async function getSessionById(sid) {
 export async function setSessionData(sid, sessionData, maxAge) {
   const expires = Date.now() + (maxAge || 86400000);
   const data = JSON.stringify(sessionData);
+  // Kept in its own column so admin sessions can be found without parsing every session.
+  const isAdmin = sessionData?.kiteSession?.isAdmin === true;
 
   await query(
-    `INSERT INTO sessions (sid, data, expires) VALUES ($1, $2, $3)
-     ON CONFLICT (sid) DO UPDATE SET data = EXCLUDED.data, expires = EXCLUDED.expires`,
-    [sid, data, expires],
+    `INSERT INTO sessions (sid, data, expires, is_admin) VALUES ($1, $2, $3, $4)
+     ON CONFLICT (sid) DO UPDATE SET data = EXCLUDED.data, expires = EXCLUDED.expires, is_admin = EXCLUDED.is_admin`,
+    [sid, data, expires, isAdmin],
   );
 }
 
@@ -1878,7 +1880,8 @@ export async function getRecentOiHistoryScrips(sinceDate) {
  * jobs fetch shared market data with an admin's token, never another user's.
  */
 export async function getAdminKiteSessions() {
-  const result = await rows('SELECT data FROM sessions WHERE expires > $1', [Date.now()]);
+  // Only admin sessions are read (sessions_admin_idx), not every user's.
+  const result = await rows('SELECT data FROM sessions WHERE is_admin AND expires > $1', [Date.now()]);
   return result
     .map((r) => {
       try {

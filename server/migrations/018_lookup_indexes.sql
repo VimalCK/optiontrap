@@ -25,3 +25,44 @@ CREATE INDEX IF NOT EXISTS watchlists_user_idx
 
 CREATE INDEX IF NOT EXISTS watchlist_items_watchlist_idx
   ON watchlist_items (watchlist_id, instrument_token);
+
+-- Watched stocks across all users: the nightly purge and the stock scan look
+-- items up by instrument alone.
+CREATE INDEX IF NOT EXISTS watchlist_items_instrument_idx
+  ON watchlist_items (instrument_token);
+
+-- Sessions: expired ones are deleted by expiry on every startup.
+CREATE INDEX IF NOT EXISTS sessions_expires_idx
+  ON sessions (expires);
+
+-- Scheduled jobs need an admin's Kite token. Whether a session is an admin's
+-- was only inside the JSON data, so finding one meant loading and parsing
+-- every user's session. Keep it in a column (written with the session) and
+-- index just the admin sessions.
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;
+UPDATE sessions SET is_admin = TRUE
+  WHERE NOT is_admin AND (data::jsonb -> 'kiteSession' ->> 'isAdmin') = 'true';
+CREATE INDEX IF NOT EXISTS sessions_admin_idx
+  ON sessions (expires)
+  WHERE is_admin;
+
+-- Admin user list: non-admins, most recently updated first, 500 at a time.
+CREATE INDEX IF NOT EXISTS users_non_admin_updated_idx
+  ON users (updated_at DESC)
+  WHERE is_admin = 0;
+
+-- A user's latest subscription (looked up per user in the admin list, and on
+-- every subscription check). Replaces the plain user_id index from 002.
+CREATE INDEX IF NOT EXISTS subscriptions_user_latest_idx
+  ON subscriptions (user_id, updated_at DESC);
+DROP INDEX IF EXISTS idx_subscriptions_user_id;
+
+-- Nightly outcome check: only signals still waiting for a final outcome.
+CREATE INDEX IF NOT EXISTS trade_setup_signals_pending_idx
+  ON trade_setup_signals (scrip)
+  WHERE NOT outcome_final AND deleted_at IS NULL;
+
+-- Nightly purge of triggered alerts.
+CREATE INDEX IF NOT EXISTS price_alerts_triggered_idx
+  ON price_alerts (user_id)
+  WHERE status = 'triggered';
