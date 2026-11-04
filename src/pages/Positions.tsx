@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { getPositions, exitPosition, Position } from '@/services/positions';
+import { getPositions, exitPosition, tradeErrorMessage, Position } from '@/services/positions';
 
 import { fetchQuotes, fetchPositions, KitePosition, KitePositions } from '@/services/kiteApi';
 import { Tick } from '@/services/kiteTicker';
@@ -589,6 +589,7 @@ const PaperPositions: React.FC = () => {
   const [livePrices, setLivePrices] = useState<Map<number, number>>(new Map());
   const [spotPrices, setSpotPrices] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
+  const [exitError, setExitError] = useState<string | null>(null);
 
   const loadPositions = useCallback(async () => {
     // Server already excludes positions exited before today (IST).
@@ -688,8 +689,14 @@ const PaperPositions: React.FC = () => {
 
   const handleExit = async (id: string, instrumentToken: number) => {
     const exitPrice = livePrices.get(instrumentToken) || 0;
-    await exitPosition(id, exitPrice);
-    await loadPositions();
+    setExitError(null);
+    try {
+      await exitPosition(id, exitPrice);
+      await loadPositions();
+    } catch (err) {
+      // e.g. the market is closed: say why rather than doing nothing.
+      setExitError(tradeErrorMessage(err, 'Failed to exit position'));
+    }
   };
 
   const riskGroups = computeRiskGroups(positions, livePrices);
@@ -721,6 +728,12 @@ const PaperPositions: React.FC = () => {
 
   return (
     <>
+      {exitError && (
+        <div className="card holdings-error" style={{ marginBottom: 'var(--card-gap)' }}>
+          <p>{exitError}</p>
+        </div>
+      )}
+
       {/* Summary */}
       <div className="card" style={{ marginBottom: 'var(--card-gap)' }}>
         <div className="positions-summary">

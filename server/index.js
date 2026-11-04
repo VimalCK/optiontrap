@@ -68,6 +68,7 @@ import {
   resetPriceAlert,
   deletePriceAlert,
   getPositions,
+  getPositionMode,
   getDailyPnl,
   getPositionStats,
   addPosition,
@@ -113,7 +114,7 @@ import { checkSubscriptionAccess, inactiveSubscription } from './subscriptionAcc
 import { backfillStockSetups, scanStock, syncStockCandles } from './stockCandles.js';
 import { startStockSetupScheduler } from './stockSetupScheduler.js';
 import { NIGHTLY_JOB_PREFIX, startNightlyJobs } from './nightlyJobs.js';
-import { parseDailyPnlQuery, parsePositionsQuery, parseStatsQuery } from './positionsQuery.js';
+import { paperTradeClosedReason, parseDailyPnlQuery, parsePositionsQuery, parseStatsQuery } from './positionsQuery.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -902,6 +903,11 @@ app.post('/api/positions', requireAuth, requireSubscription, async (req, res) =>
     return res.status(400).json({ status: 'error', message: 'Missing required fields' });
   }
 
+  const closedReason = paperTradeClosedReason(mode);
+  if (closedReason) {
+    return res.status(409).json({ status: 'error', code: 'MARKET_CLOSED', message: closedReason });
+  }
+
   const position = await addPosition(userId, {
     tradingsymbol,
     instrumentToken: Number(instrumentToken),
@@ -929,6 +935,15 @@ app.patch('/api/positions/:id', requireAuth, requireSubscription, async (req, re
 
   if (exitPrice == null) {
     return res.status(400).json({ status: 'error', message: 'exitPrice is required' });
+  }
+
+  const mode = await getPositionMode(req.params.id, userId);
+  if (mode === null) {
+    return res.status(404).json({ status: 'error', message: 'Position not found or already exited' });
+  }
+  const closedReason = paperTradeClosedReason(mode);
+  if (closedReason) {
+    return res.status(409).json({ status: 'error', code: 'MARKET_CLOSED', message: closedReason });
   }
 
   const updated = await exitPositionById(req.params.id, userId, Number(exitPrice));

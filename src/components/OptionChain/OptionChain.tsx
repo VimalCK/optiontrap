@@ -4,7 +4,7 @@ import AppSelect from '@/components/AppSelect/AppSelect';
 import { calculateExpectedMove } from '@/services/edgeScore';
 import { watchSnapshotSymbol, withSpot, getTodaySnapshots, getLatestSnapshotTimestamp, calculateVelocity, analyzeVelocityPattern, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
 import { computeStrikeSignals } from '@/services/combinedSignal';
-import { addPosition } from '@/services/positions';
+import { addPosition, tradeErrorMessage } from '@/services/positions';
 import { computeLiveFlow, describeFlow, flowColor } from '@/services/oiFlow';
 import { OiChartGuide, SellStrategyGuide, BuyStrategyGuide, PositionAnalyzerGuide } from './AnalyzerGuides';
 
@@ -770,12 +770,12 @@ const OptionChain: React.FC = () => {
                         </span>
                       </td>
                       <td className={`oc-cell-ltp oc-cell-ltp--clickable oc-cell-ltp--hover-btns ${ceItm ? 'oc-cell--itm-ce' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === 'CE' ? null : { strike: row.strike, optionType: 'CE' }); if (cePrice) setOrderPrice(cePrice); if (row.ce) setOrderQty(row.ce.lotSize); if (!(isOrderOpen && orderForm?.optionType === 'CE')) resetOrderMeta(); }}>
-                        <button className="oc-ltp-action-btn oc-ltp-action-btn--buy" onClick={async (e) => { e.stopPropagation(); if (!row.ce || cePrice === null || orderMode !== 'paper') return; try { await placePaperTrade({ instrument: row.ce, strike: row.strike, optionType: 'CE', side: 'BUY', quantity: row.ce.lotSize, entryPrice: cePrice, strategyTag: 'Quick Trade' }); } catch { showToast('Failed to add position', 'red'); } }}>B</button>
+                        <button className="oc-ltp-action-btn oc-ltp-action-btn--buy" onClick={async (e) => { e.stopPropagation(); if (!row.ce || cePrice === null || orderMode !== 'paper') return; try { await placePaperTrade({ instrument: row.ce, strike: row.strike, optionType: 'CE', side: 'BUY', quantity: row.ce.lotSize, entryPrice: cePrice, strategyTag: 'Quick Trade' }); } catch (err) { showToast(tradeErrorMessage(err), 'red'); } }}>B</button>
                         <span className="oc-ltp-price">
                           {cePrice !== null ? cePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                           {ceChg && <span className={`oc-cell-chg ${ceChg.color}`}>{ceChg.pct >= 0 ? '+' : ''}{ceChg.pct.toFixed(2)}%</span>}
                         </span>
-                        <button className="oc-ltp-action-btn oc-ltp-action-btn--sell" onClick={async (e) => { e.stopPropagation(); if (!row.ce || cePrice === null || orderMode !== 'paper') return; try { await placePaperTrade({ instrument: row.ce, strike: row.strike, optionType: 'CE', side: 'SELL', quantity: row.ce.lotSize, entryPrice: cePrice, strategyTag: 'Quick Trade' }); } catch { showToast('Failed to add position', 'red'); } }}>S</button>
+                        <button className="oc-ltp-action-btn oc-ltp-action-btn--sell" onClick={async (e) => { e.stopPropagation(); if (!row.ce || cePrice === null || orderMode !== 'paper') return; try { await placePaperTrade({ instrument: row.ce, strike: row.strike, optionType: 'CE', side: 'SELL', quantity: row.ce.lotSize, entryPrice: cePrice, strategyTag: 'Quick Trade' }); } catch (err) { showToast(tradeErrorMessage(err), 'red'); } }}>S</button>
                       </td>
                       <td className="oc-cell-strike">
                         <div className="oc-strike-bars">
@@ -785,12 +785,12 @@ const OptionChain: React.FC = () => {
                         {row.strike}
                       </td>
                       <td className={`oc-cell-ltp oc-cell-ltp--clickable oc-cell-ltp--hover-btns ${peItm ? 'oc-cell--itm-pe' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === 'PE' ? null : { strike: row.strike, optionType: 'PE' }); if (pePrice) setOrderPrice(pePrice); if (row.pe) setOrderQty(row.pe.lotSize); if (!(isOrderOpen && orderForm?.optionType === 'PE')) resetOrderMeta(); }}>
-                        <button className="oc-ltp-action-btn oc-ltp-action-btn--buy" onClick={async (e) => { e.stopPropagation(); if (!row.pe || pePrice === null || orderMode !== 'paper') return; try { await placePaperTrade({ instrument: row.pe, strike: row.strike, optionType: 'PE', side: 'BUY', quantity: row.pe.lotSize, entryPrice: pePrice, strategyTag: 'Quick Trade' }); } catch { showToast('Failed to add position', 'red'); } }}>B</button>
+                        <button className="oc-ltp-action-btn oc-ltp-action-btn--buy" onClick={async (e) => { e.stopPropagation(); if (!row.pe || pePrice === null || orderMode !== 'paper') return; try { await placePaperTrade({ instrument: row.pe, strike: row.strike, optionType: 'PE', side: 'BUY', quantity: row.pe.lotSize, entryPrice: pePrice, strategyTag: 'Quick Trade' }); } catch (err) { showToast(tradeErrorMessage(err), 'red'); } }}>B</button>
                         <span className="oc-ltp-price">
                           {pePrice !== null ? pePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                           {peChg && <span className={`oc-cell-chg ${peChg.color}`}>{peChg.pct >= 0 ? '+' : ''}{peChg.pct.toFixed(2)}%</span>}
                         </span>
-                        <button className="oc-ltp-action-btn oc-ltp-action-btn--sell" onClick={async (e) => { e.stopPropagation(); if (!row.pe || pePrice === null || orderMode !== 'paper') return; try { await placePaperTrade({ instrument: row.pe, strike: row.strike, optionType: 'PE', side: 'SELL', quantity: row.pe.lotSize, entryPrice: pePrice, strategyTag: 'Quick Trade' }); } catch { showToast('Failed to add position', 'red'); } }}>S</button>
+                        <button className="oc-ltp-action-btn oc-ltp-action-btn--sell" onClick={async (e) => { e.stopPropagation(); if (!row.pe || pePrice === null || orderMode !== 'paper') return; try { await placePaperTrade({ instrument: row.pe, strike: row.strike, optionType: 'PE', side: 'SELL', quantity: row.pe.lotSize, entryPrice: pePrice, strategyTag: 'Quick Trade' }); } catch (err) { showToast(tradeErrorMessage(err), 'red'); } }}>S</button>
                       </td>
                       <td className={`oc-cell-oi oc-cell-oi--pe ${peItm ? 'oc-cell--itm-pe' : ''}`}>
                         <span className="oc-oi-content">
@@ -895,11 +895,11 @@ const OptionChain: React.FC = () => {
                 {orderMode === 'paper' && (
                   <>
                     <button className="oc-order-panel__btn oc-order-panel__btn--buy" onClick={async () => {
-                      try { await placePaperTrade({ instrument, strike: orderForm.strike, optionType: orderForm.optionType, side: 'BUY', quantity: orderQty, entryPrice: orderPrice, ...buildOrderMeta() }); resetOrderMeta(); } catch { showToast('Failed to add position', 'red'); }
+                      try { await placePaperTrade({ instrument, strike: orderForm.strike, optionType: orderForm.optionType, side: 'BUY', quantity: orderQty, entryPrice: orderPrice, ...buildOrderMeta() }); resetOrderMeta(); } catch (err) { showToast(tradeErrorMessage(err), 'red'); }
                       setOrderForm(null);
                     }}>Buy</button>
                     <button className="oc-order-panel__btn oc-order-panel__btn--sell" onClick={async () => {
-                      try { await placePaperTrade({ instrument, strike: orderForm.strike, optionType: orderForm.optionType, side: 'SELL', quantity: orderQty, entryPrice: orderPrice, ...buildOrderMeta() }); resetOrderMeta(); } catch { showToast('Failed to add position', 'red'); }
+                      try { await placePaperTrade({ instrument, strike: orderForm.strike, optionType: orderForm.optionType, side: 'SELL', quantity: orderQty, entryPrice: orderPrice, ...buildOrderMeta() }); resetOrderMeta(); } catch (err) { showToast(tradeErrorMessage(err), 'red'); }
                       setOrderForm(null);
                     }}>Sell</button>
                   </>
@@ -1040,7 +1040,7 @@ const OptionChain: React.FC = () => {
                                 try {
                                   await placePaperTrade({ instrument: row.pe, strike: row.strike, optionType: 'PE', side: 'SELL', quantity: row.pe.lotSize, entryPrice: peLtp, strategyTag: 'OI Chart' });
                                   setSelectedChartStrike(null);
-                                } catch { showToast('Failed to add position', 'red'); }
+                                } catch (err) { showToast(tradeErrorMessage(err), 'red'); }
                               }}
                             >Sell PE {peLtp !== null ? `@ ${peLtp.toFixed(0)}` : ''}</button>
                             <button
@@ -1052,7 +1052,7 @@ const OptionChain: React.FC = () => {
                                 try {
                                   await placePaperTrade({ instrument: row.ce, strike: row.strike, optionType: 'CE', side: 'SELL', quantity: row.ce.lotSize, entryPrice: ceLtp, strategyTag: 'OI Chart' });
                                   setSelectedChartStrike(null);
-                                } catch { showToast('Failed to add position', 'red'); }
+                                } catch (err) { showToast(tradeErrorMessage(err), 'red'); }
                               }}
                             >Sell CE {ceLtp !== null ? `@ ${ceLtp.toFixed(0)}` : ''}</button>
                           </div>

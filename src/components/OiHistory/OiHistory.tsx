@@ -4,7 +4,7 @@ import { handleKiteAuthFailure, isKiteAuthFailure } from '@/services/authSession
 import { apiClient, isAbortError } from '@/services/apiClient';
 import { useAbortSignal } from '@/hooks/useAbortSignal';
 import AppSelect from '@/components/AppSelect/AppSelect';
-import { addPosition } from '@/services/positions';
+import { addPosition, tradeErrorMessage } from '@/services/positions';
 import { getLotSize } from '@/services/optionChain';
 import { fetchQuotes } from '@/services/kiteApi';
 import { loadInstruments, getLotSizeByToken } from '@/services/instruments';
@@ -468,8 +468,8 @@ const OiHistory: React.FC = () => {
         expiry,
       });
       showToast(`${side} ${strike}${optionType} @ ₹${entryPrice.toFixed(2)}`, 'green');
-    } catch {
-      showToast('Failed to add position', 'red');
+    } catch (err) {
+      showToast(tradeErrorMessage(err), 'red');
     }
   }, [showToast]);
 

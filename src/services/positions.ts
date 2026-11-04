@@ -3,7 +3,15 @@
  * Manages paper trading positions via server-side REST API.
  * Netting logic (average-in, partial close, over-close) runs on the server.
  */
-import { apiClient } from './apiClient';
+import { apiClient, ApiError } from './apiClient';
+
+/**
+ * What to tell the user when placing or exiting a trade failed: the server's
+ * own reason when it gave one (e.g. the market is closed), otherwise `fallback`.
+ */
+export function tradeErrorMessage(err: unknown, fallback = 'Failed to add position'): string {
+  return err instanceof ApiError && err.message ? err.message : fallback;
+}
 
 export interface Position {
   id: string;

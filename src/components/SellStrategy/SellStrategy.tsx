@@ -11,7 +11,7 @@ import {
 } from '@/services/sellStrategy';
 import { calculateMaxPain, calculatePCR } from '@/services/trapAnalysis';
 import { calculateExpectedMove } from '@/services/edgeScore';
-import { addPosition } from '@/services/positions';
+import { addPosition, tradeErrorMessage } from '@/services/positions';
 import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
 import type { FlowReading } from '@/services/oiFlow';
 import '@/styles/sellstrategy.css';
@@ -245,8 +245,8 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
         });
         onToast(`${verb} Strangle ${rec.strikes[0]}CE@${ceLtp.toFixed(0)} ${rec.strikes[1]}PE@${peLtp.toFixed(0)}`, 'green');
       }
-    } catch {
-      onToast('Failed to add position', 'red');
+    } catch (err) {
+      onToast(tradeErrorMessage(err), 'red');
     }
   }, [chain, effectivePrices, orderMode, expiry, onToast, mode]);
 
