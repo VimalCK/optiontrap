@@ -38,10 +38,15 @@ interface TabBarProps<T extends string> {
   /** Controls after the tabs that always show (e.g. a "+" new-list button). */
   trailing?: React.ReactNode;
   ariaLabel?: string;
+  /**
+   * Let the active tab go under "+N" too when not even a short form of it fits,
+   * e.g. while a wide trailing control (a new-list box) is open. Otherwise it always shows.
+   */
+  foldActiveWhenTight?: boolean;
 }
 
 function TabBar<T extends string>({
-  items, activeId, onChange, className, tabClassName, renderTab, renderMeasure, trailing, ariaLabel,
+  items, activeId, onChange, className, tabClassName, renderTab, renderMeasure, trailing, ariaLabel, foldActiveWhenTight = false,
 }: TabBarProps<T>) {
   const rowRef = useRef<HTMLDivElement>(null);
   const measureRef = useRef<HTMLDivElement>(null);
@@ -49,7 +54,7 @@ function TabBar<T extends string>({
   const moreRef = useRef<HTMLDivElement>(null);
   const [moreOpen, setMoreOpen] = useState(false);
 
-  const visible = useTabsThatFit(rowRef, measureRef, trailingRef, items.findIndex((item) => item.id === activeId));
+  const visible = useTabsThatFit(rowRef, measureRef, trailingRef, items.findIndex((item) => item.id === activeId), Infinity, foldActiveWhenTight);
   const shown = visible ? items.filter((_, i) => visible.has(i)) : items;
   const more = visible ? items.filter((_, i) => !visible.has(i)) : [];
 

@@ -22,9 +22,11 @@
   flex-shrink: 0;
 }
 
+/* A tab shrinks with its name cut; its content stays inside it, never over the next control. */
 .tab-bar > .tab-bar__tab {
   flex-shrink: 1;
-  min-width: 0;
+  min-width: 40px;
+  overflow: hidden;
 }
 
 button.tab-bar__tab {

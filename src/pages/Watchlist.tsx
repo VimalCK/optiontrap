@@ -592,6 +592,7 @@ const Watchlist: React.FC = () => {
         className="wl-tabs"
         tabClassName="wl-tab"
         ariaLabel="Watchlists"
+        foldActiveWhenTight={showNewInput}
         renderMeasure={(item, active) => {
           const tab = tabs.find((t) => t.id === item.id);
           return (
@@ -610,7 +611,7 @@ const Watchlist: React.FC = () => {
                 <input
                   ref={renameInputRef}
                   className="wl-tab__rename-input"
-                  style={renameWidth ? { minWidth: renameWidth } : undefined}
+                  style={renameWidth ? { width: Math.max(renameWidth, 96) } : undefined}
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onBlur={handleRenameSubmit}

@@ -1042,11 +1042,6 @@
 }
 
 @media (max-width: 700px) {
-  .wl-tabs {
-    width: 100%;
-    border-radius: 16px;
-  }
-
   .wl-search,
   .wl-alerts__header {
     align-items: stretch;
@@ -1685,14 +1680,27 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
   background: rgba(239, 68, 68, 0.25);
 }
 
-/* Rename and new-list boxes: a pill the height of a tab, as wide as the name typed (up to the tab name cap). */
+/*
+ * Rename and new-list boxes: a pill the height of a tab, with a fixed width (a long
+ * name scrolls inside it). The rename box takes the width of the tab it replaces.
+ */
+/* A little room round the box, so its accent border does not sit on the bar's edge. */
+/* While it holds the name box, the trailing slot may narrow (the "+" button never does). */
+.wl-tabs > .tab-bar__trailing:has(.wl-tab--new) {
+  flex-shrink: 1;
+  min-width: 0;
+}
+
 .wl-tabs .wl-tab--new {
+  flex-shrink: 1;
+  min-width: 0;
   padding: 0;
+  margin: 0 3px 0 2px;
 }
 
 .wl-tabs .wl-tab__rename-input {
   box-sizing: border-box;
-  height: 38px;
+  height: 34px;
   width: 140px;
   padding: 0 16px;
   font-size: 13px;
@@ -1703,13 +1711,11 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
   border-radius: 999px;
 }
 
-@supports (field-sizing: content) {
-  .wl-tabs .wl-tab__rename-input {
-    field-sizing: content;
-    width: auto;
-    min-width: 72px;
-    max-width: 192px;
-  }
+/* 120px wide; on a tight row it narrows instead of running past the bar's edge. */
+.wl-tabs .wl-tab__rename-input--new {
+  width: 120px;
+  min-width: 44px;
+  flex-shrink: 1;
 }
 
 /* The shared tab bar's "+N" button (components/TabBar), sized like a watchlist tab label. */
