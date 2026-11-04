@@ -469,6 +469,8 @@
 
 /* Futures Context is a daily table, so its first column must not inherit the
    strike-grid offset used by the option table. */
+/* Fixed layout with no column widths: the seven columns share the width
+   equally. Below 760px the card scrolls sideways instead of squeezing them. */
 .oi-history__futures-table {
   min-width: 760px;
   table-layout: fixed;
@@ -476,35 +478,11 @@
 
 .oi-history__futures-table th:first-child,
 .oi-history__futures-table td:first-child {
-  width: 112px;
-  min-width: 112px;
   left: 0;
 }
 
-.oi-history__futures-table th:nth-child(2),
-.oi-history__futures-table td:nth-child(2) {
-  width: 100px;
-  min-width: 100px;
-}
-
-.oi-history__futures-table th:nth-child(3),
-.oi-history__futures-table td:nth-child(3),
-.oi-history__futures-table th:nth-child(5),
-.oi-history__futures-table td:nth-child(5) {
-  width: 96px;
-  min-width: 96px;
-}
-
-.oi-history__futures-table th:nth-child(4),
-.oi-history__futures-table td:nth-child(4),
-.oi-history__futures-table th:nth-child(6),
-.oi-history__futures-table td:nth-child(6) {
-  width: 110px;
-  min-width: 110px;
-}
-
 /* Signal is a regular column here (not pinned like the option table's PE
-   pattern column), and takes the remaining width. */
+   pattern column). */
 .oi-history__table.oi-history__futures-table th:last-child,
 .oi-history__table.oi-history__futures-table td:last-child {
   position: static;
