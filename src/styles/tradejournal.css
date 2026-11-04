@@ -235,7 +235,11 @@
 .heatmap-day-label {
   height: 13px;
   margin-bottom: 3px;
-  font-size: 10px;
+  font-size: 9px;
+  /* Monospace so MON…SUN are all exactly the same width */
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   color: var(--text-secondary);
   text-align: right;
   line-height: 13px;
@@ -325,41 +329,6 @@
 .heatmap-cell--loss-2 { background: rgba(239, 68, 68, 0.45); }
 .heatmap-cell--loss-3 { background: rgba(239, 68, 68, 0.70); }
 .heatmap-cell--loss-4 { background: rgba(239, 68, 68, 0.95); }
-
-/* Legend */
-.heatmap-legend {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  margin-top: 4px;
-}
-
-.heatmap-legend__label {
-  font-size: 10px;
-  color: var(--text-secondary);
-}
-
-.heatmap-legend__cell {
-  width: 13px !important;
-  min-width: 13px !important;
-  max-width: 13px !important;
-  flex: none !important;
-  height: 13px;
-  border-radius: 2px;
-  flex-shrink: 0;
-  cursor: default;
-}
-
-.heatmap-legend__cell:hover {
-  transform: none;
-  opacity: 1;
-}
-
-.heatmap-legend__sep {
-  font-size: 10px;
-  color: var(--text-secondary);
-  margin: 0 4px;
-}
 
 /* Tooltip */
 .heatmap-tooltip {

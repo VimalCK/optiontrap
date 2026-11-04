@@ -230,22 +230,6 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, endDate, months = 12 
         </div>
       </div>
 
-      {/* Legend */}
-      <div className="heatmap-legend">
-        <span className="heatmap-legend__label">Less</span>
-        <div className="heatmap-cell heatmap-cell--empty heatmap-legend__cell" />
-        <div className="heatmap-cell heatmap-cell--profit heatmap-cell--profit-1 heatmap-legend__cell" />
-        <div className="heatmap-cell heatmap-cell--profit heatmap-cell--profit-2 heatmap-legend__cell" />
-        <div className="heatmap-cell heatmap-cell--profit heatmap-cell--profit-3 heatmap-legend__cell" />
-        <div className="heatmap-cell heatmap-cell--profit heatmap-cell--profit-4 heatmap-legend__cell" />
-        <span className="heatmap-legend__sep">·</span>
-        <div className="heatmap-cell heatmap-cell--loss heatmap-cell--loss-1 heatmap-legend__cell" />
-        <div className="heatmap-cell heatmap-cell--loss heatmap-cell--loss-2 heatmap-legend__cell" />
-        <div className="heatmap-cell heatmap-cell--loss heatmap-cell--loss-3 heatmap-legend__cell" />
-        <div className="heatmap-cell heatmap-cell--loss heatmap-cell--loss-4 heatmap-legend__cell" />
-        <span className="heatmap-legend__label">More</span>
-      </div>
-
       {/* Tooltip — rendered in a portal to escape overflow:hidden parents */}
       {tooltip && createPortal(
         <div

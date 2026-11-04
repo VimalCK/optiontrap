@@ -5,7 +5,7 @@ import PnLHeatmap from './PnLHeatmap';
 const END = new Date(2026, 10, 5); // 5 Nov 2026
 const ALL_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const dayLabels = (html: string) => [...html.matchAll(/class="heatmap-day-label">(\w+)</g)].map((m) => m[1]);
-// Coloured day squares only: the legend's sample squares aren't hoverable.
+// Coloured day squares that can be hovered (days up to today).
 const coloured = (html: string) =>
   [...html.matchAll(/class="([^"]*)"/g)].filter(([, cls]) => /heatmap-cell--(profit|loss)\b/.test(cls) && cls.includes('heatmap-cell--hoverable')).length;
 
@@ -33,7 +33,7 @@ describe('PnLHeatmap', () => {
     const html = renderToStaticMarkup(<PnLHeatmap dailyPnL={new Map()} endDate={END} />);
     const days = [...html.matchAll(/class="heatmap-cell[^"]*"/g)]
       .map((m) => m[0])
-      .filter((cls) => !cls.includes('filler') && !cls.includes('legend'));
+      .filter((cls) => !cls.includes('filler'));
     expect(days).toHaveLength(365); // 2026
   });
 });
