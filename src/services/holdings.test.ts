@@ -4,7 +4,7 @@ import type { Holding, QuoteData } from './kiteApi';
 const apiGet = vi.hoisted(() => vi.fn());
 vi.mock('./apiClient', () => ({ apiClient: { get: apiGet } }));
 
-import { applyQuotes, fetchPricedHoldings, priceHolding } from './holdings';
+import { applyQuotes, fetchPricedHoldings, heldQuantity, holdingTotals, priceHolding } from './holdings';
 
 function holding(tradingsymbol: string, exchange: string, quantity: number, average_price: number,
   last_price: number, close_price: number, collateral_quantity = 0): Holding {
@@ -37,9 +37,8 @@ const PRICES: Record<string, number> = {
 const quote = (last_price: number): QuoteData => ({ last_price, oi: 0, volume: 0, ohlc: { open: 0, high: 0, low: 0, close: 0 } });
 const quotes = new Map(Object.entries(PRICES).map(([key, price]) => [key, quote(price)]));
 
-const qty = (h: Holding) => h.quantity || h.collateral_quantity;
-const dayChangeTotal = (hs: Holding[]) => hs.reduce((sum, h) => sum + h.day_change * qty(h), 0);
-const pnlTotal = (hs: Holding[]) => hs.reduce((sum, h) => sum + h.pnl, 0);
+const dayChangeTotal = (hs: Holding[]) => holdingTotals(hs).dayChange;
+const pnlTotal = (hs: Holding[]) => holdingTotals(hs).pnl;
 
 beforeEach(() => apiGet.mockReset());
 
@@ -58,6 +57,46 @@ describe('applyQuotes', () => {
 
   it("keeps Kite's figures for a holding without a quote", () => {
     expect(applyQuotes(STALE, new Map())).toEqual(STALE);
+  });
+});
+
+describe('heldQuantity', () => {
+  const base = STALE[0]; // AWL: 1000 settled
+
+  it('counts settled shares', () => {
+    expect(heldQuantity(base)).toBe(1000);
+  });
+
+  it('counts a fully pledged holding, which Kite reports with quantity 0', () => {
+    expect(heldQuantity(STALE[4])).toBe(500); // LICI
+  });
+
+  it('adds shares bought but not yet settled (T1)', () => {
+    expect(heldQuantity({ ...base, t1_quantity: 200 })).toBe(1200);
+  });
+
+  it('adds the pledged part of a part-pledged holding', () => {
+    expect(heldQuantity({ ...base, quantity: 200, collateral_quantity: 300 })).toBe(500);
+  });
+
+  it('leaves out shares sold today', () => {
+    expect(heldQuantity({ ...base, used_quantity: 400 })).toBe(600);
+  });
+});
+
+describe('holdingTotals', () => {
+  it('counts P&L, value and day change on the same shares, T1 and pledged included', () => {
+    const h = priceHolding({ ...STALE[0], quantity: 200, t1_quantity: 100, collateral_quantity: 300, average_price: 100, close_price: 110 }, 120);
+    expect(holdingTotals([h])).toEqual({
+      investment: 100 * 600,
+      currentValue: 120 * 600,
+      pnl: 20 * 600,
+      dayChange: 10 * 600,
+    });
+  });
+
+  it('is all zero with no holdings', () => {
+    expect(holdingTotals([])).toEqual({ investment: 0, currentValue: 0, pnl: 0, dayChange: 0 });
   });
 });
 

@@ -8,8 +8,14 @@
  */
 import { fetchHoldings, fetchQuotes, Holding, QuoteData } from './kiteApi';
 
-/** Shares the holding's P&L is counted on: settled, or pledged when none are settled. */
-const pnlQuantity = (h: Holding) => (h.quantity > 0 ? h.quantity : h.collateral_quantity);
+/**
+ * Shares held, the one count used for P&L, value and day change: settled,
+ * plus bought but not yet settled (T1), plus pledged (Kite keeps pledged
+ * shares out of `quantity`: a fully pledged holding has quantity 0), less
+ * any sold today.
+ */
+export const heldQuantity = (h: Holding) =>
+  h.quantity + h.t1_quantity + h.collateral_quantity - h.used_quantity;
 
 /** The holding at `lastPrice`, with P&L and day change worked out from it. */
 export function priceHolding(h: Holding, lastPrice: number, closePrice: number = h.close_price): Holding {
@@ -18,10 +24,26 @@ export function priceHolding(h: Holding, lastPrice: number, closePrice: number =
     ...h,
     last_price: lastPrice,
     close_price: closePrice,
-    pnl: (lastPrice - h.average_price) * pnlQuantity(h),
+    pnl: (lastPrice - h.average_price) * heldQuantity(h),
     day_change: dayChange,
     day_change_percentage: closePrice > 0 ? (dayChange / closePrice) * 100 : 0,
   };
+}
+
+/** Portfolio totals, every one counted on heldQuantity. */
+export function holdingTotals(holdings: Holding[]) {
+  return holdings.reduce(
+    (t, h) => {
+      const qty = heldQuantity(h);
+      return {
+        investment: t.investment + h.average_price * qty,
+        currentValue: t.currentValue + h.last_price * qty,
+        pnl: t.pnl + h.pnl,
+        dayChange: t.dayChange + h.day_change * qty,
+      };
+    },
+    { investment: 0, currentValue: 0, pnl: 0, dayChange: 0 },
+  );
 }
 
 /** Holdings re-priced from quotes; one without a quote keeps Kite's figures. */

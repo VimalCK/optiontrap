@@ -7,7 +7,7 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { HoldingsIcon } from '@/components/icons/Icons';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import { Holding } from '@/services/kiteApi';
-import { fetchPricedHoldings, priceHolding } from '@/services/holdings';
+import { fetchPricedHoldings, heldQuantity, holdingTotals, priceHolding } from '@/services/holdings';
 import { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe } from '@/services/tickerSingleton';
 import { getMarketStatus, MarketStatus } from '@/utils/marketStatus';
@@ -80,19 +80,16 @@ const HoldingsView: React.FC = () => {
     }
   };
 
-  const getEffectiveQty = (h: Holding) => {
-    const qty = h.t1_quantity + h.realised_quantity - h.used_quantity;
-    return qty > 0 ? qty : h.collateral_quantity;
-  };
-
-  const totalInvestment   = holdings.reduce((sum, h) => sum + h.average_price * getEffectiveQty(h), 0);
-  const totalCurrentValue = holdings.reduce((sum, h) => sum + h.last_price * getEffectiveQty(h), 0);
-  const totalPnl          = holdings.reduce((sum, h) => sum + h.pnl, 0);
-  const totalDayChange    = holdings.reduce((sum, h) => sum + h.day_change * getEffectiveQty(h), 0);
+  const {
+    investment: totalInvestment,
+    currentValue: totalCurrentValue,
+    pnl: totalPnl,
+    dayChange: totalDayChange,
+  } = holdingTotals(holdings);
 
   const allocation: AllocationItem[] = holdings
     .map((h) => {
-      const qty = getEffectiveQty(h);
+      const qty = heldQuantity(h);
       const currentValue  = h.last_price * qty;
       const investedValue = h.average_price * qty;
       return {
@@ -263,7 +260,7 @@ const HoldingsView: React.FC = () => {
               </thead>
               <tbody>
                 {holdings.map((h) => {
-                  const qty = getEffectiveQty(h);
+                  const qty = heldQuantity(h);
                   const investedValue = h.average_price * qty;
                   const pnlPct = investedValue > 0 ? (h.pnl / investedValue) * 100 : 0;
                   const isPledged = h.collateral_quantity > 0 && h.collateral_type === 'pledge';
