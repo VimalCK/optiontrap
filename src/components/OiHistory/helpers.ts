@@ -1,12 +1,6 @@
 import type { FuturesHistoryRow, RolloverPattern } from './types';
 import { marketDate, marketMonth } from '../../../shared/marketTime.js';
 
-/** Default scrip options shown before dynamic list loads */
-export const DEFAULT_SCRIP_OPTIONS = [
-  { value: 'NIFTY50', label: 'NIFTY 50' },
-  { value: 'BANKNIFTY', label: 'BANK NIFTY' },
-];
-
 export const RECENT_SCRIPS_KEY = 'optiontrap_oi_history_recent_scrips';
 export const MAX_RECENT_SCRIPS = 5;
 

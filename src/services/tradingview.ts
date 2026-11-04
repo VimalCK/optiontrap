@@ -3,19 +3,12 @@
  *
  * TradingView charts equities/indices by `EXCHANGE:SYMBOL`. Indian F&O
  * tradingsymbols (e.g. `NIFTY25O0724500CE`) generally don't resolve on
- * TradingView, so for options/futures we fall back to the underlying on NSE
- * — which is what a trader actually wants to see for context.
+ * TradingView, so for options/futures we fall back to the underlying
+ * — which is what a trader actually wants to see for context. An
+ * underlying's TradingView symbol comes from its price row
+ * (instruments.tradingview_symbol; e.g. FINNIFTY charts as CNXFINANCE).
  */
-
-const INDEX_SYMBOLS: Record<string, string> = {
-  NIFTY: 'NIFTY',
-  NIFTY50: 'NIFTY',
-  BANKNIFTY: 'BANKNIFTY',
-  FINNIFTY: 'CNXFINANCE',
-  MIDCPNIFTY: 'NIFTY_MID_SELECT',
-  SENSEX: 'SENSEX',
-  BANKEX: 'BANKEX',
-};
+import type { Underlying } from './underlyings';
 
 /**
  * Extract the underlying name from an F&O tradingsymbol.
@@ -35,19 +28,21 @@ function underlyingFromOption(tradingsymbol: string): string {
  * Get the TradingView-ready symbol for a given tradingsymbol + exchange.
  * Returns { exchange, symbol } to be joined as `EXCHANGE:SYMBOL`.
  */
-function resolveSymbol(tradingsymbol: string, exchange?: string): { exchange: string; symbol: string } {
+function resolveSymbol(tradingsymbol: string, exchange: string | undefined, underlyings: Underlying[]): { exchange: string; symbol: string } {
   const upperEx = (exchange || '').toUpperCase();
   const upperSym = tradingsymbol.toUpperCase();
+  const chart = (u: Underlying) => ({ exchange: u.exchange || 'NSE', symbol: u.tradingviewSymbol || u.name });
 
-  // Option/future symbol → chart the underlying on NSE
+  // Option/future symbol → chart the underlying
   if (upperEx === 'NFO' || upperEx === 'BFO' || /\d(CE|PE|FUT)$/.test(upperSym) || upperSym.endsWith('FUT')) {
-    const underlying = underlyingFromOption(upperSym);
-    if (INDEX_SYMBOLS[underlying]) return { exchange: 'NSE', symbol: INDEX_SYMBOLS[underlying] };
-    return { exchange: 'NSE', symbol: underlying };
+    const name = underlyingFromOption(upperSym);
+    const underlying = underlyings.find((u) => u.name === name);
+    return underlying ? chart(underlying) : { exchange: 'NSE', symbol: name };
   }
 
-  // Known indices
-  if (INDEX_SYMBOLS[upperSym]) return { exchange: 'NSE', symbol: INDEX_SYMBOLS[upperSym] };
+  // An underlying by its F&O name ("NIFTY") or its price row ("NIFTY 50")
+  const underlying = underlyings.find((u) => u.name === upperSym || u.tradingsymbol === upperSym);
+  if (underlying) return chart(underlying);
 
   // Regular equity — default to NSE, use BSE only if that's explicitly the exchange
   const ex = upperEx === 'BSE' ? 'BSE' : 'NSE';
@@ -55,7 +50,7 @@ function resolveSymbol(tradingsymbol: string, exchange?: string): { exchange: st
 }
 
 /** Build the full https://www.tradingview.com/chart URL. */
-export function tradingViewUrl(tradingsymbol: string, exchange?: string): string {
-  const { exchange: ex, symbol } = resolveSymbol(tradingsymbol, exchange);
+export function tradingViewUrl(tradingsymbol: string, exchange?: string, underlyings: Underlying[] = []): string {
+  const { exchange: ex, symbol } = resolveSymbol(tradingsymbol, exchange, underlyings);
   return `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(`${ex}:${symbol}`)}`;
 }

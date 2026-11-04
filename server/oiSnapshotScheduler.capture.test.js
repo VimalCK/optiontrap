@@ -3,23 +3,23 @@
  * functions, with Kite, the database and the clock faked.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { marketDayStartMs } from '../shared/marketTime.js';
 
 const state = vi.hoisted(() => ({
-  watched: new Map(), // date -> Set(symbol)
-  saves: [],          // saveOiSnapshot arguments, in order
+  saves: [], // saveOiSnapshot arguments, in order (the fake oi_snapshots table)
+  always: [], // underlyings marked always_snapshot in Settings
   admin: { apiKey: 'key', accessToken: 'token', userId: 'ADMIN' },
 }));
 
 vi.mock('./db.js', () => ({
-  addOiSnapshotSymbol: async (date, symbol) => {
-    const set = state.watched.get(date) || new Set();
-    state.watched.set(date, set);
-    if (set.has(symbol)) return false;
-    set.add(symbol);
-    return true;
-  },
-  getOiSnapshotSymbols: async (date) => [...(state.watched.get(date) || [])],
+  getAlwaysSnapshotSymbols: async () => [...state.always],
+  // Tokens in today's (market-day) snapshots, like the real query.
+  getTodayOiSnapshotTokens: async () => [...new Set(state.saves
+    .filter((snap) => snap.timestamp >= marketDayStartMs())
+    .flatMap((snap) => Object.keys(snap.data)))],
   saveOiSnapshot: async (snapshot) => { state.saves.push(snapshot); },
+  // Each underlying's price row, as in the instruments table.
+  getUnderlyings: async () => Object.entries(SPOT_ROWS).map(([name, row]) => ({ name, ...row })),
 }));
 
 vi.mock('./oiHistoryScheduler.js', () => ({
@@ -28,7 +28,13 @@ vi.mock('./oiHistoryScheduler.js', () => ({
 
 // Five strikes per underlying, CE and PE, one expiry after the test dates.
 const UNDERLYINGS = { NIFTY: 24000, BANKNIFTY: 52000, RELIANCE: 1400, HDFCBANK: 1700 };
-const SPOT_KEYS = { NIFTY: 'NSE:NIFTY 50', BANKNIFTY: 'NSE:NIFTY BANK', RELIANCE: 'NSE:RELIANCE', HDFCBANK: 'NSE:HDFCBANK' };
+const SPOT_ROWS = {
+  NIFTY: { instrumentToken: 9001, exchange: 'NSE', tradingsymbol: 'NIFTY 50' },
+  BANKNIFTY: { instrumentToken: 9002, exchange: 'NSE', tradingsymbol: 'NIFTY BANK' },
+  RELIANCE: { instrumentToken: 9003, exchange: 'NSE', tradingsymbol: 'RELIANCE' },
+  HDFCBANK: { instrumentToken: 9004, exchange: 'NSE', tradingsymbol: 'HDFCBANK' },
+};
+const SPOT_KEYS = Object.fromEntries(Object.entries(SPOT_ROWS).map(([name, row]) => [name, `${row.exchange}:${row.tradingsymbol}`]));
 const tokenSymbol = new Map();
 const INSTRUMENTS = Object.entries(UNDERLYINGS).flatMap(([name, spot], u) => [-2, -1, 0, 1, 2].flatMap((step, s) =>
   ['CE', 'PE'].map((type, t) => {
@@ -62,8 +68,8 @@ const ist = (hhmm, date = '2026-11-03') => new Date(`${date}T${hhmm}:00+05:30`);
 let scheduler;
 
 beforeEach(async () => {
-  state.watched.clear();
   state.saves.length = 0;
+  state.always = ['NIFTY', 'BANKNIFTY'];
   state.admin = { apiKey: 'key', accessToken: 'token', userId: 'ADMIN' };
   vi.useFakeTimers({ now: ist('10:02') });
   vi.stubGlobal('fetch', vi.fn(fakeKiteFetch));
@@ -87,27 +93,29 @@ async function startScheduler() {
 
 describe('picking a symbol in the Option Analyzer', () => {
   it('watches RELIANCE then HDFCBANK picked straight after, each with an immediate first snapshot', async () => {
-    expect(await scheduler.watchOiSnapshotSymbol('RELIANCE')).toEqual({ added: true, captured: 10 });
-    expect(await scheduler.watchOiSnapshotSymbol('HDFCBANK')).toEqual({ added: true, captured: 10 });
+    expect(await scheduler.watchOiSnapshotSymbol('RELIANCE')).toEqual({ captured: 10 });
+    expect(await scheduler.watchOiSnapshotSymbol('HDFCBANK')).toEqual({ captured: 10 });
 
-    expect([...state.watched.get('2026-11-03')]).toEqual(['RELIANCE', 'HDFCBANK']);
     expect(state.saves.map(symbolsIn)).toEqual([['RELIANCE'], ['HDFCBANK']]);
   });
 
   it('does not take an extra snapshot for NIFTY, BANKNIFTY or an already-watched stock', async () => {
-    expect(await scheduler.watchOiSnapshotSymbol('NIFTY')).toEqual({ added: false, captured: 0 });
-    expect(await scheduler.watchOiSnapshotSymbol('BANKNIFTY')).toEqual({ added: false, captured: 0 });
+    expect(await scheduler.watchOiSnapshotSymbol('NIFTY')).toEqual({ captured: 0 });
+    expect(await scheduler.watchOiSnapshotSymbol('BANKNIFTY')).toEqual({ captured: 0 });
     await scheduler.watchOiSnapshotSymbol('RELIANCE');
-    expect(await scheduler.watchOiSnapshotSymbol('RELIANCE')).toEqual({ added: false, captured: 0 });
+    expect(await scheduler.watchOiSnapshotSymbol('RELIANCE')).toEqual({ captured: 0 });
 
-    expect(state.saves).toHaveLength(1);
-    expect(state.watched.get('2026-11-03')).toEqual(new Set(['RELIANCE']));
+    expect(state.saves.map(symbolsIn)).toEqual([['RELIANCE']]);
   });
 
-  it('adds the symbol but takes no snapshot while the market is closed', async () => {
-    vi.setSystemTime(ist('16:00'));
-    expect(await scheduler.watchOiSnapshotSymbol('RELIANCE')).toEqual({ added: true, captured: 0 });
-    expect(state.saves).toHaveLength(0);
+  it('takes no snapshot while the market is closed, so the stock is not watched', async () => {
+    vi.setSystemTime(ist('09:00')); // pre-open
+    expect(await scheduler.watchOiSnapshotSymbol('RELIANCE')).toEqual({ captured: 0 });
+
+    vi.setSystemTime(ist('09:14'));
+    await startScheduler();
+    await vi.advanceTimersByTimeAsync(60 * 1000); // 09:15 round
+    expect(state.saves.map(symbolsIn)).toEqual([['BANKNIFTY', 'NIFTY']]);
   });
 });
 
@@ -116,7 +124,39 @@ describe('the 10-minute rounds', () => {
     await startScheduler();
 
     expect(state.saves.map(symbolsIn)).toEqual([['BANKNIFTY', 'NIFTY']]);
-    expect(state.saves[0]).toMatchObject({ timeLabel: '10:02', spot: 24000 });
+    expect(state.saves[0].timeLabel).toBe('10:02');
+  });
+
+  it("stores each symbol's own spot price under its price instrument's token", async () => {
+    await startScheduler();
+    await scheduler.watchOiSnapshotSymbol('RELIANCE');
+
+    const [round, reliance] = state.saves;
+    expect(round.prices).toMatchObject({ 9001: 24000, 9002: 52000 });
+    expect(reliance.prices).toMatchObject({ 9003: 1400 });
+    expect(reliance.prices).not.toHaveProperty('9001');
+    expect(reliance).not.toHaveProperty('spot');
+  });
+
+  it('snapshots a symbol ticked in Settings from the next round', async () => {
+    await startScheduler(); // 10:02 round
+    state.always = ['NIFTY', 'BANKNIFTY', 'RELIANCE'];
+
+    await vi.advanceTimersByTimeAsync(8 * 60 * 1000); // 10:10, the next round
+
+    expect(state.saves.map(symbolsIn)).toEqual([['BANKNIFTY', 'NIFTY'], ['BANKNIFTY', 'NIFTY', 'RELIANCE']]);
+  });
+
+  it('keeps a symbol unticked in Settings for the rest of the day, then stops it the next day', async () => {
+    await startScheduler(); // 10:02 round
+    state.always = ['NIFTY'];
+
+    await vi.advanceTimersByTimeAsync(8 * 60 * 1000); // 10:10: already snapshotted today
+    expect(symbolsIn(state.saves.at(-1))).toEqual(['BANKNIFTY', 'NIFTY']);
+
+    vi.setSystemTime(ist('10:00', '2026-11-04')); // next trading day
+    await vi.advanceTimersByTimeAsync(60 * 1000);
+    expect(symbolsIn(state.saves.at(-1))).toEqual(['NIFTY']);
   });
 
   it('keeps snapshotting a symbol after the user switches away from it', async () => {
@@ -139,6 +179,16 @@ describe('the 10-minute rounds', () => {
 
     await vi.advanceTimersByTimeAsync(60 * 1000);     // 10:10, new slot
     expect(state.saves).toHaveLength(2);
+  });
+
+  it('watches picked stocks only for that day; the next day is NIFTY and BANKNIFTY again', async () => {
+    await scheduler.watchOiSnapshotSymbol('HDFCBANK');
+    await scheduler.watchOiSnapshotSymbol('RELIANCE');
+
+    vi.setSystemTime(ist('10:00', '2026-11-04')); // next trading day
+    await startScheduler();
+
+    expect(symbolsIn(state.saves.at(-1))).toEqual(['BANKNIFTY', 'NIFTY']);
   });
 
   it('takes no snapshots outside market hours', async () => {

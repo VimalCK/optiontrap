@@ -12,7 +12,7 @@ export interface OiSnapshot {
   data: Record<string, number>;
   prices?: Record<string, number>;  // token -> LTP
   close?: Record<string, number>;   // token -> previous day close
-  spot?: number;                    // NIFTY spot price
+  spot?: number;                    // spot of the symbol being analysed (see withSpot)
   volumes?: Record<string, number>; // token -> volume
 }
 
@@ -27,8 +27,17 @@ export interface OiVelocity {
 }
 
 /**
- * Ask the server to snapshot `symbol` for the rest of today. NIFTY and
- * BANKNIFTY always are. Resolves once the first snapshot (if any) is stored.
+ * Snapshots with `spot` set to one symbol's spot price. The server stores
+ * each snapshotted symbol's spot in `prices` under its price instrument's
+ * token, so this picks the analysed symbol's out (undefined if not captured).
+ */
+export function withSpot(snapshots: OiSnapshot[], spotToken: number | null): OiSnapshot[] {
+  return snapshots.map((snap) => ({ ...snap, spot: spotToken !== null ? snap.prices?.[String(spotToken)] : undefined }));
+}
+
+/**
+ * Ask the server to snapshot `symbol` for the rest of today; the
+ * always-snapshot symbols always are. Resolves once the first snapshot (if any) is stored.
  */
 export async function watchSnapshotSymbol(symbol: string, signal?: AbortSignal): Promise<void> {
   try {

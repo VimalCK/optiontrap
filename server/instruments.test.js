@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { bseOnlyStocks, isDebtOrFund } from './instruments.js';
+import { bseOnlyStocks, isDebtOrFund, isInstrumentStampFresh } from './instruments.js';
 
 const stock = (tradingsymbol, name) => ({ tradingsymbol, name });
 
@@ -67,5 +67,30 @@ describe('isDebtOrFund', () => {
     expect(bse(950001, 'SMILCCD', 'SMILCCD')).toBe(true);
     expect(bse(500999, '08MPD', 'NIPPON INDIA MUTUAL FUND')).toBe(true);
     expect(bse(500998, 'DWSFTS50AG', '')).toBe(true);
+  });
+});
+
+describe('isInstrumentStampFresh', () => {
+  // Zerodha's list is taken as published at 08:30 IST (03:00 UTC) each day.
+  const ist = (date, hhmm) => new Date(`${date}T${hhmm}:00+05:30`);
+  const stamp = (date, hhmm, version = 'v4-bse-scrip-code') => `${ist(date, hhmm).toISOString()}|${version}`;
+
+  it('is current when loaded after today\'s 08:30', () => {
+    expect(isInstrumentStampFresh(stamp('2026-11-04', '08:45'), ist('2026-11-04', '14:00'))).toBe(true);
+  });
+
+  it('is stale when loaded before today\'s 08:30, e.g. just after midnight IST', () => {
+    expect(isInstrumentStampFresh(stamp('2026-11-04', '00:30'), ist('2026-11-04', '09:00'))).toBe(false);
+  });
+
+  it('before 08:30, yesterday\'s post-08:30 load is still the current list', () => {
+    expect(isInstrumentStampFresh(stamp('2026-11-03', '09:00'), ist('2026-11-04', '07:00'))).toBe(true);
+    expect(isInstrumentStampFresh(stamp('2026-11-03', '08:00'), ist('2026-11-04', '07:00'))).toBe(false);
+  });
+
+  it('is stale for another code version, a missing stamp, or the old date-only format', () => {
+    expect(isInstrumentStampFresh(stamp('2026-11-04', '09:00', 'v3-old'), ist('2026-11-04', '10:00'))).toBe(false);
+    expect(isInstrumentStampFresh(null, ist('2026-11-04', '10:00'))).toBe(false);
+    expect(isInstrumentStampFresh('2026-11-04|v4-bse-scrip-code', ist('2026-11-04', '10:00'))).toBe(false);
   });
 });

@@ -39,12 +39,13 @@ const MARKET_LABEL: Record<MarketCheck['relation'], string> = {
   'in-line': 'In line with market',
 };
 
-const MARKET_TEXT: Record<MarketCheck['relation'], string> = {
+/** `market`: the market reference index's label. */
+const marketText = (relation: MarketCheck['relation'], market: string): string => ({
   alone: 'Stock-specific selling while the market holds: higher risk.',
   'with-market': 'Moving down with the market: it often recovers when the market does.',
-  stronger: 'Holding up better than NIFTY 50.',
-  'in-line': 'Moving with NIFTY 50.',
-};
+  stronger: `Holding up better than ${market}.`,
+  'in-line': `Moving with ${market}.`,
+})[relation];
 
 const rs = (v: number) => `₹${v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct = (v: number) => `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`;
@@ -364,19 +365,19 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
             <>
               <section className="wl-sz-overview">
                 <p className="wl-sz-overview__note">{analysis.stateNote}</p>
-                {analysis.market && (
+                {analysis.market && data?.marketLabel && (
                   <div className="wl-sz-market">
                     <div className="wl-sz-stat">
                       <span>{tradingsymbol} · 20d</span>
                       <strong className={`wl-sz-num--${tone(analysis.market.stockPct)}`}>{pct(analysis.market.stockPct)}</strong>
                     </div>
                     <div className="wl-sz-stat">
-                      <span>NIFTY 50 · 20d</span>
+                      <span>{data.marketLabel} · 20d</span>
                       <strong className={`wl-sz-num--${tone(analysis.market.marketPct)}`}>{pct(analysis.market.marketPct)}</strong>
                     </div>
                     <div className={`wl-sz-stat wl-sz-stat--wide wl-sz-market--${analysis.market.relation}`}>
                       <span>{MARKET_LABEL[analysis.market.relation]}</span>
-                      <em>{MARKET_TEXT[analysis.market.relation]}</em>
+                      <em>{marketText(analysis.market.relation, data.marketLabel)}</em>
                     </div>
                   </div>
                 )}

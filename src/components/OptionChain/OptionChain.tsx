@@ -2,7 +2,7 @@ import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react'
 import SellStrategy from '@/components/SellStrategy/SellStrategy';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { calculateExpectedMove } from '@/services/edgeScore';
-import { watchSnapshotSymbol, getTodaySnapshots, getLatestSnapshotTimestamp, calculateVelocity, analyzeVelocityPattern, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
+import { watchSnapshotSymbol, withSpot, getTodaySnapshots, getLatestSnapshotTimestamp, calculateVelocity, analyzeVelocityPattern, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
 import { computeStrikeSignals } from '@/services/combinedSignal';
 import { addPosition } from '@/services/positions';
 import { computeLiveFlow, describeFlow, flowColor } from '@/services/oiFlow';
@@ -15,13 +15,12 @@ import { isAbortError } from '@/services/apiClient';
 import { useAbortSignal } from '@/hooks/useAbortSignal';
 import {
   fetchOptions,
-  fetchFnoSymbols,
-  getSpotToken,
   getExpiries,
   buildOptionChain,
   OptionInstrument,
   OptionChainRow,
 } from '@/services/optionChain';
+import { fetchUnderlyings, type Underlying } from '@/services/underlyings';
 import { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe, tickerUpdateTokens } from '@/services/tickerSingleton';
 import { formatCalendarDate, isMarketLive, istDaysUntil } from '@/utils/marketStatus';
@@ -50,13 +49,15 @@ function saveRecentOptionSymbols(symbols: string[]): void {
 const OptionChain: React.FC = () => {
   // Cancels this tab's in-flight requests when the user navigates away.
   const signal = useAbortSignal();
-  const [selectedSymbol, setSelectedSymbol] = useState<string>('NIFTY');
+  // The last symbol opened; none until the user picks one.
+  const [selectedSymbol, setSelectedSymbol] = useState<string>(() => loadRecentOptionSymbols()[0] ?? '');
   const [recentSymbols, setRecentSymbols] = useState<string[]>(() => loadRecentOptionSymbols());
-  const [symbolOptions, setSymbolOptions] = useState<{ value: string | number; label: string }[]>([
-    { value: 'NIFTY', label: 'NIFTY 50' },
-    { value: 'BANKNIFTY', label: 'BANK NIFTY' },
-  ]);
-  const [spotToken, setSpotToken] = useState<number>(256265);
+  const [underlyings, setUnderlyings] = useState<Underlying[]>([]);
+  const symbolOptions = useMemo(() => underlyings.map((u) => ({ value: u.name, label: u.label })), [underlyings]);
+  // The selected symbol's price instrument (an index row or the stock's NSE row).
+  const underlying = useMemo(() => underlyings.find((u) => u.name === selectedSymbol) ?? null, [underlyings, selectedSymbol]);
+  const spotToken = underlying?.instrumentToken ?? null;
+  const spotQuoteKey = underlying?.tradingsymbol ? `${underlying.exchange}:${underlying.tradingsymbol}` : null;
   const [options, setOptions] = useState<OptionInstrument[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,7 +86,8 @@ const OptionChain: React.FC = () => {
     return (localStorage.getItem('optiontrap_order_mode') as 'paper' | 'live') || 'paper';
   });
   const [oiVelocity, setOiVelocity] = useState<Map<number, OiVelocity>>(new Map());
-  const [snapshots, setSnapshots] = useState<OiSnapshot[]>([]);
+  const [allSnapshots, setSnapshots] = useState<OiSnapshot[]>([]);
+  const snapshots = useMemo(() => withSpot(allSnapshots, spotToken), [allSnapshots, spotToken]);
   const [toasts, setToasts] = useState<{ id: number; text: string; color: 'green' | 'red' }[]>([]);
   const subscribedTokensRef = useRef<number[]>([]);
   const toastIdRef = useRef(0);
@@ -226,23 +228,17 @@ const OptionChain: React.FC = () => {
     });
   }, [spotToken]);
 
-  // Load F&O symbols on mount
+  // Load the F&O underlyings (names, labels, price instruments) on mount
   useEffect(() => {
-    fetchFnoSymbols(signal).then((symbols) => {
-      const opts = symbols.map((name) => ({
-        value: name,
-        label: name === 'NIFTY' ? 'NIFTY 50' : name === 'BANKNIFTY' ? 'BANK NIFTY' : name,
-      }));
-      setSymbolOptions(opts);
-    }).catch(() => { /* cancelled */ });
+    fetchUnderlyings(signal).then(setUnderlyings).catch((err) => {
+      if (!isAbortError(err)) console.error('[Option Analyzer] Could not load symbols:', err);
+    });
   }, []);
 
   // Load options when symbol changes
   useEffect(() => {
-    loadOptions();
+    if (selectedSymbol) loadOptions();
   }, [selectedSymbol]);
-
-
 
   const loadOptions = async () => {
     setLoading(true);
@@ -254,9 +250,6 @@ const OptionChain: React.FC = () => {
       if (expiries.length > 0) {
         setSelectedExpiry(expiries[0]);
       }
-      // Update spot token for the selected symbol
-      const token = getSpotToken(selectedSymbol);
-      if (token) setSpotToken(token);
       setSpotPrevClose(0);
     } catch (err) {
       if (isAbortError(err)) return;
@@ -273,7 +266,7 @@ const OptionChain: React.FC = () => {
     [options, selectedExpiry],
   );
 
-  // Find ATM strike (closest to NIFTY spot price)
+  // Find ATM strike (closest to the spot price)
   const atmStrike = useMemo(() => {
     if (chain.length === 0) return 0;
     if (spotPrice > 0) {
@@ -401,7 +394,7 @@ const OptionChain: React.FC = () => {
   useEffect(() => {
     if (visibleChain.length === 0 || !isMarketLive()) return;
 
-    const tokens: number[] = [spotToken];
+    const tokens: number[] = spotToken !== null ? [spotToken] : [];
     visibleChain.forEach((row) => {
       if (row.ce) tokens.push(row.ce.instrumentToken);
       if (row.pe) tokens.push(row.pe.instrumentToken);
@@ -422,8 +415,8 @@ const OptionChain: React.FC = () => {
     return unsub;
   }, [visibleChain, handleTicks]);
 
-  // OI snapshots are taken by the server (NIFTY/BANKNIFTY always, other symbols
-  // once opened here). Register the selected symbol, then load today's snapshots.
+  // OI snapshots are taken by the server (the always-snapshot symbols, plus
+  // others once opened here). Register the selected symbol, then load today's snapshots.
   const latestSnapshotTsRef = useRef<number | null>(null);
   const loadSnapshots = useCallback(async () => {
     const snaps = await getTodaySnapshots(signal);
@@ -432,6 +425,7 @@ const OptionChain: React.FC = () => {
   }, [signal]);
 
   useEffect(() => {
+    if (!selectedSymbol) return;
     watchSnapshotSymbol(selectedSymbol, signal)
       .then(loadSnapshots)
       .catch((err) => { if (!isAbortError(err)) console.error('[OI Snapshots] Load failed:', err); });
@@ -472,7 +466,7 @@ const OptionChain: React.FC = () => {
   }, [oiData, snapshots]);
 
   // Market closed: fetch quotes when chain is ready.
-  // Two-phase approach: first fetch NIFTY spot to determine correct ATM,
+  // Two-phase approach: first fetch the spot to determine correct ATM,
   // then fetch all option strikes around the real ATM.
   const quoteFetchedRef = useRef<string>('');
   useEffect(() => {
@@ -483,20 +477,14 @@ const OptionChain: React.FC = () => {
     const start = Math.max(0, atmIndex - 15);
     const end = Math.min(chain.length, atmIndex + 16);
     const strikes = chain.slice(start, end);
-    const fetchKey = `${selectedExpiry}_${strikes[0]?.strike}_${strikes[strikes.length - 1]?.strike}`;
+    // The spot key is part of it: the symbol list (and so the spot) may arrive after the chain.
+    const fetchKey = `${spotQuoteKey}_${selectedExpiry}_${strikes[0]?.strike}_${strikes[strikes.length - 1]?.strike}`;
 
     // Skip if we already fetched for this exact range
     if (quoteFetchedRef.current === fetchKey) return;
     quoteFetchedRef.current = fetchKey;
 
-    // Build spot instrument key for Kite quotes API
-    const SPOT_QUOTE_KEYS: Record<string, string> = {
-      NIFTY: 'NSE:NIFTY 50',
-      BANKNIFTY: 'NSE:NIFTY BANK',
-    };
-    const spotQuoteKey = SPOT_QUOTE_KEYS[selectedSymbol] || `NSE:${selectedSymbol}`;
-
-    const instruments: string[] = [spotQuoteKey];
+    const instruments: string[] = spotQuoteKey ? [spotQuoteKey] : [];
     strikes.forEach((row) => {
       if (row.ce) instruments.push(`NFO:${row.ce.tradingsymbol}`);
       if (row.pe) instruments.push(`NFO:${row.pe.tradingsymbol}`);
@@ -530,7 +518,7 @@ const OptionChain: React.FC = () => {
       setOiData(oiMap);
       setClosePrices(closeMap);
 
-      const spotQuote = quotes.get(spotQuoteKey);
+      const spotQuote = spotQuoteKey ? quotes.get(spotQuoteKey) : undefined;
       if (spotQuote) {
         setSpotPrice(spotQuote.last_price);
         if (spotQuote.ohlc.close > 0) setSpotPrevClose(spotQuote.ohlc.close);
@@ -553,7 +541,7 @@ const OptionChain: React.FC = () => {
       // Fallback to latest server OI snapshot
       getTodaySnapshots(signal).then((snaps) => {
         if (snaps.length > 0) {
-          const latest = snaps[snaps.length - 1];
+          const [latest] = withSpot(snaps.slice(-1), spotToken);
           if (latest.prices) setLivePrices(new Map(Object.entries(latest.prices).map(([k, v]) => [Number(k), v])));
           if (latest.data) setOiData(new Map(Object.entries(latest.data).map(([k, v]) => [Number(k), v])));
           if (latest.close) setClosePrices(new Map(Object.entries(latest.close).map(([k, v]) => [Number(k), v])));
@@ -561,7 +549,7 @@ const OptionChain: React.FC = () => {
         }
       }).catch(() => { /* cancelled */ });
     });
-  }, [chain, atmStrike, selectedExpiry, selectedSymbol]);
+  }, [chain, atmStrike, selectedExpiry, spotQuoteKey]);
 
   // Helper to get live price or fallback to CSV price
   const getPrice = (instrument: OptionInstrument | null): number | null => {
@@ -668,25 +656,30 @@ const OptionChain: React.FC = () => {
         </div>
       )}
       {/* Global Expiry Selector */}
-      {expiries.length > 0 && (
+      {(expiries.length > 0 || !selectedSymbol) && (
         <div className="oc-expiry-panel">
           <div className="oc-expiry-bar">
             <AppSelect
               value={selectedSymbol}
               options={symbolOptions}
               onChange={(v) => selectSymbol(String(v))}
+              placeholder="Select symbol"
               searchable
             />
-            <span className="oc-expiry-bar__label">Expiry</span>
-            <AppSelect
-              value={selectedExpiry}
-              options={expiries.map((exp) => ({
-                value: exp,
-                label: formatCalendarDate(exp, { day: '2-digit', month: 'short', year: 'numeric' }),
-              }))}
-              onChange={(v) => setSelectedExpiry(String(v))}
-              className="oc-expiry-select"
-            />
+            {expiries.length > 0 && (
+              <>
+                <span className="oc-expiry-bar__label">Expiry</span>
+                <AppSelect
+                  value={selectedExpiry}
+                  options={expiries.map((exp) => ({
+                    value: exp,
+                    label: formatCalendarDate(exp, { day: '2-digit', month: 'short', year: 'numeric' }),
+                  }))}
+                  onChange={(v) => setSelectedExpiry(String(v))}
+                  className="oc-expiry-select"
+                />
+              </>
+            )}
             {daysToExpiry !== undefined && (
               <span className="oc-expiry-bar__days">{daysToExpiry === 0 ? 'Expiry today' : `${daysToExpiry}d to expiry`}</span>
             )}
@@ -813,7 +806,13 @@ const OptionChain: React.FC = () => {
           </div>
         )}
 
-        {!loading && !error && options.length === 0 && (
+        {!selectedSymbol && (
+          <p className="card__description" style={{ marginTop: 16 }}>
+            Select a symbol to see its option chain.
+          </p>
+        )}
+
+        {selectedSymbol && !loading && !error && options.length === 0 && (
           <p className="card__description" style={{ marginTop: 16 }}>
             No option data available.
           </p>

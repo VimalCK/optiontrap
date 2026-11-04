@@ -2,24 +2,21 @@
  * Intraday option-chain OI snapshots, taken by the server.
  *
  * Every 10 minutes while the market is open (09:15–15:30 IST, trading days),
- * quote the nearest-expiry option chain around ATM for NIFTY and BANKNIFTY,
- * plus any symbol someone opened in the Option Analyzer today, and store one
- * shared snapshot row. Nobody needs to keep the analyzer open.
+ * quote the nearest-expiry option chain around ATM for the symbols marked
+ * always_snapshot (Settings), plus any symbol someone opened in the Option Analyzer today (i.e. already in
+ * today's snapshots), and store one shared snapshot row. Nobody needs to keep
+ * the analyzer open.
  *
  * Uses the newest admin Kite session (see findWorkingAdminSession). With no
  * admin login today it waits and logs once.
  */
 
-import { addOiSnapshotSymbol, getOiSnapshotSymbols, saveOiSnapshot } from './db.js';
+import { getAlwaysSnapshotSymbols, getTodayOiSnapshotTokens, getUnderlyings, saveOiSnapshot } from './db.js';
 import { getOrFetchInstruments } from './instruments.js';
 import { istClock, isMarketOpen } from './marketClock.js';
 import { marketTimeLabel } from '../shared/marketTime.js';
 import { findWorkingAdminSession } from './oiHistoryScheduler.js';
 
-/** Always snapshotted, whether or not anyone opens them. */
-export const ALWAYS_SNAPSHOT_SYMBOLS = ['NIFTY', 'BANKNIFTY'];
-
-const INDEX_QUOTE_KEYS = { NIFTY: 'NSE:NIFTY 50', BANKNIFTY: 'NSE:NIFTY BANK' };
 /** Strikes each side of ATM. The analyzer shows ±15; the extra covers ATM drifting during the day. */
 const STRIKES_EACH_SIDE = 20;
 const SLOT_MS = 10 * 60 * 1000;
@@ -38,10 +35,6 @@ function enqueue(fn) {
   const run = queue.then(fn);
   queue = run.catch(() => {});
   return run;
-}
-
-function spotQuoteKey(symbol) {
-  return INDEX_QUOTE_KEYS[symbol] || `NSE:${symbol}`;
 }
 
 /** Today's admin Kite session, cached for the day; null if none works. */
@@ -96,20 +89,46 @@ export function pickChainWindow(options, spot, today, each = STRIKES_EACH_SIDE) 
   return forExpiry.filter((o) => keep.has(o.strike));
 }
 
-/** Quote the chains for `symbols` and store them in the current 10-minute snapshot row. */
-async function captureSymbols(symbols, kite, now = new Date()) {
-  const { date } = istClock(now);
-  const instruments = await getOrFetchInstruments(kite.apiKey, kite.accessToken);
-
-  const optionsBySymbol = new Map(symbols.map((s) => [s, []]));
+/** Option chains of each underlying in the instrument list, by underlying name. */
+function optionsByUnderlying(instruments) {
+  const byName = new Map();
   for (const i of instruments) {
-    if (i.exchange === 'NFO' && (i.instrumentType === 'CE' || i.instrumentType === 'PE')) {
-      optionsBySymbol.get(i.name)?.push(i);
-    }
+    if (i.exchange !== 'NFO' || (i.instrumentType !== 'CE' && i.instrumentType !== 'PE')) continue;
+    if (!byName.has(i.name)) byName.set(i.name, []);
+    byName.get(i.name).push(i);
   }
+  return byName;
+}
 
-  const spotQuotes = await fetchQuotes(kite, symbols.map(spotQuoteKey));
-  const chain = symbols.flatMap((s) => pickChainWindow(optionsBySymbol.get(s), spotQuotes[spotQuoteKey(s)]?.last_price || 0, date));
+/**
+ * Underlyings with options in today's snapshots. A stock opened in the
+ * analyzer gets its first snapshot at once, so this is today's watch list;
+ * tomorrow has no snapshots yet, so it starts empty again.
+ */
+async function snapshottedToday(instruments) {
+  const tokens = new Set(await getTodayOiSnapshotTokens());
+  const names = new Set();
+  for (const i of instruments) {
+    if (i.exchange === 'NFO' && tokens.has(String(i.instrumentToken))) names.add(i.name);
+  }
+  return names;
+}
+
+/**
+ * Quote the chains for `symbols` and store them in the current 10-minute
+ * snapshot row. Each symbol's spot price goes in `prices` (and `close`) under
+ * its price instrument's token, beside its options' prices.
+ */
+async function captureSymbols(symbols, kite, instruments, now = new Date()) {
+  const { date } = istClock(now);
+  const options = optionsByUnderlying(instruments);
+  const spotRows = new Map((await getUnderlyings())
+    .filter((u) => symbols.includes(u.name) && u.instrumentToken !== null)
+    .map((u) => [u.name, { token: String(u.instrumentToken), key: `${u.exchange}:${u.tradingsymbol}` }]));
+
+  const spotQuotes = await fetchQuotes(kite, [...spotRows.values()].map((row) => row.key));
+  const spotOf = (symbol) => spotQuotes[spotRows.get(symbol)?.key]?.last_price || 0;
+  const chain = symbols.flatMap((s) => pickChainWindow(options.get(s) || [], spotOf(s), date));
   if (chain.length === 0) return 0;
 
   const quotes = await fetchQuotes(kite, chain.map((o) => `NFO:${o.tradingsymbol}`));
@@ -117,6 +136,11 @@ async function captureSymbols(symbols, kite, now = new Date()) {
   const prices = {};
   const close = {};
   const volumes = {};
+  for (const { token, key } of spotRows.values()) {
+    const q = spotQuotes[key];
+    if (q?.last_price > 0) prices[token] = q.last_price;
+    if (q?.ohlc?.close > 0) close[token] = q.ohlc.close;
+  }
   for (const o of chain) {
     const q = quotes[`NFO:${o.tradingsymbol}`];
     if (!q) continue;
@@ -128,19 +152,24 @@ async function captureSymbols(symbols, kite, now = new Date()) {
   }
   if (Object.keys(data).length === 0) return 0;
 
-  // The row has a single spot; it is NIFTY's, as the analyzer has always assumed.
-  const spot = spotQuotes[spotQuoteKey('NIFTY')]?.last_price || undefined;
-  await saveOiSnapshot({ timestamp: now.getTime(), timeLabel: marketTimeLabel(now), data, prices, close, volumes, spot });
+  await saveOiSnapshot({ timestamp: now.getTime(), timeLabel: marketTimeLabel(now), data, prices, close, volumes });
   return Object.keys(data).length;
 }
 
-/** Capture with today's admin session, dropping the cached session if Kite rejects it. */
-function capture(symbols, date) {
+/**
+ * With today's admin session, let `pickSymbols` choose from the instrument
+ * list what to capture, then capture it. Drops the cached session if Kite
+ * rejects it.
+ */
+function capture(date, pickSymbols) {
   return enqueue(async () => {
     const kite = await getAdminKite(date);
-    if (!kite) return 0;
+    if (!kite) return { symbols: [], count: 0 };
     try {
-      return await captureSymbols(symbols, kite);
+      const instruments = await getOrFetchInstruments(kite.apiKey, kite.accessToken);
+      const symbols = await pickSymbols(instruments);
+      const count = symbols.length > 0 ? await captureSymbols(symbols, kite, instruments) : 0;
+      return { symbols, count };
     } catch (err) {
       if (err instanceof KiteAuthError) adminKite = null;
       throw err;
@@ -149,17 +178,18 @@ function capture(symbols, date) {
 }
 
 /**
- * Snapshot `symbol` for the rest of today. If it's new to the list and the
- * market is open, take its first snapshot now so the analyzer has data at once.
+ * Snapshot `symbol` for the rest of today. If it isn't already in today's
+ * snapshots and the market is open, take its first snapshot now: the
+ * analyzer gets data at once, and later rounds see it and keep capturing it.
  */
 export async function watchOiSnapshotSymbol(symbol) {
+  if (!isMarketOpen() || (await getAlwaysSnapshotSymbols()).includes(symbol)) return { captured: 0 };
   const { date } = istClock();
-  if (ALWAYS_SNAPSHOT_SYMBOLS.includes(symbol)) return { added: false, captured: 0 };
-  const added = await addOiSnapshotSymbol(date, symbol);
-  if (!added || !isMarketOpen()) return { added, captured: 0 };
-  const captured = await capture([symbol], date);
-  console.log(`[OI Snapshots] Now snapshotting ${symbol} for today (${captured} options)`);
-  return { added, captured };
+  const { count } = await capture(date, async (instruments) => (
+    (await snapshottedToday(instruments)).has(symbol) ? [] : [symbol]
+  ));
+  if (count > 0) console.log(`[OI Snapshots] Now snapshotting ${symbol} for today (${count} options)`);
+  return { captured: count };
 }
 
 async function tick() {
@@ -168,8 +198,9 @@ async function tick() {
   if (slot === lastSlot) return;
 
   const { date } = istClock();
-  const symbols = [...new Set([...ALWAYS_SNAPSHOT_SYMBOLS, ...(await getOiSnapshotSymbols(date))])];
-  const count = await capture(symbols, date);
+  const { symbols, count } = await capture(date, async (instruments) => (
+    [...new Set([...(await getAlwaysSnapshotSymbols()), ...(await snapshottedToday(instruments))])]
+  ));
   if (count > 0) {
     lastSlot = slot;
     console.log(`[OI Snapshots] Saved ${count} options for ${symbols.join(', ')}`);

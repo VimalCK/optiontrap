@@ -10,7 +10,7 @@ import { fetchQuotes } from '@/services/kiteApi';
 import { loadInstruments, getLotSizeByToken } from '@/services/instruments';
 import '@/styles/oihistory.css';
 import type { OiHistoryRow, FuturesHistoryRow, FetchProgress, SignalPerformanceSummary, TradeSetupStatus, StrikeHistoryEntry, OiCellData, OiTableRow, TradeSignalRow } from './types';
-import { DEFAULT_SCRIP_OPTIONS, MAX_RECENT_SCRIPS, loadRecentScrips, saveRecentScrips, currentMonthIST, todayIST, addMonths, formatMonthLabel, formatMonthShortLabel, formatFullDateLabel } from './helpers';
+import { MAX_RECENT_SCRIPS, loadRecentScrips, saveRecentScrips, currentMonthIST, todayIST, addMonths, formatMonthLabel, formatMonthShortLabel, formatFullDateLabel } from './helpers';
 import { summarizePriceTrend, summarizeTradeBias, summarizeTradeLevels, summarizeOptionMomentum, summarizeTradeSetup, summarizePremiumDecay, summarizeSellingSetup, summarizeStrikeBias, classifyPattern, expiryLabel, computeMonthlyExpiries } from './analysis';
 import { FuturesContext } from './FuturesContext';
 import { OiSnapshotTable } from './OiSnapshotTable';
@@ -18,6 +18,7 @@ import { StrikeOiChart } from './StrikeOiChart';
 import { TradeSetupDashboard } from './TradeSetupDashboard';
 import StockSetupsPanel from '@/components/StockSetups/StockSetupsPanel';
 import { findNseStock } from '@/services/stockSetups';
+import { useUnderlyings } from '@/hooks/useUnderlyings';
 import { computeFlowReadings, marketCloseIST, type FlowInput, type FlowReading } from '@/services/oiFlow';
 import { computeFairValues, realizedVol, volVerdict, REALIZED_WINDOW, type FairInput, type FairValueResult } from '@/services/fairValue';
 
@@ -43,7 +44,8 @@ const OiHistory: React.FC = () => {
   const navigate = useNavigate();
   // Cancels this tab's in-flight requests when the user navigates away.
   const pageSignal = useAbortSignal();
-  const [scrip, setScrip] = useState('NIFTY50');
+  // The F&O name of the scrip shown (e.g. "NIFTY"): the last one opened; none until the user picks one.
+  const [scrip, setScrip] = useState(() => loadRecentScrips()[0] ?? '');
   const [selectedExpiryMonth, setSelectedExpiryMonth] = useState(currentMonthIST());
   const [fetching, setFetching] = useState(false);
   const lastFetchedRef = useRef('');
@@ -77,6 +79,7 @@ const OiHistory: React.FC = () => {
     let stale = false;
     setUnderlyingStock(null);
     setShowZones(false);
+    if (!scrip) return;
     findNseStock(scrip)
       .then((stock) => { if (!stale) setUnderlyingStock(stock); })
       .catch(() => { /* no zones button */ });
@@ -84,7 +87,19 @@ const OiHistory: React.FC = () => {
   }, [scrip]);
   const [fairExpiry, setFairExpiry] = useState<string | null>(null);
   const [recentScrips, setRecentScrips] = useState<string[]>(() => loadRecentScrips());
-  const [scripOptions, setScripOptions] = useState(DEFAULT_SCRIP_OPTIONS);
+  const underlyings = useUnderlyings();
+  const scripOptions = useMemo(() => underlyings.map((u) => ({ value: u.name, label: u.label })), [underlyings]);
+
+  // Once the list is known, drop recent scrips it no longer has (e.g. a name
+  // saved under an old alias), so the page doesn't open an empty scrip.
+  useEffect(() => {
+    if (underlyings.length === 0) return;
+    const known = new Set(underlyings.map((u) => u.name));
+    const kept = loadRecentScrips().filter((value) => known.has(value));
+    setRecentScrips(kept);
+    saveRecentScrips(kept);
+    setScrip((current) => (current && !known.has(current) ? kept[0] ?? '' : current));
+  }, [underlyings]);
   const [expiryMonthOptions, setExpiryMonthOptions] = useState<{ value: string; label: string }[]>(() => {
     const current = currentMonthIST();
     return [{ value: current, label: formatMonthLabel(current) }];
@@ -123,6 +138,7 @@ const OiHistory: React.FC = () => {
 
   // Fetch available future expiry months for the selected scrip from instruments
   useEffect(() => {
+    if (!scrip) return;
     const current = currentMonthIST();
     let stale = false;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -170,21 +186,6 @@ const OiHistory: React.FC = () => {
       if (retryTimer) clearTimeout(retryTimer);
     };
   }, [scrip]);
-
-  // Fetch available F&O symbols on mount
-  useEffect(() => {
-    apiClient.get<string[]>('/api/fno-symbols', { signal: pageSignal })
-      .then((symbols) => {
-        if (symbols.length > 0) {
-          const options = symbols.map((name: string) => ({
-            value: name === 'NIFTY' ? 'NIFTY50' : name,
-            label: name === 'NIFTY' ? 'NIFTY 50' : name === 'BANKNIFTY' ? 'BANK NIFTY' : name,
-          }));
-          setScripOptions(options);
-        }
-      })
-      .catch(() => { /* keep defaults */ });
-  }, []);
 
   const selectableExpiryMonthOptions = useMemo(() => {
     const current = currentMonthIST();
@@ -378,7 +379,7 @@ const OiHistory: React.FC = () => {
     setFetchResult(null);
     setFetchError(null);
 
-    loadData();
+    if (scrip) loadData();
   }, [scrip, selectedExpiryMonth, loadData]);
 
   /** Delete all OI history for the selected scrip */
@@ -1194,6 +1195,7 @@ const OiHistory: React.FC = () => {
               value={scrip}
               options={scripOptions}
               onChange={(v) => selectScrip(String(v))}
+              placeholder="Select instrument"
               searchable
               disabled={fetching}
             />
@@ -1249,7 +1251,7 @@ const OiHistory: React.FC = () => {
             <button
               className="app-btn app-btn--primary"
               onClick={handleFetch}
-              disabled={fetching}
+              disabled={fetching || !scrip}
               title={fetchableExpiryMonths.length > 0
                 ? `Fetch ${scrip} data for ${fetchableExpiryMonths.length} current/future expiry month(s) (${fetchableExpiryMonths.join(', ')}) from Kite`
                 : 'Historical expiry months are loaded from stored database data'}
@@ -1273,7 +1275,7 @@ const OiHistory: React.FC = () => {
                 <button
                   className="oi-history__data-menu-item oi-history__data-menu-item--danger"
                   onClick={() => { setIsDataMenuOpen(false); setConfirmDelete(true); }}
-                  disabled={fetching}
+                  disabled={fetching || !scrip}
                   role="menuitem"
                   title={`Delete all OI history data for ${scrip}`}
                 >

@@ -1,11 +1,66 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTheme, ACCENT_THEMES } from '@/context/ThemeContext';
 import { SettingsIcon } from '@/components/icons/Icons';
+import AppSelect from '@/components/AppSelect/AppSelect';
+import { useAbortSignal } from '@/hooks/useAbortSignal';
+import { useKiteSession } from '@/hooks/useKiteSession';
+import { fetchUnderlyings, setAlwaysSnapshot, type Underlying } from '@/services/underlyings';
 import '@/styles/settings.css';
 
 const TRADING_MODE_KEY = 'optiontrap_order_mode';
 
+/**
+ * Admin: which Option Analyzer symbols get an OI snapshot every trading day.
+ * Each tick or untick is saved straight away (instruments.always_snapshot).
+ */
+const AlwaysSnapshotSetting: React.FC = () => {
+  const signal = useAbortSignal();
+  const [underlyings, setUnderlyings] = useState<Underlying[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchUnderlyings(signal)
+      .then((list) => setUnderlyings(list.filter((u) => u.instrumentToken !== null)))
+      .catch((err) => { if (!signal.aborted) setError(err.message); });
+  }, []);
+
+  const toggle = async (name: string | number) => {
+    const current = underlyings.find((u) => u.name === name);
+    if (!current) return;
+    const next = !current.alwaysSnapshot;
+    const apply = (value: boolean) => setUnderlyings((list) => list.map((u) => (u.name === name ? { ...u, alwaysSnapshot: value } : u)));
+    apply(next);
+    setError(null);
+    try {
+      await setAlwaysSnapshot(current.name, next);
+    } catch (err) {
+      apply(!next);
+      setError(`Could not update ${current.label}: ${(err as Error).message}`);
+    }
+  };
+
+  return (
+    <div className="settings-section">
+      <h2 className="settings-section__title">Always Snapshot</h2>
+      <p className="settings-section__description">
+        Symbols whose option chain OI is snapshotted every trading day, whether or not anyone opens them
+        in the Option Analyzer. Other symbols are snapshotted only on the day someone picks them.
+      </p>
+      <AppSelect
+        selectedValues={underlyings.filter((u) => u.alwaysSnapshot).map((u) => u.name)}
+        options={underlyings.map((u) => ({ value: u.name, label: u.label }))}
+        onChange={toggle}
+        placeholder="None"
+        searchable
+        className="settings-always-snapshot"
+      />
+      {error && <p className="settings-section__error">{error}</p>}
+    </div>
+  );
+};
+
 const Settings: React.FC = () => {
+  const { session } = useKiteSession();
   const { accent, setAccent } = useTheme();
   const [tradingMode, setTradingMode] = useState<'paper' | 'live'>(() =>
     (localStorage.getItem(TRADING_MODE_KEY) as 'paper' | 'live') || 'paper'
@@ -61,6 +116,8 @@ const Settings: React.FC = () => {
           ))}
         </div>
       </div>
+
+      {session?.isAdmin === true && <AlwaysSnapshotSetting />}
 
       <div className="settings-section">
         <h2 className="settings-section__title">Notifications</h2>

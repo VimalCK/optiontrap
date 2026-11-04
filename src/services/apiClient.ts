@@ -40,6 +40,17 @@ function serializeBody(body: ApiRequestOptions['body'], headers: Headers): BodyI
   return JSON.stringify(body);
 }
 
+/**
+ * Whether a 401/403 means the Kite login has ended. Kite also answers 403 for
+ * a call this Kite app isn't allowed (PermissionException, e.g. quotes without
+ * market-data access): that is an ordinary error, not a reason to log out.
+ */
+export function isLoginEnded(status: number, body: unknown): boolean {
+  if (status === 401) return true;
+  if (status !== 403) return false;
+  return !(body && typeof body === 'object' && 'error_type' in body && body.error_type === 'PermissionException');
+}
+
 async function readBody(response: Response): Promise<unknown> {
   if (isJsonResponse(response)) return response.json().catch(() => null);
   return response.text().catch(() => '');
@@ -56,7 +67,7 @@ async function request<T>(url: string, options: ApiRequestOptions = {}): Promise
   });
 
   const parsedBody = await readBody(response);
-  if (response.status === 401 || response.status === 403) {
+  if (isLoginEnded(response.status, parsedBody)) {
     handleKiteAuthFailure();
     throw new ApiError('Session expired. Please login again.', response.status, parsedBody);
   }
@@ -87,7 +98,8 @@ export const apiClient = {
       credentials: requestOptions.credentials ?? 'include',
       body: serializeBody(body, headers),
     });
-    if (response.status === 401 || response.status === 403) {
+    const errorBody = response.status === 403 ? await readBody(response.clone()) : null;
+    if (isLoginEnded(response.status, errorBody)) {
       handleKiteAuthFailure();
       throw new ApiError('Session expired. Please login again.', response.status);
     }

@@ -29,6 +29,7 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import crypto from 'crypto';
 import { createProxyMiddleware } from 'http-proxy-middleware';
+import { isKiteLoginError, readKiteBody } from './kiteErrors.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import path from 'path';
@@ -87,6 +88,9 @@ import {
   deleteOiHistoryByMonth,
   deleteOiHistoryByExpiryMonth,
   getFnoSymbols,
+  getUnderlyings,
+  getMarketReference,
+  setAlwaysSnapshot,
   deleteOiHistoryByScrip,
   getCashStock,
   getStockCandles,
@@ -102,11 +106,11 @@ import { getOrFetchInstruments } from './instruments.js';
 import { fetchOiHistoryMonth, OiHistoryFetchError, todayIST } from './oiHistoryFetch.js';
 import { OI_HISTORY_JOB, startOiHistoryScheduler } from './oiHistoryScheduler.js';
 import { startOiSnapshotScheduler, watchOiSnapshotSymbol } from './oiSnapshotScheduler.js';
+import { startInstrumentSync } from './instrumentSyncScheduler.js';
 import { checkSubscriptionAccess, inactiveSubscription } from './subscriptionAccess.js';
 import { backfillStockSetups, scanStock, syncStockCandles } from './stockCandles.js';
 import { startStockSetupScheduler } from './stockSetupScheduler.js';
 import { NIGHTLY_JOB_PREFIX, startNightlyJobs } from './nightlyJobs.js';
-import { NIFTY_50_TOKEN } from '../shared/stockSetups.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -948,8 +952,8 @@ app.get('/api/oi-snapshots/latest', requireAuth, requireSubscription, async (req
   }
 });
 
-// Snapshot a symbol's option chain for the rest of today (NIFTY and BANKNIFTY
-// always are). The analyzer calls this when a symbol is opened; the first
+// Snapshot a symbol's option chain for the rest of today (the always-snapshot
+// symbols always are). The analyzer calls this when a symbol is opened; the first
 // snapshot is taken before responding so the chart has data straight away.
 app.post('/api/oi-snapshots/watch', requireAuth, requireSubscription, async (req, res) => {
   const symbol = typeof req.body?.symbol === 'string' ? req.body.symbol.trim().toUpperCase() : '';
@@ -970,7 +974,7 @@ app.post('/api/oi-snapshots/watch', requireAuth, requireSubscription, async (req
  * POST /api/oi-history/fetch — Fetch historical daily OI candles from Kite.
  * Fetches missing dates from the current month and always refreshes today.
  * Streams progress via Server-Sent Events (SSE).
- * Body: { scrip: 'NIFTY50', expiryMonth: 'YYYY-MM' }
+ * Body: { scrip: 'NIFTY', expiryMonth: 'YYYY-MM' }
  *
  * SSE events:
  *   step     — { step, message }
@@ -1030,7 +1034,7 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
 });
 
 /**
- * GET /api/oi-history/expiry-months?scrip=NIFTY50
+ * GET /api/oi-history/expiry-months?scrip=NIFTY
  * Returns list of future expiry months available in current instruments.
  */
 app.get('/api/oi-history/expiry-months', requireAuth, requireSubscription, async (req, res) => {
@@ -1042,12 +1046,11 @@ app.get('/api/oi-history/expiry-months', requireAuth, requireSubscription, async
 
     const { apiKey, accessToken } = req.session.kiteSession;
     const instruments = await getOrFetchInstruments(apiKey, accessToken);
-    const scripName = scrip === 'NIFTY50' ? 'NIFTY' : scrip;
     const minExpiryDate = todayIST();
     const liveMonths = [...new Set(
       instruments
         .filter((inst) =>
-          inst.name === scripName &&
+          inst.name === scrip &&
           inst.exchange === 'NFO' &&
           (inst.instrumentType === 'CE' || inst.instrumentType === 'PE') &&
           inst.expiry &&
@@ -1069,7 +1072,7 @@ app.get('/api/oi-history/expiry-months', requireAuth, requireSubscription, async
 });
 
 /**
- * GET /api/oi-history?scrip=NIFTY50&expiryMonth=YYYY-MM
+ * GET /api/oi-history?scrip=NIFTY&expiryMonth=YYYY-MM
  * Returns stored OI history data for the selected expiry month.
  */
 app.get('/api/oi-history', requireAuth, requireSubscription, async (req, res) => {
@@ -1107,8 +1110,9 @@ app.get('/api/oi-history/futures', requireAuth, requireSubscription, async (req,
 /** Candles as compact [date, open, high, low, close, volume] rows: about half the JSON of objects. */
 const compactCandles = (candles) => candles.map((c) => [c.date, c.open, c.high, c.low, c.close, c.volume]);
 
-// One stock's stored daily candles plus NIFTY 50's, brought up to date with the
-// user's own Kite session first. If Kite fails but candles are stored, they are
+// One stock's stored daily candles plus the market reference index's (none when
+// no index is marked is_market_reference), brought up to date with the user's
+// own Kite session first. If Kite fails but candles are stored, they are
 // returned with a warning rather than an error.
 app.get('/api/stocks/:token/candles', requireAuth, requireSubscription, async (req, res) => {
   try {
@@ -1119,8 +1123,9 @@ app.get('/api/stocks/:token/candles', requireAuth, requireSubscription, async (r
     const kite = req.session.kiteSession;
     let warning = null;
     let synced = false;
+    const reference = await getMarketReference();
     try {
-      await syncStockCandles(NIFTY_50_TOKEN, kite);
+      if (reference) await syncStockCandles(reference.instrumentToken, kite);
       const sync = await syncStockCandles(token, kite);
       synced = !sync.skipped;
     } catch (err) {
@@ -1128,14 +1133,14 @@ app.get('/api/stocks/:token/candles', requireAuth, requireSubscription, async (r
       warning = err.message;
     }
 
-    const [candles, market] = await Promise.all([getStockCandles(token), getStockCandles(NIFTY_50_TOKEN)]);
+    const [candles, market] = await Promise.all([getStockCandles(token), reference ? getStockCandles(reference.instrumentToken) : []]);
     if (!candles.length) {
       return res.status(502).json({ status: 'error', message: warning || 'Kite returned no daily candles for this stock' });
     }
     // Keep the watchlist's Setups column in step with what the panel shows.
     if (synced) await scanStock(stock, market).catch((err) => console.warn(`[Stocks] Scan failed for ${stock.tradingsymbol}:`, err.message));
 
-    res.json({ status: 'ok', data: { stock, candles: compactCandles(candles), market: compactCandles(market), warning } });
+    res.json({ status: 'ok', data: { stock, candles: compactCandles(candles), market: compactCandles(market), marketLabel: reference?.label ?? null, warning } });
   } catch (err) {
     console.error('[Stocks] Candles GET error:', err.message);
     res.status(500).json({ status: 'error', message: err.message });
@@ -1258,7 +1263,7 @@ app.patch('/api/oi-history/signals/:id/outcome', requireAuth, requireSubscriptio
 });
 
 /**
- * DELETE /api/oi-history?scrip=NIFTY50
+ * DELETE /api/oi-history?scrip=NIFTY
  * Deletes all OI history rows for the given scrip.
  */
 app.delete('/api/oi-history', requireAuth, requireSubscription, async (req, res) => {
@@ -1308,6 +1313,39 @@ app.get('/api/fno-symbols', requireAuth, requireSubscription, async (req, res) =
   }
 });
 
+/**
+ * GET /api/underlyings
+ * F&O underlyings with their price instrument and display settings:
+ * [{ name, label, instrumentToken, exchange, tradingsymbol, tradingviewSymbol, alwaysSnapshot, isMarketReference }]
+ */
+app.get('/api/underlyings', requireAuth, requireSubscription, async (req, res) => {
+  try {
+    res.json({ status: 'ok', data: await getUnderlyings() });
+  } catch (err) {
+    console.error('[Underlyings] Error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+/**
+ * PATCH /api/admin/underlyings/:name  Body: { alwaysSnapshot: boolean }
+ * Mark an underlying to be OI-snapshotted every trading day, or not.
+ */
+app.patch('/api/admin/underlyings/:name', requireAuth, requireAdmin, async (req, res) => {
+  const { alwaysSnapshot } = req.body || {};
+  if (typeof alwaysSnapshot !== 'boolean') {
+    return res.status(400).json({ status: 'error', message: 'alwaysSnapshot must be true or false' });
+  }
+  try {
+    const underlying = await setAlwaysSnapshot(req.params.name, alwaysSnapshot);
+    if (!underlying) return res.status(404).json({ status: 'error', message: `No price instrument for ${req.params.name}` });
+    res.json({ status: 'ok', data: underlying });
+  } catch (err) {
+    console.error('[Underlyings] Update error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
 // ---------- Instruments (shared cache) ----------
 
 app.get('/instruments', requireAuth, requireSubscription, async (req, res) => {
@@ -1353,12 +1391,15 @@ app.use('/api', requireAuth, requireSubscription, apiLimiter, createProxyMiddlew
       proxyReq.setHeader('Accept', 'application/json');
     },
     proxyRes: (proxyRes, req) => {
-      if (proxyRes.statusCode === 403) {
-        // Clear expired Kite session but keep the session itself intact
-        // so the remember cookie + pending credentials still work
+      if (proxyRes.statusCode !== 403) return;
+      // Clear an expired Kite login but keep the session itself intact so the
+      // remember cookie + pending credentials still work. A 403 for a call this
+      // Kite app isn't allowed (PermissionException) leaves the login alone.
+      readKiteBody(proxyRes).then((body) => {
+        if (!isKiteLoginError(body)) return;
         delete req.session.kiteSession;
         req.session.save(() => {});
-      }
+      });
     },
   },
 }));
@@ -1541,13 +1582,15 @@ async function start() {
   evaluateSignals();
   setInterval(evaluateSignals, 60 * 60 * 1000).unref();
 
-  // Snapshot NIFTY/BANKNIFTY (and symbols opened today) every 10 minutes in market hours.
+  // Sync the instrument list from 08:30 IST each day (at startup if that time has passed).
+  startInstrumentSync();
+  // Snapshot the always-snapshot symbols (and symbols opened today) every 10 minutes in market hours.
   startOiSnapshotScheduler();
   // Fetch tracked scrips' OI history after the close so no trading day is missed.
   startOiHistoryScheduler();
   // Then update watchlist stocks' daily candles and scan them for setups.
   startStockSetupScheduler();
-  // Run every file in server/jobs/nightly/ from 22:00 IST.
+  // Run every file in server/jobs/nightly/ from 08:30 IST (at startup if that time has passed).
   startNightlyJobs();
 
   server.listen(PORT, () => {

@@ -47,44 +47,12 @@ export async function fetchOptions(symbol: string, signal?: AbortSignal): Promis
 }
 
 /**
- * Look up the spot token for a symbol from the instruments cache.
- * For indices, returns known tokens. For stocks, finds the NSE EQ instrument.
- */
-export function getSpotToken(symbol: string): number | null {
-  const INDEX_TOKENS: Record<string, number> = {
-    NIFTY: 256265,
-    BANKNIFTY: 260105,
-  };
-
-  if (INDEX_TOKENS[symbol]) return INDEX_TOKENS[symbol];
-
-  if (!instrumentsCache) return null;
-  const eq = instrumentsCache.find(
-    (i: any) => i.exchange === 'NSE' && i.instrumentType === 'EQ' && i.tradingsymbol === symbol,
-  );
-  return eq ? eq.instrumentToken : null;
-}
-
-/**
  * Look up the lot size for an instrument token from the cache.
  */
 export function getLotSize(instrumentToken: number): number {
   if (!instrumentsCache) return 1;
   const inst = instrumentsCache.find((i: any) => i.instrumentToken === instrumentToken);
   return inst?.lotSize || 1;
-}
-
-/**
- * Fetch the list of available F&O symbols.
- */
-export async function fetchFnoSymbols(signal?: AbortSignal): Promise<string[]> {
-  try {
-    const symbols = await apiClient.get<string[]>('/api/fno-symbols', { signal });
-    if (symbols.length > 0) return symbols;
-  } catch (err) {
-    if (signal?.aborted) throw err;
-  }
-  return ['NIFTY', 'BANKNIFTY'];
 }
 
 /**

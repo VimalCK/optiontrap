@@ -126,7 +126,7 @@ export async function syncStockCandles(instrumentToken, kite, { now = new Date()
 /**
  * Re-scan one stock from its stored candles.
  * @param {{ instrumentToken: number, tradingsymbol: string }} stock
- * @param {Array<{ date: string, close: number }>} marketCandles  NIFTY 50, for the market check
+ * @param {Array<{ date: string, close: number }>} marketCandles  the market reference index; empty skips the market check
  */
 export async function scanStock(stock, marketCandles) {
   const candles = await getStockCandles(stock.instrumentToken);

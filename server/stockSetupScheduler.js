@@ -4,7 +4,7 @@
  * On weekdays from 15:45 IST, once the OI history job has finished (both use
  * the admin's Kite historical-data limit), bring every watchlist stock's daily
  * candles up to date, then re-scan each for setups and move open setups
- * forward. NIFTY 50 is synced first as the market reference.
+ * forward. The market reference index (is_market_reference) is synced first.
  *
  * One run per IST date, recorded in scheduled_job_runs.
  */
@@ -12,6 +12,7 @@
 import {
   claimScheduledJobRun,
   finishScheduledJobRun,
+  getMarketReference,
   getScheduledJobStatus,
   getStockCandles,
   getWatchlistStocks,
@@ -19,7 +20,6 @@ import {
 import { istClock, isAfterCloseOnWeekday } from './marketClock.js';
 import { OI_HISTORY_JOB, findWorkingAdminSession } from './oiHistoryScheduler.js';
 import { scanStock, syncStockCandles } from './stockCandles.js';
-import { NIFTY_50_TOKEN } from '../shared/stockSetups.js';
 
 export const STOCK_SETUPS_JOB = 'stock-setups-after-close';
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
@@ -51,13 +51,17 @@ async function runAfterCloseScan(date) {
     const stocks = await getWatchlistStocks();
     console.log(`[Scheduler] ${STOCK_SETUPS_JOB}: syncing ${stocks.length} watchlist stock(s)`);
 
-    try {
-      await syncStockCandles(NIFTY_50_TOKEN, kite);
-    } catch (err) {
-      results.push({ tradingsymbol: 'NIFTY 50', error: err.message });
-      if (err.status === 401 || err.status === 403) authFailed = true;
+    // Without a market reference the setups skip the market check.
+    const reference = await getMarketReference();
+    if (reference) {
+      try {
+        await syncStockCandles(reference.instrumentToken, kite);
+      } catch (err) {
+        results.push({ tradingsymbol: reference.label, error: err.message });
+        if (err.status === 401 || err.status === 403) authFailed = true;
+      }
     }
-    const market = await getStockCandles(NIFTY_50_TOKEN);
+    const market = reference ? await getStockCandles(reference.instrumentToken) : [];
 
     for (const stock of authFailed ? [] : stocks) {
       try {

@@ -13,22 +13,14 @@
  */
 
 import { getInstrumentsDate, getInstruments, saveInstruments, withAdvisoryLock } from './db.js';
-import { marketDate } from '../shared/marketTime.js';
+import { currentInstrumentListStart } from './marketClock.js';
 
 // Arbitrary constant identifying the instruments-fetch advisory lock.
 const INSTRUMENTS_FETCH_LOCK = 573210;
 
-// Stored with the fetch date; bump it when the instrument mix changes so the
-// day's cache is refetched instead of served until tomorrow.
+// Stored with the load time; bump it when the instrument mix changes so the
+// stored list is refetched instead of served until the next refresh.
 const CACHE_VERSION = 'v4-bse-scrip-code';
-const cacheStamp = (date) => `${date}|${CACHE_VERSION}`;
-
-/**
- * Get today's date in IST as YYYY-MM-DD.
- */
-function getTodayIST() {
-  return marketDate();
-}
 
 // ---------------------------------------------------------------------------
 // CSV Parsing
@@ -268,53 +260,68 @@ async function fetchFromKite(apiKey, accessToken) {
 // ---------------------------------------------------------------------------
 
 /**
+ * Whether a stored load stamp (`<ISO load time>|<CACHE_VERSION>`) is current:
+ * same version, and loaded after the instrument list in use at `now` was
+ * published. Older date-only stamps parse as midnight UTC and so count as stale.
+ */
+export function isInstrumentStampFresh(stamp, now = new Date()) {
+  if (!stamp) return false;
+  const [loadedAt, version] = String(stamp).split('|');
+  const loadedMs = Date.parse(loadedAt);
+  return version === CACHE_VERSION && !Number.isNaN(loadedMs) && loadedMs >= currentInstrumentListStart(now);
+}
+
+/** Whether the instruments table holds the current list (see isInstrumentStampFresh). */
+export async function instrumentsAreFresh() {
+  return isInstrumentStampFresh(await getInstrumentsDate());
+}
+
+/**
  * Get instruments — from the database cache or Kite API.
  *
- * A cross-process advisory lock ensures only one fetch happens per day even
- * across multiple app replicas; concurrent callers block on the lock and then
- * read the freshly-cached rows instead of calling Kite again.
+ * The table is refreshed once per published list (from 08:30 IST each day).
+ * A cross-process advisory lock ensures only one fetch happens even across
+ * multiple app replicas; concurrent callers block on the lock and then read
+ * the freshly-saved rows instead of calling Kite again.
  *
  * @param {string} apiKey - Caller's API key (used only if fetch is needed)
  * @param {string} accessToken - Caller's access token
  * @returns {Promise<any[]>} Array of instrument objects
  */
 export async function getOrFetchInstruments(apiKey, accessToken) {
-  const today = getTodayIST();
-
-  // 1. Fast path — return today's cache without locking.
-  const cachedDate = await getInstrumentsDate();
-  if (cachedDate === cacheStamp(today)) {
+  // 1. Fast path — the stored list is current, no locking.
+  if (await instrumentsAreFresh()) {
     const cached = await getInstruments();
     if (cached.length > 0) return cached;
   }
 
   // 2. Within this process, concurrent callers share one in-flight load rather
   //    than each holding a pooled connection while blocked on the advisory lock.
-  if (!inFlightLoad || inFlightLoad.date !== today) {
-    const promise = loadWithLock(apiKey, accessToken, today)
+  const listStart = currentInstrumentListStart();
+  if (!inFlightLoad || inFlightLoad.listStart !== listStart) {
+    const promise = loadWithLock(apiKey, accessToken)
       .finally(() => { if (inFlightLoad?.promise === promise) inFlightLoad = null; });
-    inFlightLoad = { date: today, promise };
+    inFlightLoad = { listStart, promise };
   }
   return inFlightLoad.promise;
 }
 
-/** @type {{ date: string, promise: Promise<any[]> } | null} */
+/** @type {{ listStart: number, promise: Promise<any[]> } | null} */
 let inFlightLoad = null;
 
-async function loadWithLock(apiKey, accessToken, today) {
+async function loadWithLock(apiKey, accessToken) {
   // 3. Serialize the fetch across replicas.
   return withAdvisoryLock(INSTRUMENTS_FETCH_LOCK, async () => {
     // Re-check inside the lock — another caller may have just fetched.
-    const recheckDate = await getInstrumentsDate();
-    if (recheckDate === cacheStamp(today)) {
+    if (await instrumentsAreFresh()) {
       const cached = await getInstruments();
       if (cached.length > 0) return cached;
     }
 
     console.log('[Instruments] Fetching NSE + NFO + BSE instruments from Kite...');
     const instruments = await fetchFromKite(apiKey, accessToken);
-    await saveInstruments(instruments, cacheStamp(today));
-    console.log(`[Instruments] Cached ${instruments.length} instruments (NSE EQ + NFO F&O + BSE-only EQ) for ${today}`);
+    const summary = await saveInstruments(instruments, `${new Date().toISOString()}|${CACHE_VERSION}`);
+    console.log(`[Instruments] Synced ${instruments.length} instruments: ${summary.added} added, ${summary.updated} updated, ${summary.removed} removed`);
     return instruments;
   });
 }

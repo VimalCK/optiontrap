@@ -15,8 +15,10 @@ import { marketDate } from '../../shared/marketTime.js';
 export interface StockCandles {
   stock: { instrumentToken: number; tradingsymbol: string };
   candles: Candle[];
-  /** NIFTY 50, for the market check. */
+  /** The market reference index, for the market check; empty when none is set. */
   market: Candle[];
+  /** That index's label, e.g. as shown in Settings; null when none is set. */
+  marketLabel: string | null;
   /** Set when Kite couldn't be reached and stored candles were returned instead. */
   warning: string | null;
 }
@@ -70,7 +72,7 @@ function untilAborted<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> 
 }
 
 /**
- * One stock's daily candles and NIFTY 50's, cached in memory for the day.
+ * One stock's daily candles and the market reference index's, cached in memory for the day.
  *
  * The shared request is never tied to a caller's signal: aborting one caller
  * (e.g. a StrictMode remount) would otherwise hand the next caller a cancelled
@@ -82,10 +84,10 @@ export function fetchStockCandles(instrumentToken: number, signal?: AbortSignal)
   if (hit && hit.day === day) return untilAborted(hit.data, signal);
 
   const data = apiClient
-    .get<{ stock: StockCandles['stock']; candles: CompactCandle[]; market: CompactCandle[]; warning: string | null }>(
+    .get<{ stock: StockCandles['stock']; candles: CompactCandle[]; market: CompactCandle[]; marketLabel: string | null; warning: string | null }>(
       `/api/stocks/${instrumentToken}/candles`,
     )
-    .then((raw) => ({ stock: raw.stock, candles: parseKiteCandles(raw.candles), market: parseKiteCandles(raw.market), warning: raw.warning }));
+    .then((raw) => ({ stock: raw.stock, candles: parseKiteCandles(raw.candles), market: parseKiteCandles(raw.market), marketLabel: raw.marketLabel, warning: raw.warning }));
   cache.set(instrumentToken, { day, data });
   // Don't keep a failed request: the next open should try again.
   data.catch(() => { if (cache.get(instrumentToken)?.data === data) cache.delete(instrumentToken); });

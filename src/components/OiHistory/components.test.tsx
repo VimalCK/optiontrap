@@ -32,7 +32,7 @@ const cell = (overrides: Partial<OiCellData>): OiCellData => ({
 
 describe('FuturesContext', () => {
   it('renders nothing without futures data', () => {
-    expect(renderToStaticMarkup(<FuturesContext futuresData={[]} filterDate="2026-10-23" scrip="NIFTY50" />)).toBe('');
+    expect(renderToStaticMarkup(<FuturesContext futuresData={[]} filterDate="2026-10-23" scrip="NIFTY" />)).toBe('');
   });
 
   it('shows each month for the selected date with its signal', () => {
@@ -45,7 +45,7 @@ describe('FuturesContext', () => {
           futuresRow('2026-10-23', '2026-11-24', 22450, 600),
         ]}
         filterDate="2026-10-23"
-        scrip="NIFTY50"
+        scrip="NIFTY"
       />,
     );
     expect(html).toContain('Futures Context');

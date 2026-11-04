@@ -1,5 +1,6 @@
 import React from 'react';
 import { tradingViewUrl } from '@/services/tradingview';
+import { useUnderlyings } from '@/hooks/useUnderlyings';
 import './TradingViewLink.css';
 
 interface TradingViewLinkProps {
@@ -21,10 +22,12 @@ const TradingViewLink: React.FC<TradingViewLinkProps> = ({
   size = 14,
   className = '',
   title,
-}) => (
+}) => {
+  const underlyings = useUnderlyings();
+  return (
   <a
     className={`tv-link ${className}`}
-    href={tradingViewUrl(symbol, exchange)}
+    href={tradingViewUrl(symbol, exchange, underlyings)}
     target="_blank"
     rel="noopener noreferrer"
     title={title || 'Open chart on TradingView'}
@@ -36,6 +39,7 @@ const TradingViewLink: React.FC<TradingViewLinkProps> = ({
       <path d="M10 4h3v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   </a>
-);
+  );
+};
 
 export default TradingViewLink;

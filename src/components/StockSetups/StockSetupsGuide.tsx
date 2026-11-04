@@ -18,10 +18,10 @@ const SETUPS: GuideRow[] = [
 ];
 
 const MARKET: GuideRow[] = [
-  { label: 'Falling on its own', tone: 'bear', rule: 'Stock ≤ −3% · 3%+ worse than NIFTY', meaning: 'Company-specific selling. Riskiest to buy.' },
-  { label: 'Falling with market', tone: 'warn', rule: 'Stock down · NIFTY ≤ −3%', meaning: 'Usually recovers when the market does.' },
-  { label: 'Stronger than market', tone: 'bull', rule: '3%+ better than NIFTY', meaning: 'Relative strength: buyers favour it.' },
-  { label: 'In line', tone: 'muted', rule: 'Otherwise', meaning: 'Moving with NIFTY.' },
+  { label: 'Falling on its own', tone: 'bear', rule: 'Stock ≤ −3% · 3%+ worse than the index', meaning: 'Company-specific selling. Riskiest to buy.' },
+  { label: 'Falling with market', tone: 'warn', rule: 'Stock down · index ≤ −3%', meaning: 'Usually recovers when the market does.' },
+  { label: 'Stronger than market', tone: 'bull', rule: '3%+ better than the index', meaning: 'Relative strength: buyers favour it.' },
+  { label: 'In line', tone: 'muted', rule: 'Otherwise', meaning: 'Moving with the index.' },
 ];
 
 const STRENGTH: GuideRow[] = [
@@ -84,7 +84,7 @@ const StockSetupsGuide: React.FC = () => (
       <GuideSection title="Zone history" wide>
         <GuideTerms terms={HISTORY} />
       </GuideSection>
-      <GuideSection title="Stock vs NIFTY 50" wide>
+      <GuideSection title="Stock vs the market index" wide>
         <GuideRows rows={MARKET} />
       </GuideSection>
       <GuideSection title="Trade levels" wide>

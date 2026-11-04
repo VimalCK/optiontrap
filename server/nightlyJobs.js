@@ -1,8 +1,9 @@
 /**
  * Nightly jobs.
  *
- * Every night from 22:00 IST, run each job file in server/jobs/nightly/ once,
- * in filename order. The runner doesn't know what a job does:
+ * Every day from 08:30 IST, run each job file in server/jobs/nightly/ once,
+ * in filename order. If the server was down at 08:30, they run as soon as it
+ * starts again that day. The runner doesn't know what a job does:
  *
  *   - `.sql` files run in one transaction.
  *   - `.js` files export `default async function run({ query, date, log })`;
@@ -14,7 +15,7 @@
  *
  * Each run is recorded in scheduled_job_runs as `nightly:<file>` for the IST
  * date, so a restart doesn't repeat a finished job and two servers can't run
- * the same job at once. A failed job is not retried until the next night,
+ * the same job at once. A failed job is not retried until the next day,
  * since it may have half-done something (like sending some of its emails).
  * Jobs should still be safe to run twice: a crash mid-run is retried once the
  * run has been stale for two hours.
@@ -35,7 +36,7 @@ import { istClock, isNightlyJobTime } from './marketClock.js';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const NIGHTLY_JOBS_DIR = path.join(__dirname, 'jobs', 'nightly');
 export const NIGHTLY_JOB_PREFIX = 'nightly:';
-/** Hourly is enough: the 22:00-midnight window always contains at least one check. */
+/** Checked at startup, then hourly: the 08:30-midnight window always contains a check. */
 const CHECK_INTERVAL_MS = 60 * 60 * 1000;
 const SQL_TIMEOUT_MS = 10 * 60 * 1000;
 

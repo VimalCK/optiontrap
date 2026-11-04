@@ -15,7 +15,7 @@ import {
   RiskGroup,
   OiBar,
 } from '@/services/positionRisk';
-import { loadInstruments, Instrument } from '@/services/instruments';
+import { loadUnderlyings, type Underlying } from '@/services/underlyings';
 import '@/styles/positions.css';
 
 const fmtInr = (n: number) =>
@@ -23,19 +23,12 @@ const fmtInr = (n: number) =>
 
 export type PositionsMode = 'paper' | 'live';
 
-const INDEX_SPOTS: Record<string, { token: number; quoteKey: string }> = {
-  NIFTY: { token: 256265, quoteKey: 'NSE:NIFTY 50' },
-  BANKNIFTY: { token: 260105, quoteKey: 'NSE:NIFTY BANK' },
-};
-
-function getSpotInstrument(underlying: string, instruments: Instrument[]): { token: number; quoteKey: string } | null {
-  const indexSpot = INDEX_SPOTS[underlying];
-  if (indexSpot) return indexSpot;
-
-  const eq = instruments.find(
-    (inst) => inst.exchange === 'NSE' && inst.instrumentType === 'EQ' && inst.tradingsymbol === underlying,
-  );
-  return eq ? { token: eq.instrumentToken, quoteKey: `${eq.exchange}:${eq.tradingsymbol}` } : null;
+/** An underlying's price instrument (its index row, or the stock's NSE row). */
+function getSpotInstrument(name: string, underlyings: Underlying[]): { token: number; quoteKey: string } | null {
+  const u = underlyings.find((item) => item.name === name);
+  return u?.instrumentToken != null && u.tradingsymbol
+    ? { token: u.instrumentToken, quoteKey: `${u.exchange}:${u.tradingsymbol}` }
+    : null;
 }
 
 /**
@@ -648,12 +641,11 @@ const PaperPositions: React.FC = () => {
     let unsubscribe: (() => void) | undefined;
 
     const loadSpotPrices = async () => {
-      const needsInstruments = underlyings.some((underlying) => !INDEX_SPOTS[underlying]);
-      const instruments = needsInstruments ? await loadInstruments().catch(() => []) : [];
+      const priceRows = await loadUnderlyings().catch(() => []);
       if (cancelled) return;
 
       const spotMeta = underlyings
-        .map((underlying) => ({ underlying, spot: getSpotInstrument(underlying, instruments) }))
+        .map((underlying) => ({ underlying, spot: getSpotInstrument(underlying, priceRows) }))
         .filter((item): item is { underlying: string; spot: { token: number; quoteKey: string } } => item.spot != null);
 
       if (spotMeta.length === 0) return;

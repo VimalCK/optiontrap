@@ -9,7 +9,7 @@ import {
   getOiHistoryDatesForExpiryMonth,
   getOptionsForAtm,
   getOptionsForStrikes,
-  getSpotToken,
+  getUnderlying,
   getStoredOiHistoryStrikes,
   getStrikeStepSize,
   insertOiHistoryFuturesRows,
@@ -37,7 +37,7 @@ export class OiHistoryFetchError extends Error {
  * Fetches missing dates from the current month and always refreshes today.
  *
  * @param {object} options
- * @param {string} options.scrip          e.g. 'NIFTY50'
+ * @param {string} options.scrip          F&O name, e.g. 'NIFTY'
  * @param {string} options.expiryMonth    'YYYY-MM'
  * @param {string} [options.strikeMode]   'atmRange' | 'allStored' | 'specific'
  * @param {number} [options.specificStrike]
@@ -84,24 +84,14 @@ export async function fetchOiHistoryMonth({
 
   const authHeader = `token ${apiKey}:${accessToken}`;
 
-  // Determine scrip configuration dynamically
-  // Index scrips have known spot tokens; stocks use their NSE EQ token
-  const INDEX_SPOT_TOKENS = {
-    NIFTY: 256265,
-    BANKNIFTY: 260105,
-  };
-
-  // scripName is the name in the NFO instruments table
-  // For indices: scrip="NIFTY50" → scripName="NIFTY", scrip="BANKNIFTY" → scripName="BANKNIFTY"
-  // For stocks: scrip="RELIANCE" → scripName="RELIANCE"
-  const scripName = scrip === 'NIFTY50' ? 'NIFTY' : scrip;
-
-  const spotToken = INDEX_SPOT_TOKENS[scripName] || await getSpotToken(scripName);
+  // scrip is the F&O name the contracts carry ("NIFTY", "RELIANCE"); its spot
+  // is its price row (the index row, or the stock's NSE row).
+  const spotToken = (await getUnderlying(scrip))?.instrumentToken;
   if (!spotToken) {
     throw new OiHistoryFetchError(`Cannot find spot token for ${scrip}. Ensure instruments are loaded.`);
   }
 
-  const stepSize = await getStrikeStepSize(scripName);
+  const stepSize = await getStrikeStepSize(scrip);
   const range = 20;
   const fetchAllStoredStrikes = strikeMode === 'allStored';
   const fetchSpecificStrike = strikeMode === 'specific';
@@ -167,7 +157,7 @@ export async function fetchOiHistoryMonth({
     // Use the nearest futures contract in the selected expiry month.
     const instruments = await getOrFetchInstruments(apiKey, accessToken);
     const futuresContract = instruments
-      .filter((inst) => inst.name === scripName && inst.exchange === 'NFO' && inst.instrumentType === 'FUT'
+      .filter((inst) => inst.name === scrip && inst.exchange === 'NFO' && inst.instrumentType === 'FUT'
         && inst.expiry && inst.expiry.startsWith(expiryMonth) && inst.expiry >= today)
       .sort((a, b) => a.expiry.localeCompare(b.expiry))[0];
     if (futuresContract) {
@@ -200,11 +190,11 @@ export async function fetchOiHistoryMonth({
     for (const { date, spotClose, atm } of allDays) {
       let optionsSource;
       if (fetchSpecificStrike) {
-        optionsSource = await getOptionsForStrikes(scripName, [exactStrike], { targetMonth: expiryMonth });
+        optionsSource = await getOptionsForStrikes(scrip, [exactStrike], { targetMonth: expiryMonth });
       } else if (fetchAllStoredStrikes && storedStrikes.length > 0) {
-        optionsSource = await getOptionsForStrikes(scripName, storedStrikes, { targetMonth: expiryMonth });
+        optionsSource = await getOptionsForStrikes(scrip, storedStrikes, { targetMonth: expiryMonth });
       } else {
-        optionsSource = await getOptionsForAtm(scripName, atm, stepSize, range, { allExpiries: true, targetMonth: expiryMonth });
+        optionsSource = await getOptionsForAtm(scrip, atm, stepSize, range, { allExpiries: true, targetMonth: expiryMonth });
       }
       const options = optionsSource
         .filter((opt) => opt.expiry && opt.expiry >= date);

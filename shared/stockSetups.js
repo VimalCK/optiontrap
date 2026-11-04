@@ -11,7 +11,7 @@
  * 2. History check: how often each zone actually held on this stock, counted
  *    over its whole stored history. Zones come from the same history, so the
  *    count flatters them a little; it is evidence, not proof.
- * 3. Market check: the stock's 20-session move against NIFTY 50, so a stock
+ * 3. Market check: the stock's 20-session move against the market reference index, so a stock
  *    falling on its own news reads differently from one falling with the market.
  * 4. State and setups: whether the stock is falling, stretched, turning or
  *    trending, and any buy or sell setup on the latest session, each with an
@@ -54,9 +54,6 @@ export const SETUP_HOLD_SESSIONS = 20;
 export const SETUP_BACKFILL_DAYS = 365;
 const BREAKOUT_VOLUME_RATIO = 1.5;
 const MIN_REWARD_RISK = 1;
-
-/** The NIFTY 50 instrument token on Kite: the market reference. */
-export const NIFTY_50_TOKEN = 256265;
 
 const SETUP_LABELS = /** @type {Record<SetupType, string>} */ ({
   pullback: 'Pullback to support',
@@ -353,7 +350,7 @@ export function zoneHistory(candles, zone, side, movePct, failPct) {
 // ── Market, state, setups ────────────────────────────────────────────────
 
 /**
- * The stock's move over the last MARKET_WINDOW sessions against NIFTY 50 over the same dates.
+ * The stock's move over the last MARKET_WINDOW sessions against the market reference index over the same dates.
  * @param {Candle[]} stock
  * @param {Candle[]} market
  * @returns {MarketCheck | null}

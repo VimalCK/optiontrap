@@ -959,38 +959,100 @@ function lastPerKey(items, keyOf) {
   return [...new Map(items.map((item) => [keyOf(item), item])).values()];
 }
 
-export async function saveInstruments(instruments, dateIST) {
+/** Keep the first row per key, matching what ON CONFLICT DO NOTHING inserts would keep. */
+function firstPerKey(items, keyOf) {
+  const byKey = new Map();
+  for (const item of items) if (!byKey.has(keyOf(item))) byKey.set(keyOf(item), item);
+  return [...byKey.values()];
+}
+
+/**
+ * Our own columns on an underlying's price row (migration 017). The sync keeps
+ * them, and resets them to their defaults when Zerodha gives a token to a
+ * different tradingsymbol, so a setting never moves to another instrument.
+ */
+const UNDERLYING_COLUMN_DEFAULTS = {
+  fno_name: 'NULL',
+  label: 'NULL',
+  tradingview_symbol: 'NULL',
+  always_snapshot: 'false',
+  is_market_reference: 'false',
+};
+
+/**
+ * Sync the instruments table to Zerodha's latest list, in one transaction:
+ * update rows whose token is still listed, add new tokens, and delete tokens
+ * no longer listed (expired contracts, delisted stocks). Rows are updated in
+ * place rather than the table being wiped, so readers never see it empty.
+ * `stamp` is stored as the load marker (see instruments.js).
+ *
+ * @returns {Promise<{ added: number, updated: number, removed: number }>}
+ */
+export async function saveInstruments(instruments, stamp) {
+  const rowsToSave = firstPerKey(instruments, (inst) => inst.instrumentToken);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('DELETE FROM instruments');
-    await client.query("DELETE FROM instruments_meta WHERE key = 'last_fetched_date'");
 
-    // Row-by-row inserts of the full NSE + NFO list took minutes on a hosted DB,
-    // blocking every request that waits on the instruments cache.
-    await insertInBatches(
-      client,
-      `INSERT INTO instruments
-        (instrument_token, exchange_token, tradingsymbol, name, exchange, instrument_type, strike, expiry, lot_size)`,
-      'ON CONFLICT (instrument_token) DO NOTHING',
-      instruments.map((inst) => [
-        inst.instrumentToken,
-        inst.exchangeToken,
-        inst.tradingsymbol,
-        inst.name,
-        inst.exchange,
-        inst.instrumentType || 'EQ',
-        inst.strike || null,
-        inst.expiry || null,
-        inst.lotSize || null,
-      ]),
+    // Multi-row statements: row-by-row writes of the full NSE + NFO list took
+    // minutes on a hosted DB, blocking every request that waits on instruments.
+    // Unchanged rows are skipped by the WHERE, so a normal day writes little.
+    // xmax = 0 marks a freshly inserted row, which tells added from updated.
+    let added = 0;
+    let updated = 0;
+    const columnCount = 9;
+    for (let i = 0; i < rowsToSave.length; i += 1000) {
+      const batch = rowsToSave.slice(i, i + 1000);
+      const placeholders = batch.map((_, r) => `(${Array.from({ length: columnCount }, (_, c) => `$${r * columnCount + c + 1}`).join(', ')})`);
+      const result = await client.query(
+        `INSERT INTO instruments
+           (instrument_token, exchange_token, tradingsymbol, name, exchange, instrument_type, strike, expiry, lot_size)
+         VALUES ${placeholders.join(', ')}
+         ON CONFLICT (instrument_token) DO UPDATE SET
+           exchange_token = EXCLUDED.exchange_token,
+           tradingsymbol = EXCLUDED.tradingsymbol,
+           name = EXCLUDED.name,
+           exchange = EXCLUDED.exchange,
+           instrument_type = EXCLUDED.instrument_type,
+           strike = EXCLUDED.strike,
+           expiry = EXCLUDED.expiry,
+           lot_size = EXCLUDED.lot_size,
+           ${Object.entries(UNDERLYING_COLUMN_DEFAULTS).map(([col, reset]) => `${col} = CASE WHEN instruments.tradingsymbol = EXCLUDED.tradingsymbol THEN instruments.${col} ELSE ${reset} END`).join(',\n           ')}
+         WHERE (instruments.exchange_token, instruments.tradingsymbol, instruments.name, instruments.exchange,
+                instruments.instrument_type, instruments.strike, instruments.expiry, instruments.lot_size)
+           IS DISTINCT FROM
+               (EXCLUDED.exchange_token, EXCLUDED.tradingsymbol, EXCLUDED.name, EXCLUDED.exchange,
+                EXCLUDED.instrument_type, EXCLUDED.strike, EXCLUDED.expiry, EXCLUDED.lot_size)
+         RETURNING (xmax = 0) AS inserted`,
+        batch.flatMap((inst) => [
+          inst.instrumentToken,
+          inst.exchangeToken,
+          inst.tradingsymbol,
+          inst.name,
+          inst.exchange,
+          inst.instrumentType || 'EQ',
+          inst.strike || null,
+          inst.expiry || null,
+          inst.lotSize || null,
+        ]),
+      );
+      for (const row of result.rows) {
+        if (row.inserted) added++;
+        else updated++;
+      }
+    }
+
+    const removed = await client.query(
+      'DELETE FROM instruments WHERE NOT (instrument_token = ANY($1::bigint[]))',
+      [rowsToSave.map((inst) => inst.instrumentToken)],
     );
 
     await client.query(
       "INSERT INTO instruments_meta (key, value) VALUES ('last_fetched_date', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
-      [dateIST],
+      [stamp],
     );
     await client.query('COMMIT');
+    return { added, updated, removed: removed.rowCount };
   } catch (err) {
     await client.query('ROLLBACK');
     throw err;
@@ -1288,22 +1350,13 @@ export async function getLatestOiSnapshotTimestamp() {
   return row && row.ts !== null ? Number(row.ts) : null;
 }
 
-/** Add a symbol to a day's snapshot list. Returns true if it wasn't already there. */
-export async function addOiSnapshotSymbol(tradeDate, symbol) {
-  const result = await query(
-    'INSERT INTO oi_snapshot_symbols (trade_date, symbol) VALUES ($1, $2) ON CONFLICT DO NOTHING',
-    [tradeDate, symbol],
-  );
-  return result.rowCount > 0;
-}
-
-/** Symbols added to a day's snapshot list, oldest first. */
-export async function getOiSnapshotSymbols(tradeDate) {
+/** Instrument tokens (as strings) with OI in any of today's snapshots. */
+export async function getTodayOiSnapshotTokens() {
   const result = await rows(
-    'SELECT symbol FROM oi_snapshot_symbols WHERE trade_date = $1 ORDER BY added_at',
-    [tradeDate],
+    'SELECT DISTINCT jsonb_object_keys(data::jsonb) AS token FROM oi_snapshots WHERE timestamp >= $1',
+    [getTodayMidnight()],
   );
-  return result.map((r) => r.symbol);
+  return result.map((r) => r.token);
 }
 
 // ===========================================================================
@@ -1888,7 +1941,6 @@ export async function getScheduledJobRuns(job, limit = 10) {
 }
 
 export async function getOiHistoryExpiryMonths(scrip, minExpiryDate, limit = 3) {
-  const scripName = scrip === 'NIFTY50' ? 'NIFTY' : scrip;
   const result = await rows(
     `SELECT DISTINCT substr(expiry, 1, 7) AS month
      FROM instruments
@@ -1899,7 +1951,7 @@ export async function getOiHistoryExpiryMonths(scrip, minExpiryDate, limit = 3) 
        AND expiry >= $2
      ORDER BY month
      LIMIT $3`,
-    [scripName, minExpiryDate, limit],
+    [scrip, minExpiryDate, limit],
   );
   return result.map((r) => r.month);
 }
@@ -1946,12 +1998,77 @@ export async function getFnoSymbols() {
   return result.map((r) => r.name);
 }
 
-export async function getSpotToken(name) {
-  const row = await firstRow(
-    "SELECT instrument_token FROM instruments WHERE tradingsymbol = $1 AND exchange = 'NSE' AND instrument_type = 'EQ' LIMIT 1",
+/**
+ * F&O underlyings (the names option contracts carry) with their price row:
+ * the index row whose fno_name matches ("NIFTY" -> "NIFTY 50"), otherwise the
+ * stock's NSE EQ row of the same tradingsymbol. `name` limits it to one.
+ * instrumentToken is null when no price row is known for the name.
+ */
+async function queryUnderlyings(name = null) {
+  const result = await rows(
+    `WITH fno AS (
+       SELECT DISTINCT name FROM instruments
+       WHERE exchange = 'NFO' AND instrument_type IN ('CE', 'PE') AND ($1::text IS NULL OR name = $1)
+     )
+     SELECT DISTINCT ON (f.name)
+       f.name,
+       p.instrument_token, p.tradingsymbol, p.exchange,
+       p.label, p.tradingview_symbol, p.always_snapshot, p.is_market_reference
+     FROM fno f
+     -- Two joins rather than one with OR: the OR forces a nested loop (~0.6 s against ~30 ms).
+     LEFT JOIN instruments i ON i.fno_name = f.name
+     LEFT JOIN instruments e
+       ON e.fno_name IS NULL AND e.exchange = 'NSE' AND e.instrument_type = 'EQ' AND e.tradingsymbol = f.name
+     CROSS JOIN LATERAL (SELECT (CASE WHEN i.instrument_token IS NOT NULL THEN i ELSE e END).*) p
+     ORDER BY f.name`,
     [name],
   );
-  return row ? Number(row.instrument_token) : null;
+  return result.map((row) => ({
+    name: row.name,
+    label: row.label || row.name,
+    instrumentToken: row.instrument_token == null ? null : Number(row.instrument_token),
+    exchange: row.exchange,
+    tradingsymbol: row.tradingsymbol,
+    tradingviewSymbol: row.tradingview_symbol || row.tradingsymbol,
+    alwaysSnapshot: Boolean(row.always_snapshot),
+    isMarketReference: Boolean(row.is_market_reference),
+  }));
+}
+
+/** Every F&O underlying, by name. */
+export async function getUnderlyings() {
+  return queryUnderlyings();
+}
+
+/** One F&O underlying by its F&O name ("NIFTY", "RELIANCE"), or null. */
+export async function getUnderlying(name) {
+  return (await queryUnderlyings(name))[0] ?? null;
+}
+
+/**
+ * The market reference index (is_market_reference): the stock setups'
+ * market check compares each stock against it. Null when none is set.
+ */
+export async function getMarketReference() {
+  const row = await firstRow('SELECT instrument_token, tradingsymbol, label FROM instruments WHERE is_market_reference LIMIT 1');
+  return row ? { instrumentToken: Number(row.instrument_token), label: row.label || row.tradingsymbol } : null;
+}
+
+/** F&O names of the underlyings marked always_snapshot. */
+export async function getAlwaysSnapshotSymbols() {
+  const result = await rows('SELECT COALESCE(fno_name, tradingsymbol) AS name FROM instruments WHERE always_snapshot ORDER BY 1');
+  return result.map((r) => r.name);
+}
+
+/**
+ * Set always_snapshot on an underlying's price row. Returns the updated
+ * underlying, or null when the name has no price row.
+ */
+export async function setAlwaysSnapshot(name, alwaysSnapshot) {
+  const underlying = await getUnderlying(name);
+  if (!underlying?.instrumentToken) return null;
+  await query('UPDATE instruments SET always_snapshot = $2 WHERE instrument_token = $1', [underlying.instrumentToken, alwaysSnapshot]);
+  return { ...underlying, alwaysSnapshot };
 }
 
 export async function getStrikeStepSize(scripName) {

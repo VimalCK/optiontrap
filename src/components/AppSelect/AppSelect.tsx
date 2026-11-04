@@ -2,6 +2,8 @@
  * AppSelect — custom styled combobox/select component.
  * Replaces native <select> with a fully theme-aware dropdown.
  * Supports optional search/filter when `searchable` prop is set.
+ * Pass `selectedValues` instead of `value` for a multi-select: each option gets
+ * a checkbox, a click toggles it through `onChange`, and the list stays open.
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
@@ -14,7 +16,9 @@ export interface AppSelectOption {
 }
 
 interface AppSelectProps {
-  value: string | number;
+  value?: string | number;
+  /** Multi-select mode: the ticked values. */
+  selectedValues?: (string | number)[];
   options: AppSelectOption[];
   onChange: (value: string | number) => void;
   className?: string;
@@ -25,6 +29,7 @@ interface AppSelectProps {
 
 const AppSelect: React.FC<AppSelectProps> = ({
   value,
+  selectedValues,
   options,
   onChange,
   className = '',
@@ -41,7 +46,11 @@ const AppSelect: React.FC<AppSelectProps> = ({
   const searchInputRef = useRef<HTMLInputElement>(null);
   const highlightedRef = useRef<HTMLDivElement>(null);
 
-  const selectedLabel = options.find((o) => o.value === value)?.label ?? placeholder;
+  const multi = selectedValues !== undefined;
+  const isSelected = (optValue: string | number) => (multi ? selectedValues.includes(optValue) : optValue === value);
+  const selectedLabel = multi
+    ? options.filter((o) => isSelected(o.value)).map((o) => o.label).join(', ') || placeholder
+    : options.find((o) => o.value === value)?.label ?? placeholder;
 
   const filteredOptions = useMemo(() => {
     if (!searchable || !search.trim()) return options;
@@ -124,6 +133,7 @@ const AppSelect: React.FC<AppSelectProps> = ({
 
   const handleSelect = (optValue: string | number) => {
     onChange(optValue);
+    if (multi) return; // keep the list open to tick more
     setOpen(false);
     setSearch('');
   };
@@ -182,9 +192,10 @@ const AppSelect: React.FC<AppSelectProps> = ({
       {open && createPortal(
         <div
           ref={dropdownRef}
-          className="app-select-dropdown"
+          className={`app-select-dropdown ${multi ? 'app-select-dropdown--multi' : ''}`}
           style={dropdownStyle}
           role="listbox"
+          aria-multiselectable={multi || undefined}
         >
           {searchable && (
             <div className="app-select-search">
@@ -209,12 +220,21 @@ const AppSelect: React.FC<AppSelectProps> = ({
                 key={opt.value}
                 ref={idx === highlightedIdx ? highlightedRef : null}
                 role="option"
-                aria-selected={opt.value === value}
-                className={`app-select-option ${opt.value === value ? 'app-select-option--selected' : ''} ${idx === highlightedIdx ? 'app-select-option--highlighted' : ''}`}
+                aria-selected={isSelected(opt.value)}
+                className={`app-select-option ${!multi && opt.value === value ? 'app-select-option--selected' : ''} ${idx === highlightedIdx ? 'app-select-option--highlighted' : ''}`}
                 onMouseDown={(e) => { e.preventDefault(); handleSelect(opt.value); }}
                 onMouseEnter={() => setHighlightedIdx(idx)}
               >
-                {opt.value === value && (
+                {multi && (
+                  <span className={`app-select-option__checkbox ${isSelected(opt.value) ? 'app-select-option__checkbox--checked' : ''}`}>
+                    {isSelected(opt.value) && (
+                      <svg width="10" height="8" viewBox="0 0 12 10" fill="none">
+                        <path d="M1 5l3.5 3.5L11 1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    )}
+                  </span>
+                )}
+                {!multi && opt.value === value && (
                   <svg className="app-select-option__check" width="12" height="10" viewBox="0 0 12 10" fill="none">
                     <path d="M1 5l3.5 3.5L11 1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>

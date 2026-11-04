@@ -185,3 +185,25 @@
 .app-select-option--empty:hover {
   background: none;
 }
+
+/* Multi-select: a checkbox per option instead of the single-select tick */
+.app-select-dropdown--multi .app-select-option:not(.app-select-option--selected) {
+  padding-left: 10px;
+}
+
+.app-select-option__checkbox {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border: 1.5px solid var(--text-secondary);
+  border-radius: 3px;
+}
+
+.app-select-option__checkbox--checked {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}

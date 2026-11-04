@@ -568,3 +568,15 @@
   background: rgba(245, 158, 11, 0.14);
   border: 1px solid rgba(245, 158, 11, 0.4);
 }
+
+/* Always Snapshot */
+.settings-always-snapshot {
+  width: 100%;
+  max-width: 480px;
+}
+
+.settings-section__error {
+  margin-top: 8px;
+  font-size: 13px;
+  color: var(--danger);
+}
