@@ -43,6 +43,11 @@ describe('market instants', () => {
     expect(marketDateTime('2026-11-03T00:00:00').toISOString()).toBe('2026-11-02T18:30:00.000Z');
   });
 
+  it('gives an Invalid Date for an empty or bad date instead of throwing (pages render before data loads)', () => {
+    expect(Number.isNaN(marketCloseTime('').getTime())).toBe(true);
+    expect(Number.isNaN(marketDateTime('not-a-date', 60).getTime())).toBe(true);
+  });
+
   it('finds the start of the market day containing a timestamp', () => {
     const start = Date.parse('2026-11-02T18:30:00Z'); // 00:00 IST, 3 Nov
     expect(marketDayStartMs(Date.parse('2026-11-03T07:35:00Z'))).toBe(start);

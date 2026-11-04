@@ -88,6 +88,8 @@ function zoneOffsetMs(at) {
 export function marketDateTime(date, minutes = 0) {
   const [y, m, d] = date.slice(0, 10).split('-').map(Number);
   const wall = Date.UTC(y, m - 1, d, 0, minutes);
+  // Not a date (e.g. '' before a page has data): an Invalid Date, as new Date() gives, not a throw.
+  if (Number.isNaN(wall)) return new Date(NaN);
   return new Date(wall - zoneOffsetMs(new Date(wall)));
 }
 
