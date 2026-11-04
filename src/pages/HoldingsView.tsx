@@ -6,7 +6,8 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { HoldingsIcon } from '@/components/icons/Icons';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
-import { fetchHoldings, Holding } from '@/services/kiteApi';
+import { Holding } from '@/services/kiteApi';
+import { fetchPricedHoldings, priceHolding } from '@/services/holdings';
 import { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe } from '@/services/tickerSingleton';
 import { getMarketStatus, MarketStatus } from '@/utils/marketStatus';
@@ -42,14 +43,7 @@ const HoldingsView: React.FC = () => {
       ticks.forEach((t) => priceMap.set(t.instrumentToken, t));
       return prev.map((h) => {
         const tick = priceMap.get(h.instrument_token);
-        if (!tick) return h;
-        const newLastPrice = tick.lastPrice;
-        const qty = h.quantity > 0 ? h.quantity : h.collateral_quantity;
-        const newPnl = (newLastPrice - h.average_price) * qty;
-        const closePrice = tick.closePrice ?? h.close_price;
-        const dayChange = newLastPrice - closePrice;
-        const dayChangePct = closePrice > 0 ? (dayChange / closePrice) * 100 : 0;
-        return { ...h, last_price: newLastPrice, close_price: closePrice, pnl: newPnl, day_change: dayChange, day_change_percentage: dayChangePct };
+        return tick ? priceHolding(h, tick.lastPrice, tick.closePrice ?? h.close_price) : h;
       });
     });
   }, []);
@@ -70,7 +64,7 @@ const HoldingsView: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchHoldings();
+      const data = await fetchPricedHoldings();
       setHoldings(data);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to load holdings';
