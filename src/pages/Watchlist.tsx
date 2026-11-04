@@ -605,13 +605,17 @@ const Watchlist: React.FC = () => {
         renderTab={(item, active) => {
           const tab = tabs.find((t) => t.id === item.id);
           if (renamingId === item.id) {
-            // Editing: only the name box, sized like the tab it replaces.
+            // Editing: only the name box, sized like the tab it replaces. The tab holds the
+            // width (and narrows on a tight row); the box fills it, so its border always shows.
             return (
-              <div key={item.id} className="wl-tab tab-bar__tab wl-tab--editing">
+              <div
+                key={item.id}
+                className="wl-tab tab-bar__tab wl-tab--editing"
+                style={renameWidth ? { width: Math.max(renameWidth, 96) } : undefined}
+              >
                 <input
                   ref={renameInputRef}
                   className="wl-tab__rename-input"
-                  style={renameWidth ? { width: Math.max(renameWidth, 96) } : undefined}
                   value={renameValue}
                   onChange={(e) => setRenameValue(e.target.value)}
                   onBlur={handleRenameSubmit}

@@ -1712,6 +1712,12 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
 }
 
 /* 120px wide; on a tight row it narrows instead of running past the bar's edge. */
+/* The rename box fills its tab, which holds the width (see Watchlist.tsx). */
+.wl-tabs .wl-tab--editing .wl-tab__rename-input {
+  width: 100%;
+  min-width: 0;
+}
+
 .wl-tabs .wl-tab__rename-input--new {
   width: 120px;
   min-width: 44px;
