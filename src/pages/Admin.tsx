@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import AdminFeedback from './AdminFeedback';
 import AdminUsers from './AdminUsers';
 import Health from './Health';
+import TabBar from '@/components/TabBar/TabBar';
 import '@/styles/analytics.css'; // reuse the shared tab-bar CSS
 import '@/styles/admin.css';
 
@@ -34,17 +35,14 @@ const Admin: React.FC = () => {
 
   return (
     <div className="admin">
-      <div className="analytics-tabs">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={`analytics-tab ${tab === t.id ? 'analytics-tab--active' : ''}`}
-            onClick={() => handleTabChange(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <TabBar
+        items={TABS}
+        activeId={tab}
+        onChange={handleTabChange}
+        className="analytics-tabs"
+        tabClassName="analytics-tab"
+        ariaLabel="Admin sections"
+      />
 
       {tab === 'feedback' && <AdminFeedback />}
       {tab === 'users' && <AdminUsers />}

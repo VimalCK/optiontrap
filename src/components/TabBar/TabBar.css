@@ -1,0 +1,97 @@
+/*
+ * The space a tab bar may use: its row, less what the market strip takes when
+ * the bar shares the page's first row with it (--market-strip-space, set by the strip).
+ */
+.tab-bar-row {
+  position: relative;
+  display: flex;
+  max-width: calc(100% - var(--market-strip-space, 0px));
+}
+
+/* Never scroll: tabs that do not fit are under "+N", whose menu must not be clipped. */
+.tab-bar-row > .tab-bar {
+  overflow: visible;
+}
+
+/*
+ * Hidden full copy of the bar, measured to work out which tabs fit. Its box clips
+ * it, so a long copy never makes the page scroll sideways.
+ */
+.tab-bar__measure-box {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.tab-bar__measure-box > .tab-bar--measure {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: max-content;
+  max-width: none;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.tab-bar__trailing {
+  display: flex;
+  align-items: center;
+}
+
+.tab-bar__more-wrap {
+  position: relative;
+  display: flex;
+}
+
+/* The "+N" button takes the page's tab class for its size; keep it compact. */
+.tab-bar__more {
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.tab-bar__more--open {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.tab-bar__menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 60;
+  min-width: 180px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--card-bg-solid);
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.tab-bar__menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 10px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  text-align: left;
+  white-space: nowrap;
+  background: none;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.tab-bar__menu-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}

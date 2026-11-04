@@ -8,6 +8,7 @@ import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import HoldingsView from './HoldingsView';
 import PositionsView from './Positions';
+import TabBar from '@/components/TabBar/TabBar';
 import '@/styles/analytics.css'; // reuse same tab-bar CSS
 import '@/styles/portfolio.css';
 
@@ -49,17 +50,14 @@ const Holdings: React.FC = () => {
 
   return (
     <div className="portfolio">
-      <div className="portfolio-tabs">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={`portfolio-tab ${tab === t.id ? 'portfolio-tab--active' : ''}`}
-            onClick={() => handleTabChange(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <TabBar
+        items={TABS}
+        activeId={tab}
+        onChange={handleTabChange}
+        className="portfolio-tabs"
+        tabClassName="portfolio-tab"
+        ariaLabel="Portfolio sections"
+      />
 
       <div className="portfolio-content">
         {tab === 'holdings'  && <HoldingsView />}

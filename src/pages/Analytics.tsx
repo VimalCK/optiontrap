@@ -1,6 +1,7 @@
 import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { AnalyticsIcon } from '@/components/icons/Icons';
+import TabBar from '@/components/TabBar/TabBar';
 
 // Each tab is large; load it only when the tab is opened.
 const OptionChain = lazy(() => import('@/components/OptionChain/OptionChain'));
@@ -41,17 +42,14 @@ const Analytics: React.FC = () => {
 
   return (
     <div className="analytics">
-      <div className="analytics-tabs">
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            className={`analytics-tab ${tab === t.id ? 'analytics-tab--active' : ''}`}
-            onClick={() => handleTabChange(t.id)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      <TabBar
+        items={TABS}
+        activeId={tab}
+        onChange={handleTabChange}
+        className="analytics-tabs"
+        tabClassName="analytics-tab"
+        ariaLabel="Analytics sections"
+      />
 
       <div className="analytics-content">
         <Suspense fallback={null}>

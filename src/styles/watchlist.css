@@ -1646,3 +1646,22 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
   .wl-sz .info-guide__terms { grid-template-columns: minmax(0, 1fr); gap: 2px; }
   .wl-sz .info-guide__terms dd { margin-bottom: 8px; }
 }
+
+/* The shared tab bar's "+N" button (components/TabBar), sized like a watchlist tab label. */
+.wl-tabs .tab-bar__more {
+  padding: 10px 14px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-secondary);
+  background: none;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.wl-tabs .tab-bar__more:hover,
+.wl-tabs .tab-bar__more--open {
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+}

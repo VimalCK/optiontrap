@@ -4,7 +4,7 @@
   gap: var(--card-gap);
 }
 
-.admin > .analytics-tabs {
+.admin > .tab-bar-row {
   margin-bottom: 10px;
 }
 

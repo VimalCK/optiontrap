@@ -15,6 +15,7 @@ import { loadInstruments, searchInstruments, getDisplayLabel, Instrument } from 
 import { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe } from '@/services/tickerSingleton';
 import AppSelect from '@/components/AppSelect/AppSelect';
+import TabBar from '@/components/TabBar/TabBar';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import {
   PriceAlert,
@@ -578,13 +579,24 @@ const Watchlist: React.FC = () => {
       )}
 
       {/* ── Tab bar ── */}
-      <div className="wl-tabs">
-        {tabs.map((tab) => (
-          <div
-            key={tab.id}
-            className={`wl-tab ${activeTabId === tab.id ? 'wl-tab--active' : ''}`}
-          >
-            {renamingId === tab.id ? (
+      <TabBar
+        items={tabs.map((tab) => ({
+          id: tab.id,
+          label: <>{tab.name}<span className="wl-tab__count">{tab.itemCount}</span></>,
+        }))}
+        activeId={activeTabId}
+        onChange={handleTabSwitch}
+        className="wl-tabs"
+        tabClassName="wl-tab"
+        ariaLabel="Watchlists"
+        renderMeasure={(item, active) => (
+          <div key={item.id} className={`wl-tab${active ? ' wl-tab--active' : ''}`}>
+            <span className="wl-tab__label">{item.label}</span>
+          </div>
+        )}
+        renderTab={(item, active) => (
+          <div key={item.id} className={`wl-tab${active ? ' wl-tab--active' : ''}`}>
+            {renamingId === item.id ? (
               <input
                 ref={renameInputRef}
                 className="wl-tab__rename-input"
@@ -599,21 +611,20 @@ const Watchlist: React.FC = () => {
             ) : (
               <button
                 className="wl-tab__label"
-                onClick={() => handleTabSwitch(tab.id)}
+                onClick={() => handleTabSwitch(item.id)}
                 onDoubleClick={() => {
-                  setRenamingId(tab.id);
-                  setRenameValue(tab.name);
+                  setRenamingId(item.id);
+                  setRenameValue(tabs.find((t) => t.id === item.id)?.name ?? '');
                 }}
               >
-                {tab.name}
-                <span className="wl-tab__count">{tab.itemCount}</span>
+                {item.label}
               </button>
             )}
             <button
               className="wl-tab__delete"
               onClick={(e) => {
                 e.stopPropagation();
-                handleDeleteList(tab.id);
+                handleDeleteList(item.id);
               }}
               title="Delete watchlist"
             >
@@ -623,9 +634,8 @@ const Watchlist: React.FC = () => {
               </svg>
             </button>
           </div>
-        ))}
-
-        {showNewInput ? (
+        )}
+        trailing={showNewInput ? (
           <div className="wl-tab wl-tab--new">
             <input
               ref={newInputRef}
@@ -652,7 +662,7 @@ const Watchlist: React.FC = () => {
             +
           </button>
         )}
-      </div>
+      />
 
       {/* ── Content ── */}
       {activeTab ? (
