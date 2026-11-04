@@ -40,8 +40,22 @@ CREATE INDEX IF NOT EXISTS sessions_expires_idx
 -- every user's session. Keep it in a column (written with the session) and
 -- index just the admin sessions.
 ALTER TABLE sessions ADD COLUMN IF NOT EXISTS is_admin BOOLEAN NOT NULL DEFAULT FALSE;
+
+-- Fill it in for existing sessions. A row whose data isn't valid JSON is
+-- skipped (left non-admin) rather than failing the migration, and only rows
+-- that mention isAdmin at all are parsed, so this stays cheap with many
+-- sessions. The function lives in pg_temp and disappears with the connection.
+CREATE OR REPLACE FUNCTION pg_temp.try_jsonb(t TEXT) RETURNS JSONB LANGUAGE plpgsql AS $$
+BEGIN
+  RETURN t::jsonb;
+EXCEPTION WHEN others THEN
+  RETURN NULL;
+END
+$$;
 UPDATE sessions SET is_admin = TRUE
-  WHERE NOT is_admin AND (data::jsonb -> 'kiteSession' ->> 'isAdmin') = 'true';
+  WHERE NOT is_admin
+    AND data LIKE '%"isAdmin":true%'
+    AND (pg_temp.try_jsonb(data) -> 'kiteSession' ->> 'isAdmin') = 'true';
 CREATE INDEX IF NOT EXISTS sessions_admin_idx
   ON sessions (expires)
   WHERE is_admin;
