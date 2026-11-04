@@ -582,7 +582,8 @@ const Watchlist: React.FC = () => {
       <TabBar
         items={tabs.map((tab) => ({
           id: tab.id,
-          label: <>{tab.name}<span className="wl-tab__count">{tab.itemCount}</span></>,
+          label: <><span className="tab-bar__text">{tab.name}</span><span className="wl-tab__count">{tab.itemCount}</span></>,
+          title: tab.name,
         }))}
         activeId={activeTabId}
         onChange={handleTabSwitch}
@@ -590,12 +591,12 @@ const Watchlist: React.FC = () => {
         tabClassName="wl-tab"
         ariaLabel="Watchlists"
         renderMeasure={(item, active) => (
-          <div key={item.id} className={`wl-tab${active ? ' wl-tab--active' : ''}`}>
+          <div key={item.id} className={`wl-tab tab-bar__tab${active ? ' wl-tab--active' : ''}`}>
             <span className="wl-tab__label">{item.label}</span>
           </div>
         )}
         renderTab={(item, active) => (
-          <div key={item.id} className={`wl-tab${active ? ' wl-tab--active' : ''}`}>
+          <div key={item.id} className={`wl-tab tab-bar__tab${active ? ' wl-tab--active' : ''}`}>
             {renamingId === item.id ? (
               <input
                 ref={renameInputRef}
@@ -611,6 +612,7 @@ const Watchlist: React.FC = () => {
             ) : (
               <button
                 className="wl-tab__label"
+                title={item.title}
                 onClick={() => handleTabSwitch(item.id)}
                 onDoubleClick={() => {
                   setRenamingId(item.id);

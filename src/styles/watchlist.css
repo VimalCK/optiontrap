@@ -1647,6 +1647,16 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
   .wl-sz .info-guide__terms dd { margin-bottom: 8px; }
 }
 
+/* A long list name is cut with "…" (components/TabBar); the item count and delete button stay whole. */
+.wl-tabs .wl-tab__label {
+  min-width: 0;
+}
+
+.wl-tabs .wl-tab__count,
+.wl-tabs .wl-tab__delete {
+  flex-shrink: 0;
+}
+
 /* The shared tab bar's "+N" button (components/TabBar), sized like a watchlist tab label. */
 .wl-tabs .tab-bar__more {
   padding: 10px 14px;
