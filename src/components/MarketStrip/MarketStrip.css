@@ -6,10 +6,10 @@
  */
 .market-strip-box {
   position: absolute;
-  top: 40px;
+  top: var(--page-top-offset);
   right: 32px;
   width: calc(50% - 32px);
-  height: 48px;
+  height: var(--page-top-row-height);
   display: flex;
   justify-content: flex-end;
   align-items: center;

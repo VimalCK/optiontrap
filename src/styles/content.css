@@ -22,7 +22,7 @@
 .content__inner {
   position: relative;
   flex: 1;
-  padding: 40px 32px;
+  padding: var(--page-top-offset) 32px 40px;
   width: 100%;
   box-sizing: border-box;
 }
@@ -36,6 +36,17 @@
   font-weight: 700;
   letter-spacing: -0.5px;
   margin-bottom: 8px;
+}
+
+/* A page header that is the page's first row: its title takes the full
+   top-row height so it lines up with the sidebar's "OptionTrap" text.
+   Centred with flex rather than line-height, so badges inside the title
+   keep their own size. */
+.page-header--top .page-header__title {
+  display: flex;
+  align-items: center;
+  min-height: var(--page-top-row-height);
+  margin-bottom: 0;
 }
 
 .page-header__subtitle {

@@ -6,7 +6,7 @@
 
 /* Same height as the tab bars that open the other pages (48px). */
 .dashboard-header {
-  height: 48px;
+  height: var(--page-top-row-height);
   display: flex;
   align-items: center;
 }

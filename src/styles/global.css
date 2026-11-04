@@ -20,6 +20,12 @@
   --radius: 12px;
   --card-gap: 8px;                /* space between cards on every page */
   --transition-speed: 0.2s;
+  /* Each page's first row (tab bar, title, market strip) is this tall and sits
+     this far from the top, so its centre lines up with the sidebar's
+     "OptionTrap" text: the sidebar header is 20px + 36px logo + 20px, centred
+     at 38px, and 14px + 48px / 2 = 38px. */
+  --page-top-row-height: 48px;
+  --page-top-offset: 14px;
 }
 
 /* Accent theme overrides */

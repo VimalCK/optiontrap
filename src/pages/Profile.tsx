@@ -124,7 +124,7 @@ const Profile: React.FC = () => {
 
   return (
     <div>
-      <div className="page-header" style={{ position: 'relative' }}>
+      <div className="page-header page-header--top" style={{ position: 'relative' }}>
         <div>
           <h1 className="page-header__title">
             Profile

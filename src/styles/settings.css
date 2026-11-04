@@ -450,7 +450,7 @@
 
 /* Title row, the height of the other pages' tab bars (as on the Dashboard). */
 .settings-header {
-  height: 48px;
+  height: var(--page-top-row-height);
   display: flex;
   align-items: center;
 }
