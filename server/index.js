@@ -111,6 +111,7 @@ import { checkSubscriptionAccess, inactiveSubscription } from './subscriptionAcc
 import { backfillStockSetups, scanStock, syncStockCandles } from './stockCandles.js';
 import { startStockSetupScheduler } from './stockSetupScheduler.js';
 import { NIGHTLY_JOB_PREFIX, startNightlyJobs } from './nightlyJobs.js';
+import { POSITION_STATUSES, isValidPositionStatus } from './positionsQuery.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -849,8 +850,11 @@ app.delete('/api/price-alerts/:id', requireAuth, requireSubscription, async (req
 app.get('/api/positions', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const mode = req.query.mode || null;
-  const includePastExits = req.query.history === '1';
-  const positions = await getPositions(userId, mode, { includePastExits });
+  const { status } = req.query;
+  if (!isValidPositionStatus(status)) {
+    return res.status(400).json({ status: 'error', message: `status must be one of: ${POSITION_STATUSES.join(', ')}` });
+  }
+  const positions = await getPositions(userId, { mode, status });
   res.json({ status: 'ok', data: positions });
 });
 

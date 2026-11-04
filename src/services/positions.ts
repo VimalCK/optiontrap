@@ -28,15 +28,18 @@ export interface Position {
 }
 
 /**
- * Open positions plus those exited today. Pass `includeHistory` to also get
- * positions exited on earlier days (used by the trade journal).
+ * Open positions plus those exited today.
  */
-export async function getPositions(
-  mode: 'paper' | 'live' = 'paper',
-  { includeHistory = false }: { includeHistory?: boolean } = {},
-): Promise<Position[]> {
-  const history = includeHistory ? '&history=1' : '';
-  return apiClient.get<Position[]>(`/api/positions?mode=${mode}${history}`);
+export async function getPositions(mode: 'paper' | 'live' = 'paper'): Promise<Position[]> {
+  return apiClient.get<Position[]>(`/api/positions?mode=${mode}`);
+}
+
+/**
+ * Every exited position, from any day, most recently exited first
+ * (used by the trade journal).
+ */
+export async function getClosedPositions(mode: 'paper' | 'live' = 'paper'): Promise<Position[]> {
+  return apiClient.get<Position[]>(`/api/positions?mode=${mode}&status=closed`);
 }
 
 /**

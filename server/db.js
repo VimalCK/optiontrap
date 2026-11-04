@@ -17,6 +17,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
 import { MARKET_TIME_ZONE, marketDayStartMs } from '../shared/marketTime.js';
+import { buildPositionsQuery } from './positionsQuery.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
@@ -1065,24 +1066,13 @@ export async function saveInstruments(instruments, stamp) {
 // Positions CRUD
 // ---------------------------------------------------------------------------
 
-export async function getPositions(userId, mode = null, { includePastExits = false } = {}) {
-  // By default, exclude positions that were exited before today (IST). Open
-  // positions are always returned; exited positions only if exited today.
-  // The trade journal passes includePastExits to get the full history.
-  // exit_time is stored as an ISO-8601 UTC string, which sorts chronologically,
-  // so a plain string comparison against today's IST-midnight threshold works.
-  const conditions = ['user_id = $1'];
-  const params = [userId];
-  if (mode) {
-    params.push(mode);
-    conditions.push(`mode = $${params.length}`);
-  }
-  if (!includePastExits) {
-    params.push(new Date(getTodayMidnight()).toISOString());
-    conditions.push(`(exited = 0 OR exit_time >= $${params.length})`);
-  }
-
-  const sql = `SELECT * FROM positions WHERE ${conditions.join(' AND ')} ORDER BY entry_time DESC`;
+/**
+ * List a user's positions. See buildPositionsQuery for what `status` selects:
+ * by default, open positions plus those exited today; 'closed' for every exit.
+ */
+export async function getPositions(userId, { mode = null, status } = {}) {
+  const todayStart = new Date(getTodayMidnight()).toISOString();
+  const { sql, params } = buildPositionsQuery(userId, { mode, status, todayStart });
   const result = await rows(sql, params);
   return result.map(mapPositionRow);
 }

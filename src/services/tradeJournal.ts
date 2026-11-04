@@ -1,12 +1,12 @@
 /**
  * Trade Journal Service
- * Derives trade entries from existing IndexedDB data sources.
+ * Derives trade entries from the positions API.
  *
- * Paper  → exited positions from positions.ts (open_positions key)
+ * Paper  → every exited paper position (GET /api/positions?status=closed)
  * Live   → not yet implemented (reserved for Kite Trades API)
  */
 
-import { getPositions, Position } from './positions';
+import { getClosedPositions, Position } from './positions';
 
 export type Segment = 'stocks' | 'options';
 export type TradingMode = 'paper' | 'live';
@@ -74,7 +74,7 @@ function positionToEntry(pos: Position): TradeEntry {
  * Load paper trade entries — all exited positions from IndexedDB.
  */
 export async function getPaperTradeEntries(): Promise<TradeEntry[]> {
-  const positions = await getPositions('paper', { includeHistory: true });
+  const positions = await getClosedPositions('paper');
   return positions
     .filter((p) => p.exited && p.exitPrice !== undefined)
     .map(positionToEntry)
