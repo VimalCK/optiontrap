@@ -115,7 +115,7 @@ export async function addPosition(
  * Exit a position — marks it as exited with exit price and time.
  */
 export async function exitPosition(id: string, exitPrice: number): Promise<void> {
-  await apiClient.put(`/api/positions/${id}/exit`, { exitPrice });
+  await apiClient.patch(`/api/positions/${id}`, { exitPrice });
 }
 
 /**

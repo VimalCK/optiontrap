@@ -27,7 +27,7 @@ let instrumentsCache: any[] | null = null;
  */
 export async function fetchOptions(symbol: string, signal?: AbortSignal): Promise<OptionInstrument[]> {
   if (!instrumentsCache) {
-    instrumentsCache = await apiClient.get<any[]>('/instruments', { signal });
+    instrumentsCache = await apiClient.get<any[]>('/api/instruments', { signal });
   }
 
   // Filter for the given symbol's CE/PE options

@@ -33,11 +33,11 @@ export async function createPriceAlert(input: NewPriceAlert): Promise<PriceAlert
 }
 
 export async function triggerPriceAlert(id: string, price: number): Promise<PriceAlert> {
-  return apiClient.post<PriceAlert>(`/api/price-alerts/${id}/trigger`, { price });
+  return apiClient.patch<PriceAlert>(`/api/price-alerts/${id}`, { status: 'triggered', price });
 }
 
 export async function resetPriceAlert(id: string): Promise<PriceAlert> {
-  return apiClient.post<PriceAlert>(`/api/price-alerts/${id}/reset`);
+  return apiClient.patch<PriceAlert>(`/api/price-alerts/${id}`, { status: 'active' });
 }
 
 export async function deletePriceAlert(id: string): Promise<void> {

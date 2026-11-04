@@ -24,5 +24,5 @@ export async function getSubscriptionStatus(): Promise<SubscriptionStatus> {
 }
 
 export async function activateSubscription(planId: string): Promise<SubscriptionStatus> {
-  return apiClient.post<SubscriptionStatus>('/api/subscription/activate', { planId });
+  return apiClient.post<SubscriptionStatus>('/api/subscriptions', { planId });
 }

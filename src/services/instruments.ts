@@ -29,7 +29,7 @@ let memoryCache: Instrument[] | null = null;
 export async function loadInstruments(): Promise<Instrument[]> {
   if (memoryCache) return memoryCache;
 
-  memoryCache = await apiClient.get<Instrument[]>('/instruments');
+  memoryCache = await apiClient.get<Instrument[]>('/api/instruments');
   lotSizeByToken = null; // rebuild lazily on next lookup
   return memoryCache;
 }

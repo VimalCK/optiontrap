@@ -41,7 +41,7 @@ export function withSpot(snapshots: OiSnapshot[], spotToken: number | null): OiS
  */
 export async function watchSnapshotSymbol(symbol: string, signal?: AbortSignal): Promise<void> {
   try {
-    await apiClient.post('/api/oi-snapshots/watch', { symbol }, { signal });
+    await apiClient.post('/api/oi-snapshots/watched-symbols', { symbol }, { signal });
   } catch (err) {
     if (signal?.aborted) throw err;
     console.warn(`[OI Snapshots] Could not start snapshots for ${symbol}:`, err);

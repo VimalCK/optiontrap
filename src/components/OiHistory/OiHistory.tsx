@@ -143,7 +143,7 @@ const OiHistory: React.FC = () => {
     let stale = false;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     setFetchError(null);
-    const requestMonths = () => apiClient.get<{ status: string; months?: string[]; message?: string }>(`/api/oi-history/expiry-months?scrip=${scrip}`, { signal: pageSignal });
+    const requestMonths = () => apiClient.get<string[]>(`/api/oi-history/expiry-months?scrip=${scrip}`, { signal: pageSignal });
     // Retry once: on the first login of the day the server may still be building
     // its instruments cache, and a transient failure would otherwise leave only
     // the current month in the dropdown.
@@ -156,22 +156,18 @@ const OiHistory: React.FC = () => {
             return requestMonths();
           });
       })
-      .then((json) => {
+      .then((fetchedMonths) => {
         if (stale) return;
-        if (json.status === 'ok') {
-          const months: string[] = json.months || [];
-          if (months.length > 0) {
-            const selectableMonths = months.filter((month) => month >= current);
-            const selectedMonths = selectableMonths.length > 0 ? selectableMonths : [current];
-            const options = months.map((m) => ({ value: m, label: formatMonthLabel(m) }));
-            setExpiryMonthOptions(options);
-            setSelectedExpiryMonth((prev) => selectedMonths.includes(prev) ? prev : selectedMonths[0]);
-          } else {
-            setExpiryMonthOptions([{ value: current, label: formatMonthLabel(current) }]);
-            setSelectedExpiryMonth(current);
-          }
+        const months: string[] = fetchedMonths || [];
+        if (months.length > 0) {
+          const selectableMonths = months.filter((month) => month >= current);
+          const selectedMonths = selectableMonths.length > 0 ? selectableMonths : [current];
+          const options = months.map((m) => ({ value: m, label: formatMonthLabel(m) }));
+          setExpiryMonthOptions(options);
+          setSelectedExpiryMonth((prev) => selectedMonths.includes(prev) ? prev : selectedMonths[0]);
         } else {
-          throw new Error(json.message || 'Failed to load expiry months');
+          setExpiryMonthOptions([{ value: current, label: formatMonthLabel(current) }]);
+          setSelectedExpiryMonth(current);
         }
       })
       .catch((err) => {
@@ -414,15 +410,12 @@ const OiHistory: React.FC = () => {
 
     try {
       const params = new URLSearchParams({ scrip });
-      const json = await apiClient.delete<{ status: string; message?: string }>(`/api/oi-history?${params}`);
-      if (json.status === 'ok') {
-        setData([]);
-        lastFetchedRef.current = '';
-        setSelectedStrike(null);
-        setFilterDate('');
-      } else {
-        setFetchError(json.message || 'Failed to delete');
-      }
+      // apiClient throws on any error reply, so reaching here means it worked.
+      await apiClient.delete<{ deleted: number }>(`/api/oi-history?${params}`);
+      setData([]);
+      lastFetchedRef.current = '';
+      setSelectedStrike(null);
+      setFilterDate('');
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Network error');
     }
@@ -1005,11 +998,11 @@ const OiHistory: React.FC = () => {
     if (!chartData || !scrip) return;
     void (async () => {
       try {
-        const result = await apiClient.get<{ signals?: TradeSignalRow[] }>(
+        const result = await apiClient.get<TradeSignalRow[]>(
           `/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=500`,
           { signal: pageSignal },
         );
-        const signals = result.signals || [];
+        const signals = result || [];
         setSignalRows(signals);
         const openSignals = signals.filter((signal) => signal.outcome_status === 'Open' || signal.outcome_status === null);
         const openReturns = openSignals
