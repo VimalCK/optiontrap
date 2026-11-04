@@ -29,14 +29,9 @@ interface MonthGroup {
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
                      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
-const ALL_DAY_LABELS = [...WEEKDAY_LABELS, 'Sat', 'Sun'];
-
-/** Whether a 'YYYY-MM-DD' date falls on a Saturday or Sunday. */
-export function isWeekendDate(date: string): boolean {
-  const day = new Date(`${date}T00:00:00Z`).getUTCDay();
-  return day === 0 || day === 6;
-}
+// Every day gets a row, weekends included: trades can close on a Saturday or
+// Sunday, and the calendar keeps the same shape whatever the data.
+const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
 function toDateStr(d: Date): string {
   // Use local date to avoid UTC-shift issues
@@ -68,14 +63,6 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, endDate, months = 12 
     return d;
   }, [endDate]);
 
-  // The market trades Mon–Fri, so weekends are left out to keep the calendar
-  // compact. But paper trades can close on a weekend; when any did, show
-  // Sat and Sun rows so those days aren't hidden.
-  const dayLabels = useMemo(
-    () => ([...dailyPnL.keys()].some(isWeekendDate) ? ALL_DAY_LABELS : WEEKDAY_LABELS),
-    [dailyPnL],
-  );
-
   const { monthGroups, totalPnL, winDays, lossDays, totalDays } = useMemo(() => {
     const todayStr = toDateStr(today);
 
@@ -101,8 +88,8 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, endDate, months = 12 
       // Iterate weeks until we've passed the end of the month
       while (cursor <= monthEnd) {
         const week: (DayCell | null)[] = [];
-        for (let di = 0; di < dayLabels.length; di++) {
-          // di 0=Mon … 4=Fri (5=Sat, 6=Sun when weekends are shown)
+        for (let di = 0; di < DAY_LABELS.length; di++) {
+          // di 0=Mon … 6=Sun
           const dayDate = addDays(cursor, di);
           const dateStr = toDateStr(dayDate);
           const inMonth = dayDate.getMonth() === monthStart.getMonth();
@@ -136,7 +123,7 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, endDate, months = 12 
     });
 
     return { monthGroups: groups, totalPnL: total, winDays: wins, lossDays: losses, totalDays: traded };
-  }, [dailyPnL, today, months, dayLabels]);
+  }, [dailyPnL, today, months]);
 
   const maxAbs = useMemo(() => {
     let max = 0;
@@ -219,7 +206,7 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, endDate, months = 12 
         {/* Day labels column */}
         <div className="heatmap-day-col">
           <div className="heatmap-month-label-spacer" />
-          {dayLabels.map((d) => (
+          {DAY_LABELS.map((d) => (
             <div key={d} className="heatmap-day-label">{d}</div>
           ))}
         </div>
@@ -231,7 +218,7 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, endDate, months = 12 
               {/* Month name */}
               <div className="heatmap-month-name">{group.label}</div>
               {/* Rows: one per day of week */}
-              {dayLabels.map((_, dayIdx) => (
+              {DAY_LABELS.map((_, dayIdx) => (
                 <div key={dayIdx} className="heatmap-row">
                   {group.weeks.map((week, wi) =>
                     renderCell(week[dayIdx], `${gi}-${wi}-${dayIdx}`)
