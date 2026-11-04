@@ -68,11 +68,8 @@ import {
   resetPriceAlert,
   deletePriceAlert,
   getPositions,
-  getPositionMode,
   getDailyPnl,
   getPositionStats,
-  addPosition,
-  exitPositionById,
   removePositionById,
   clearPositions,
   getTodayOiSnapshots,
@@ -114,7 +111,8 @@ import { checkSubscriptionAccess, inactiveSubscription } from './subscriptionAcc
 import { backfillStockSetups, scanStock, syncStockCandles } from './stockCandles.js';
 import { startStockSetupScheduler } from './stockSetupScheduler.js';
 import { NIGHTLY_JOB_PREFIX, startNightlyJobs } from './nightlyJobs.js';
-import { paperTradeClosedReason, parseDailyPnlQuery, parsePositionsQuery, parseStatsQuery } from './positionsQuery.js';
+import { parseDailyPnlQuery, parsePositionsQuery, parseStatsQuery } from './positionsQuery.js';
+import { exitPaperTrade, openPaperTrade } from './paperTrading.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -880,78 +878,25 @@ app.get('/api/positions/stats', requireAuth, requireSubscription, async (req, re
   res.json({ status: 'ok', data: await getPositionStats(userId, filter) });
 });
 
+// Paper trades are opened and exited only through server/paperTrading.js,
+// which applies shared/paperTradeRules.js; the automation uses the same calls.
+const PAPER_TRADE_HTTP_STATUS = { INVALID_TRADE: 400, MARKET_CLOSED: 409, NOT_FOUND: 404 };
+
+const sendPaperTradeResult = (res, result) => {
+  if (result.ok) return res.json({ status: 'ok', data: result.position });
+  return res.status(PAPER_TRADE_HTTP_STATUS[result.code] ?? 400)
+    .json({ status: 'error', code: result.code, message: result.message });
+};
+
 app.post('/api/positions', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
-  const {
-    tradingsymbol,
-    instrumentToken,
-    strike,
-    optionType,
-    side,
-    quantity,
-    entryPrice,
-    expiry,
-    mode,
-    note,
-    targetPrice,
-    stopLossPrice,
-    strategyTag,
-    confidence,
-  } = req.body;
-
-  if (!tradingsymbol || !instrumentToken || strike == null || !optionType || !side || !quantity || !entryPrice || !expiry) {
-    return res.status(400).json({ status: 'error', message: 'Missing required fields' });
-  }
-
-  const closedReason = paperTradeClosedReason(mode);
-  if (closedReason) {
-    return res.status(409).json({ status: 'error', code: 'MARKET_CLOSED', message: closedReason });
-  }
-
-  const position = await addPosition(userId, {
-    tradingsymbol,
-    instrumentToken: Number(instrumentToken),
-    strike: Number(strike),
-    optionType,
-    side,
-    quantity: Number(quantity),
-    entryPrice: Number(entryPrice),
-    expiry,
-    mode: mode || 'paper',
-    note,
-    targetPrice,
-    stopLossPrice,
-    strategyTag,
-    confidence,
-  });
-
-  res.json({ status: 'ok', data: position });
+  sendPaperTradeResult(res, await openPaperTrade(userId, req.body || {}));
 });
 
 // Exit an open position at exitPrice (the only change a position takes).
 app.patch('/api/positions/:id', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
-  const { exitPrice } = req.body;
-
-  if (exitPrice == null) {
-    return res.status(400).json({ status: 'error', message: 'exitPrice is required' });
-  }
-
-  const mode = await getPositionMode(req.params.id, userId);
-  if (mode === null) {
-    return res.status(404).json({ status: 'error', message: 'Position not found or already exited' });
-  }
-  const closedReason = paperTradeClosedReason(mode);
-  if (closedReason) {
-    return res.status(409).json({ status: 'error', code: 'MARKET_CLOSED', message: closedReason });
-  }
-
-  const updated = await exitPositionById(req.params.id, userId, Number(exitPrice));
-  if (!updated) {
-    return res.status(404).json({ status: 'error', message: 'Position not found or already exited' });
-  }
-
-  res.json({ status: 'ok' });
+  sendPaperTradeResult(res, await exitPaperTrade(userId, req.params.id, req.body?.exitPrice));
 });
 
 app.delete('/api/positions/:id', requireAuth, requireSubscription, async (req, res) => {

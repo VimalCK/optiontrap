@@ -1251,10 +1251,10 @@ export async function addPosition(userId, position) {
   });
 }
 
-/** Mode ('paper' | 'live') of one of a user's open positions, or null if there's no such open position. */
-export async function getPositionMode(id, userId) {
-  const row = await firstRow('SELECT mode FROM positions WHERE id = $1 AND user_id = $2 AND exited = 0', [id, userId]);
-  return row ? row.mode : null;
+/** One of a user's open positions, or null if there's no such open position. */
+export async function getOpenPosition(id, userId) {
+  const row = await firstRow('SELECT * FROM positions WHERE id = $1 AND user_id = $2 AND exited = 0', [id, userId]);
+  return row ? mapPositionRow(row) : null;
 }
 
 export async function exitPositionById(id, userId, exitPrice) {

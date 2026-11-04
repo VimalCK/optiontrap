@@ -1,68 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import {
-  MARKET_CLOSED_MESSAGE,
   buildDailyPnlQuery,
   buildPositionsQuery,
   buildStatsQueries,
-  paperTradeClosedReason,
   parseDailyPnlQuery,
   parsePositionsQuery,
   parseStatsQuery,
 } from './positionsQuery.js';
-
-/** The instant at `hhmm` IST on `date` (IST is UTC+5:30). */
-const ist = (date, hhmm) => {
-  const [h, m] = hhmm.split(':').map(Number);
-  return new Date(Date.parse(`${date}T00:00:00Z`) + ((h * 60 + m) - 330) * 60000);
-};
-
-describe('paperTradeClosedReason', () => {
-  const TRADING_DAY = '2026-11-05'; // Thursday
-
-  it.each([
-    ['at the open, 9:15', '09:15'],
-    ['mid-session', '12:00'],
-    ['at the close, 15:30', '15:30'],
-  ])('allows a paper trade %s', (_label, time) => {
-    expect(paperTradeClosedReason('paper', ist(TRADING_DAY, time))).toBeNull();
-  });
-
-  it.each([
-    ['in pre-open, 9:14', '09:14'],
-    ['before pre-open, 8:00', '08:00'],
-    ['just after the close, 15:31', '15:31'],
-    ['in the evening', '20:00'],
-    ['after midnight', '00:30'],
-  ])('blocks a paper trade %s', (_label, time) => {
-    expect(paperTradeClosedReason('paper', ist(TRADING_DAY, time))).toBe(MARKET_CLOSED_MESSAGE);
-  });
-
-  it('blocks paper trades all weekend, even in session hours', () => {
-    expect(paperTradeClosedReason('paper', ist('2026-10-17', '11:00'))).toBe(MARKET_CLOSED_MESSAGE); // Saturday
-    expect(paperTradeClosedReason('paper', ist('2026-10-18', '11:00'))).toBe(MARKET_CLOSED_MESSAGE); // Sunday
-  });
-
-  it('blocks paper trades on a weekday market holiday', () => {
-    expect(paperTradeClosedReason('paper', ist('2026-01-26', '11:00'))).toBe(MARKET_CLOSED_MESSAGE); // Republic Day, Monday
-  });
-
-  it('judges the time in IST, not the server’s zone', () => {
-    // 05:00 UTC on a Thursday is 10:30 IST: open, though early morning in Europe.
-    expect(paperTradeClosedReason('paper', new Date('2026-11-05T05:00:00Z'))).toBeNull();
-    // 23:00 UTC on Thursday is 04:30 IST on Friday: closed.
-    expect(paperTradeClosedReason('paper', new Date('2026-11-05T23:00:00Z'))).toBe(MARKET_CLOSED_MESSAGE);
-  });
-
-  it('treats a missing mode as paper', () => {
-    expect(paperTradeClosedReason(undefined, ist(TRADING_DAY, '20:00'))).toBe(MARKET_CLOSED_MESSAGE);
-    expect(paperTradeClosedReason(null, ist(TRADING_DAY, '12:00'))).toBeNull();
-  });
-
-  it('never blocks live trades, which go through Kite', () => {
-    expect(paperTradeClosedReason('live', ist('2026-10-17', '11:00'))).toBeNull();
-    expect(paperTradeClosedReason('live', ist(TRADING_DAY, '20:00'))).toBeNull();
-  });
-});
 
 const todayStart = '2026-11-03T18:30:00.000Z'; // 4 Nov 2026, 00:00 IST
 // IST midnights, as UTC instants.

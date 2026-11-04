@@ -12,24 +12,7 @@
  * chronologically, so comparing it as text against the ISO instants of
  * market-zone midnights selects whole market days.
  */
-import { MARKET_TIME_ZONE, addDays, daysBetween, isMarketOpen, marketDateTime } from '../shared/marketTime.js';
-
-export const MARKET_CLOSED_MESSAGE =
-  'The market is closed. Paper trades can be placed and exited 9:15–15:30 IST on trading days.';
-
-/**
- * Why a paper trade can't be placed or exited right now, or null when it can.
- * Paper trades fill at the last traded price, which is stale while the market
- * is closed, so they are only allowed during the session (IST trading days,
- * 9:15–15:30, holidays excluded). Live trades go through Kite and aren't
- * checked here.
- * @param {string | null | undefined} mode position mode; missing means paper
- * @param {Date} [now]
- */
-export function paperTradeClosedReason(mode, now = new Date()) {
-  if ((mode ?? 'paper') !== 'paper') return null;
-  return isMarketOpen(now) ? null : MARKET_CLOSED_MESSAGE;
-}
+import { MARKET_TIME_ZONE, addDays, daysBetween, marketDateTime } from '../shared/marketTime.js';
 
 export const POSITION_STATUSES = ['closed'];
 export const POSITION_MODES = ['paper', 'live'];
