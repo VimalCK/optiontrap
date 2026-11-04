@@ -293,7 +293,7 @@ const TradeJournal: React.FC<{
               title={problem ?? undefined}
               onClick={() => runReport(currentFilters, expandedDates)}
             >
-              {reportLoading ? 'Loading…' : 'Report'}
+              Report
             </button>
           </>
         )}
