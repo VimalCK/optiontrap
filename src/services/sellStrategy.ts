@@ -78,6 +78,21 @@ function volumeMultiplier(
   return 0.6;
 }
 
+/**
+ * The gap between neighbouring strikes in the chain: 50 for NIFTY, 100 for
+ * BANKNIFTY, 20 for a ₹1,400 stock. "Near" in the checks below means within
+ * one gap, so they read every symbol the same way. 0 with fewer than two strikes.
+ */
+export function strikeGap(chain: OptionChainRow[]): number {
+  const strikes = [...new Set(chain.map((r) => r.strike))].sort((a, b) => a - b);
+  let gap = 0;
+  for (let i = 1; i < strikes.length; i++) {
+    const d = strikes[i] - strikes[i - 1];
+    if (gap === 0 || d < gap) gap = d;
+  }
+  return gap;
+}
+
 // ── Scoring Sub-functions ──
 
 /**
@@ -98,17 +113,18 @@ function scorePinning(
   if (maxPain === 0) return { score: 0, reasons };
 
   const distFromMaxPain = Math.abs(spotPrice - maxPain);
+  const gap = strikeGap(chain);
 
-  // Check how many snapshots had spot within 50pts of max pain
+  // Check how many snapshots had spot within one strike of max pain
   let pinnedCount = 0;
   for (const snap of snapshots) {
     if (snap.spot && snap.spot > 0) {
-      if (Math.abs(snap.spot - maxPain) <= 50) pinnedCount++;
+      if (Math.abs(snap.spot - maxPain) <= gap) pinnedCount++;
     }
   }
 
-  // Current spot within 50pts of max pain
-  if (distFromMaxPain <= 50) {
+  // Current spot within one strike of max pain
+  if (distFromMaxPain <= gap) {
     score += 5;
     reasons.push(`Spot within ${distFromMaxPain.toFixed(0)}pts of max pain ${maxPain}`);
   }
@@ -759,7 +775,8 @@ function scoreBuyMomentum(
   const oppType = type === 'ce' ? 'pe' : 'ce';
 
   // Check velocity on the buy side (near ATM)
-  const atmRow = chain.find((r) => Math.abs(r.strike - spotPrice) <= 50);
+  const gap = strikeGap(chain);
+  const atmRow = chain.find((r) => Math.abs(r.strike - spotPrice) <= gap);
   if (atmRow) {
     const buyToken = type === 'ce' ? atmRow.ce?.instrumentToken : atmRow.pe?.instrumentToken;
     if (buyToken) {
@@ -1071,13 +1088,14 @@ export function computeBuyRecommendations(
     }
   }
 
-  // Straddle: same strike, both CE and PE (ATM, within 50pts)
+  // Straddle: same strike, both CE and PE (ATM, within one strike of spot)
   const ceScores = strikeScores.filter((s) => s.type === 'ce');
   const peScores = strikeScores.filter((s) => s.type === 'pe');
+  const gap = strikeGap(chain);
 
   for (const ce of ceScores) {
     const pe = peScores.find((p) => p.strike === ce.strike);
-    if (pe && Math.abs(ce.strike - spotPrice) <= 50) {
+    if (pe && Math.abs(ce.strike - spotPrice) <= gap) {
       const straddleScore = Math.round((ce.score + pe.score) / 2);
       if (straddleScore >= 35) {
         const mergedBreakdown: BuyScoreBreakdown = {
