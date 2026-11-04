@@ -14,7 +14,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PnLHeatmap from './PnLHeatmap';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
-import { daysBetween, marketDate } from '../../../shared/marketTime.js';
+import { addDays, daysBetween, marketDate } from '../../../shared/marketTime.js';
 import {
   getPaperDailyPnl,
   getPaperTrades,
@@ -185,6 +185,24 @@ const TradeJournal: React.FC<{
     report.filters.from !== rangeStart || report.filters.to !== rangeEnd || report.filters.segment !== segment
   );
 
+  // Picking one end of the range drags the other along when the range would
+  // otherwise exceed what the server reports on, so Report stays usable.
+  const pickFrom = (from: string) => {
+    setRangeStart(from);
+    if (isValidDateParam(from) && isValidDateParam(rangeEnd) && daysBetween(from, rangeEnd) > MAX_RANGE_DAYS) {
+      const today = marketDate();
+      const end = addDays(from, MAX_RANGE_DAYS);
+      setRangeEnd(end < today ? end : today);
+    }
+  };
+
+  const pickTo = (to: string) => {
+    setRangeEnd(to);
+    if (isValidDateParam(to) && isValidDateParam(rangeStart) && daysBetween(rangeStart, to) > MAX_RANGE_DAYS) {
+      setRangeStart(addDays(to, -MAX_RANGE_DAYS));
+    }
+  };
+
   const toggleDate = (date: string) => {
     const opening = !expandedDates.has(date);
     setExpandedDates((prev) => {
@@ -236,7 +254,7 @@ const TradeJournal: React.FC<{
                 className="app-date-input"
                 value={rangeStart}
                 max={rangeEnd || undefined}
-                onChange={(e) => setRangeStart(e.target.value)}
+                onChange={(e) => pickFrom(e.target.value)}
               />
               <label className="tj-date-label">To</label>
               <input
@@ -244,7 +262,7 @@ const TradeJournal: React.FC<{
                 className="app-date-input"
                 value={rangeEnd}
                 min={rangeStart || undefined}
-                onChange={(e) => setRangeEnd(e.target.value)}
+                onChange={(e) => pickTo(e.target.value)}
               />
             </div>
 
