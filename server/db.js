@@ -1065,19 +1065,24 @@ export async function saveInstruments(instruments, stamp) {
 // Positions CRUD
 // ---------------------------------------------------------------------------
 
-export async function getPositions(userId, mode = null) {
-  // Exclude positions that were exited before today (IST). Open positions are
-  // always returned; exited positions only if they were exited today.
+export async function getPositions(userId, mode = null, { includePastExits = false } = {}) {
+  // By default, exclude positions that were exited before today (IST). Open
+  // positions are always returned; exited positions only if exited today.
+  // The trade journal passes includePastExits to get the full history.
   // exit_time is stored as an ISO-8601 UTC string, which sorts chronologically,
   // so a plain string comparison against today's IST-midnight threshold works.
-  const todayStart = new Date(getTodayMidnight()).toISOString();
+  const conditions = ['user_id = $1'];
+  const params = [userId];
+  if (mode) {
+    params.push(mode);
+    conditions.push(`mode = $${params.length}`);
+  }
+  if (!includePastExits) {
+    params.push(new Date(getTodayMidnight()).toISOString());
+    conditions.push(`(exited = 0 OR exit_time >= $${params.length})`);
+  }
 
-  const notPastExit = '(exited = 0 OR exit_time >= $%d)';
-  const sql = mode
-    ? `SELECT * FROM positions WHERE user_id = $1 AND mode = $2 AND ${notPastExit.replace('%d', '3')} ORDER BY entry_time DESC`
-    : `SELECT * FROM positions WHERE user_id = $1 AND ${notPastExit.replace('%d', '2')} ORDER BY entry_time DESC`;
-  const params = mode ? [userId, mode, todayStart] : [userId, todayStart];
-
+  const sql = `SELECT * FROM positions WHERE ${conditions.join(' AND ')} ORDER BY entry_time DESC`;
   const result = await rows(sql, params);
   return result.map(mapPositionRow);
 }

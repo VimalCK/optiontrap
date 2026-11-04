@@ -27,8 +27,16 @@ export interface Position {
   confidence?: number | null;
 }
 
-export async function getPositions(mode: 'paper' | 'live' = 'paper'): Promise<Position[]> {
-  return apiClient.get<Position[]>(`/api/positions?mode=${mode}`);
+/**
+ * Open positions plus those exited today. Pass `includeHistory` to also get
+ * positions exited on earlier days (used by the trade journal).
+ */
+export async function getPositions(
+  mode: 'paper' | 'live' = 'paper',
+  { includeHistory = false }: { includeHistory?: boolean } = {},
+): Promise<Position[]> {
+  const history = includeHistory ? '&history=1' : '';
+  return apiClient.get<Position[]>(`/api/positions?mode=${mode}${history}`);
 }
 
 /**

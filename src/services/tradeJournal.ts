@@ -74,7 +74,7 @@ function positionToEntry(pos: Position): TradeEntry {
  * Load paper trade entries — all exited positions from IndexedDB.
  */
 export async function getPaperTradeEntries(): Promise<TradeEntry[]> {
-  const positions = await getPositions();
+  const positions = await getPositions('paper', { includeHistory: true });
   return positions
     .filter((p) => p.exited && p.exitPrice !== undefined)
     .map(positionToEntry)

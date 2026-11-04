@@ -849,7 +849,8 @@ app.delete('/api/price-alerts/:id', requireAuth, requireSubscription, async (req
 app.get('/api/positions', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const mode = req.query.mode || null;
-  const positions = await getPositions(userId, mode);
+  const includePastExits = req.query.history === '1';
+  const positions = await getPositions(userId, mode, { includePastExits });
   res.json({ status: 'ok', data: positions });
 });
 
