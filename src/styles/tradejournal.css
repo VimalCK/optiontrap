@@ -120,11 +120,7 @@
   background: var(--sidebar-active);
 }
 
-/* ── Report button and messages ── */
-.tj-report-btn {
-  margin-left: auto;
-}
-
+/* ── Report messages ── */
 .tj-notice {
   font-size: 13px;
   color: var(--text-secondary);

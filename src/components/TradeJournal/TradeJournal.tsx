@@ -270,7 +270,7 @@ const TradeJournal: React.FC<{
             </div>
 
             <button
-              className="app-btn app-btn--primary tj-report-btn"
+              className="app-btn app-btn--primary"
               disabled={Boolean(problem) || reportLoading}
               title={problem ?? undefined}
               onClick={() => runReport(currentFilters, expandedDates)}
