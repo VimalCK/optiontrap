@@ -1,17 +1,24 @@
 /**
  * Trade Journal
- * Shows P&L heatmap derived from IndexedDB positions.
+ * P&L heatmap and per-day trade log for exited paper positions.
+ *
+ * Nothing loads when the page opens: pick the filters and press Report, which
+ * fetches one P&L total per day from the server. A day's trades are fetched
+ * only when that day is expanded, a page at a time, so the browser never
+ * loads the full trade history.
+ *
  * Mode: Paper (exited paper positions) | Live (coming soon)
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PnLHeatmap from './PnLHeatmap';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
+import { daysBetween, marketDate } from '../../../shared/marketTime.js';
 import {
-  getPaperTradeEntries,
-  getLiveTradeEntries,
-  aggregateDailyPnL,
+  getPaperDailyPnl,
+  getPaperTrades,
+  DailyPnl,
   TradeEntry,
   TradingMode,
   Segment,
@@ -20,18 +27,51 @@ import '@/styles/tradejournal.css';
 
 type SegmentFilter = 'all' | Segment;
 
-function toDateStr(d: Date): string {
-  return d.toISOString().slice(0, 10);
+/** Trades fetched per request when a day is expanded. */
+const DAY_PAGE_SIZE = 100;
+/** Longest range the server's daily P&L accepts. */
+const MAX_RANGE_DAYS = 366;
+
+interface ReportFilters {
+  from: string;
+  to: string;
+  segment: SegmentFilter;
 }
 
-function subtractMonths(d: Date, n: number): Date {
-  const copy = new Date(d);
-  copy.setMonth(copy.getMonth() - n);
-  return copy;
+interface DayTrades {
+  trades: TradeEntry[];
+  loading: boolean;
+  error: string | null;
+}
+
+/** `date` ('YYYY-MM-DD') moved back `n` calendar months, clamped to month end. */
+function subtractMonths(date: string, n: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  const target = new Date(Date.UTC(y, m - 1 - n, 1));
+  const lastDay = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+  target.setUTCDate(Math.min(d, lastDay));
+  return target.toISOString().slice(0, 10);
 }
 
 const isValidDateParam = (value: string | undefined): value is string =>
   Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+
+/** Why the range can't be reported on, or null when it's fine. */
+function rangeProblem(from: string, to: string): string | null {
+  if (!isValidDateParam(from) || !isValidDateParam(to)) return 'Pick both a From and a To date.';
+  if (from > to) return 'From must not be after To.';
+  if (daysBetween(from, to) > MAX_RANGE_DAYS) return 'Pick a range of at most one year.';
+  return null;
+}
+
+const segmentParam = (segment: SegmentFilter): Segment | undefined => (segment === 'all' ? undefined : segment);
+
+const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Could not load trades');
+
+const formatPnl = (pnl: number) =>
+  `${pnl >= 0 ? '+' : ''}${pnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const pnlClass = (pnl: number) => (pnl > 0 ? 'heatmap-positive' : pnl < 0 ? 'heatmap-negative' : '');
 
 const TradeJournal: React.FC<{
   initialRange?: 'today';
@@ -47,48 +87,90 @@ const TradeJournal: React.FC<{
   const [mode, setMode] = useState<TradingMode>(() =>
     initialMode || (localStorage.getItem('optiontrap_order_mode') as TradingMode) || 'paper'
   );
-  const [entries, setEntries] = useState<TradeEntry[]>([]);
   const [segment, setSegment] = useState<SegmentFilter>('all');
-  const [rangeStart, setRangeStart] = useState<string>(() =>
-    toDateStr(subtractMonths(new Date(), 12))
-  );
-  const [rangeEnd, setRangeEnd] = useState<string>(() => toDateStr(new Date()));
-  const [loading, setLoading] = useState(true);
+  const [rangeStart, setRangeStart] = useState<string>(() => subtractMonths(marketDate(), 12));
+  const [rangeEnd, setRangeEnd] = useState<string>(() => marketDate());
+
+  // The last report: its filters and one row per day. null until Report is pressed.
+  const [report, setReport] = useState<{ filters: ReportFilters; days: DailyPnl[] } | null>(null);
+  const [reportLoading, setReportLoading] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [dayTrades, setDayTrades] = useState<Record<string, DayTrades>>({});
   const [expandedDates, setExpandedDates] = useState<Set<string>>(new Set());
 
+  // Bumped on every report so answers to older requests are dropped.
+  const reportIdRef = useRef(0);
+
+  const loadDay = useCallback(async (filters: ReportFilters, date: string, offset: number) => {
+    const reportId = reportIdRef.current;
+    setDayTrades((prev) => ({
+      ...prev,
+      [date]: { trades: prev[date]?.trades ?? [], loading: true, error: null },
+    }));
+    try {
+      const trades = await getPaperTrades({
+        from: date,
+        to: date,
+        segment: segmentParam(filters.segment),
+        limit: DAY_PAGE_SIZE,
+        offset,
+      });
+      if (reportId !== reportIdRef.current) return;
+      setDayTrades((prev) => ({
+        ...prev,
+        [date]: { trades: [...(offset === 0 ? [] : prev[date]?.trades ?? []), ...trades], loading: false, error: null },
+      }));
+    } catch (err) {
+      if (reportId !== reportIdRef.current) return;
+      setDayTrades((prev) => ({
+        ...prev,
+        [date]: { trades: prev[date]?.trades ?? [], loading: false, error: errorText(err) },
+      }));
+    }
+  }, []);
+
+  const runReport = useCallback(async (filters: ReportFilters, expand: Set<string>) => {
+    const reportId = ++reportIdRef.current;
+    setReportLoading(true);
+    setReportError(null);
+    setDayTrades({});
+    try {
+      const days = await getPaperDailyPnl(filters.from, filters.to, segmentParam(filters.segment));
+      if (reportId !== reportIdRef.current) return;
+      setReport({ filters, days });
+      // Reload the trades of days that were open and are still in the report.
+      for (const day of days) {
+        if (expand.has(day.date)) loadDay(filters, day.date, 0);
+      }
+    } catch (err) {
+      if (reportId !== reportIdRef.current) return;
+      setReportError(errorText(err));
+    } finally {
+      if (reportId === reportIdRef.current) setReportLoading(false);
+    }
+  }, [loadDay]);
+
+  // A link to a specific day (e.g. a trade on the Dashboard) opens that day's
+  // report straight away; plain navigation to the page fetches nothing.
   useEffect(() => {
     const targetDate = isValidDateParam(initialDate)
       ? initialDate
       : initialRange === 'today'
-        ? toDateStr(new Date())
+        ? marketDate()
         : null;
 
     if (!targetDate) return;
 
+    const expand = new Set([targetDate]);
     setRangeStart(targetDate);
     setRangeEnd(targetDate);
-    setExpandedDates((prev) => new Set(prev).add(targetDate));
+    setExpandedDates(expand);
+    if ((initialMode ?? mode) === 'paper') {
+      runReport({ from: targetDate, to: targetDate, segment: 'all' }, expand);
+    }
+    // Only when the link itself changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDate, initialRange]);
-
-  const toggleDate = (date: string) => {
-    setExpandedDates((prev) => {
-      const next = new Set(prev);
-      if (next.has(date)) next.delete(date);
-      else next.add(date);
-      return next;
-    });
-  };
-
-  const load = useCallback(async (m: TradingMode) => {
-    setLoading(true);
-    const data = m === 'paper'
-      ? await getPaperTradeEntries()
-      : await getLiveTradeEntries();
-    setEntries(data);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => { load(mode); }, [load, mode]);
 
   useEffect(() => {
     if (!initialMode) return;
@@ -97,23 +179,24 @@ const TradeJournal: React.FC<{
     localStorage.setItem('optiontrap_order_mode', initialMode);
   }, [initialMode]);
 
-  const handleModeSwitch = (m: TradingMode) => {
-    setMode(m);
+  const currentFilters: ReportFilters = { from: rangeStart, to: rangeEnd, segment };
+  const problem = rangeProblem(rangeStart, rangeEnd);
+  const isStale = report !== null && (
+    report.filters.from !== rangeStart || report.filters.to !== rangeEnd || report.filters.segment !== segment
+  );
+
+  const toggleDate = (date: string) => {
+    const opening = !expandedDates.has(date);
+    setExpandedDates((prev) => {
+      const next = new Set(prev);
+      if (next.has(date)) next.delete(date);
+      else next.add(date);
+      return next;
+    });
+    if (opening && report && !dayTrades[date]) loadDay(report.filters, date, 0);
   };
 
-  // Filtered entries
-  const filteredEntries = entries.filter((e) => {
-    if (segment !== 'all' && e.segment !== segment) return false;
-    if (e.date < rangeStart || e.date > rangeEnd) return false;
-    return true;
-  });
-
-  const dailyPnL = aggregateDailyPnL(filteredEntries);
-
-  // Recent trades sorted by date desc
-  const recentTrades = [...filteredEntries]
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 50);
+  const dailyPnL = new Map((report?.days ?? []).map((day) => [day.date, day.pnl]));
 
   return (
     <div className="tj-container">
@@ -125,7 +208,7 @@ const TradeJournal: React.FC<{
             <button
               key={m}
               className={`tj-mode-tab ${mode === m ? 'tj-mode-tab--active' : ''} ${m === 'live' ? 'tj-mode-tab--live' : ''}`}
-              onClick={() => handleModeSwitch(m)}
+              onClick={() => setMode(m)}
             >
               <span className={`tj-mode-dot tj-mode-dot--${m}`} />
               {m.charAt(0).toUpperCase() + m.slice(1)}
@@ -133,29 +216,26 @@ const TradeJournal: React.FC<{
           ))}
         </div>
 
-        {/* Segment filter — only relevant for paper mode */}
-        {mode === 'paper' && (
-          <AppSelect
-            className="tj-segment-select"
-            value={segment}
-            options={[
-              { value: 'all', label: 'All Segments' },
-              { value: 'options', label: 'Options' },
-              { value: 'stocks', label: 'Stocks' },
-            ]}
-            onChange={(v) => setSegment(v as SegmentFilter)}
-          />
-        )}
-
-        {/* Date range */}
         {mode === 'paper' && (
           <>
+            <AppSelect
+              className="tj-segment-select"
+              value={segment}
+              options={[
+                { value: 'all', label: 'All Segments' },
+                { value: 'options', label: 'Options' },
+                { value: 'stocks', label: 'Stocks' },
+              ]}
+              onChange={(v) => setSegment(v as SegmentFilter)}
+            />
+
             <div className="tj-date-range">
               <label className="tj-date-label">From</label>
               <input
                 type="date"
                 className="app-date-input"
                 value={rangeStart}
+                max={rangeEnd || undefined}
                 onChange={(e) => setRangeStart(e.target.value)}
               />
               <label className="tj-date-label">To</label>
@@ -163,6 +243,7 @@ const TradeJournal: React.FC<{
                 type="date"
                 className="app-date-input"
                 value={rangeEnd}
+                min={rangeStart || undefined}
                 onChange={(e) => setRangeEnd(e.target.value)}
               />
             </div>
@@ -178,15 +259,24 @@ const TradeJournal: React.FC<{
                   key={label}
                   className="tj-preset-btn"
                   onClick={() => {
-                    const end = new Date();
-                    setRangeEnd(toDateStr(end));
-                    setRangeStart(toDateStr(subtractMonths(end, months)));
+                    const end = marketDate();
+                    setRangeEnd(end);
+                    setRangeStart(subtractMonths(end, months));
                   }}
                 >
                   {label}
                 </button>
               ))}
             </div>
+
+            <button
+              className="app-btn app-btn--primary tj-report-btn"
+              disabled={Boolean(problem) || reportLoading}
+              title={problem ?? undefined}
+              onClick={() => runReport(currentFilters, expandedDates)}
+            >
+              {reportLoading ? 'Loading…' : 'Report'}
+            </button>
           </>
         )}
       </div>
@@ -203,105 +293,119 @@ const TradeJournal: React.FC<{
         </div>
       )}
 
-      {/* Paper — Heatmap */}
       {mode === 'paper' && (
         <>
-          <div className="card tj-heatmap-card">
-            {loading ? (
-              <div className="tj-loading">Loading positions...</div>
-            ) : (
-              <PnLHeatmap
-                dailyPnL={dailyPnL}
-                endDate={new Date(rangeEnd)}
-                months={12}
-              />
-            )}
-          </div>
+          {problem && <div className="tj-notice">{problem}</div>}
+          {!problem && isStale && !reportLoading && (
+            <div className="tj-notice">Filters changed. Press Report to update the results below.</div>
+          )}
+          {reportError && <div className="tj-notice tj-notice--error">{reportError}</div>}
 
-          {/* Trades Table — grouped by date, collapsible */}
-          {!loading && recentTrades.length > 0 && (() => {
-            // Group trades by date
-            const groups = recentTrades.reduce<Record<string, TradeEntry[]>>((acc, t) => {
-              (acc[t.date] = acc[t.date] || []).push(t);
-              return acc;
-            }, {});
+          {report === null ? (
+            <div className="card tj-empty">
+              {reportLoading ? 'Loading report…' : 'Choose a segment and date range, then press Report.'}
+            </div>
+          ) : (
+            <>
+              <div className="card tj-heatmap-card">
+                <PnLHeatmap
+                  dailyPnL={dailyPnL}
+                  endDate={new Date(report.filters.to)}
+                  months={12}
+                />
+              </div>
 
-            return (
               <div className="card">
                 <h4 className="tj-section-title" style={{ marginBottom: 16 }}>Trade Log</h4>
-                <table className="tj-table">
-                  <thead>
-                    <tr>
-                      <th>Symbol</th>
-                      <th>Segment</th>
-                      <th>Side</th>
-                      <th>Qty</th>
-                      <th>Entry</th>
-                      <th>Exit</th>
-                      <th>P&L</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.entries(groups).map(([date, trades]) => {
-                      const dayTotal = trades.reduce((s, t) => s + t.pnl, 0);
-                      const isExpanded = expandedDates.has(date);
-                      return (
-                        <React.Fragment key={date}>
-                          {/* Date group header — clickable */}
-                          <tr
-                            className="tj-group-row"
-                            onClick={() => toggleDate(date)}
-                          >
-                            <td className="tj-group-date">
-                              <span className="tj-group-chevron">{isExpanded ? '▾' : '▸'}</span>
-                              {date}
-                              <span className="tj-group-count">{trades.length} trade{trades.length !== 1 ? 's' : ''}</span>
-                            </td>
-                            <td className="tj-group-empty" />
-                            <td className="tj-group-empty" />
-                            <td className="tj-group-empty" />
-                            <td className="tj-group-empty" />
-                            <td className="tj-group-empty" />
-                            <td className={`tj-group-pnl ${dayTotal > 0 ? 'heatmap-positive' : dayTotal < 0 ? 'heatmap-negative' : ''}`}>
-                              {dayTotal >= 0 ? '+' : ''}
-                              {dayTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                            </td>
-                          </tr>
-                          {/* Individual trades — only shown when expanded */}
-                          {isExpanded && trades.map((t) => (
-                            <tr key={t.id} className={`tj-trade-row ${initialTradeId === t.id ? 'tj-trade-row--highlighted' : ''}`}>
-                              <td className="tj-symbol">
-                                {t.symbol}
-                                <TradingViewLink symbol={t.symbol} />
-                                {(t.strategyTag || t.confidence != null || t.targetPrice != null || t.stopLossPrice != null || t.note) && (
-                                  <div className="tj-trade-meta">
-                                    {t.strategyTag && <span className="tj-trade-meta__tag">{t.strategyTag}</span>}
-                                    {t.confidence != null && <span>Conf {t.confidence}%</span>}
-                                    {t.targetPrice != null && <span>Tgt {t.targetPrice.toFixed(2)}</span>}
-                                    {t.stopLossPrice != null && <span>SL {t.stopLossPrice.toFixed(2)}</span>}
-                                    {t.note && <span className="tj-trade-meta__note">{t.note}</span>}
-                                  </div>
-                                )}
+                {report.days.length === 0 ? (
+                  <div className="tj-empty">No closed trades between {report.filters.from} and {report.filters.to}.</div>
+                ) : (
+                  <table className="tj-table">
+                    <thead>
+                      <tr>
+                        <th>Symbol</th>
+                        <th>Segment</th>
+                        <th>Side</th>
+                        <th>Qty</th>
+                        <th>Entry</th>
+                        <th>Exit</th>
+                        <th>P&L</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {report.days.map((day) => {
+                        const isExpanded = expandedDates.has(day.date);
+                        const loaded = dayTrades[day.date];
+                        const shown = loaded?.trades.length ?? 0;
+                        return (
+                          <React.Fragment key={day.date}>
+                            {/* Date group header — clickable */}
+                            <tr className="tj-group-row" onClick={() => toggleDate(day.date)}>
+                              <td className="tj-group-date">
+                                <span className="tj-group-chevron">{isExpanded ? '▾' : '▸'}</span>
+                                {day.date}
+                                <span className="tj-group-count">{day.trades} trade{day.trades !== 1 ? 's' : ''}</span>
                               </td>
-                              <td><span className={`tj-badge tj-badge--${t.segment}`}>{t.segment}</span></td>
-                              <td><span className={`tj-side tj-side--${t.side.toLowerCase()}`}>{t.side}</span></td>
-                              <td>{t.quantity}</td>
-                              <td>{t.entryPrice.toFixed(2)}</td>
-                              <td>{t.exitPrice.toFixed(2)}</td>
-                              <td className={t.pnl > 0 ? 'heatmap-positive' : t.pnl < 0 ? 'heatmap-negative' : ''}>
-                                {t.pnl >= 0 ? '+' : ''}
-                                {t.pnl.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                              </td>
+                              <td className="tj-group-empty" />
+                              <td className="tj-group-empty" />
+                              <td className="tj-group-empty" />
+                              <td className="tj-group-empty" />
+                              <td className="tj-group-empty" />
+                              <td className={`tj-group-pnl ${pnlClass(day.pnl)}`}>{formatPnl(day.pnl)}</td>
                             </tr>
-                          ))}
-                        </React.Fragment>
-                      );
-                    })}
-                  </tbody>
-                </table>
+
+                            {/* Individual trades — fetched when the day is expanded */}
+                            {isExpanded && loaded?.trades.map((t) => (
+                              <tr key={t.id} className={`tj-trade-row ${initialTradeId === t.id ? 'tj-trade-row--highlighted' : ''}`}>
+                                <td className="tj-symbol">
+                                  {t.symbol}
+                                  <TradingViewLink symbol={t.symbol} />
+                                  {(t.strategyTag || t.confidence != null || t.targetPrice != null || t.stopLossPrice != null || t.note) && (
+                                    <div className="tj-trade-meta">
+                                      {t.strategyTag && <span className="tj-trade-meta__tag">{t.strategyTag}</span>}
+                                      {t.confidence != null && <span>Conf {t.confidence}%</span>}
+                                      {t.targetPrice != null && <span>Tgt {t.targetPrice.toFixed(2)}</span>}
+                                      {t.stopLossPrice != null && <span>SL {t.stopLossPrice.toFixed(2)}</span>}
+                                      {t.note && <span className="tj-trade-meta__note">{t.note}</span>}
+                                    </div>
+                                  )}
+                                </td>
+                                <td><span className={`tj-badge tj-badge--${t.segment}`}>{t.segment}</span></td>
+                                <td><span className={`tj-side tj-side--${t.side.toLowerCase()}`}>{t.side}</span></td>
+                                <td>{t.quantity}</td>
+                                <td>{t.entryPrice.toFixed(2)}</td>
+                                <td>{t.exitPrice.toFixed(2)}</td>
+                                <td className={pnlClass(t.pnl)}>{formatPnl(t.pnl)}</td>
+                              </tr>
+                            ))}
+
+                            {isExpanded && loaded && (loaded.loading || loaded.error || shown < day.trades) && (
+                              <tr className="tj-day-status-row">
+                                <td colSpan={7}>
+                                  {loaded.loading ? (
+                                    <span className="tj-loading">Loading trades…</span>
+                                  ) : loaded.error ? (
+                                    <span className="tj-notice--error">{loaded.error}</span>
+                                  ) : (
+                                    <button
+                                      className="tj-preset-btn"
+                                      onClick={() => loadDay(report.filters, day.date, shown)}
+                                    >
+                                      Load more ({shown} of {day.trades})
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
               </div>
-            );
-          })()}
+            </>
+          )}
         </>
       )}
     </div>

@@ -3,10 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import { DashboardIcon } from '@/components/icons/Icons';
 import { fetchHoldings, fetchPositions } from '@/services/kiteApi';
 import { getPositions, Position } from '@/services/positions';
-import { getLiveTradeEntries, getPaperTradeEntries, TradeEntry } from '@/services/tradeJournal';
+import { getLiveTradeEntries, getPaperTradeStats, getPaperTrades, TradeEntry, TradeStats } from '@/services/tradeJournal';
 import { fetchPriceAlerts } from '@/services/priceAlerts';
 import { fetchWatchlists } from '@/services/watchlist';
-import { istDateString } from '@/utils/marketStatus';
 import '@/styles/dashboard.css';
 
 type DashboardTradeEntry = TradeEntry & { mode: 'paper' | 'live' };
@@ -86,12 +85,6 @@ const getPaperPositionPnl = (position: Position) => {
     : (position.entryPrice - exitPrice) * position.quantity;
 };
 
-/** Whether a trade falls on today's IST trading day. */
-const isToday = (value: string) => {
-  const date = new Date(value);
-  return !Number.isNaN(date.getTime()) && istDateString(date) === istDateString();
-};
-
 const MetricCard: React.FC<{
   title: string;
   value: string;
@@ -151,11 +144,14 @@ const Dashboard: React.FC = () => {
     setError(null);
 
     try {
-      const [holdingsResult, livePositionsResult, paperPositionsResult, paperTradesResult, liveTradesResult, watchlistsResult, alertsResult] = await Promise.allSettled([
+      // Stats are totalled on the server, and only the 5 latest trades are
+      // fetched, so the Dashboard never loads the full trade history.
+      const [holdingsResult, livePositionsResult, paperPositionsResult, paperStatsResult, paperTradesResult, liveTradesResult, watchlistsResult, alertsResult] = await Promise.allSettled([
         fetchHoldings(),
         fetchPositions(),
         getPositions(),
-        getPaperTradeEntries(),
+        getPaperTradeStats(),
+        getPaperTrades({ limit: 5 }),
         getLiveTradeEntries(),
         fetchWatchlists(),
         fetchPriceAlerts(),
@@ -164,9 +160,11 @@ const Dashboard: React.FC = () => {
       const holdings = holdingsResult.status === 'fulfilled' ? holdingsResult.value : [];
       const livePositions = livePositionsResult.status === 'fulfilled' ? livePositionsResult.value : { net: [], day: [] };
       const paperPositions = paperPositionsResult.status === 'fulfilled' ? paperPositionsResult.value : [];
+      const paperStats: TradeStats = paperStatsResult.status === 'fulfilled'
+        ? paperStatsResult.value
+        : { closedTrades: 0, winningTrades: 0, losingTrades: 0, avgWin: 0, avgLoss: 0, todayTrades: 0 };
       const paperTrades = paperTradesResult.status === 'fulfilled' ? paperTradesResult.value : [];
       const liveTrades = liveTradesResult.status === 'fulfilled' ? liveTradesResult.value : [];
-      const trades = paperTrades;
       const recentTrades: DashboardTradeEntry[] = [
         ...paperTrades.map((trade) => ({ ...trade, mode: 'paper' as const })),
         ...liveTrades.map((trade) => ({ ...trade, mode: 'live' as const })),
@@ -189,11 +187,6 @@ const Dashboard: React.FC = () => {
       const holdingsPnl = holdingRows.reduce((sum, holding) => sum + holding.pnl, 0);
       const paperPnl = paperPositions.reduce((sum, position) => sum + getPaperPositionPnl(position), 0);
       const livePnl = livePositions.net.reduce((sum, position) => sum + position.pnl, 0);
-      const winners = trades.filter((trade) => trade.pnl > 0);
-      const losers = trades.filter((trade) => trade.pnl < 0);
-      const avgWin = winners.length > 0 ? winners.reduce((sum, trade) => sum + trade.pnl, 0) / winners.length : 0;
-      const avgLoss = losers.length > 0 ? losers.reduce((sum, trade) => sum + trade.pnl, 0) / losers.length : 0;
-      const sortedByPnl = [...trades].sort((a, b) => b.pnl - a.pnl);
 
       setMetrics({
         holdingsValue,
@@ -201,21 +194,21 @@ const Dashboard: React.FC = () => {
         holdingsPnl,
         paperPnl,
         livePnl,
-        todayTrades: trades.filter((trade) => isToday(trade.date)).length,
+        todayTrades: paperStats.todayTrades,
         watchlistCount: watchlists.reduce((sum, list) => sum + list.itemCount, 0),
         watchlistLists: watchlists.length,
         openPaperPositions: paperPositions.filter((position) => !position.exited).length,
         openLivePositions: livePositions.net.filter((position) => position.quantity !== 0).length,
         activeAlerts: alerts.filter((alert) => alert.status === 'active').length,
         triggeredAlerts: alerts.filter((alert) => alert.status === 'triggered').length,
-        closedTrades: trades.length,
-        winningTrades: winners.length,
-        losingTrades: losers.length,
-        winRate: trades.length > 0 ? (winners.length / trades.length) * 100 : 0,
-        avgWin,
-        avgLoss,
-        bestTrade: sortedByPnl[0],
-        worstTrade: sortedByPnl[sortedByPnl.length - 1],
+        closedTrades: paperStats.closedTrades,
+        winningTrades: paperStats.winningTrades,
+        losingTrades: paperStats.losingTrades,
+        winRate: paperStats.closedTrades > 0 ? (paperStats.winningTrades / paperStats.closedTrades) * 100 : 0,
+        avgWin: paperStats.avgWin,
+        avgLoss: paperStats.avgLoss,
+        bestTrade: paperStats.bestTrade,
+        worstTrade: paperStats.worstTrade,
         recentTrades,
         topHoldings: holdingRows
           .sort((a, b) => b.value - a.value)
@@ -223,7 +216,7 @@ const Dashboard: React.FC = () => {
           .map((holding) => ({ ...holding, weight: holdingsValue > 0 ? (holding.value / holdingsValue) * 100 : 0 })),
       });
 
-      const failed = [holdingsResult, livePositionsResult, paperPositionsResult, paperTradesResult, liveTradesResult, watchlistsResult]
+      const failed = [holdingsResult, livePositionsResult, paperPositionsResult, paperStatsResult, paperTradesResult, liveTradesResult, watchlistsResult]
         .some((result) => result.status === 'rejected');
       setError(failed ? 'Some dashboard data could not be loaded. Showing available metrics.' : null);
     } catch (err) {

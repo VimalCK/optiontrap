@@ -120,6 +120,30 @@
   background: var(--sidebar-active);
 }
 
+/* ── Report button and messages ── */
+.tj-report-btn {
+  margin-left: auto;
+}
+
+.tj-notice {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.tj-notice--error {
+  font-size: 13px;
+  color: #ef4444;
+}
+
+.tj-empty {
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.tj-day-status-row td {
+  padding: 8px 12px;
+}
+
 /* ── Heatmap card ── */
 .tj-heatmap-card {
   padding: 20px 24px;

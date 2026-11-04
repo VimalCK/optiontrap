@@ -34,12 +34,69 @@ export async function getPositions(mode: 'paper' | 'live' = 'paper'): Promise<Po
   return apiClient.get<Position[]>(`/api/positions?mode=${mode}`);
 }
 
+export interface ClosedPositionsFilter {
+  /** Market-zone (IST) exit days, 'YYYY-MM-DD', inclusive. */
+  from?: string;
+  to?: string;
+  segment?: 'options' | 'stocks';
+  /** Page size; the server defaults to 100 and allows at most 500. */
+  limit?: number;
+  offset?: number;
+}
+
+export interface DailyPnl {
+  date: string; // market-zone exit day, 'YYYY-MM-DD'
+  pnl: number;
+  trades: number;
+}
+
+export interface PositionStats {
+  closedTrades: number;
+  winningTrades: number;
+  losingTrades: number;
+  avgWin: number;
+  avgLoss: number;
+  todayTrades: number;
+  bestTrade: Position | null;
+  worstTrade: Position | null;
+}
+
+function query(params: Record<string, string | number | undefined>): string {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined) search.set(key, String(value));
+  }
+  return search.toString();
+}
+
 /**
- * Every exited position, from any day, most recently exited first
- * (used by the trade journal).
+ * A page of exited positions, most recently exited first.
  */
-export async function getClosedPositions(mode: 'paper' | 'live' = 'paper'): Promise<Position[]> {
-  return apiClient.get<Position[]>(`/api/positions?mode=${mode}&status=closed`);
+export async function getClosedPositions(
+  mode: 'paper' | 'live' = 'paper',
+  filter: ClosedPositionsFilter = {},
+): Promise<Position[]> {
+  return apiClient.get<Position[]>(`/api/positions?${query({ mode, status: 'closed', ...filter })}`);
+}
+
+/**
+ * P&L and trade count per exit day between `from` and `to` (at most 366 days
+ * apart), newest day first. Days without exits are left out.
+ */
+export async function getDailyPnl(
+  mode: 'paper' | 'live',
+  from: string,
+  to: string,
+  segment?: 'options' | 'stocks',
+): Promise<DailyPnl[]> {
+  return apiClient.get<DailyPnl[]>(`/api/positions/daily-pnl?${query({ mode, from, to, segment })}`);
+}
+
+/**
+ * All-time win/loss figures over exited positions.
+ */
+export async function getPositionStats(mode: 'paper' | 'live' = 'paper'): Promise<PositionStats> {
+  return apiClient.get<PositionStats>(`/api/positions/stats?${query({ mode })}`);
 }
 
 /**

@@ -17,7 +17,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
 import { MARKET_TIME_ZONE, marketDayStartMs } from '../shared/marketTime.js';
-import { buildPositionsQuery } from './positionsQuery.js';
+import { buildDailyPnlQuery, buildPositionsQuery, buildStatsQueries } from './positionsQuery.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
@@ -1067,14 +1067,47 @@ export async function saveInstruments(instruments, stamp) {
 // ---------------------------------------------------------------------------
 
 /**
- * List a user's positions. See buildPositionsQuery for what `status` selects:
- * by default, open positions plus those exited today; 'closed' for every exit.
+ * List a user's positions. By default, open positions plus those exited
+ * today; with status 'closed', a filtered page of exited positions. The
+ * filter comes from parsePositionsQuery (positionsQuery.js).
  */
-export async function getPositions(userId, { mode = null, status } = {}) {
+export async function getPositions(userId, filter = {}) {
   const todayStart = new Date(getTodayMidnight()).toISOString();
-  const { sql, params } = buildPositionsQuery(userId, { mode, status, todayStart });
+  const { sql, params } = buildPositionsQuery(userId, { ...filter, todayStart });
   const result = await rows(sql, params);
   return result.map(mapPositionRow);
+}
+
+/**
+ * P&L and trade count per market-zone exit day, newest first.
+ * The filter comes from parseDailyPnlQuery (positionsQuery.js).
+ * @returns {Promise<{ date: string, pnl: number, trades: number }[]>}
+ */
+export async function getDailyPnl(userId, filter) {
+  const { sql, params } = buildDailyPnlQuery(userId, filter);
+  const result = await rows(sql, params);
+  return result.map((row) => ({ date: row.date, pnl: Number(row.pnl), trades: Number(row.trades) }));
+}
+
+/** All-time win/loss figures over a user's exited positions. */
+export async function getPositionStats(userId, { mode = null } = {}) {
+  const todayStart = new Date(getTodayMidnight()).toISOString();
+  const queries = buildStatsQueries(userId, { mode, todayStart });
+  const [summary, best, worst] = await Promise.all([
+    firstRow(queries.summary.sql, queries.summary.params),
+    firstRow(queries.best.sql, queries.best.params),
+    firstRow(queries.worst.sql, queries.worst.params),
+  ]);
+  return {
+    closedTrades: Number(summary.closed_trades),
+    winningTrades: Number(summary.winning_trades),
+    losingTrades: Number(summary.losing_trades),
+    avgWin: summary.avg_win === null ? 0 : Number(summary.avg_win),
+    avgLoss: summary.avg_loss === null ? 0 : Number(summary.avg_loss),
+    todayTrades: Number(summary.today_trades),
+    bestTrade: best ? mapPositionRow(best) : null,
+    worstTrade: worst ? mapPositionRow(worst) : null,
+  };
 }
 
 function mapPositionRow(row) {

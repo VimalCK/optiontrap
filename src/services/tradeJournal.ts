@@ -1,19 +1,29 @@
 /**
  * Trade Journal Service
- * Derives trade entries from the positions API.
+ * Trade entries and summaries from the positions API. The server filters,
+ * pages and totals the trades, so the browser never loads the full history.
  *
- * Paper  → every exited paper position (GET /api/positions?status=closed)
+ * Paper  → exited paper positions (GET /api/positions?status=closed, /daily-pnl, /stats)
  * Live   → not yet implemented (reserved for Kite Trades API)
  */
 
-import { getClosedPositions, Position } from './positions';
+import { marketDate } from '../../shared/marketTime.js';
+import {
+  getClosedPositions,
+  getDailyPnl,
+  getPositionStats,
+  ClosedPositionsFilter,
+  DailyPnl,
+  Position,
+} from './positions';
 
 export type Segment = 'stocks' | 'options';
 export type TradingMode = 'paper' | 'live';
+export type { DailyPnl };
 
 export interface TradeEntry {
   id: string;
-  date: string;       // 'YYYY-MM-DD'
+  date: string;       // market-zone (IST) exit day, 'YYYY-MM-DD'
   segment: Segment;
   symbol: string;
   side: 'BUY' | 'SELL';
@@ -28,33 +38,38 @@ export interface TradeEntry {
   confidence?: number | null;
 }
 
+export interface TradeStats {
+  closedTrades: number;
+  winningTrades: number;
+  losingTrades: number;
+  avgWin: number;
+  avgLoss: number;
+  todayTrades: number;
+  bestTrade?: TradeEntry;
+  worstTrade?: TradeEntry;
+}
+
 /**
- * Derive segment from a Position.
- * Options have optionType (CE/PE). Everything else is stocks.
+ * Options have optionType CE/PE; everything else is stocks (the same rule the
+ * server's segment filter uses).
  */
-function positionToSegment(_pos: Position): Segment {
-  // All current paper positions are options (CE/PE).
-  // When stocks are added, check optionType or a future `segment` field.
-  return 'options';
+function positionToSegment(pos: Position): Segment {
+  return pos.optionType === 'CE' || pos.optionType === 'PE' ? 'options' : 'stocks';
 }
 
 /**
  * Convert an exited Position into a TradeEntry.
  */
-function positionToEntry(pos: Position): TradeEntry {
+export function positionToEntry(pos: Position): TradeEntry {
   const exitPrice = pos.exitPrice ?? 0;
   const pnl =
     pos.side === 'BUY'
       ? (exitPrice - pos.entryPrice) * pos.quantity
       : (pos.entryPrice - exitPrice) * pos.quantity;
 
-  const date = pos.exitTime
-    ? pos.exitTime.slice(0, 10)
-    : pos.entryTime.slice(0, 10);
-
   return {
     id: pos.id,
-    date,
+    date: marketDate(new Date(pos.exitTime ?? pos.entryTime)),
     segment: positionToSegment(pos),
     symbol: pos.tradingsymbol,
     side: pos.side,
@@ -71,14 +86,30 @@ function positionToEntry(pos: Position): TradeEntry {
 }
 
 /**
- * Load paper trade entries — all exited positions from IndexedDB.
+ * A page of paper trades, most recently exited first.
  */
-export async function getPaperTradeEntries(): Promise<TradeEntry[]> {
-  const positions = await getClosedPositions('paper');
-  return positions
-    .filter((p) => p.exited && p.exitPrice !== undefined)
-    .map(positionToEntry)
-    .sort((a, b) => b.date.localeCompare(a.date));
+export async function getPaperTrades(filter: ClosedPositionsFilter = {}): Promise<TradeEntry[]> {
+  const positions = await getClosedPositions('paper', filter);
+  return positions.map(positionToEntry);
+}
+
+/**
+ * Paper P&L per exit day between `from` and `to`, newest day first.
+ */
+export async function getPaperDailyPnl(from: string, to: string, segment?: Segment): Promise<DailyPnl[]> {
+  return getDailyPnl('paper', from, to, segment);
+}
+
+/**
+ * All-time paper win/loss figures.
+ */
+export async function getPaperTradeStats(): Promise<TradeStats> {
+  const { bestTrade, worstTrade, ...counts } = await getPositionStats('paper');
+  return {
+    ...counts,
+    bestTrade: bestTrade ? positionToEntry(bestTrade) : undefined,
+    worstTrade: worstTrade ? positionToEntry(worstTrade) : undefined,
+  };
 }
 
 /**
@@ -87,16 +118,4 @@ export async function getPaperTradeEntries(): Promise<TradeEntry[]> {
  */
 export async function getLiveTradeEntries(): Promise<TradeEntry[]> {
   return [];
-}
-
-/**
- * Aggregate daily P&L for a set of entries.
- * Returns a map of 'YYYY-MM-DD' → total P&L.
- */
-export function aggregateDailyPnL(entries: TradeEntry[]): Map<string, number> {
-  const map = new Map<string, number>();
-  for (const e of entries) {
-    map.set(e.date, (map.get(e.date) ?? 0) + e.pnl);
-  }
-  return map;
 }
