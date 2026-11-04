@@ -30,7 +30,7 @@ export interface Holding {
   average_price: number; last_price: number; close_price: number; pnl: number; day_change: number;
   day_change_percentage: number; collateral_quantity: number; collateral_type: string;
 }
-export function fetchHoldings(): Promise<Holding[]> { return apiClient.get('/api/portfolio/holdings'); }
+export function fetchHoldings(signal?: AbortSignal): Promise<Holding[]> { return apiClient.get('/api/portfolio/holdings', { signal }); }
 
 export interface SegmentMargin {
   enabled: boolean; net: number;

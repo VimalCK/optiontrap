@@ -82,6 +82,23 @@ describe('fetchPricedHoldings', () => {
     expect(dayChangeTotal(priced)).toBeCloseTo(41949.5, 2);
   });
 
+  // A fetch given an aborted signal rejects without sending anything.
+  it('passes the signal to both requests and stops, without a fallback, once cancelled', async () => {
+    const controller = new AbortController();
+    apiGet.mockImplementation(async (url: string, options?: { signal?: AbortSignal }) => {
+      if (url === '/api/portfolio/holdings') {
+        controller.abort(); // the page closed while holdings were loading
+        return STALE;
+      }
+      if (options?.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      return {};
+    });
+
+    await expect(fetchPricedHoldings(controller.signal)).rejects.toThrow('Aborted');
+    expect(apiGet).toHaveBeenCalledWith('/api/portfolio/holdings', { signal: controller.signal });
+    expect(apiGet.mock.calls.filter(([url]) => (url as string).startsWith('/api/quote'))).toHaveLength(1);
+  });
+
   it("falls back to Kite's figures when quotes fail", async () => {
     apiGet.mockResolvedValueOnce(STALE).mockRejectedValueOnce(new Error('quote down'));
 

@@ -48,10 +48,14 @@ const HoldingsView: React.FC = () => {
     });
   }, []);
 
+  // Cancelled when the page closes, so a load nobody will see (or StrictMode's
+  // first mount in development) never goes on to fetch quotes.
   useEffect(() => {
-    loadHoldings();
+    const controller = new AbortController();
+    loadHoldings(controller.signal);
     const statusInterval = setInterval(() => setMarketStatus(getMarketStatus()), 30000);
-    return () => { clearInterval(statusInterval); };
+    return () => { controller.abort(); clearInterval(statusInterval); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -60,17 +64,19 @@ const HoldingsView: React.FC = () => {
     return tickerSubscribe('holdings', tokens, handleTicks);
   }, [holdings, marketStatus, handleTicks]);
 
-  const loadHoldings = async () => {
+  const loadHoldings = async (signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchPricedHoldings();
+      const data = await fetchPricedHoldings(signal);
+      if (signal?.aborted) return;
       setHoldings(data);
     } catch (err) {
+      if (signal?.aborted) return;
       const msg = err instanceof Error ? err.message : 'Failed to load holdings';
       setError(msg);
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   };
 
@@ -142,7 +148,7 @@ const HoldingsView: React.FC = () => {
       {error && (
         <div className="card holdings-error">
           <p>{error}</p>
-          <button className="btn btn--primary" onClick={loadHoldings} style={{ marginTop: 12 }}>Retry</button>
+          <button className="btn btn--primary" onClick={() => loadHoldings()} style={{ marginTop: 12 }}>Retry</button>
         </div>
       )}
 

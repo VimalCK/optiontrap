@@ -33,9 +33,12 @@ export function applyQuotes(holdings: Holding[], quotes: Map<string, QuoteData>)
 }
 
 /** Holdings priced from the quote API. If quotes can't be fetched, Kite's own figures. */
-export async function fetchPricedHoldings(): Promise<Holding[]> {
-  const holdings = await fetchHoldings();
+export async function fetchPricedHoldings(signal?: AbortSignal): Promise<Holding[]> {
+  const holdings = await fetchHoldings(signal);
   if (holdings.length === 0) return holdings;
-  const quotes = await fetchQuotes(holdings.map((h) => `${h.exchange}:${h.tradingsymbol}`)).catch(() => new Map());
+  const quotes = await fetchQuotes(holdings.map((h) => `${h.exchange}:${h.tradingsymbol}`), signal).catch((err) => {
+    if (signal?.aborted) throw err;
+    return new Map<string, QuoteData>();
+  });
   return applyQuotes(holdings, quotes);
 }
