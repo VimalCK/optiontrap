@@ -8,6 +8,7 @@ import { HoldingsIcon } from '@/components/icons/Icons';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import { heldQuantity } from '@/services/holdings';
 import { useHoldings } from '@/hooks/useHoldings';
+import { formatAmount, formatSignedAmount } from '@/utils/formatAmount';
 import '@/styles/holdings.css';
 
 type AllocationView = 'bar' | 'treemap';
@@ -107,14 +108,14 @@ const HoldingsView: React.FC = () => {
             <div className="card holdings-stat">
               <span className="holdings-stat__label">Total P&L</span>
               <span className={`holdings-stat__value ${totalPnl >= 0 ? 'positive' : 'negative'} ${privacyMode ? 'blurred' : ''}`}>
-                {totalPnl >= 0 ? '+' : ''}{totalPnl.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                {formatSignedAmount(totalPnl)}
                 <small> ({totalInvestment > 0 ? ((totalPnl / totalInvestment) * 100).toFixed(2) : '0.00'}%)</small>
               </span>
             </div>
             <div className="card holdings-stat">
               <span className="holdings-stat__label">Day Change</span>
               <span className={`holdings-stat__value ${totalDayChange >= 0 ? 'positive' : 'negative'}`}>
-                {totalDayChange >= 0 ? '+' : ''}{totalDayChange.toLocaleString('en-IN', { maximumFractionDigits: 2 })}
+                {formatSignedAmount(totalDayChange)}
               </span>
             </div>
           </div>
@@ -128,12 +129,12 @@ const HoldingsView: React.FC = () => {
                 <div className="allocation-summary">
                   <span className="allocation-summary__item">
                     <span className="allocation-summary__label">Invested</span>
-                    <span className={`allocation-summary__value ${privacyMode ? 'blurred' : ''}`}>{totalInvestment.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                    <span className={`allocation-summary__value ${privacyMode ? 'blurred' : ''}`}>{formatAmount(totalInvestment)}</span>
                   </span>
                   <span className="allocation-summary__divider" />
                   <span className="allocation-summary__item">
                     <span className="allocation-summary__label">Current</span>
-                    <span className={`allocation-summary__value ${privacyMode ? 'blurred' : ''}`}>{totalCurrentValue.toLocaleString('en-IN', { maximumFractionDigits: 2 })}</span>
+                    <span className={`allocation-summary__value ${privacyMode ? 'blurred' : ''}`}>{formatAmount(totalCurrentValue)}</span>
                   </span>
                 </div>
               </div>
