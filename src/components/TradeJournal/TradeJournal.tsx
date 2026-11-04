@@ -15,7 +15,7 @@ import PnLHeatmap from './PnLHeatmap';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import { marketDate } from '../../../shared/marketTime.js';
-import { fitRange, isDateValue, isOverYear, rangeProblem, subtractMonths } from './journalRange';
+import { isDateValue, rangeProblem, subtractMonths } from './journalRange';
 import {
   getPaperDailyPnl,
   getPaperTrades,
@@ -159,18 +159,13 @@ const TradeJournal: React.FC<{
   }, [initialMode]);
 
   const problem = rangeProblem(rangeStart, rangeEnd);
-  const overYear = isOverYear(rangeStart, rangeEnd);
   const isStale = report !== null && (
     report.filters.from !== rangeStart || report.filters.to !== rangeEnd || report.filters.segment !== segment
   );
 
-  // The range is checked here, on Report, and not while a date is being
-  // typed (see journalRange.ts). A range over a year is cut to the year
-  // ending on To.
+  // Report runs on exactly the dates picked.
   const handleReport = () => {
-    const range = fitRange(rangeStart, rangeEnd);
-    if (range.from !== rangeStart) setRangeStart(range.from);
-    runReport({ ...range, segment }, expandedDates);
+    runReport({ from: rangeStart, to: rangeEnd, segment }, expandedDates);
   };
 
   const toggleDate = (date: string) => {
@@ -282,10 +277,7 @@ const TradeJournal: React.FC<{
       {mode === 'paper' && (
         <>
           {problem && <div className="tj-notice">{problem}</div>}
-          {overYear && (
-            <div className="tj-notice">That range is over a year: Report will show the year up to the To date.</div>
-          )}
-          {!problem && !overYear && isStale && !reportLoading && (
+          {!problem && isStale && !reportLoading && (
             <div className="tj-notice">Filters changed. Press Report to update the results below.</div>
           )}
           {reportError && <div className="tj-notice tj-notice--error">{reportError}</div>}

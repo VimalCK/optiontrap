@@ -12,15 +12,13 @@
  * chronologically, so comparing it as text against the ISO instants of
  * market-zone midnights selects whole market days.
  */
-import { MARKET_TIME_ZONE, addDays, daysBetween, marketDateTime } from '../shared/marketTime.js';
+import { MARKET_TIME_ZONE, addDays, marketDateTime } from '../shared/marketTime.js';
 
 export const POSITION_STATUSES = ['closed'];
 export const POSITION_MODES = ['paper', 'live'];
 export const SEGMENTS = ['options', 'stocks'];
 export const DEFAULT_TRADE_LIMIT = 100;
 export const MAX_TRADE_LIMIT = 500;
-/** Longest from–to span daily-pnl accepts: a year, plus a leap day. */
-export const MAX_RANGE_DAYS = 366;
 
 // P&L of an exited position; the same formula the browser used before.
 const PNL_SQL = "CASE WHEN side = 'BUY' THEN (exit_price - entry_price) * quantity ELSE (entry_price - exit_price) * quantity END";
@@ -93,8 +91,8 @@ export function parsePositionsQuery(query = {}) {
 
 /**
  * Validate the query of GET /api/positions/daily-pnl. from and to are
- * required and at most MAX_RANGE_DAYS apart, so the reply stays one row per
- * day of a bounded range however many trades there are.
+ * required; the reply is one row per day with exits, however many trades
+ * there are.
  * @returns {{ filter: object } | { error: string }}
  */
 export function parseDailyPnlQuery(query = {}) {
@@ -102,9 +100,6 @@ export function parseDailyPnlQuery(query = {}) {
   if (mode.error) return mode;
   const range = parseRange(query.from, query.to, { required: true });
   if (range.error) return range;
-  if (daysBetween(range.from, range.to) > MAX_RANGE_DAYS) {
-    return { error: `from and to must be at most ${MAX_RANGE_DAYS} days apart` };
-  }
   const segment = parseSegment(query.segment);
   if (segment.error) return segment;
   return { filter: { mode: mode.mode, from: range.from, to: range.to, segment: segment.segment } };

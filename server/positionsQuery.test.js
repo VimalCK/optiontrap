@@ -68,10 +68,10 @@ describe('parseDailyPnlQuery', () => {
     expect(parseDailyPnlQuery({ mode: 'paper' })).toEqual({ error: 'from and to are required' });
   });
 
-  it('allows a year including a leap day, but not more', () => {
-    expect(parseDailyPnlQuery({ from: '2027-03-01', to: '2028-03-01' })).toHaveProperty('filter'); // 366 days
-    expect(parseDailyPnlQuery({ from: '2025-11-04', to: '2026-11-06' }))
-      .toEqual({ error: 'from and to must be at most 366 days apart' });
+  it('accepts a range of any length', () => {
+    expect(parseDailyPnlQuery({ from: '2025-02-01', to: '2026-11-04' })).toEqual({
+      filter: { mode: null, from: '2025-02-01', to: '2026-11-04', segment: undefined },
+    });
   });
 });
 

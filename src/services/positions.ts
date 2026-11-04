@@ -88,8 +88,8 @@ export async function getClosedPositions(
 }
 
 /**
- * P&L and trade count per exit day between `from` and `to` (at most 366 days
- * apart), newest day first. Days without exits are left out.
+ * P&L and trade count per exit day between `from` and `to`, newest day
+ * first. Days without exits are left out.
  */
 export async function getDailyPnl(
   mode: 'paper' | 'live',
