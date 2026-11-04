@@ -29,7 +29,7 @@ describe('typing a From date year digit by digit', () => {
     // Nothing reacts to the in-between values; only the final one matters.
     const from = keystrokes[keystrokes.length - 1];
     expect(rangeProblem(from, to)).toBeNull();
-    expect(fitRange(from, to, TODAY)).toEqual({ from: '2026-08-01', to: TODAY });
+    expect(fitRange(from, to)).toEqual({ from: '2026-08-01', to: TODAY });
   });
 
   it('the in-between values are complete dates, which is why reacting to them broke To', () => {
@@ -40,20 +40,19 @@ describe('typing a From date year digit by digit', () => {
 
 describe('fitRange', () => {
   it('leaves a range of a year or less alone', () => {
-    expect(fitRange('2025-11-05', '2026-11-05', TODAY)).toEqual({ from: '2025-11-05', to: '2026-11-05' });
-    expect(fitRange('2026-10-01', '2026-10-31', TODAY)).toEqual({ from: '2026-10-01', to: '2026-10-31' });
+    expect(fitRange('2025-11-05', '2026-11-05')).toEqual({ from: '2025-11-05', to: '2026-11-05' });
+    expect(fitRange('2026-10-01', '2026-10-31')).toEqual({ from: '2026-10-01', to: '2026-10-31' });
   });
 
-  it('shortens a longer range to a year after From', () => {
-    expect(fitRange('2024-01-01', '2026-11-05', TODAY)).toEqual({ from: '2024-01-01', to: '2025-01-01' });
+  it('shortens a longer range to the year ending on To', () => {
+    expect(fitRange('2024-01-01', '2026-11-05')).toEqual({ from: '2025-11-04', to: '2026-11-05' });
   });
 
-  it('does not move To past today', () => {
-    expect(fitRange('2026-01-01', '2028-01-01', TODAY)).toEqual({ from: '2026-01-01', to: TODAY });
-  });
-
-  it('keeps To on From when From itself is in the future', () => {
-    expect(fitRange('2027-01-01', '2029-01-01', TODAY)).toEqual({ from: '2027-01-01', to: '2027-01-01' });
+  it('keeps To as picked, so the recent trades are the ones shown', () => {
+    // From 1 Feb 2025 to today used to report Feb 2025 – Feb 2026 and miss every recent trade.
+    const range = fitRange('2025-02-01', TODAY);
+    expect(range.to).toBe(TODAY);
+    expect(isOverYear(range.from, range.to)).toBe(false);
   });
 });
 

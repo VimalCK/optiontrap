@@ -165,10 +165,11 @@ const TradeJournal: React.FC<{
   );
 
   // The range is checked here, on Report, and not while a date is being
-  // typed (see journalRange.ts). A range over a year is cut to one year.
+  // typed (see journalRange.ts). A range over a year is cut to the year
+  // ending on To.
   const handleReport = () => {
-    const range = fitRange(rangeStart, rangeEnd, marketDate());
-    if (range.to !== rangeEnd) setRangeEnd(range.to);
+    const range = fitRange(rangeStart, rangeEnd);
+    if (range.from !== rangeStart) setRangeStart(range.from);
     runReport({ ...range, segment }, expandedDates);
   };
 
@@ -282,7 +283,7 @@ const TradeJournal: React.FC<{
         <>
           {problem && <div className="tj-notice">{problem}</div>}
           {overYear && (
-            <div className="tj-notice">That range is over a year: Report will show one year from the From date.</div>
+            <div className="tj-notice">That range is over a year: Report will show the year up to the To date.</div>
           )}
           {!problem && !overYear && isStale && !reportLoading && (
             <div className="tj-notice">Filters changed. Press Report to update the results below.</div>

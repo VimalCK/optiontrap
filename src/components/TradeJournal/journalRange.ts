@@ -27,15 +27,14 @@ export function isOverYear(from: string, to: string): boolean {
 }
 
 /**
- * The range Report runs on: unchanged when it is a year or less, otherwise To
- * moves to one year after From (but not past today).
+ * The range Report runs on: unchanged when it is a year or less, otherwise
+ * From moves up to one year before To. To is kept because it is the end the
+ * calendar is drawn to, and usually today: the recent trades are the ones
+ * wanted.
  */
-export function fitRange(from: string, to: string, today: string): { from: string; to: string } {
+export function fitRange(from: string, to: string): { from: string; to: string } {
   if (!isOverYear(from, to)) return { from, to };
-  const end = addDays(from, MAX_RANGE_DAYS);
-  // Not past today, unless From itself is in the future.
-  const latest = today > from ? today : from;
-  return { from, to: end < latest ? end : latest };
+  return { from: addDays(to, -MAX_RANGE_DAYS), to };
 }
 
 /** `date` ('YYYY-MM-DD') moved back `n` calendar months, clamped to month end. */
