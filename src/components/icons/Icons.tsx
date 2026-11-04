@@ -338,3 +338,25 @@ export const IdCardIcon: React.FC<IconProps> = ({ size = 20, className }) => (
     <path d="M5 16a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2" />
   </svg>
 );
+
+export const AutomationIcon: React.FC<IconProps> = ({ size = 20, className }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <rect x="4" y="8" width="16" height="12" rx="2" />
+    <path d="M12 8V4" />
+    <circle cx="12" cy="3" r="1" />
+    <circle cx="9" cy="14" r="1.2" />
+    <circle cx="15" cy="14" r="1.2" />
+    <path d="M2 13v3M22 13v3" />
+  </svg>
+);

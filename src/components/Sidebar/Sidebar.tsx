@@ -5,6 +5,7 @@ import {
   AnalyticsIcon,
   TradesIcon,
   WatchlistIcon,
+  AutomationIcon,
   UserIcon,
   SettingsIcon,
   ChevronLeftIcon,
@@ -25,6 +26,7 @@ const navItems: NavItem[] = [
   { path: '/portfolio', label: 'Portfolio', icon: <TradesIcon /> },
   { path: '/analytics', label: 'Analytics', icon: <AnalyticsIcon /> },
   { path: '/watchlist', label: 'Watchlist', icon: <WatchlistIcon /> },
+  { path: '/automation', label: 'Automation', icon: <AutomationIcon /> },
 ];
 
 interface SidebarProps {
