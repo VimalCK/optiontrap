@@ -5,6 +5,7 @@ import { tickerConnect, tickerDisconnect } from '@/services/tickerSingleton';
 import { apiClient } from '@/services/apiClient';
 import FeedbackButton from '@/components/Feedback/FeedbackButton';
 import Sidebar from './components/Sidebar/Sidebar';
+import MarketStrip from './components/MarketStrip/MarketStrip';
 
 // Pages load on first visit so each route only downloads its own code.
 const Holdings = lazy(() => import('./pages/Holdings'));
@@ -86,6 +87,7 @@ const App: React.FC = () => {
                 <Sidebar collapsed={sidebarCollapsed} onToggle={handleToggleSidebar} session={session} />
                 <main className={`content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
                   <div className="content__inner">
+                    <MarketStrip />
                     {/* Inner boundary keeps the sidebar and footer visible while a page loads. */}
                     <Suspense fallback={null}>
                     <Routes>

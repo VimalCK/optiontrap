@@ -1,0 +1,106 @@
+/*
+ * Right-aligned on each page's first row: level with the tab bar (40px down,
+ * 48px tall, as the pages' tab bars are) or the Dashboard title. The box is the
+ * most the strip may take (half the row); symbols that do not fit go under "+N".
+ * Only the strip itself takes clicks, so the box's empty part never covers the tabs.
+ */
+.market-strip-box {
+  position: absolute;
+  top: 40px;
+  right: 32px;
+  width: calc(50% - 32px);
+  height: 48px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 50;
+}
+
+/* The menu opens below the box, so it may not be clipped while open. */
+.market-strip-box:has(.market-strip__dropdown) {
+  overflow: visible;
+}
+
+.market-strip {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: auto;
+}
+
+/* Hidden full copy, measured to work out how many symbols fit. */
+.market-strip--measure {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: max-content;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.market-strip__item {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.market-strip__label {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+.market-strip__price {
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.market-strip__change {
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.market-strip__change--up { color: #22c55e; }
+.market-strip__change--down { color: #ef4444; }
+
+.market-strip__more-btn {
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+.market-strip__more-btn:hover,
+.market-strip__more-btn--open {
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+/* The extra symbols, as aligned columns: label, price, change. */
+.market-strip__dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  display: grid;
+  grid-template-columns: auto auto auto;
+  column-gap: 14px;
+  row-gap: 8px;
+  padding: 10px 14px;
+  background: var(--card-bg-solid);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+/* Each row's spans become cells of the dropdown grid. */
+.market-strip__row { display: contents; }
+.market-strip__row .market-strip__price,
+.market-strip__row .market-strip__change { text-align: right; }

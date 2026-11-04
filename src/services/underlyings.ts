@@ -35,7 +35,22 @@ export function loadedUnderlyings(): Underlying[] | null {
   return sharedValue;
 }
 
+const listeners = new Set<(list: Underlying[]) => void>();
+
+/** Called with the new shared list whenever a setting changes it; returns the unsubscribe. */
+export function onUnderlyingsChange(listener: (list: Underlying[]) => void): () => void {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
+}
+
 /** Admin: snapshot this underlying's option chain every trading day, or not. */
-export function setAlwaysSnapshot(name: string, alwaysSnapshot: boolean): Promise<Underlying> {
-  return apiClient.patch<Underlying>(`/api/admin/underlyings/${encodeURIComponent(name)}`, { alwaysSnapshot });
+export async function setAlwaysSnapshot(name: string, alwaysSnapshot: boolean): Promise<Underlying> {
+  const updated = await apiClient.patch<Underlying>(`/api/admin/underlyings/${encodeURIComponent(name)}`, { alwaysSnapshot });
+  if (sharedValue) {
+    const list = sharedValue.map((u) => (u.name === updated.name ? updated : u));
+    sharedValue = list;
+    shared = Promise.resolve(list);
+    listeners.forEach((listener) => listener(list));
+  }
+  return updated;
 }

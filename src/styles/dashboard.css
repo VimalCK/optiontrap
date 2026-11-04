@@ -4,6 +4,20 @@
   gap: var(--card-gap);
 }
 
+/* Same height as the tab bars that open the other pages (48px). */
+.dashboard-header {
+  height: 48px;
+  display: flex;
+  align-items: center;
+}
+
+.dashboard-header__title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
 /* Icon button in the top-right corner of the Total Net P&L card. */
 .dashboard-refresh {
   position: absolute;

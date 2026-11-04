@@ -244,6 +244,10 @@ const Dashboard: React.FC = () => {
 
   return (
     <div className="dashboard">
+      {/* Title row, the height of the other pages' tab bars, so the market strip sits beside it. */}
+      <header className="dashboard-header">
+        <h1 className="dashboard-header__title">Dashboard</h1>
+      </header>
       {error && <div className="dashboard-warning">{error}</div>}
 
       <section className="dashboard-hero">
