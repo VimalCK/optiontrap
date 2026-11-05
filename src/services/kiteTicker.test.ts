@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { KiteTicker, type Tick } from './kiteTicker';
+import { parseTicks } from '../../shared/kiteTicks.js';
 import { handleKiteAuthFailure } from './authSession';
 import { apiClient } from './apiClient';
 
@@ -14,10 +15,9 @@ function message(fields: number[]): ArrayBuffer {
   return buffer;
 }
 
-const parse = (buffer: ArrayBuffer): Tick[] =>
-  (new KiteTicker() as unknown as { parseBinary: (b: ArrayBuffer) => Tick[] }).parseBinary(buffer);
+const parse = (buffer: ArrayBuffer): Tick[] => parseTicks(buffer);
 
-describe('KiteTicker packet parsing', () => {
+describe('Kite tick parsing (shared/kiteTicks.js), as the browser ticker uses it', () => {
   it('reads the previous close from a full-mode index packet', () => {
     // token, ltp, high, low, open, close, change, timestamp
     const [tick] = parse(message([256265, 2274775, 2280000, 2265000, 2270000, 2275320, -545, 0]));

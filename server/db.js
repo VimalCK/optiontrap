@@ -933,6 +933,72 @@ export async function saveAutomationConfig(userId, config) {
   return withDefaults(row.config);
 }
 
+/**
+ * The automation configurations of these users (defaults for those who saved
+ * none), by user id. Served by the automation_configs primary key.
+ * @param {string[]} userIds
+ * @returns {Promise<Map<string, import('../shared/automation.js').AutomationConfig>>}
+ */
+export async function getAutomationConfigs(userIds) {
+  const result = await rows('SELECT user_id, config FROM automation_configs WHERE user_id = ANY($1)', [userIds]);
+  const stored = new Map(result.map((row) => [row.user_id, row.config]));
+  return new Map(userIds.map((userId) => [userId, withDefaults(stored.get(userId))]));
+}
+
+/** Every user's open automated paper positions, for the trade monitor. Served by positions_open_auto_idx. */
+export async function getAllOpenAutoPositions() {
+  const result = await rows("SELECT * FROM positions WHERE source = 'auto' AND exited = 0 AND mode = 'paper'");
+  return result.map(mapPositionRow);
+}
+
+/** One user's open automated paper positions, for the trade monitor. Served by positions_open_auto_idx. */
+export async function getOpenAutoPositions(userId) {
+  const result = await rows(
+    "SELECT * FROM positions WHERE user_id = $1 AND source = 'auto' AND exited = 0 AND mode = 'paper'",
+    [userId],
+  );
+  return result.map(mapPositionRow);
+}
+
+/**
+ * Close the user's executed automated trades behind a position that was just
+ * exited: each gets the exit price and stage 'closed', with an event saying
+ * why (`detail`). One transaction, so a trade is never closed without its
+ * event. Served by auto_trades_position_idx. Returns the ids closed.
+ * @param {string} userId
+ * @param {string} positionId
+ * @param {number} exitPrice
+ * @param {{ ruleId: string, reason: string }} detail
+ * @returns {Promise<string[]>}
+ */
+export async function closeAutoTradesOfPosition(userId, positionId, exitPrice, detail) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const closed = await client.query(
+      `UPDATE auto_trades SET stage = 'closed', exit_price = $3, reason = $4, updated_at = now()
+       WHERE position_id = $1 AND user_id = $2 AND stage = 'executed'
+       RETURNING id`,
+      [positionId, userId, exitPrice, detail.reason],
+    );
+    const ids = closed.rows.map((row) => row.id);
+    if (ids.length > 0) {
+      await client.query(
+        `INSERT INTO auto_trade_events (auto_trade_id, stage, detail)
+         SELECT id, 'closed', $2 FROM unnest($1::text[]) AS id`,
+        [ids, JSON.stringify({ ...detail, exitPrice })],
+      );
+    }
+    await client.query('COMMIT');
+    return ids;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 function toAutoTrade(row) {
   return {
     id: row.id,

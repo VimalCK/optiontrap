@@ -102,8 +102,8 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   recorded with a checksum in `schema_migrations`. Line endings are normalised to LF (`.gitattributes`: `*.sql eol=lf`).
 - An applied migration whose content changes **blocks server startup**.
 - **If the latest migration hasn't reached prod yet, edit it instead of adding a new file.** Check with
-  `git log origin/master..HEAD`. Everything up to `019_trade_automation.sql` is in prod; the next change needs a new
-  `020_…` file, which can be edited until it is pushed.
+  `git log origin/master..HEAD`. Everything up to `019_trade_automation.sql` is in prod; `020_auto_trade_monitor.sql` is not
+  pushed yet, so edit it rather than adding a `021_…` file until it is.
   - After editing it, the local DB's row for it must be deleted so it re-applies. The user does this themselves; tell them the command:
     `docker exec optiontrap-postgres psql -U optiontrap -d optiontrap -c "DELETE FROM schema_migrations WHERE name = '<file>'"`.
 - Migrations must work on an existing DB with data: `IF NOT EXISTS`, backfill before `NOT NULL`, add constraints in a
@@ -254,3 +254,8 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
 - Automation: `shared/automation.js` defines trade kinds, sides, horizons (positional later),
   execution modes (live later) and the lifecycle selected → validated/rejected → executed → closed (`canMoveTo`: no skipping
   validation, nothing rejected after executed). Automated trades go to paper trading only.
+  - Entry and exit rules are plug-ins: one file per rule in `shared/entryRules/` / `shared/exitRules/`, sharing the rule
+    shape and settings logic in `shared/rules/`. Add a rule by adding its file to the list; never add `if`s in callers.
+  - The trade monitor (`server/autoTradeMonitor.js`) closes open automated positions when an exit rule fires, on live
+    ticks from the server's own Kite ticker feed (`server/kiteTickerFeed.js`, admin session, LTP mode, one feed for all
+    users). Rules compare P&L at the last traded price and exit at that price, through `exitPaperTrade`.

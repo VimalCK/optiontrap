@@ -115,6 +115,7 @@ import { checkSubscriptionAccess, inactiveSubscription } from './subscriptionAcc
 import { backfillStockSetups, scanStock, syncStockCandles } from './stockCandles.js';
 import { startStockSetupScheduler } from './stockSetupScheduler.js';
 import { NIGHTLY_JOB_PREFIX, startNightlyJobs } from './nightlyJobs.js';
+import { refreshAutoTradeMonitor, startAutoTradeMonitor } from './autoTradeMonitor.js';
 import { parseDailyPnlQuery, parsePositionsQuery, parseRange, parseStatsQuery } from './positionsQuery.js';
 import { exitPaperTrade, openPaperTrade } from './paperTrading.js';
 
@@ -821,7 +822,9 @@ app.put('/api/automation/config', requireAuth, requireSubscription, async (req, 
   const userId = req.session.kiteSession.userId;
   const { config, error } = parseAutomationConfig(req.body);
   if (error) return res.status(400).json({ status: 'error', message: error });
-  res.json({ status: 'ok', data: await saveAutomationConfig(userId, config) });
+  const saved = await saveAutomationConfig(userId, config);
+  refreshAutoTradeMonitor(userId); // new exit rules apply from the next tick
+  res.json({ status: 'ok', data: saved });
 });
 
 // The automated trades created in ?from=…&to=… (market days, both required), each with its lifecycle.
@@ -923,6 +926,7 @@ app.post('/api/positions', requireAuth, requireSubscription, async (req, res) =>
 app.patch('/api/positions/:id', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   sendPaperTradeResult(res, await exitPaperTrade(userId, req.params.id, req.body?.exitPrice));
+  refreshAutoTradeMonitor(userId); // stop watching it if it was automated
 });
 
 app.delete('/api/positions/:id', requireAuth, requireSubscription, async (req, res) => {
@@ -933,6 +937,7 @@ app.delete('/api/positions/:id', requireAuth, requireSubscription, async (req, r
     return res.status(404).json({ status: 'error', message: 'Position not found' });
   }
 
+  refreshAutoTradeMonitor(userId);
   res.json({ status: 'ok' });
 });
 
@@ -940,6 +945,7 @@ app.delete('/api/positions', requireAuth, requireSubscription, async (req, res) 
   const userId = req.session.kiteSession.userId;
   const mode = req.query.mode || null;
   await clearPositions(userId, mode);
+  refreshAutoTradeMonitor(userId);
   res.json({ status: 'ok' });
 });
 
@@ -1605,6 +1611,8 @@ async function start() {
   startStockSetupScheduler();
   // Run every file in server/jobs/nightly/ from 08:30 IST (at startup if that time has passed).
   startNightlyJobs();
+  // Close open automated positions when their exit rules fire, on live ticks in market hours.
+  startAutoTradeMonitor();
 
   server.listen(PORT, () => {
     console.log(`${ts()} ${GREEN}Server${RESET} OptionTrap running on port ${PORT}`);

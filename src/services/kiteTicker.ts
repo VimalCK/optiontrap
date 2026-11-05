@@ -3,28 +3,17 @@
  *
  * The server handles authentication (injects api_key + access_token)
  * and proxies the binary stream from wss://ws.kite.trade.
- * The client never sees credentials in the WebSocket URL.
+ * The client never sees credentials in the WebSocket URL. Messages are read
+ * with the parser shared with the server (shared/kiteTicks.js).
  */
 import { apiClient } from './apiClient';
 import { handleKiteAuthFailure } from './authSession';
+import { parseTicks, type Tick } from '../../shared/kiteTicks.js';
 
 /** Close code the server sends when Kite rejects the access token (see server/index.js). */
 const WS_SESSION_EXPIRED = 4001;
 
-export interface Tick {
-  instrumentToken: number;
-  lastPrice: number;
-  lastQuantity?: number;
-  averagePrice?: number;
-  volume?: number;
-  buyQuantity?: number;
-  sellQuantity?: number;
-  openPrice?: number;
-  highPrice?: number;
-  lowPrice?: number;
-  closePrice?: number;
-  oi?: number;
-}
+export type { Tick } from '../../shared/kiteTicks.js';
 
 type TickCallback = (ticks: Tick[]) => void;
 
@@ -56,7 +45,7 @@ export class KiteTicker {
 
     this.ws.onmessage = (event) => {
       if (event.data instanceof ArrayBuffer) {
-        const ticks = this.parseBinary(event.data);
+        const ticks = parseTicks(event.data);
         if (ticks.length > 0 && this.onTickCallback) {
           this.onTickCallback(ticks);
         }
@@ -155,86 +144,5 @@ export class KiteTicker {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ a: 'mode', v: [mode, tokens] }));
     }
-  }
-
-  private parseBinary(buffer: ArrayBuffer): Tick[] {
-    const data = new DataView(buffer);
-    const ticks: Tick[] = [];
-
-    // First 2 bytes: number of packets
-    if (buffer.byteLength < 2) return ticks;
-    const numPackets = data.getInt16(0);
-
-    let offset = 2;
-
-    for (let i = 0; i < numPackets; i++) {
-      if (offset + 2 > buffer.byteLength) break;
-
-      // 2 bytes: packet length
-      const packetLength = data.getInt16(offset);
-      offset += 2;
-
-      if (offset + packetLength > buffer.byteLength) break;
-
-      const tick = this.parsePacket(data, offset, packetLength);
-      if (tick) {
-        ticks.push(tick);
-      }
-
-      offset += packetLength;
-    }
-
-    return ticks;
-  }
-
-  private parsePacket(data: DataView, start: number, length: number): Tick | null {
-    if (length < 8) return null;
-
-    const instrumentToken = data.getInt32(start);
-    const divisor = this.getDivisor(instrumentToken);
-    const lastPrice = data.getInt32(start + 4) / divisor;
-
-    const tick: Tick = { instrumentToken, lastPrice };
-
-    // Index quote / full mode: 28 / 32 bytes — OHLC only, no volume or OI
-    if (length === 28 || length === 32) {
-      tick.highPrice = data.getInt32(start + 8) / divisor;
-      tick.lowPrice = data.getInt32(start + 12) / divisor;
-      tick.openPrice = data.getInt32(start + 16) / divisor;
-      tick.closePrice = data.getInt32(start + 20) / divisor;
-      return tick;
-    }
-
-    // LTP mode: 8 bytes
-    if (length >= 44) {
-      // Quote mode: 44 bytes
-      tick.lastQuantity = data.getInt32(start + 8);
-      tick.averagePrice = data.getInt32(start + 12) / divisor;
-      tick.volume = data.getInt32(start + 16);
-      tick.buyQuantity = data.getInt32(start + 20);
-      tick.sellQuantity = data.getInt32(start + 24);
-      tick.openPrice = data.getInt32(start + 28) / divisor;
-      tick.highPrice = data.getInt32(start + 32) / divisor;
-      tick.lowPrice = data.getInt32(start + 36) / divisor;
-      tick.closePrice = data.getInt32(start + 40) / divisor;
-    }
-
-    // Full mode: 184 bytes — includes OI
-    if (length >= 60) {
-      tick.oi = data.getInt32(start + 48);
-    }
-
-    return tick;
-  }
-
-  private getDivisor(instrumentToken: number): number {
-    // Currency segment tokens need division by 10000000
-    // Others by 100
-    const segment = instrumentToken & 0xff;
-    // CDS segment = 3, BCD segment = 6
-    if (segment === 3 || segment === 6) {
-      return 10000000;
-    }
-    return 100;
   }
 }
