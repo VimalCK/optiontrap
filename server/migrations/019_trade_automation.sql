@@ -43,3 +43,41 @@ CREATE TABLE IF NOT EXISTS auto_trade_events (
 );
 
 CREATE INDEX IF NOT EXISTS auto_trade_events_trade_idx ON auto_trade_events (auto_trade_id, at);
+
+-- Paper positions in stocks and futures as well as options, and automated
+-- ones kept apart from manual ones.
+--   instrument_type  CE / PE (options), FUT (futures), EQ (stocks). Existing
+--                    rows are options; anything else counts as a stock, the
+--                    rule the journal's segment filter already used.
+--   exchange         for quotes and charts; existing rows are NFO options.
+--   source           manual (placed by the user) or auto (by the automation).
+--                    Only manual positions are merged with each other.
+-- strike, option_type and expiry are only set for the types that have them.
+ALTER TABLE positions ADD COLUMN IF NOT EXISTS instrument_type TEXT;
+UPDATE positions
+  SET instrument_type = CASE WHEN option_type IN ('CE', 'PE') THEN option_type ELSE 'EQ' END
+  WHERE instrument_type IS NULL;
+ALTER TABLE positions ALTER COLUMN instrument_type SET NOT NULL;
+ALTER TABLE positions ADD COLUMN IF NOT EXISTS exchange TEXT NOT NULL DEFAULT 'NFO';
+ALTER TABLE positions ADD COLUMN IF NOT EXISTS source TEXT NOT NULL DEFAULT 'manual';
+ALTER TABLE positions ALTER COLUMN strike DROP NOT NULL;
+ALTER TABLE positions ALTER COLUMN option_type DROP NOT NULL;
+ALTER TABLE positions ALTER COLUMN expiry DROP NOT NULL;
+
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'positions_instrument_type_check') THEN
+    ALTER TABLE positions ADD CONSTRAINT positions_instrument_type_check CHECK (instrument_type IN ('CE', 'PE', 'FUT', 'EQ'));
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'positions_source_check') THEN
+    ALTER TABLE positions ADD CONSTRAINT positions_source_check CHECK (source IN ('manual', 'auto'));
+  END IF;
+  -- Options have a strike, CE/PE and an expiry; futures an expiry; stocks neither.
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'positions_instrument_fields_check') THEN
+    ALTER TABLE positions ADD CONSTRAINT positions_instrument_fields_check CHECK (
+      (instrument_type IN ('CE', 'PE') AND strike IS NOT NULL AND option_type = instrument_type AND expiry IS NOT NULL)
+      OR (instrument_type = 'FUT' AND expiry IS NOT NULL)
+      OR (instrument_type = 'EQ')
+    );
+  END IF;
+END $$;

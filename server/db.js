@@ -1173,6 +1173,9 @@ function mapPositionRow(row) {
     mode: row.mode,
     tradingsymbol: row.tradingsymbol,
     instrumentToken: Number(row.instrument_token),
+    instrumentType: row.instrument_type,
+    exchange: row.exchange,
+    source: row.source,
     strike: row.strike,
     optionType: row.option_type,
     side: row.side,
@@ -1201,15 +1204,58 @@ function positionMetaValues(position) {
   ];
 }
 
+/**
+ * Strike, option type and expiry as stored for each instrument type: options
+ * keep all three, futures only the expiry, stocks none.
+ */
+function instrumentColumns(position) {
+  const type = position.instrumentType;
+  const isOption = type === 'CE' || type === 'PE';
+  return {
+    strike: isOption ? position.strike : null,
+    optionType: isOption ? type : null,
+    expiry: isOption || type === 'FUT' ? position.expiry : null,
+  };
+}
+
+/** Insert one new open position of `quantity` and return it. */
+async function insertPosition(userId, mode, position, quantity, now) {
+  const { strike, optionType, expiry } = instrumentColumns(position);
+  const row = await firstRow(
+    `INSERT INTO positions (id, user_id, mode, source, tradingsymbol, instrument_token, instrument_type, exchange, strike, option_type,
+       side, quantity, entry_price, entry_time, expiry, note, target_price, stop_loss_price, strategy_tag, confidence)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+     RETURNING *`,
+    [crypto.randomUUID(), userId, mode, position.source || 'manual', position.tradingsymbol, position.instrumentToken,
+     position.instrumentType, position.exchange, strike, optionType, position.side, quantity, position.entryPrice, now, expiry,
+     ...positionMetaValues(position)],
+  );
+  return mapPositionRow(row);
+}
+
+/**
+ * Open a position. A manual trade merges with the user's open manual
+ * position in the same instrument: the same side averages in, the opposite
+ * side nets out. An automated trade (source 'auto') never merges, so each one
+ * keeps its own entry, stop loss and lifecycle, and manual positions are
+ * never touched by the automation.
+ */
 export async function addPosition(userId, position) {
   const mode = position.mode || 'paper';
   const now = new Date().toISOString();
 
-  // Same-side existing → average in
-  const sameSide = await firstRow(
-    'SELECT * FROM positions WHERE user_id = $1 AND mode = $2 AND instrument_token = $3 AND side = $4 AND exited = 0',
-    [userId, mode, position.instrumentToken, position.side],
+  if ((position.source || 'manual') !== 'manual') {
+    return insertPosition(userId, mode, position, position.quantity, now);
+  }
+
+  const openManual = (side) => firstRow(
+    `SELECT * FROM positions
+     WHERE user_id = $1 AND mode = $2 AND instrument_token = $3 AND side = $4 AND exited = 0 AND source = 'manual'`,
+    [userId, mode, position.instrumentToken, side],
   );
+
+  // Same-side existing → average in
+  const sameSide = await openManual(position.side);
 
   if (sameSide) {
     const totalQty = Number(sameSide.quantity) + position.quantity;
@@ -1238,11 +1284,7 @@ export async function addPosition(userId, position) {
   }
 
   // Opposite-side existing → net out
-  const oppSide = position.side === 'BUY' ? 'SELL' : 'BUY';
-  const opposite = await firstRow(
-    'SELECT * FROM positions WHERE user_id = $1 AND mode = $2 AND instrument_token = $3 AND side = $4 AND exited = 0',
-    [userId, mode, position.instrumentToken, oppSide],
-  );
+  const opposite = await openManual(position.side === 'BUY' ? 'SELL' : 'BUY');
 
   if (opposite) {
     const oppQty = Number(opposite.quantity);
@@ -1267,42 +1309,11 @@ export async function addPosition(userId, position) {
       'UPDATE positions SET exited = 1, exit_price = $1, exit_time = $2 WHERE id = $3',
       [position.entryPrice, now, opposite.id],
     );
-
-    const remainderId = crypto.randomUUID();
-    await query(
-      `INSERT INTO positions (id, user_id, mode, tradingsymbol, instrument_token, strike, option_type, side, quantity, entry_price, entry_time, expiry, note, target_price, stop_loss_price, strategy_tag, confidence)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
-      [remainderId, userId, mode, position.tradingsymbol, position.instrumentToken, position.strike,
-       position.optionType, position.side, position.quantity - oppQty, position.entryPrice, now, position.expiry,
-       ...positionMetaValues(position)],
-    );
-    return mapPositionRow({
-      id: remainderId, user_id: userId, mode, tradingsymbol: position.tradingsymbol,
-      instrument_token: position.instrumentToken, strike: position.strike, option_type: position.optionType,
-      side: position.side, quantity: position.quantity - oppQty, entry_price: position.entryPrice,
-      entry_time: now, expiry: position.expiry, exited: 0, exit_price: null, exit_time: null,
-      note: position.note || null, target_price: position.targetPrice ?? null, stop_loss_price: position.stopLossPrice ?? null,
-      strategy_tag: position.strategyTag || null, confidence: position.confidence ?? null,
-    });
+    return insertPosition(userId, mode, position, position.quantity - oppQty, now);
   }
 
   // No existing — open fresh
-  const id = crypto.randomUUID();
-  await query(
-    `INSERT INTO positions (id, user_id, mode, tradingsymbol, instrument_token, strike, option_type, side, quantity, entry_price, entry_time, expiry, note, target_price, stop_loss_price, strategy_tag, confidence)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
-    [id, userId, mode, position.tradingsymbol, position.instrumentToken, position.strike,
-     position.optionType, position.side, position.quantity, position.entryPrice, now, position.expiry,
-     ...positionMetaValues(position)],
-  );
-  return mapPositionRow({
-    id, user_id: userId, mode, tradingsymbol: position.tradingsymbol,
-    instrument_token: position.instrumentToken, strike: position.strike, option_type: position.optionType,
-    side: position.side, quantity: position.quantity, entry_price: position.entryPrice,
-    entry_time: now, expiry: position.expiry, exited: 0, exit_price: null, exit_time: null,
-    note: position.note || null, target_price: position.targetPrice ?? null, stop_loss_price: position.stopLossPrice ?? null,
-    strategy_tag: position.strategyTag || null, confidence: position.confidence ?? null,
-  });
+  return insertPosition(userId, mode, position, position.quantity, now);
 }
 
 /** One of a user's open positions, or null if there's no such open position. */

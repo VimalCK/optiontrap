@@ -64,7 +64,7 @@ describe('required-fields rule', () => {
     expect(open(validInput)).toEqual({ ok: true });
   });
 
-  it.each(['tradingsymbol', 'instrumentToken', 'strike', 'optionType', 'side', 'quantity', 'entryPrice', 'expiry'])(
+  it.each(['tradingsymbol', 'instrumentToken', 'side', 'quantity', 'entryPrice'])(
     'refuses a trade without %s',
     (field) => {
       const { [field]: _omit, ...input } = validInput;
@@ -82,6 +82,45 @@ describe('required-fields rule', () => {
 
   it('allows a strike of 0', () => {
     expect(open({ ...validInput, strike: 0 }).ok).toBe(true);
+  });
+});
+
+describe('instrument-fields rule', () => {
+  const stock = { tradingsymbol: 'RELIANCE', instrumentToken: '738561', instrumentType: 'EQ', side: 'BUY', quantity: '10', entryPrice: '1400' };
+  const future = { tradingsymbol: 'NIFTY26NOVFUT', instrumentToken: '13238786', instrumentType: 'FUT', side: 'SELL', quantity: '75', entryPrice: '24100', expiry: '2026-11-24' };
+  const hit = (input) => (open(input).ok ? null : open(input).violations.find((v) => v.rule === 'instrument-fields')?.message);
+
+  it('takes a trade that sends only optionType CE/PE as an option, as the option chain does', () => {
+    expect(normalizeTradeInput(validInput)).toMatchObject({ instrumentType: 'CE', exchange: 'NFO' });
+    expect(open(validInput)).toEqual({ ok: true });
+  });
+
+  it('accepts a stock with no strike, option type or expiry, on NSE by default', () => {
+    expect(open(stock)).toEqual({ ok: true });
+    expect(normalizeTradeInput(stock).exchange).toBe('NSE');
+    expect(normalizeTradeInput({ ...stock, exchange: 'BSE' }).exchange).toBe('BSE');
+  });
+
+  it('accepts a future with an expiry, and refuses one without', () => {
+    expect(open(future)).toEqual({ ok: true });
+    expect(normalizeTradeInput(future).exchange).toBe('NFO');
+    const { expiry: _omit, ...noExpiry } = future;
+    expect(hit(noExpiry)).toBe('A future needs an expiry');
+  });
+
+  it.each(['strike', 'expiry'])('refuses an option without %s', (field) => {
+    const { [field]: _omit, ...input } = validInput;
+    expect(hit(input)).toBe('An option needs a strike and an expiry');
+  });
+
+  it('refuses an option whose optionType does not match its type', () => {
+    expect(hit({ ...validInput, instrumentType: 'PE' })).toBe('optionType must match instrumentType for an option');
+  });
+
+  it('refuses a trade with no known instrument type', () => {
+    const { optionType: _omit, ...input } = validInput;
+    expect(hit(input)).toBe('instrumentType must be one of: CE, PE, FUT, EQ');
+    expect(hit({ ...stock, instrumentType: 'CRYPTO' })).toBe('instrumentType must be one of: CE, PE, FUT, EQ');
   });
 });
 
@@ -153,7 +192,7 @@ describe('market-open rule', () => {
 
 describe('checkPaperTrade', () => {
   it('reports every failing rule, in list order', () => {
-    expect(rulesHit(open({}, CLOSED))).toEqual(['required-fields', 'market-open']);
+    expect(rulesHit(open({}, CLOSED))).toEqual(['required-fields', 'instrument-fields', 'market-open']);
     expect(rulesHit(exit({ mode: 'paper' }, undefined, CLOSED))).toEqual(['exit-price-given', 'market-open']);
   });
 

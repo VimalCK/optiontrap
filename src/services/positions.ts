@@ -18,13 +18,21 @@ export interface Position {
   mode: 'paper' | 'live';
   tradingsymbol: string;
   instrumentToken: number;
-  strike: number;
-  optionType: 'CE' | 'PE';
+  /** CE / PE (options), FUT (futures), EQ (stocks). */
+  instrumentType: 'CE' | 'PE' | 'FUT' | 'EQ';
+  exchange: string;
+  /** manual: placed by the user; auto: by the trade automation. */
+  source: 'manual' | 'auto';
+  /** Options only. */
+  strike: number | null;
+  /** Options only: the same as instrumentType. */
+  optionType: 'CE' | 'PE' | null;
   side: 'BUY' | 'SELL';
   quantity: number;
   entryPrice: number;
   entryTime: string; // ISO timestamp
-  expiry: string;
+  /** Options and futures only. */
+  expiry: string | null;
   exited?: boolean;
   exitPrice?: number;
   exitTime?: string;
@@ -46,7 +54,7 @@ export interface ClosedPositionsFilter {
   /** Market-zone (IST) exit days, 'YYYY-MM-DD', inclusive. */
   from?: string;
   to?: string;
-  segment?: 'options' | 'stocks';
+  segment?: 'options' | 'futures' | 'stocks';
   /** Page size; the server defaults to 100 and allows at most 500. */
   limit?: number;
   offset?: number;
@@ -95,7 +103,7 @@ export async function getDailyPnl(
   mode: 'paper' | 'live',
   from: string,
   to: string,
-  segment?: 'options' | 'stocks',
+  segment?: 'options' | 'futures' | 'stocks',
 ): Promise<DailyPnl[]> {
   return apiClient.get<DailyPnl[]>(`/api/positions/daily-pnl?${query({ mode, from, to, segment })}`);
 }
@@ -113,9 +121,18 @@ export async function getPositionStats(mode: 'paper' | 'live' = 'paper'): Promis
  *   - Opposite-side existing → net out (exact, partial, or over-close)
  *   - No existing → open fresh
  */
-export async function addPosition(
-  position: Omit<Position, 'id' | 'entryTime' | 'mode'> & { mode?: 'paper' | 'live' },
-): Promise<Position> {
+/**
+ * A trade to open. instrumentType and exchange may be left out for an option
+ * (the server takes them from optionType, on NFO). source is never sent: the
+ * server records browser trades as manual.
+ */
+export type NewPosition = Omit<Position, 'id' | 'entryTime' | 'mode' | 'instrumentType' | 'exchange' | 'source'> & {
+  mode?: 'paper' | 'live';
+  instrumentType?: Position['instrumentType'];
+  exchange?: string;
+};
+
+export async function addPosition(position: NewPosition): Promise<Position> {
   return apiClient.post<Position>('/api/positions', { ...position, mode: position.mode || 'paper' });
 }
 
@@ -138,4 +155,14 @@ export async function removePosition(id: string): Promise<void> {
  */
 export async function clearPositions(mode: 'paper' | 'live' = 'paper'): Promise<void> {
   await apiClient.delete(`/api/positions?mode=${mode}`);
+}
+
+/** Key for the quote API: the position's own exchange (NSE for stocks, NFO for F&O). */
+export function positionQuoteKey(pos: Pick<Position, 'exchange' | 'tradingsymbol'>): string {
+  return `${pos.exchange}:${pos.tradingsymbol}`;
+}
+
+/** Name to show: a stock's symbol, or an F&O contract's underlying (NIFTY26NOV24000CE → NIFTY). */
+export function instrumentName(pos: Pick<Position, 'instrumentType' | 'tradingsymbol'>): string {
+  return pos.instrumentType === 'EQ' ? pos.tradingsymbol : pos.tradingsymbol.replace(/\d.*/, '');
 }

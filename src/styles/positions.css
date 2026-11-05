@@ -154,6 +154,26 @@
   color: #ef4444;
 }
 
+.positions-table__type--fut {
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+}
+
+.positions-table__type--eq {
+  background: rgba(148, 163, 184, 0.15);
+  color: var(--text-secondary);
+}
+
+/* Marks a position placed by the trade automation. */
+.positions-table__source {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 5px;
+  border-radius: 3px;
+  border: 1px solid var(--accent);
+  color: var(--accent);
+}
+
 .positions-table__expiry {
   font-size: 11px;
   color: var(--text-secondary);

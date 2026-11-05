@@ -5,7 +5,7 @@ const apiGet = vi.hoisted(() => vi.fn());
 vi.mock('./apiClient', () => ({ apiClient: { get: apiGet } }));
 
 import { getPositions, getClosedPositions, getDailyPnl, getPositionStats } from './positions';
-import { getPaperTrades, getPaperDailyPnl, getPaperTradeStats, positionToEntry } from './tradeJournal';
+import { getPaperTrades, getPaperDailyPnl, getPaperTradeStats, positionToEntry, positionToSegment } from './tradeJournal';
 
 function position(overrides: Partial<Position>): Position {
   return {
@@ -13,6 +13,9 @@ function position(overrides: Partial<Position>): Position {
     mode: 'paper',
     tradingsymbol: 'NIFTY26NOV24000CE',
     instrumentToken: 1001,
+    instrumentType: 'CE',
+    exchange: 'NFO',
+    source: 'manual',
     strike: 24000,
     optionType: 'CE',
     side: 'BUY',
@@ -63,6 +66,15 @@ describe('positions API URLs', () => {
   });
 });
 
+describe('positionToSegment', () => {
+  it('sorts positions into options, futures and stocks by instrument type', () => {
+    expect(positionToSegment(position({ instrumentType: 'CE' }))).toBe('options');
+    expect(positionToSegment(position({ instrumentType: 'PE', optionType: 'PE' }))).toBe('options');
+    expect(positionToSegment(position({ instrumentType: 'FUT', optionType: null, strike: null }))).toBe('futures');
+    expect(positionToSegment(position({ instrumentType: 'EQ', optionType: null, strike: null, expiry: null }))).toBe('stocks');
+  });
+});
+
 describe('positionToEntry', () => {
   it('works out P&L for buys and sells', () => {
     expect(positionToEntry(position({ side: 'BUY', entryPrice: 100, exitPrice: 120, quantity: 75 })).pnl).toBe(1500);
@@ -74,9 +86,9 @@ describe('positionToEntry', () => {
     expect(positionToEntry(position({ exitTime: '2026-10-20T23:00:00.000Z' })).date).toBe('2026-10-21');
   });
 
-  it('calls CE/PE options and anything else stocks', () => {
-    expect(positionToEntry(position({ optionType: 'PE' })).segment).toBe('options');
-    expect(positionToEntry(position({ optionType: 'EQ' as Position['optionType'] })).segment).toBe('stocks');
+  it('gives each entry the segment of its instrument type', () => {
+    expect(positionToEntry(position({ instrumentType: 'PE', optionType: 'PE' })).segment).toBe('options');
+    expect(positionToEntry(position({ instrumentType: 'EQ', optionType: null, strike: null, expiry: null })).segment).toBe('stocks');
   });
 });
 

@@ -42,7 +42,7 @@ describe('parsePositionsQuery', () => {
   it.each([
     ['unknown status', { status: 'open' }, /^status must be/],
     ['unknown mode', { mode: 'demo' }, /^mode must be/],
-    ['unknown segment', { status: 'closed', segment: 'futures' }, /^segment must be/],
+    ['unknown segment', { status: 'closed', segment: 'crypto' }, /^segment must be/],
     ['bad from', { status: 'closed', from: '01-10-2026' }, /^from must be a date/],
     ['impossible date', { status: 'closed', to: '2026-02-30' }, /^to must be a date/],
     ['from after to', { status: 'closed', from: '2026-11-02', to: '2026-11-01' }, /^from must not be after to/],
@@ -112,15 +112,24 @@ describe('buildPositionsQuery', () => {
     });
     expect(sql).toBe(
       'SELECT * FROM positions WHERE user_id = $1 AND mode = $2 AND exited = 1 AND exit_price IS NOT NULL '
-      + "AND exit_time >= $3 AND exit_time < $4 AND option_type IN ('CE', 'PE') "
+      + "AND exit_time >= $3 AND exit_time < $4 AND instrument_type IN ('CE', 'PE') "
       + 'ORDER BY exit_time DESC, id DESC LIMIT $5 OFFSET $6',
     );
     expect(params).toEqual(['U1', 'paper', OCT_1_IST, NOV_1_IST, 20, 40]);
   });
 
-  it('selects stocks as anything that is not a CE or PE', () => {
-    const { sql } = buildPositionsQuery('U1', { status: 'closed', segment: 'stocks', limit: 100, offset: 0 });
-    expect(sql).toContain("option_type NOT IN ('CE', 'PE')");
+  it.each([
+    ['options', "instrument_type IN ('CE', 'PE')"],
+    ['futures', "instrument_type = 'FUT'"],
+    ['stocks', "instrument_type = 'EQ'"],
+  ])('selects %s by instrument type', (segment, condition) => {
+    const { sql } = buildPositionsQuery('U1', { status: 'closed', segment, limit: 100, offset: 0 });
+    expect(sql).toContain(condition);
+    expect(sql).not.toContain('option_type');
+  });
+
+  it('accepts futures as a segment', () => {
+    expect(parsePositionsQuery({ status: 'closed', segment: 'futures' }).filter.segment).toBe('futures');
   });
 
   it('passes user input only as parameters, never in the SQL text', () => {
@@ -144,7 +153,7 @@ describe('buildDailyPnlQuery', () => {
 
   it('adds the segment condition when given', () => {
     const { sql } = buildDailyPnlQuery('U1', { from: '2026-10-01', to: '2026-10-31', segment: 'options' });
-    expect(sql).toContain("AND option_type IN ('CE', 'PE') GROUP BY 1");
+    expect(sql).toContain("AND instrument_type IN ('CE', 'PE') GROUP BY 1");
   });
 });
 

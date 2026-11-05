@@ -17,7 +17,7 @@ import {
   Position,
 } from './positions';
 
-export type Segment = 'stocks' | 'options';
+export type Segment = 'stocks' | 'options' | 'futures';
 export type TradingMode = 'paper' | 'live';
 export type { DailyPnl };
 
@@ -49,12 +49,10 @@ export interface TradeStats {
   worstTrade?: TradeEntry;
 }
 
-/**
- * Options have optionType CE/PE; everything else is stocks (the same rule the
- * server's segment filter uses).
- */
-function positionToSegment(pos: Position): Segment {
-  return pos.optionType === 'CE' || pos.optionType === 'PE' ? 'options' : 'stocks';
+/** By instrument type, the same rule the server's segment filter uses. */
+export function positionToSegment(pos: Position): Segment {
+  if (pos.instrumentType === 'CE' || pos.instrumentType === 'PE') return 'options';
+  return pos.instrumentType === 'FUT' ? 'futures' : 'stocks';
 }
 
 /**

@@ -11,13 +11,23 @@
  *
  * All quantities on a Position are absolute contract quantities (already
  * lot-adjusted), matching the convention used elsewhere (Positions.tsx getPnL).
+ *
+ * Only option legs are grouped: stock and futures positions have no strike
+ * or expiry payoff, and are left out.
  */
 
 import { Position } from './positions';
+
+/** An option position: always has a strike, CE/PE and an expiry. */
+export type OptionPosition = Position & { optionType: 'CE' | 'PE'; strike: number; expiry: string };
+
+export function isOptionPosition(pos: Position): pos is OptionPosition {
+  return (pos.optionType === 'CE' || pos.optionType === 'PE') && pos.strike != null && pos.expiry != null;
+}
 import { apiClient } from './apiClient';
 
 export interface LegRisk {
-  position: Position;
+  position: OptionPosition;
   /** Current traded price of this leg (LTP), if available */
   ltp: number | null;
   /** Live P&L for this leg in currency */
@@ -70,7 +80,7 @@ export function underlyingFromSymbol(tradingsymbol: string): string {
  *   Long PE : (max(K - S, 0) - premium) * qty
  *   Short   : negated intrinsic, plus premium collected
  */
-function legPayoffAtExpiry(pos: Position, underlyingPrice: number): number {
+function legPayoffAtExpiry(pos: OptionPosition, underlyingPrice: number): number {
   const intrinsic =
     pos.optionType === 'CE'
       ? Math.max(underlyingPrice - pos.strike, 0)
@@ -87,7 +97,7 @@ function legPayoffAtExpiry(pos: Position, underlyingPrice: number): number {
 /**
  * Live P&L for a single leg given its current LTP.
  */
-function legLivePnL(pos: Position, ltp: number): number {
+function legLivePnL(pos: OptionPosition, ltp: number): number {
   return pos.side === 'BUY'
     ? (ltp - pos.entryPrice) * pos.quantity
     : (pos.entryPrice - ltp) * pos.quantity;
@@ -98,7 +108,7 @@ function legLivePnL(pos: Position, ltp: number): number {
  * Long legs are invalidated when price falls to/below the stop.
  * Short legs are invalidated when price rises to/above the stop.
  */
-function isInvalidationHit(pos: Position, ltp: number | null): boolean {
+function isInvalidationHit(pos: OptionPosition, ltp: number | null): boolean {
   if (ltp == null || pos.stopLossPrice == null || pos.exited) return false;
   return pos.side === 'BUY' ? ltp <= pos.stopLossPrice : ltp >= pos.stopLossPrice;
 }
@@ -117,10 +127,10 @@ export function computeRiskGroups(
   positions: Position[],
   livePrices: Map<number, number>,
 ): RiskGroup[] {
-  const open = positions.filter((p) => !p.exited);
+  const open = positions.filter((p) => !p.exited).filter(isOptionPosition);
 
   // Group by underlying + expiry
-  const groups = new Map<string, Position[]>();
+  const groups = new Map<string, OptionPosition[]>();
   for (const pos of open) {
     const underlying = underlyingFromSymbol(pos.tradingsymbol);
     const key = `${underlying}|${pos.expiry}`;
@@ -206,7 +216,7 @@ export function computeRiskGroups(
 }
 
 /** Combined payoff of all legs in a group at an underlying expiry price. */
-function groupPayoff(legs: Position[], underlyingPrice: number): number {
+function groupPayoff(legs: OptionPosition[], underlyingPrice: number): number {
   let total = 0;
   for (const leg of legs) total += legPayoffAtExpiry(leg, underlyingPrice);
   return total;
@@ -279,7 +289,7 @@ export function samplePayoffCurve(
 /**
  * Net signed contract quantity for one option type (BUY positive, SELL negative).
  */
-function signedQty(legs: Position[], type: 'CE' | 'PE'): number {
+function signedQty(legs: OptionPosition[], type: 'CE' | 'PE'): number {
   return legs
     .filter((l) => l.optionType === type)
     .reduce((s, l) => s + (l.side === 'SELL' ? -l.quantity : l.quantity), 0);
@@ -291,7 +301,7 @@ function signedQty(legs: Position[], type: 'CE' | 'PE'): number {
  * evaluate at 0, each strike, and a point beyond the top strike, then
  * interpolate any sign change.
  */
-function findBreakevens(legs: Position[], strikes: number[]): number[] {
+function findBreakevens(legs: OptionPosition[], strikes: number[]): number[] {
   const topStrike = strikes.length ? strikes[strikes.length - 1] : 0;
   // A point beyond the highest strike so an upward-sloping tail can cross zero.
   const beyond = topStrike + Math.max(topStrike * 0.5, 1);

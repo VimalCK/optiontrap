@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { addPosition, exitPosition, tradeErrorMessage } from './positions';
+import { addPosition, exitPosition, instrumentName, positionQuoteKey, tradeErrorMessage } from './positions';
 import { ApiError, isLoginEnded } from './apiClient';
 
 const MARKET_CLOSED = 'The market is closed. Paper trades can be placed and exited 9:15–15:30 IST on trading days.';
@@ -73,5 +73,21 @@ describe('tradeErrorMessage', () => {
 
   it('falls back for anything that is not an error', () => {
     expect(tradeErrorMessage(undefined)).toBe('Failed to add position');
+  });
+});
+
+describe('positionQuoteKey', () => {
+  it("uses the position's own exchange", () => {
+    expect(positionQuoteKey({ exchange: 'NFO', tradingsymbol: 'NIFTY26NOV24000CE' })).toBe('NFO:NIFTY26NOV24000CE');
+    expect(positionQuoteKey({ exchange: 'NSE', tradingsymbol: 'RELIANCE' })).toBe('NSE:RELIANCE');
+  });
+});
+
+describe('instrumentName', () => {
+  it("shows a stock's full symbol and an F&O contract's underlying", () => {
+    expect(instrumentName({ instrumentType: 'EQ', tradingsymbol: 'M&M' })).toBe('M&M');
+    expect(instrumentName({ instrumentType: 'EQ', tradingsymbol: '360ONE' })).toBe('360ONE'); // starts with a digit
+    expect(instrumentName({ instrumentType: 'CE', tradingsymbol: 'NIFTY26NOV24000CE' })).toBe('NIFTY');
+    expect(instrumentName({ instrumentType: 'FUT', tradingsymbol: 'RELIANCE26NOVFUT' })).toBe('RELIANCE');
   });
 });

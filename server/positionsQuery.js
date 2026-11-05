@@ -16,15 +16,18 @@ import { MARKET_TIME_ZONE, addDays, marketDateTime } from '../shared/marketTime.
 
 export const POSITION_STATUSES = ['closed'];
 export const POSITION_MODES = ['paper', 'live'];
-export const SEGMENTS = ['options', 'stocks'];
+export const SEGMENTS = ['options', 'futures', 'stocks'];
 export const DEFAULT_TRADE_LIMIT = 100;
 export const MAX_TRADE_LIMIT = 500;
 
 // P&L of an exited position; the same formula the browser used before.
 const PNL_SQL = "CASE WHEN side = 'BUY' THEN (exit_price - entry_price) * quantity ELSE (entry_price - exit_price) * quantity END";
+// By instrument_type, which every position has (option_type is NULL for stocks
+// and futures, and NOT IN never matches NULL).
 const SEGMENT_SQL = {
-  options: "option_type IN ('CE', 'PE')",
-  stocks: "option_type NOT IN ('CE', 'PE')",
+  options: "instrument_type IN ('CE', 'PE')",
+  futures: "instrument_type = 'FUT'",
+  stocks: "instrument_type = 'EQ'",
 };
 
 const isDate = (value) =>

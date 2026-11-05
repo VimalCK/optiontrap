@@ -24,16 +24,19 @@ const refused = ({ rule, code, message }) => ({ ok: false, code, message, rule }
 /**
  * Open (or net against) a paper position for `userId`.
  * @param {string} userId
- * @param {Record<string, unknown>} input tradingsymbol, instrumentToken, strike, optionType, side,
- *   quantity, entryPrice, expiry, and optionally mode, note, targetPrice, stopLossPrice, strategyTag, confidence
- * @param {{ now?: Date }} [options] now: when the trade happens (defaults to the current time)
+ * @param {Record<string, unknown>} input tradingsymbol, instrumentToken, instrumentType (CE, PE, FUT
+ *   or EQ), side, quantity, entryPrice; strike and expiry for options, expiry for futures; and
+ *   optionally exchange, mode, note, targetPrice, stopLossPrice, strategyTag, confidence
+ * @param {{ now?: Date, source?: 'manual' | 'auto' }} [options] now: when the trade happens (defaults
+ *   to the current time). source: who placed it, set by the caller and never taken from the request;
+ *   automated trades are never merged with other positions.
  */
-export async function openPaperTrade(userId, input, { now = new Date() } = {}) {
+export async function openPaperTrade(userId, input, { now = new Date(), source = 'manual' } = {}) {
   const trade = normalizeTradeInput(input);
   const result = checkPaperTrade('open', { trade, now });
   if (!result.ok) return refused(result.violations[0]);
 
-  const position = await addPosition(userId, trade);
+  const position = await addPosition(userId, { ...trade, source });
   return { ok: true, position };
 }
 

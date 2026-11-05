@@ -8,6 +8,9 @@ const leg = (overrides: Partial<Position>): Position => ({
   mode: 'paper',
   tradingsymbol: 'NIFTY26OCT22500PE',
   instrumentToken: nextToken++,
+  instrumentType: 'PE',
+  exchange: 'NFO',
+  source: 'manual',
   strike: 22500,
   optionType: 'PE',
   side: 'BUY',
@@ -83,6 +86,24 @@ describe('computeRiskGroups', () => {
 
     const safe = computeRiskGroups([buy, sell], new Map([[buy.instrumentToken, 80], [sell.instrumentToken, 120]]))[0];
     expect(safe.invalidationHit).toBe(false);
+  });
+});
+
+describe('computeRiskGroups with stocks and futures', () => {
+  it('groups only the option legs, leaving stocks and futures out', () => {
+    const option = leg({});
+    const stock = leg({ tradingsymbol: 'RELIANCE', instrumentType: 'EQ', exchange: 'NSE', strike: null, optionType: null, expiry: null });
+    const future = leg({ tradingsymbol: 'NIFTY26OCTFUT', instrumentType: 'FUT', strike: null, optionType: null });
+
+    const groups = computeRiskGroups([option, stock, future], new Map());
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0].legs.map((l) => l.position.id)).toEqual([option.id]);
+  });
+
+  it('gives no groups when nothing open is an option', () => {
+    const stock = leg({ tradingsymbol: 'RELIANCE', instrumentType: 'EQ', strike: null, optionType: null, expiry: null });
+    expect(computeRiskGroups([stock], new Map())).toEqual([]);
   });
 });
 

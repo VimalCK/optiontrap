@@ -37,6 +37,28 @@ describe('openPaperTrade', () => {
     }));
   });
 
+  it('records a trade as manual unless the caller says it is automated', async () => {
+    db.addPosition.mockResolvedValue({ id: 'p1' });
+    await openPaperTrade('U1', input, { now: OPEN });
+    expect(db.addPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ source: 'manual' }));
+
+    await openPaperTrade('U1', input, { now: OPEN, source: 'auto' });
+    expect(db.addPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ source: 'auto' }));
+  });
+
+  it('never takes the source from the request itself', async () => {
+    db.addPosition.mockResolvedValue({ id: 'p1' });
+    await openPaperTrade('U1', { ...input, source: 'auto' }, { now: OPEN });
+    expect(db.addPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ source: 'manual' }));
+  });
+
+  it('records a stock trade with no strike or expiry', async () => {
+    db.addPosition.mockResolvedValue({ id: 'p2' });
+    const stock = { tradingsymbol: 'RELIANCE', instrumentToken: '738561', instrumentType: 'EQ', side: 'BUY', quantity: '10', entryPrice: '1400' };
+    expect(await openPaperTrade('U1', stock, { now: OPEN })).toEqual({ ok: true, position: { id: 'p2' } });
+    expect(db.addPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ instrumentType: 'EQ', exchange: 'NSE', quantity: 10 }));
+  });
+
   it('refuses an incomplete trade without touching the database', async () => {
     const result = await openPaperTrade('U1', { ...input, side: undefined }, { now: OPEN });
     expect(result).toEqual({ ok: false, code: 'INVALID_TRADE', message: 'Missing required fields', rule: 'required-fields' });

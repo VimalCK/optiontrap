@@ -34,6 +34,16 @@ export const RULE_CODES = {
 export const MARKET_CLOSED_MESSAGE =
   'The market is closed. Paper trades can be placed and exited 9:15–15:30 IST on trading days.';
 
+/**
+ * What a position is in: CE / PE (options), FUT (futures), EQ (stocks).
+ * Options need a strike, CE/PE and an expiry; futures an expiry; stocks neither.
+ */
+export const INSTRUMENT_TYPES = ['CE', 'PE', 'FUT', 'EQ'];
+const OPTION_TYPES = ['CE', 'PE'];
+
+/** Exchange a trade defaults to when none is given: options and futures NFO, stocks NSE. */
+const defaultExchange = (/** @type {unknown} */ instrumentType) => (instrumentType === 'EQ' ? 'NSE' : 'NFO');
+
 /** Positions without a mode are paper trades. */
 const isPaper = (/** @type {unknown} */ mode) => (mode ?? 'paper') === 'paper';
 
@@ -45,9 +55,13 @@ const isPaper = (/** @type {unknown} */ mode) => (mode ?? 'paper') === 'paper';
  */
 export function normalizeTradeInput(input = /** @type {Record<string, any>} */ ({})) {
   const num = (/** @type {unknown} */ value) => (value === undefined || value === null || value === '' ? value : Number(value));
+  // Callers from before stocks and futures send only optionType: CE/PE is an option.
+  const instrumentType = input.instrumentType ?? (OPTION_TYPES.includes(/** @type {string} */ (input.optionType)) ? input.optionType : undefined);
   return {
     tradingsymbol: input.tradingsymbol,
     instrumentToken: num(input.instrumentToken),
+    instrumentType,
+    exchange: input.exchange || defaultExchange(instrumentType),
     strike: num(input.strike),
     optionType: input.optionType,
     side: input.side,
@@ -70,9 +84,25 @@ export const PAPER_TRADE_RULES = [
     appliesTo: ['open'],
     code: RULE_CODES.INVALID_TRADE,
     check: ({ trade }) => {
-      const { tradingsymbol, instrumentToken, strike, optionType, side, quantity, entryPrice, expiry } = trade;
-      const complete = tradingsymbol && instrumentToken && strike != null && optionType && side && quantity && entryPrice && expiry;
+      const { tradingsymbol, instrumentToken, side, quantity, entryPrice } = trade;
+      const complete = tradingsymbol && instrumentToken && side && quantity && entryPrice;
       return complete ? null : 'Missing required fields';
+    },
+  },
+  {
+    // Each instrument type carries exactly the fields it has.
+    id: 'instrument-fields',
+    appliesTo: ['open'],
+    code: RULE_CODES.INVALID_TRADE,
+    check: ({ trade }) => {
+      const { instrumentType, strike, optionType, expiry } = trade;
+      if (!INSTRUMENT_TYPES.includes(instrumentType)) return `instrumentType must be one of: ${INSTRUMENT_TYPES.join(', ')}`;
+      if (OPTION_TYPES.includes(instrumentType)) {
+        if (strike == null || Number.isNaN(strike) || !expiry) return 'An option needs a strike and an expiry';
+        if (optionType !== instrumentType) return 'optionType must match instrumentType for an option';
+      }
+      if (instrumentType === 'FUT' && !expiry) return 'A future needs an expiry';
+      return null;
     },
   },
   {

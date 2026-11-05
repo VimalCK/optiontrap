@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { getPositions, exitPosition, tradeErrorMessage, Position } from '@/services/positions';
+import { getPositions, exitPosition, tradeErrorMessage, Position, instrumentName, positionQuoteKey } from '@/services/positions';
 
 import { fetchQuotes, KitePosition } from '@/services/kiteApi';
 import { positionsPnl } from '@/services/livePositions';
@@ -616,11 +616,11 @@ const PaperPositions: React.FC = () => {
         });
       });
     } else {
-      const instruments = positions.map((p) => `NFO:${p.tradingsymbol}`);
+      const instruments = positions.map(positionQuoteKey);
       fetchQuotes(instruments).then((quotes) => {
         const priceMap = new Map<number, number>();
         positions.forEach((p) => {
-          const q = quotes.get(`NFO:${p.tradingsymbol}`);
+          const q = quotes.get(positionQuoteKey(p));
           if (q) priceMap.set(p.instrumentToken, q.last_price);
         });
         setLivePrices(priceMap);
@@ -774,11 +774,12 @@ const PaperPositions: React.FC = () => {
                 <tr key={pos.id} className={pos.exited ? 'positions-table__row--exited' : ''}>
                   <td>
                     <span className="positions-table__instrument">
-                      <span className="positions-table__name">{pos.tradingsymbol.replace(/\d.*/,'')}</span>
-                      <span className="positions-table__strike">{pos.strike}</span>
-                      <span className={`positions-table__type positions-table__type--${pos.optionType.toLowerCase()}`}>{pos.optionType}</span>
-                      <span className="positions-table__expiry">{formatCalendarDate(pos.expiry, { day: '2-digit', month: 'short' })}</span>
-                      <TradingViewLink symbol={pos.tradingsymbol} exchange="NFO" />
+                      <span className="positions-table__name">{instrumentName(pos)}</span>
+                      {pos.strike != null && <span className="positions-table__strike">{pos.strike}</span>}
+                      <span className={`positions-table__type positions-table__type--${pos.instrumentType.toLowerCase()}`}>{pos.instrumentType}</span>
+                      {pos.expiry && <span className="positions-table__expiry">{formatCalendarDate(pos.expiry, { day: '2-digit', month: 'short' })}</span>}
+                      {pos.source === 'auto' && <span className="positions-table__source" title="Placed by the trade automation">Auto</span>}
+                      <TradingViewLink symbol={pos.tradingsymbol} exchange={pos.exchange} />
                     </span>
                     {(pos.strategyTag || pos.confidence != null || pos.targetPrice != null || pos.stopLossPrice != null || pos.note) && (
                       <div className="positions-table__meta">

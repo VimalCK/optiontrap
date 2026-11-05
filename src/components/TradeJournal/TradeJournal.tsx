@@ -216,6 +216,7 @@ const TradeJournal: React.FC<{
               options={[
                 { value: 'all', label: 'All Segments' },
                 { value: 'options', label: 'Options' },
+                { value: 'futures', label: 'Futures' },
                 { value: 'stocks', label: 'Stocks' },
               ]}
               onChange={(v) => setSegment(v as SegmentFilter)}
