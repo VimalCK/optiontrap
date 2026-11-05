@@ -188,6 +188,25 @@ export const SettingsIcon: React.FC<IconProps> = ({ size = 20, className }) => (
   </svg>
 );
 
+export const InfoIcon: React.FC<IconProps> = ({ size = 16, className }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    <circle cx="12" cy="12" r="10" />
+    <path d="M12 16v-4" />
+    <path d="M12 8h.01" />
+  </svg>
+);
+
 export const ChevronLeftIcon: React.FC<IconProps> = ({ size = 14, className }) => (
   <svg
     width={size}

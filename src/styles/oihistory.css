@@ -515,17 +515,6 @@
 .oi-history__futures-signal--bullish { color: var(--green, #22c55e) !important; }
 .oi-history__futures-signal--bearish { color: var(--red, #ef4444) !important; }
 
-.oi-history__futures-info-button {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-}
-
-.oi-history__pattern-info-button {
-  width: 32px;
-  height: 32px;
-  padding: 0;
-}
 
 .oi-history__futures-info {
   padding: 10px 14px;

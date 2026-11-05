@@ -4,6 +4,8 @@ import { formatOiWithChg, formatFullDateLabel } from './helpers';
 import { patternColor, expiryLabel } from './analysis';
 import { describeFlow, flowColor, type FlowReading } from '@/services/oiFlow';
 import { PatternGuide } from './PatternGuide';
+import IconButton from '@/components/IconButton/IconButton';
+import { InfoIcon } from '@/components/icons/Icons';
 
 /** Strikes shown above and below ATM before the grid scrolls vertically. */
 const STRIKES_EACH_SIDE = 10;
@@ -74,18 +76,12 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
         <div className="oi-history__table-meta">
           <span className="oi-history__table-count">{rows.length} strikes</span>
           <span className="oi-history__table-count">{expiries.length} expiries</span>
-          <button
-            type="button"
-            className="app-btn app-btn--icon oi-history__pattern-info-button"
+          <IconButton
+            icon={<InfoIcon />}
+            label="Explain OI Snapshot patterns"
             onClick={() => setShowPatternInfo((visible) => !visible)}
-            title="Explain OI Snapshot patterns"
-            aria-label="Explain OI Snapshot patterns"
-            aria-expanded={showPatternInfo}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
-            </svg>
-          </button>
+            expanded={showPatternInfo}
+          />
         </div>
       </div>
 

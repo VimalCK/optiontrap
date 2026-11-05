@@ -172,8 +172,8 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
 - **Reusable controls: build once, use everywhere.** Any UI element that appears (or will appear) on more than one
   screen is a shared component in its own folder, like the existing ones (`src/components/AppSelect/`,
   `src/components/TabBar/`, `src/components/TradingViewLink/`), with its own styles in one shared CSS file. Pages use the component; they don't copy markup or add page-specific CSS for the same look.
-  - Example: the settings **gear button** (icon-only button with tooltip and `aria-label`) is one component used by every
-    screen that has settings, not a per-page `automation-settings-btn` class. The same goes for icon buttons, status
+  - Example: every icon-only button (the settings gear, the ⓘ info buttons) is the shared `IconButton`
+    (`src/components/IconButton/`) with an icon from `Icons.tsx`, never a per-page button class or inline SVG. The same goes for status
     pills/badges, on/off switches, Save/Cancel form footers, loading/error/empty states, section headers with an action.
   - Before writing new markup or CSS, search for an existing component or class that does the job and reuse or extend it
     (add a prop/variant), rather than making a near-copy.
@@ -182,6 +182,7 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
 - **UI building blocks:** reuse what exists, don't add libraries.
   - `AppSelect` instead of a native `<select>` (supports `searchable` and multi-select).
   - The shared `TabBar` for page tabs. `MarketStrip`.
+  - `IconButton` for any icon-only button (`icon`, `label` = tooltip + accessible name, `expanded` for toggles).
   - SVG icons in `src/components/icons/Icons.tsx`: add new ones there in the same style (24 viewBox, `currentColor`
     stroke, `aria-hidden`).
   - Buttons `app-btn`, `app-btn--primary|--secondary|--danger|--icon`. Cards `card`, `card__title`, `card__description`.

@@ -12,6 +12,7 @@
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LIFECYCLE_STAGES, TRADE_KINDS } from '../../shared/automation.js';
+import IconButton from '@/components/IconButton/IconButton';
 import { SettingsIcon } from '@/components/icons/Icons';
 import { AutomationConfig, AutoTrade, fetchAutomationConfig, fetchAutoTrades } from '@/services/automation';
 import { isAbortError } from '@/services/apiClient';
@@ -156,15 +157,11 @@ const Automation: React.FC = () => {
 
       <LifecycleSteps
         action={(
-          <button
-            type="button"
-            className="automation-settings-btn"
+          <IconButton
+            icon={<SettingsIcon size={18} />}
+            label="Automation settings"
             onClick={() => navigate('/automation/settings')}
-            title="Automation settings"
-            aria-label="Automation settings"
-          >
-            <SettingsIcon size={18} />
-          </button>
+          />
         )}
       />
       <AutoTradesTable trades={trades} loading={tradesLoading} error={tradesError} />

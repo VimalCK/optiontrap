@@ -203,24 +203,6 @@
   margin-bottom: 0;
 }
 
-.trap-info-btn {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 4px;
-  border-radius: 50%;
-  transition: color 0.15s, background 0.15s;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.trap-info-btn:hover {
-  color: var(--accent);
-  background: rgba(99, 102, 241, 0.1);
-}
-
 /* View Toggle */
 .trap-view-toggle {
   display: flex;

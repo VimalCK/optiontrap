@@ -2,6 +2,8 @@ import React, { useMemo, useState } from 'react';
 import type { FuturesHistoryRow } from './types';
 import { FUTURES_LINE_COLORS, buildFuturesSeries, formatMonthLabel, formatFullDateLabel, formatOiCompact } from './helpers';
 import { ChartXAxis } from './ChartXAxis';
+import IconButton from '@/components/IconButton/IconButton';
+import { InfoIcon } from '@/components/icons/Icons';
 
 interface FuturesContextProps {
   futuresData: FuturesHistoryRow[];
@@ -110,18 +112,12 @@ export const FuturesContext: React.FC<FuturesContextProps> = ({ futuresData, fil
             <button type="button" className={`oi-history__volume-toggle ${futuresView === 'table' ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setFuturesView('table')} aria-pressed={futuresView === 'table'}>Table</button>
             <button type="button" className={`oi-history__volume-toggle ${futuresView === 'chart' ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setFuturesView('chart')} aria-pressed={futuresView === 'chart'}>Chart</button>
           </div>
-          <button
-            type="button"
-            className="app-btn app-btn--icon oi-history__futures-info-button"
+          <IconButton
+            icon={<InfoIcon />}
+            label="Explain futures signals"
             onClick={() => setShowFuturesInfo((visible) => !visible)}
-            title="Explain futures signals"
-            aria-label="Explain futures signals"
-            aria-expanded={showFuturesInfo}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-              <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
-            </svg>
-          </button>
+            expanded={showFuturesInfo}
+          />
         </div>
       </div>
       {showFuturesInfo && (

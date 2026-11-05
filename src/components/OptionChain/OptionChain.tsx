@@ -1,6 +1,8 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import SellStrategy from '@/components/SellStrategy/SellStrategy';
 import AppSelect from '@/components/AppSelect/AppSelect';
+import IconButton from '@/components/IconButton/IconButton';
+import { InfoIcon } from '@/components/icons/Icons';
 import { calculateExpectedMove } from '@/services/edgeScore';
 import { watchSnapshotSymbol, withSpot, getTodaySnapshots, getLatestSnapshotTimestamp, calculateVelocity, analyzeVelocityPattern, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
 import { computeStrikeSignals } from '@/services/combinedSignal';
@@ -916,11 +918,7 @@ const OptionChain: React.FC = () => {
           <div className="trap-card-header">
             <div className="trap-card-header__left">
               <h3 className="card__title" style={{ marginBottom: 0 }}>OI Chart <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-secondary)' }}>(daily changes)</span></h3>
-              <button className="trap-info-btn" onClick={() => setShowOiChartInfo(!showOiChartInfo)} title="How to read this chart">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
-                </svg>
-              </button>
+              <IconButton icon={<InfoIcon />} label="How to read this chart" onClick={() => setShowOiChartInfo(!showOiChartInfo)} expanded={showOiChartInfo} />
             </div>
           </div>
           {showOiChartInfo && <OiChartGuide />}
@@ -1130,11 +1128,7 @@ const OptionChain: React.FC = () => {
           <div className="trap-card-header">
             <div className="trap-card-header__left">
               <h3 className="card__title" style={{ marginBottom: 0 }}>Strategy</h3>
-              <button className="trap-info-btn" onClick={() => setShowSellStrategyInfo(!showSellStrategyInfo)} title="How this works">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
-                </svg>
-              </button>
+              <IconButton icon={<InfoIcon />} label="How this works" onClick={() => setShowSellStrategyInfo(!showSellStrategyInfo)} expanded={showSellStrategyInfo} />
             </div>
           </div>
           {showSellStrategyInfo && (
