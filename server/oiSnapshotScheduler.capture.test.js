@@ -46,7 +46,10 @@ const INSTRUMENTS = Object.entries(UNDERLYINGS).flatMap(([name, spot], u) => [-2
 
 vi.mock('./instruments.js', () => ({ getOrFetchInstruments: async () => INSTRUMENTS }));
 
-/** Kite /quote: spot keys get a price; option keys get OI, price, volume and close. */
+/** Option tradingsymbols whose order book is empty (no bids or asks), and that never traded. */
+const EMPTY_BOOK = new Set();
+
+/** Kite /quote: spot keys get a price; option keys get OI, price, volume, close, best bid/ask and trade time. */
 async function fakeKiteFetch(url) {
   const keys = new URL(url).searchParams.getAll('i');
   const data = {};
@@ -54,7 +57,10 @@ async function fakeKiteFetch(url) {
     const spotOf = Object.keys(SPOT_KEYS).find((name) => SPOT_KEYS[name] === key);
     data[key] = spotOf
       ? { last_price: UNDERLYINGS[spotOf] }
-      : { oi: 5000, last_price: 100, volume: 200, ohlc: { close: 90 } };
+      : EMPTY_BOOK.has(key)
+        ? { oi: 5000, last_price: 100, volume: 0, ohlc: { close: 90 }, depth: { buy: [{ price: 0, quantity: 0 }], sell: [{ price: 0, quantity: 0 }] } }
+        : { oi: 5000, last_price: 100, volume: 200, ohlc: { close: 90 }, last_trade_time: '2026-11-03 10:01:30',
+            depth: { buy: [{ price: 99.5, quantity: 75 }], sell: [{ price: 100.5, quantity: 150 }] } };
   }
   return { ok: true, status: 200, json: async () => ({ data }) };
 }
@@ -69,6 +75,7 @@ let scheduler;
 
 beforeEach(async () => {
   state.saves.length = 0;
+  EMPTY_BOOK.clear();
   state.always = ['NIFTY', 'BANKNIFTY'];
   state.admin = { apiKey: 'key', accessToken: 'token', userId: 'ADMIN' };
   vi.useFakeTimers({ now: ist('10:02') });
@@ -136,6 +143,23 @@ describe('the 10-minute rounds', () => {
     expect(reliance.prices).toMatchObject({ 9003: 1400 });
     expect(reliance.prices).not.toHaveProperty('9001');
     expect(reliance).not.toHaveProperty('spot');
+  });
+
+  it("stores each option's best bid, best ask and last trade time, and none for an empty order book", async () => {
+    EMPTY_BOOK.add('NFO:NIFTY24000CE');
+    await startScheduler();
+
+    const [round] = state.saves;
+    const traded = String(INSTRUMENTS.find((i) => i.tradingsymbol === 'NIFTY24100CE').instrumentToken);
+    const empty = String(INSTRUMENTS.find((i) => i.tradingsymbol === 'NIFTY24000CE').instrumentToken);
+    expect(round.bids[traded]).toBe(99.5);
+    expect(round.asks[traded]).toBe(100.5);
+    expect(round.tradeTimes[traded]).toBe(Date.parse('2026-11-03T04:31:30Z')); // 10:01:30 IST
+    expect(round.bids).not.toHaveProperty(empty);
+    expect(round.asks).not.toHaveProperty(empty);
+    expect(round.tradeTimes).not.toHaveProperty(empty);
+    expect(round.data).toHaveProperty(empty); // its OI is still stored
+    expect(round.bids).not.toHaveProperty('9001'); // spot rows: last price only
   });
 
   it('snapshots a symbol ticked in Settings from the next round', async () => {

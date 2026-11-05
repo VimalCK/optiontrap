@@ -4,7 +4,7 @@ vi.mock('./db.js', () => ({}));
 vi.mock('./instruments.js', () => ({}));
 vi.mock('./oiHistoryScheduler.js', () => ({}));
 
-const { pickChainWindow } = await import('./oiSnapshotScheduler.js');
+const { kiteQuoteTimeMs, pickChainWindow } = await import('./oiSnapshotScheduler.js');
 
 /** CE+PE at strikes 100..(100 + 10*(n-1)) for each expiry. */
 function chain(expiries, n = 11) {
@@ -29,5 +29,17 @@ describe('pickChainWindow', () => {
   it('uses the middle of the chain without a spot price, and nothing once all expiries passed', () => {
     expect(strikesOf(pickChainWindow(chain(['2026-11-10']), 0, '2026-11-03', 1))).toEqual([140, 150, 160]);
     expect(pickChainWindow(chain(['2026-10-27']), 150, '2026-11-03')).toEqual([]);
+  });
+});
+
+describe('kiteQuoteTimeMs', () => {
+  it("reads Kite's quote time as market (IST) time", () => {
+    expect(kiteQuoteTimeMs('2026-11-05 12:07:58')).toBe(Date.parse('2026-11-05T06:37:58Z')); // 12:07:58 IST
+  });
+
+  it('gives null for a missing or malformed time', () => {
+    expect(kiteQuoteTimeMs(undefined)).toBeNull();
+    expect(kiteQuoteTimeMs('')).toBeNull();
+    expect(kiteQuoteTimeMs('2026-11-05T12:07:58')).toBeNull();
   });
 });

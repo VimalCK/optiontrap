@@ -1358,63 +1358,53 @@ function roundTo10Min(timestamp) {
   return Math.floor(timestamp / TEN_MIN) * TEN_MIN;
 }
 
+/** The per-token maps a snapshot row holds beside OI (`data`): field → column. */
+const OI_SNAPSHOT_MAPS = {
+  prices: 'prices',
+  close: 'close',
+  volumes: 'volumes',
+  bids: 'bids',
+  asks: 'asks',
+  tradeTimes: 'trade_times',
+};
+const OI_SNAPSHOT_MAP_COLUMNS = Object.values(OI_SNAPSHOT_MAPS);
+
+const parseJsonMap = (value) => (typeof value === 'string' ? JSON.parse(value) : value);
+
 export async function saveOiSnapshot(snapshot) {
   const rounded = roundTo10Min(snapshot.timestamp);
-  const timeLabel = snapshot.timeLabel;
-  const newData = typeof snapshot.data === 'string' ? JSON.parse(snapshot.data) : snapshot.data;
-  const newPrices = snapshot.prices
-    ? (typeof snapshot.prices === 'string' ? JSON.parse(snapshot.prices) : snapshot.prices)
-    : null;
-  const newClose = snapshot.close
-    ? (typeof snapshot.close === 'string' ? JSON.parse(snapshot.close) : snapshot.close)
-    : null;
+  const newData = parseJsonMap(snapshot.data);
+  const newMaps = Object.keys(OI_SNAPSHOT_MAPS).map((field) => (snapshot[field] ? parseJsonMap(snapshot[field]) : null));
   const newSpot = snapshot.spot || null;
-  const newVolumes = snapshot.volumes
-    ? (typeof snapshot.volumes === 'string' ? JSON.parse(snapshot.volumes) : snapshot.volumes)
-    : null;
 
   // All users' snapshots for a given 10-min slot merge into ONE shared row.
   // Serialize the read-modify-write per slot (cross-process) so concurrent
   // watchers on the same/different scrips can't lose each other's tokens.
   await withNamedAdvisoryLock(`oi-snapshot:${rounded}`, async () => {
     const existing = await firstRow(
-      'SELECT id, data, prices, close, spot, volumes FROM oi_snapshots WHERE timestamp = $1',
+      `SELECT id, data, spot, ${OI_SNAPSHOT_MAP_COLUMNS.join(', ')} FROM oi_snapshots WHERE timestamp = $1`,
       [rounded],
     );
 
     if (existing) {
-      const existingData = JSON.parse(existing.data);
-      Object.assign(existingData, newData);
-
-      const mergedPrices = existing.prices ? JSON.parse(existing.prices) : {};
-      if (newPrices) Object.assign(mergedPrices, newPrices);
-      const pricesStr = Object.keys(mergedPrices).length > 0 ? JSON.stringify(mergedPrices) : null;
-
-      const mergedClose = existing.close ? JSON.parse(existing.close) : {};
-      if (newClose) Object.assign(mergedClose, newClose);
-      const closeStr = Object.keys(mergedClose).length > 0 ? JSON.stringify(mergedClose) : null;
-
-      const mergedVolumes = existing.volumes ? JSON.parse(existing.volumes) : {};
-      if (newVolumes) Object.assign(mergedVolumes, newVolumes);
-      const volumesStr = Object.keys(mergedVolumes).length > 0 ? JSON.stringify(mergedVolumes) : null;
-
-      const spot = newSpot || existing.spot || null;
-
+      const data = { ...JSON.parse(existing.data), ...newData };
+      const maps = OI_SNAPSHOT_MAP_COLUMNS.map((column, i) => {
+        const merged = { ...(existing[column] ? JSON.parse(existing[column]) : {}), ...(newMaps[i] ?? {}) };
+        return Object.keys(merged).length > 0 ? JSON.stringify(merged) : null;
+      });
+      const sets = OI_SNAPSHOT_MAP_COLUMNS.map((column, i) => `${column} = $${i + 3}`).join(', ');
       await query(
-        'UPDATE oi_snapshots SET data = $1, prices = $2, close = $3, spot = $4, volumes = $5 WHERE id = $6',
-        [JSON.stringify(existingData), pricesStr, closeStr, spot, volumesStr, existing.id],
+        `UPDATE oi_snapshots SET data = $1, spot = $2, ${sets} WHERE id = $${OI_SNAPSHOT_MAP_COLUMNS.length + 3}`,
+        [JSON.stringify(data), newSpot || existing.spot || null, ...maps, existing.id],
       );
     } else {
+      const columns = ['data', 'spot', ...OI_SNAPSHOT_MAP_COLUMNS];
+      const placeholders = columns.map((_, i) => `$${i + 3}`).join(', ');
       await query(
-        `INSERT INTO oi_snapshots (timestamp, time_label, data, prices, close, spot, volumes)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         ON CONFLICT (timestamp) DO UPDATE SET
-           data    = EXCLUDED.data,
-           prices  = EXCLUDED.prices,
-           close   = EXCLUDED.close,
-           spot    = EXCLUDED.spot,
-           volumes = EXCLUDED.volumes`,
-        [rounded, timeLabel, JSON.stringify(newData), newPrices ? JSON.stringify(newPrices) : null, newClose ? JSON.stringify(newClose) : null, newSpot, newVolumes ? JSON.stringify(newVolumes) : null],
+        `INSERT INTO oi_snapshots (timestamp, time_label, ${columns.join(', ')})
+         VALUES ($1, $2, ${placeholders})
+         ON CONFLICT (timestamp) DO UPDATE SET ${columns.map((column) => `${column} = EXCLUDED.${column}`).join(', ')}`,
+        [rounded, snapshot.timeLabel, JSON.stringify(newData), newSpot, ...newMaps.map((map) => (map ? JSON.stringify(map) : null))],
       );
     }
   });

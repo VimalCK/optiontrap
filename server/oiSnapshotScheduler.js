@@ -14,7 +14,7 @@
 import { getAlwaysSnapshotSymbols, getTodayOiSnapshotTokens, getUnderlyings, saveOiSnapshot } from './db.js';
 import { getOrFetchInstruments } from './instruments.js';
 import { istClock, isMarketOpen } from './marketClock.js';
-import { marketTimeLabel } from '../shared/marketTime.js';
+import { marketDateTime, marketTimeLabel } from '../shared/marketTime.js';
 import { findWorkingAdminSession } from './oiHistoryScheduler.js';
 
 /** Strikes each side of ATM. The analyzer shows ±15; the extra covers ATM drifting during the day. */
@@ -89,6 +89,14 @@ export function pickChainWindow(options, spot, today, each = STRIKES_EACH_SIDE) 
   return forExpiry.filter((o) => keep.has(o.strike));
 }
 
+/** Kite's quote time ('YYYY-MM-DD HH:MM:SS', market time) in epoch ms, or null. */
+export function kiteQuoteTimeMs(value) {
+  const match = /^(\d{4}-\d{2}-\d{2}) (\d{2}):(\d{2}):(\d{2})$/.exec(value ?? '');
+  if (!match) return null;
+  const [, date, h, m, s] = match;
+  return marketDateTime(date).getTime() + ((Number(h) * 60 + Number(m)) * 60 + Number(s)) * 1000;
+}
+
 /** Option chains of each underlying in the instrument list, by underlying name. */
 function optionsByUnderlying(instruments) {
   const byName = new Map();
@@ -117,7 +125,8 @@ async function snapshottedToday(instruments) {
 /**
  * Quote the chains for `symbols` and store them in the current 10-minute
  * snapshot row. Each symbol's spot price goes in `prices` (and `close`) under
- * its price instrument's token, beside its options' prices.
+ * its price instrument's token, beside its options' prices. Options also get
+ * their best bid/ask and last trade time, so a stale last price can be told apart.
  */
 async function captureSymbols(symbols, kite, instruments, now = new Date()) {
   const { date } = istClock(now);
@@ -136,6 +145,9 @@ async function captureSymbols(symbols, kite, instruments, now = new Date()) {
   const prices = {};
   const close = {};
   const volumes = {};
+  const bids = {};
+  const asks = {};
+  const tradeTimes = {};
   for (const { token, key } of spotRows.values()) {
     const q = spotQuotes[key];
     if (q?.last_price > 0) prices[token] = q.last_price;
@@ -149,10 +161,16 @@ async function captureSymbols(symbols, kite, instruments, now = new Date()) {
     if (q.last_price > 0) prices[token] = q.last_price;
     if (q.ohlc?.close > 0) close[token] = q.ohlc.close;
     if (q.volume > 0) volumes[token] = q.volume;
+    const bid = q.depth?.buy?.[0]?.price;
+    const ask = q.depth?.sell?.[0]?.price;
+    if (bid > 0) bids[token] = bid;
+    if (ask > 0) asks[token] = ask;
+    const tradeTime = kiteQuoteTimeMs(q.last_trade_time);
+    if (tradeTime !== null) tradeTimes[token] = tradeTime;
   }
   if (Object.keys(data).length === 0) return 0;
 
-  await saveOiSnapshot({ timestamp: now.getTime(), timeLabel: marketTimeLabel(now), data, prices, close, volumes });
+  await saveOiSnapshot({ timestamp: now.getTime(), timeLabel: marketTimeLabel(now), data, prices, close, volumes, bids, asks, tradeTimes });
   return Object.keys(data).length;
 }
 

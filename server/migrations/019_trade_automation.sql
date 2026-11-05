@@ -1,4 +1,5 @@
--- Trade automation (see shared/automation.js).
+-- Trade automation (see shared/automation.js), and the quote data its
+-- intraday signal needs in OI snapshots (at the end).
 
 -- Each user's automation configuration, one row per user. The shape is
 -- checked by parseAutomationConfig before it is stored.
@@ -91,3 +92,21 @@ BEGIN
     );
   END IF;
 END $$;
+
+-- Best bid, best ask and last trade time per option in each OI snapshot,
+-- beside the last traded price already in `prices`. All from the same Kite
+-- /quote reply the snapshot job already fetches, so no extra calls.
+--
+-- Why: the last traded price can be minutes old on a strike nobody traded,
+-- and pairing it with a fresh spot makes a fake IV move. The bid/ask mid is
+-- current even without trades, and the trade time shows how old `prices` is.
+-- For the intraday IV flow study and the automation signal; nothing reads them yet.
+--
+-- Same shape as prices/close/volumes: JSON text, instrument token → value.
+--   bids         best bid price
+--   asks         best ask price
+--   trade_times  last trade time, epoch milliseconds
+-- Rows are looked up by timestamp only (UNIQUE), so no new index is needed.
+ALTER TABLE oi_snapshots ADD COLUMN IF NOT EXISTS bids TEXT;
+ALTER TABLE oi_snapshots ADD COLUMN IF NOT EXISTS asks TEXT;
+ALTER TABLE oi_snapshots ADD COLUMN IF NOT EXISTS trade_times TEXT;
