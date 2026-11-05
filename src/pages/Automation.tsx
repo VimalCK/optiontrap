@@ -16,6 +16,7 @@ import IconButton from '@/components/IconButton/IconButton';
 import { SettingsIcon } from '@/components/icons/Icons';
 import { AutomationConfig, AutoTrade, fetchAutomationConfig, fetchAutoTrades } from '@/services/automation';
 import { isAbortError } from '@/services/apiClient';
+import { formatAmount } from '@/utils/formatAmount';
 import { formatCalendarDate, istTimeLabel } from '@/utils/marketStatus';
 import '@/styles/automation.css';
 
@@ -55,6 +56,9 @@ export const LifecycleSteps: React.FC<{ action?: React.ReactNode }> = ({ action 
 
 // ── Trades ──
 
+/** A fill price, or a dash before there is one. */
+const price = (value: number | null) => (value == null ? '–' : formatAmount(value));
+
 const eventTime = (at: string) => {
   const date = new Date(at);
   return `${formatCalendarDate(at.slice(0, 10), { day: 'numeric', month: 'short' })} ${istTimeLabel(date)}`;
@@ -80,6 +84,8 @@ export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean;
               <th>Type</th>
               <th>Side</th>
               <th>Qty</th>
+              <th>Entry</th>
+              <th>Exit</th>
               <th>Stage</th>
               <th>Reason</th>
             </tr>
@@ -93,12 +99,14 @@ export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean;
                   <td>{kindLabel(t.kind)}</td>
                   <td>{t.side}</td>
                   <td>{t.quantity}</td>
+                  <td>{price(t.entryPrice)}</td>
+                  <td>{price(t.exitPrice)}</td>
                   <td><span className={`automation-stage automation-stage--${t.stage}`}>{stageLabel(t.stage)}</span></td>
                   <td>{t.reason ?? ''}</td>
                 </tr>
                 {open === t.id && (
                   <tr className="automation-trades__events">
-                    <td colSpan={7}>
+                    <td colSpan={9}>
                       <ol>
                         {t.events.map((e, i) => (
                           <li key={i}>

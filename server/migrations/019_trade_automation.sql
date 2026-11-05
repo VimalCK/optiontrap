@@ -23,7 +23,14 @@ CREATE TABLE IF NOT EXISTS auto_trades (
   quantity         BIGINT NOT NULL CHECK (quantity > 0),
   stage            TEXT NOT NULL CHECK (stage IN ('selected', 'validated', 'rejected', 'executed', 'closed')),
   reason           TEXT,
-  position_id      TEXT,
+  -- This trade's own fill prices. Several auto trades in one instrument merge
+  -- into one paper position at the average price, so the position alone can't
+  -- tell each trade's fill; set on execution and on exit.
+  entry_price      NUMERIC CHECK (entry_price > 0),
+  exit_price       NUMERIC CHECK (exit_price > 0),
+  -- The paper position it went into. Kept when positions are reset, so the
+  -- trade history stays; only the link is cleared.
+  position_id      TEXT REFERENCES positions (id) ON DELETE SET NULL,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );
@@ -32,6 +39,9 @@ CREATE TABLE IF NOT EXISTS auto_trades (
 CREATE INDEX IF NOT EXISTS auto_trades_user_created_idx ON auto_trades (user_id, created_at DESC);
 -- The trade monitor will look up a user's trades still in progress.
 CREATE INDEX IF NOT EXISTS auto_trades_user_open_idx ON auto_trades (user_id, stage) WHERE stage NOT IN ('rejected', 'closed');
+-- The trades behind a position (the monitor closing it), and the foreign key:
+-- clearing the link when a position is deleted stays an index lookup.
+CREATE INDEX IF NOT EXISTS auto_trades_position_idx ON auto_trades (position_id) WHERE position_id IS NOT NULL;
 
 -- Every stage a trade passed through, with when and why.
 CREATE TABLE IF NOT EXISTS auto_trade_events (
@@ -51,7 +61,7 @@ CREATE INDEX IF NOT EXISTS auto_trade_events_trade_idx ON auto_trade_events (aut
 --                    rule the journal's segment filter already used.
 --   exchange         for quotes and charts; existing rows are NFO options.
 --   source           manual (placed by the user) or auto (by the automation).
---                    Only manual positions are merged with each other.
+--                    Trades merge only into a position of the same source.
 -- strike, option_type and expiry are only set for the types that have them.
 ALTER TABLE positions ADD COLUMN IF NOT EXISTS instrument_type TEXT;
 UPDATE positions

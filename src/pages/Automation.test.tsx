@@ -40,7 +40,7 @@ describe('AutoTradesTable', () => {
   const trade: AutoTrade = {
     id: 't1', horizon: 'intraday', kind: 'index-option', mode: 'paper', tradingsymbol: 'NIFTY26NOV24000PE',
     instrumentToken: 1, side: 'SELL', quantity: 75, stage: 'rejected', reason: 'Max open positions reached',
-    positionId: null, createdAt: '2026-11-05T05:00:00.000Z', updatedAt: '2026-11-05T05:00:00.000Z',
+    entryPrice: null, exitPrice: null, positionId: null, createdAt: '2026-11-05T05:00:00.000Z', updatedAt: '2026-11-05T05:00:00.000Z',
     events: [],
   };
 
@@ -55,5 +55,13 @@ describe('AutoTradesTable', () => {
     expect(table).toContain('automation-stage--rejected">Rejected<');
     expect(table).toContain('Max open positions reached');
     expect(table).toContain('10:30'); // 05:00 UTC
+  });
+
+  it("shows each trade's own fill, even when trades merge into one position", () => {
+    const first = { ...trade, id: 'a', stage: 'executed' as const, reason: null, entryPrice: 1000, positionId: 'p1' };
+    const second = { ...first, id: 'b', quantity: 500, entryPrice: 1010 };
+    const table = renderToStaticMarkup(<AutoTradesTable trades={[first, second]} />);
+    expect(table).toContain('<td>1,000.00</td><td>–</td>');
+    expect(table).toContain('<td>1,010.00</td><td>–</td>');
   });
 });

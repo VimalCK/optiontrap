@@ -32,6 +32,9 @@ export interface AutoTrade {
   quantity: number;
   stage: LifecycleStageId;
   reason: string | null;
+  /** This trade's own fills; merged trades share one position at the average price. */
+  entryPrice: number | null;
+  exitPrice: number | null;
   positionId: string | null;
   createdAt: string;
   updatedAt: string;

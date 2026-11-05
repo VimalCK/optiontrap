@@ -945,6 +945,8 @@ function toAutoTrade(row) {
     quantity: Number(row.quantity),
     stage: row.stage,
     reason: row.reason,
+    entryPrice: row.entry_price,
+    exitPrice: row.exit_price,
     positionId: row.position_id,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
