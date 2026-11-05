@@ -33,9 +33,13 @@ export const LIFECYCLE_STEPS: { title: string; stages: string; text: string }[] 
 
 // ── Lifecycle ──
 
-export const LifecycleSteps: React.FC = () => (
+/** `action` sits at the card's top right (the settings gear). */
+export const LifecycleSteps: React.FC<{ action?: React.ReactNode }> = ({ action }) => (
   <section className="card" aria-labelledby="automation-lifecycle-title">
-    <h3 id="automation-lifecycle-title" className="card__title">How a trade runs</h3>
+    <div className="automation-section__head">
+      <h3 id="automation-lifecycle-title" className="card__title">How a trade runs</h3>
+      {action}
+    </div>
     <ol className="automation-lifecycle">
       {LIFECYCLE_STEPS.map((step) => (
         <li key={step.title} className="automation-lifecycle__step">
@@ -148,18 +152,21 @@ const Automation: React.FC = () => {
       <header className="automation-header">
         <h1 className="automation-header__title">Automation</h1>
         <span className="automation-header__status">{configError ? 'Settings could not be loaded' : automationStatus(config)}</span>
-        <button
-          type="button"
-          className="automation-header__settings"
-          onClick={() => navigate('/automation/settings')}
-          title="Automation settings"
-          aria-label="Automation settings"
-        >
-          <SettingsIcon size={18} />
-        </button>
       </header>
 
-      <LifecycleSteps />
+      <LifecycleSteps
+        action={(
+          <button
+            type="button"
+            className="automation-settings-btn"
+            onClick={() => navigate('/automation/settings')}
+            title="Automation settings"
+            aria-label="Automation settings"
+          >
+            <SettingsIcon size={18} />
+          </button>
+        )}
+      />
       <AutoTradesTable trades={trades} loading={tradesLoading} error={tradesError} />
     </div>
   );

@@ -8,8 +8,10 @@ import Automation, { AutoTradesTable, LifecycleSteps, automationStatus } from '.
 describe('Automation screen', () => {
   const html = renderToStaticMarkup(<MemoryRouter><Automation /></MemoryRouter>);
 
-  it('has a settings gear in the header, and no settings form of its own', () => {
-    expect(html).toMatch(/<header class="automation-header">.*aria-label="Automation settings".*<\/header>/s);
+  it('has the settings gear at the top of the first card, not in the page header, and no settings form of its own', () => {
+    const firstCard = html.match(/<section class="card".*?<\/section>/s)?.[0] ?? '';
+    expect(firstCard).toMatch(/<div class="automation-section__head"><h3[^>]*>How a trade runs<\/h3><button[^>]*aria-label="Automation settings"/);
+    expect(html.match(/<header.*?<\/header>/s)?.[0]).not.toContain('Automation settings');
     expect(html).not.toContain('automation-config');
   });
 

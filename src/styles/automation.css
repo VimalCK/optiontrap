@@ -219,9 +219,8 @@
   color: var(--text-secondary);
 }
 
-/* Gear in the top-right corner: opens the settings page. */
-.automation-header__settings {
-  margin-left: auto;
+/* Gear at the top right of the first card: opens the settings page. */
+.automation-settings-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -235,12 +234,12 @@
   cursor: pointer;
 }
 
-.automation-header__settings:hover {
+.automation-settings-btn:hover {
   border-color: var(--accent);
   color: var(--accent);
 }
 
-.automation-header__settings:focus-visible {
+.automation-settings-btn:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
