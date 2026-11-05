@@ -4,7 +4,7 @@ import type { Underlying } from './underlyings';
 
 // Price rows as /api/underlyings returns them (the values come from the instruments table).
 const row = (name: string, tradingsymbol: string, tradingviewSymbol: string): Underlying => ({
-  name, label: name, instrumentToken: 1, exchange: 'NSE', tradingsymbol, tradingviewSymbol, alwaysSnapshot: false, isMarketReference: false,
+  name, label: name, instrumentToken: 1, exchange: 'NSE', tradingsymbol, tradingviewSymbol, alwaysSnapshot: false, isMarketReference: false, isIndex: false,
 });
 const UNDERLYINGS = [row('IDX', 'IDX 50', 'TVIDX'), row('ACME', 'ACME', 'ACME')];
 const chartOf = (url: string) => decodeURIComponent(new URL(url).searchParams.get('symbol')!);

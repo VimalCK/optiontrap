@@ -3,8 +3,10 @@ import {
   LIFECYCLE_STAGES,
   TRADE_KINDS,
   canMoveTo,
+  checkGeneralSettings,
   defaultAutomationConfig,
   parseAutomationConfig,
+  tradeKind,
   withDefaults,
 } from './automation.js';
 
@@ -64,6 +66,46 @@ describe('parseAutomationConfig', () => {
     const config = valid();
     config.kinds.stock = { BUY: true, SELL: false, extra: 1 };
     expect(parseAutomationConfig(config).config.kinds.stock).toEqual({ BUY: true, SELL: false });
+  });
+});
+
+describe('parseAutomationConfig strategies', () => {
+  it('refuses a configuration without strategy settings', () => {
+    const config = valid();
+    delete config.strategies;
+    expect(parseAutomationConfig(config)).toEqual({ error: 'strategies is required' });
+  });
+});
+
+describe('tradeKind', () => {
+  it('tells index and stock options, futures and stocks apart', () => {
+    expect(tradeKind('CE', true)).toBe('index-option');
+    expect(tradeKind('PE', false)).toBe('stock-option');
+    expect(tradeKind('FUT', true)).toBe('index-future');
+    expect(tradeKind('FUT', false)).toBe('stock-future');
+    expect(tradeKind('EQ', false)).toBe('stock');
+  });
+
+  it('has no kind for an index itself or an unknown type', () => {
+    expect(tradeKind('EQ', true)).toBeNull();
+    expect(tradeKind('XX', false)).toBeNull();
+  });
+});
+
+describe('checkGeneralSettings', () => {
+  const trade = { horizon: 'intraday', kind: 'index-option', side: 'SELL' };
+
+  it('allows a trade type and side the user switched on', () => {
+    expect(checkGeneralSettings(trade, valid())).toBeNull();
+  });
+
+  it('refuses when automation is off, before anything else', () => {
+    expect(checkGeneralSettings({ ...trade, side: 'BUY' }, { ...valid(), enabled: false })).toBe('Automation is off');
+  });
+
+  it('refuses a horizon or a trade type and side that is off', () => {
+    expect(checkGeneralSettings(trade, { ...valid(), horizons: { intraday: false, positional: false } })).toMatch(/trades are off$/);
+    expect(checkGeneralSettings({ ...trade, side: 'BUY' }, valid())).toMatch(/^Buy .* is off$/);
   });
 });
 

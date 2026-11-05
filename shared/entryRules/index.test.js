@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ENTRY_RULES, checkEntryRules } from './index.js';
+import { DEFAULT_TRADE_LOTS, ENTRY_RULES, checkEntryRules, tradeLots } from './index.js';
 import { defaultRuleSettings, parseRuleSettings } from '../rules/ruleSettings.js';
 import { PARAM_TYPES } from '../rules/paramTypes.js';
 
@@ -44,6 +44,18 @@ describe('max-lots', () => {
     const stock = { ...trade, quantity: 10, lotSize: 1 };
     expect(check('max-lots', { max: 10 }, {}, stock)).toBeNull();
     expect(check('max-lots', { max: 9 }, {}, stock)).toBe('10 lots is above the 9 allowed per trade');
+  });
+});
+
+describe('tradeLots', () => {
+  it('is the Max lots value while that rule is active', () => {
+    expect(tradeLots({ ...defaultRuleSettings(ENTRY_RULES), 'max-lots': { active: true, params: { max: 3 } } })).toBe(3);
+  });
+
+  it('is 1 lot while it is off, whatever value it holds', () => {
+    expect(DEFAULT_TRADE_LOTS).toBe(1);
+    expect(tradeLots({ ...defaultRuleSettings(ENTRY_RULES), 'max-lots': { active: false, params: { max: 3 } } })).toBe(1);
+    expect(tradeLots(defaultRuleSettings(ENTRY_RULES))).toBe(1);
   });
 });
 

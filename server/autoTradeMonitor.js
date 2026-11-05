@@ -211,6 +211,15 @@ export function createAutoTradeMonitor({
       await track([userId], await db.getOpenAutoPositions(userId));
       if (!feed && watched.size > 0 && isMarketOpen(clock())) await startFeed(marketDate(clock()));
     },
+    /** The user's open automated P&L at the last prices (positions with no price yet count as 0). */
+    openPnl(/** @type {string} */ userId) {
+      let total = 0;
+      for (const position of watched.values()) {
+        const price = lastPrices.get(position.instrumentToken);
+        if (position.userId === userId && price !== undefined) total += positionPnl(position, price);
+      }
+      return total;
+    },
     /** What is being watched, for tests and logs. */
     watchedPositionIds: () => [...watched.keys()],
   };
@@ -221,6 +230,11 @@ const monitor = createAutoTradeMonitor();
 /** Reload a user's automated positions and exit rules after they changed; never throws. */
 export function refreshAutoTradeMonitor(/** @type {string} */ userId) {
   monitor.refreshUser(userId).catch((err) => console.warn(`${LOG_PREFIX} refresh failed:`, err.message));
+}
+
+/** A user's open automated P&L now, from the monitor's live prices (for the daily loss entry rule). */
+export function openAutoTradePnl(/** @type {string} */ userId) {
+  return monitor.openPnl(userId);
 }
 
 /** Start watching: the market check every minute, the clock check every second. */

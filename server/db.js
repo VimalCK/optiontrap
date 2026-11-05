@@ -945,6 +945,97 @@ export async function getAutomationConfigs(userIds) {
   return new Map(userIds.map((userId) => [userId, withDefaults(stored.get(userId))]));
 }
 
+/**
+ * Users with automation switched on, each with their configuration, for the
+ * trade engine. Served by automation_configs_enabled_idx.
+ * @returns {Promise<{ userId: string, config: import('../shared/automation.js').AutomationConfig }[]>}
+ */
+export async function getAutomatedUsers() {
+  const result = await rows("SELECT user_id, config FROM automation_configs WHERE (config->>'enabled') = 'true'");
+  return result.map((row) => ({ userId: row.user_id, config: withDefaults(row.config) }));
+}
+
+/**
+ * Record a newly selected automated trade (stage 'selected') with its first
+ * event, in one transaction. Returns the new trade's id.
+ * @param {string} userId
+ * @param {{ horizon: string, kind: string, mode: string, tradingsymbol: string, instrumentToken: number, side: string, quantity: number }} trade
+ * @param {object} detail  why it was selected (strategy, reason)
+ * @returns {Promise<string>}
+ */
+export async function createAutoTrade(userId, trade, detail) {
+  const id = crypto.randomUUID();
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO auto_trades (id, user_id, horizon, kind, mode, tradingsymbol, instrument_token, side, quantity, stage)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'selected')`,
+      [id, userId, trade.horizon, trade.kind, trade.mode, trade.tradingsymbol, trade.instrumentToken, trade.side, trade.quantity],
+    );
+    await client.query("INSERT INTO auto_trade_events (auto_trade_id, stage, detail) VALUES ($1, 'selected', $2)", [id, JSON.stringify(detail)]);
+    await client.query('COMMIT');
+    return id;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * Move one of the user's automated trades from stage `from` to `to`, with an
+ * event, in one transaction. Only a trade still at `from` moves, so a stage
+ * is never skipped or applied twice (the allowed moves are canMoveTo in
+ * shared/automation.js). Optionally sets the reason, entry price and position.
+ * Returns whether it moved. Served by the auto_trades primary key.
+ * @param {string} userId
+ * @param {string} id
+ * @param {string} from
+ * @param {string} to
+ * @param {{ reason?: string, entryPrice?: number, positionId?: string }} fields
+ * @param {object} detail
+ */
+export async function advanceAutoTrade(userId, id, from, to, fields, detail) {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const moved = await client.query(
+      `UPDATE auto_trades SET stage = $4, reason = COALESCE($5, reason), entry_price = COALESCE($6, entry_price),
+         position_id = COALESCE($7, position_id), updated_at = now()
+       WHERE id = $1 AND user_id = $2 AND stage = $3`,
+      [id, userId, from, to, fields.reason ?? null, fields.entryPrice ?? null, fields.positionId ?? null],
+    );
+    if (moved.rowCount > 0) {
+      await client.query('INSERT INTO auto_trade_events (auto_trade_id, stage, detail) VALUES ($1, $2, $3)', [id, to, JSON.stringify(detail)]);
+    }
+    await client.query('COMMIT');
+    return moved.rowCount > 0;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * The user's booked P&L today from automated paper positions exited since
+ * `todayStart` (ISO). Served by positions_closed_idx (user_id, mode, exit_time).
+ * @param {string} userId
+ * @param {string} todayStart
+ */
+export async function getTodayAutoRealisedPnl(userId, todayStart) {
+  const row = await firstRow(
+    `SELECT COALESCE(SUM(CASE WHEN side = 'BUY' THEN exit_price - entry_price ELSE entry_price - exit_price END * quantity), 0) AS pnl
+     FROM positions
+     WHERE user_id = $1 AND mode = 'paper' AND exited = 1 AND exit_time >= $2 AND source = 'auto'`,
+    [userId, todayStart],
+  );
+  return Number(row.pnl);
+}
+
 /** Every user's open automated paper positions, for the trade monitor. Served by positions_open_auto_idx. */
 export async function getAllOpenAutoPositions() {
   const result = await rows("SELECT * FROM positions WHERE source = 'auto' AND exited = 0 AND mode = 'paper'");
@@ -2176,7 +2267,9 @@ async function queryUnderlyings(name = null) {
      SELECT DISTINCT ON (f.name)
        f.name,
        p.instrument_token, p.tradingsymbol, p.exchange,
-       p.label, p.tradingview_symbol, p.always_snapshot, p.is_market_reference
+       p.label, p.tradingview_symbol, p.always_snapshot, p.is_market_reference,
+       -- An index's price row is mapped to its F&O name (fno_name); a stock's is its own NSE row.
+       (i.instrument_token IS NOT NULL) AS is_index
      FROM fno f
      -- Two joins rather than one with OR: the OR forces a nested loop (~0.6 s against ~30 ms).
      LEFT JOIN instruments i ON i.fno_name = f.name
@@ -2195,6 +2288,7 @@ async function queryUnderlyings(name = null) {
     tradingviewSymbol: row.tradingview_symbol || row.tradingsymbol,
     alwaysSnapshot: Boolean(row.always_snapshot),
     isMarketReference: Boolean(row.is_market_reference),
+    isIndex: Boolean(row.is_index),
   }));
 }
 

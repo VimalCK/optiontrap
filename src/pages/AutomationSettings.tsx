@@ -1,6 +1,6 @@
 /**
  * Automation settings — the full configuration page, opened from the gear on
- * the Automation screen. Its tabs (General, Entry rules, Exit rules; ?tab= in the URL)
+ * the Automation screen. Its tabs (General, Strategies, Entry rules, Exit rules; ?tab= in the URL)
  * show one section at a time in a card that fills the page's height. One
  * Save / Cancel at the bottom of the card serves every tab: Save stores the
  * whole configuration and stays on the page ("Saved"), so other tabs can be

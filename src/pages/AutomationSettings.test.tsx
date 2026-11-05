@@ -4,10 +4,10 @@ import { MemoryRouter } from 'react-router-dom';
 import AutomationSettings, { sectionFromParams } from './AutomationSettings';
 
 describe('AutomationSettings', () => {
-  it('has General, Entry rules and Exit rules tabs as its first row, General picked by default', () => {
+  it('has General, Strategies, Entry rules and Exit rules tabs as its first row, General picked by default', () => {
     const html = renderToStaticMarkup(<MemoryRouter><AutomationSettings /></MemoryRouter>);
     const tabs = [...html.matchAll(/<button[^>]*role="tab"[^>]*>.*?<\/button>/g)].map((m) => m[0]);
-    expect(tabs.map((t) => t.replace(/<[^>]+>/g, ''))).toEqual(['General', 'Entry rules', 'Exit rules']);
+    expect(tabs.map((t) => t.replace(/<[^>]+>/g, ''))).toEqual(['General', 'Strategies', 'Entry rules', 'Exit rules']);
     expect(tabs[0]).toContain('aria-selected="true"');
     expect(html.indexOf('role="tablist"')).toBeLessThan(html.indexOf('class="card'));
   });

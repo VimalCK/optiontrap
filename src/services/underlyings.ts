@@ -12,6 +12,8 @@ export interface Underlying {
   tradingviewSymbol: string | null;
   alwaysSnapshot: boolean;
   isMarketReference: boolean;
+  /** An index (its price row is mapped to the F&O name), not a stock. */
+  isIndex: boolean;
 }
 
 export function fetchUnderlyings(signal?: AbortSignal): Promise<Underlying[]> {

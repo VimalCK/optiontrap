@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo, useRef, useCallback } from 'react';
 import SellStrategy from '@/components/SellStrategy/SellStrategy';
+import { atmStrikeOf, averageVolume, strikeWindow } from '../../../shared/optionAnalysis/chain.js';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import IconButton from '@/components/IconButton/IconButton';
 import { InfoIcon } from '@/components/icons/Icons';
@@ -268,41 +269,13 @@ const OptionChain: React.FC = () => {
     [options, selectedExpiry],
   );
 
-  // Find ATM strike (closest to the spot price)
-  const atmStrike = useMemo(() => {
-    if (chain.length === 0) return 0;
-    if (spotPrice > 0) {
-      // Find strike closest to spot
-      let closest = chain[0].strike;
-      let minDiff = Math.abs(chain[0].strike - spotPrice);
-      for (const row of chain) {
-        const diff = Math.abs(row.strike - spotPrice);
-        if (diff < minDiff) {
-          minDiff = diff;
-          closest = row.strike;
-        }
-      }
-      return closest;
-    }
-    // Fallback: middle of chain
-    const mid = Math.floor(chain.length / 2);
-    return chain[mid].strike;
-  }, [chain, spotPrice]);
+  // ATM is the strike closest to spot (shared with the trade engine's Option Analyzer setups).
+  const atmStrike = useMemo(() => atmStrikeOf(chain, spotPrice), [chain, spotPrice]);
 
   // Show exactly 31 strikes centred on ATM (±15). When ATM is near an edge,
   // the window shifts rather than shrinks — count stays fixed so the table
   // height never jumps as ATM changes.
-  const visibleChain = useMemo(() => {
-    if (chain.length === 0) return [];
-    const HALF = 15;
-    const TOTAL = HALF * 2 + 1; // 31
-    const atmIndex = chain.findIndex((r) => r.strike === atmStrike);
-    let start = atmIndex - HALF;
-    let end = atmIndex + HALF + 1;
-    if (start < 0) { end = Math.min(chain.length, end - start); start = 0; }
-    if (end > chain.length) { start = Math.max(0, start - (end - chain.length)); end = chain.length; }
-    return chain.slice(start, Math.min(end, start + TOTAL));
-  }, [chain, atmStrike]);
+  const visibleChain = useMemo(() => strikeWindow(chain, atmStrike), [chain, atmStrike]);
 
   // Compute max OI across visible chain for bar width scaling
   const maxOi = useMemo(() => {
@@ -317,16 +290,7 @@ const OptionChain: React.FC = () => {
   }, [visibleChain, oiData]);
 
   // Compute average volume for volume-confirmation threshold
-  const avgVolume = useMemo(() => {
-    if (volumeData.size === 0) return 0;
-    let total = 0;
-    let count = 0;
-    visibleChain.forEach((row) => {
-      if (row.ce) { const v = volumeData.get(row.ce.instrumentToken); if (v) { total += v; count++; } }
-      if (row.pe) { const v = volumeData.get(row.pe.instrumentToken); if (v) { total += v; count++; } }
-    });
-    return count > 0 ? total / count : 0;
-  }, [visibleChain, volumeData]);
+  const avgVolume = useMemo(() => averageVolume(visibleChain, volumeData), [visibleChain, volumeData]);
 
   // IV-based flow per option against the previous close (shown alongside OI + Price, not scored)
   const flowByToken = useMemo(

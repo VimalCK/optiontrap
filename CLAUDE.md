@@ -102,8 +102,8 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   recorded with a checksum in `schema_migrations`. Line endings are normalised to LF (`.gitattributes`: `*.sql eol=lf`).
 - An applied migration whose content changes **blocks server startup**.
 - **If the latest migration hasn't reached prod yet, edit it instead of adding a new file.** Check with
-  `git log origin/master..HEAD`. Everything up to `019_trade_automation.sql` is in prod; `020_auto_trade_monitor.sql` is not
-  pushed yet, so edit it rather than adding a `021_…` file until it is.
+  `git log origin/master..HEAD`. Everything up to `020_auto_trade_monitor.sql` is in prod, so the next schema change is a new
+  `021_…` file (which can then be edited until it is pushed).
   - After editing it, the local DB's row for it must be deleted so it re-applies. The user does this themselves; tell them the command:
     `docker exec optiontrap-postgres psql -U optiontrap -d optiontrap -c "DELETE FROM schema_migrations WHERE name = '<file>'"`.
 - Migrations must work on an existing DB with data: `IF NOT EXISTS`, backfill before `NOT NULL`, add constraints in a
@@ -259,3 +259,8 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   - The trade monitor (`server/autoTradeMonitor.js`) closes open automated positions when an exit rule fires, on live
     ticks from the server's own Kite ticker feed (`server/kiteTickerFeed.js`, admin session, LTP mode, one feed for all
     users). Rules compare P&L at the last traded price and exit at that price, through `exitPaperTrade`.
+  - The trade engine (`server/autoTradeEngine.js`) runs after each scheduled OI snapshot (`onScheduledSnapshot`): every
+    active strategy (`shared/strategies/`, plug-ins whose `select` returns `{ instrumentToken, side, reason }`) for every
+    user with automation on. Each signal is sized at the Max lots entry rule's value (1 lot while it's off) × lot size, checked against the General settings
+    (`GENERAL_CHECKS`) then the entry rules, opened via `openPaperTrade` (source auto) at the quote's LTP, and handed to the
+    monitor. No strategies exist yet; they come after the full-day OI snapshot study.

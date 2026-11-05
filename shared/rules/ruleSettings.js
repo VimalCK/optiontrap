@@ -45,7 +45,7 @@ export function defaultRuleSettings(rules) {
 /**
  * Check one rule's setting from the client. An active rule needs every value;
  * an inactive one may leave values empty, but what it has must be valid.
- * @param {Rule<any, any>} rule
+ * @param {RuleInfo} rule
  * @param {any} input
  * @param {string} field  where the settings sit in the config, for messages
  * @returns {{ setting: RuleSetting, error?: undefined } | { error: string, setting?: undefined }}
@@ -72,7 +72,7 @@ function parseRuleSetting(rule, input, field) {
 
 /**
  * Check a list's settings from the client: every rule must be there, and none unknown.
- * @param {Rule<any, any>[]} rules
+ * @param {RuleInfo[]} rules
  * @param {any} input
  * @param {string} field  where the settings sit in the config, e.g. 'entryRules'
  * @returns {{ settings: RuleSettings, error?: undefined } | { error: string, settings?: undefined }}
@@ -94,7 +94,7 @@ export function parseRuleSettings(rules, input, field) {
 /**
  * Stored settings brought up to date: rules added since they were saved come
  * in inactive, and rules that no longer exist are dropped.
- * @param {Rule<any, any>[]} rules
+ * @param {RuleInfo[]} rules
  * @param {any} stored
  * @returns {RuleSettings}
  */

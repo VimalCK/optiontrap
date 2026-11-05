@@ -9,3 +9,11 @@
 CREATE INDEX IF NOT EXISTS positions_open_auto_idx
   ON positions (user_id)
   WHERE source = 'auto' AND exited = 0;
+
+-- The trade engine (server/autoTradeEngine.js) runs after each scheduled OI
+-- snapshot for every user with automation switched on (getAutomatedUsers: a
+-- cross-user scan). Only switched-on configurations are indexed, so it reads
+-- just those rows, not every user's configuration.
+CREATE INDEX IF NOT EXISTS automation_configs_enabled_idx
+  ON automation_configs (user_id)
+  WHERE (config->>'enabled') = 'true';

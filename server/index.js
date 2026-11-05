@@ -109,13 +109,14 @@ import { cached } from './cache.js';
 import { getOrFetchInstruments } from './instruments.js';
 import { fetchOiHistoryMonth, OiHistoryFetchError, todayIST } from './oiHistoryFetch.js';
 import { OI_HISTORY_JOB, startOiHistoryScheduler } from './oiHistoryScheduler.js';
-import { startOiSnapshotScheduler, watchOiSnapshotSymbol } from './oiSnapshotScheduler.js';
+import { onScheduledSnapshot, startOiSnapshotScheduler, watchOiSnapshotSymbol } from './oiSnapshotScheduler.js';
 import { startInstrumentSync } from './instrumentSyncScheduler.js';
 import { checkSubscriptionAccess, inactiveSubscription } from './subscriptionAccess.js';
 import { backfillStockSetups, scanStock, syncStockCandles } from './stockCandles.js';
 import { startStockSetupScheduler } from './stockSetupScheduler.js';
 import { NIGHTLY_JOB_PREFIX, startNightlyJobs } from './nightlyJobs.js';
 import { refreshAutoTradeMonitor, startAutoTradeMonitor } from './autoTradeMonitor.js';
+import { startAutoTradeEngine } from './autoTradeEngine.js';
 import { parseDailyPnlQuery, parsePositionsQuery, parseRange, parseStatsQuery } from './positionsQuery.js';
 import { exitPaperTrade, openPaperTrade } from './paperTrading.js';
 
@@ -1335,7 +1336,7 @@ app.get('/api/fno-symbols', requireAuth, requireSubscription, async (req, res) =
 /**
  * GET /api/underlyings
  * F&O underlyings with their price instrument and display settings:
- * [{ name, label, instrumentToken, exchange, tradingsymbol, tradingviewSymbol, alwaysSnapshot, isMarketReference }]
+ * [{ name, label, instrumentToken, exchange, tradingsymbol, tradingviewSymbol, alwaysSnapshot, isMarketReference, isIndex }]
  */
 app.get('/api/underlyings', requireAuth, requireSubscription, async (req, res) => {
   try {
@@ -1613,6 +1614,8 @@ async function start() {
   startNightlyJobs();
   // Close open automated positions when their exit rules fire, on live ticks in market hours.
   startAutoTradeMonitor();
+  // Turn active strategies' signals into automated paper trades after each scheduled snapshot.
+  startAutoTradeEngine(onScheduledSnapshot);
 
   server.listen(PORT, () => {
     console.log(`${ts()} ${GREEN}Server${RESET} OptionTrap running on port ${PORT}`);

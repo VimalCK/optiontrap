@@ -20,6 +20,8 @@ export interface RuleSettingsFormProps {
   label: string;
   /** One line on how the list is used. */
   description: string;
+  /** Shown instead of the list when it has no rules (e.g. no strategies yet). */
+  emptyText?: string;
 }
 
 /** What an input's text means as a value: empty is "not set"; anything else stays as typed, for the server to check. */
@@ -63,9 +65,10 @@ const RuleRow: React.FC<{ rule: RuleInfo; setting: RuleSetting; onChange: (setti
   </li>
 );
 
-const RuleSettingsForm: React.FC<RuleSettingsFormProps> = ({ rules, settings, onChange, label, description }) => (
+const RuleSettingsForm: React.FC<RuleSettingsFormProps> = ({ rules, settings, onChange, label, description, emptyText }) => (
   <div role="group" aria-label={label}>
     <p className="card__description">{description}</p>
+    {rules.length === 0 && emptyText && <p className="automation-rules__empty">{emptyText}</p>}
     <ul className="automation-rules">
       {rules.map((rule) => (
         <RuleRow key={rule.id} rule={rule} setting={settings[rule.id]} onChange={(setting) => onChange({ ...settings, [rule.id]: setting })} />

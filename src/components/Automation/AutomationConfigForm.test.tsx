@@ -74,6 +74,13 @@ describe('AutomationConfigForm', () => {
     expect(exitRulesTab).not.toContain('Buy Stock');
   });
 
+  it('lists the strategies on the Strategies tab, with their minimums', () => {
+    const html = form(defaultAutomationConfig(), { section: 'strategies' });
+    for (const label of ['Option Analyzer setups', 'Min score (of 100)', 'Min premium (₹)']) expect(html).toContain(label);
+    expect(html).not.toContain('No strategies yet');
+    expect(html).not.toContain('Buy Stock');
+  });
+
   it('has no Save or Cancel of its own: the settings page has one for every tab', () => {
     expect(form(defaultAutomationConfig())).not.toContain('>Save<');
     expect(form(defaultAutomationConfig(), { section: 'entry-rules' })).not.toContain('>Cancel<');

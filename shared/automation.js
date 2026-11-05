@@ -19,6 +19,7 @@
 import { defaultRuleSettings, parseRuleSettings, ruleSettingsWithDefaults } from './rules/ruleSettings.js';
 import { ENTRY_RULES } from './entryRules/index.js';
 import { EXIT_RULES } from './exitRules/index.js';
+import { STRATEGIES } from './strategies/index.js';
 
 /**
  * @typedef {'stock' | 'stock-option' | 'stock-future' | 'index-option' | 'index-future'} TradeKindId
@@ -31,6 +32,7 @@ import { EXIT_RULES } from './exitRules/index.js';
  *   mode: ExecutionModeId,
  *   horizons: Record<HorizonId, boolean>,
  *   kinds: Record<TradeKindId, Record<TradeSide, boolean>>,
+ *   strategies: import('./rules/ruleSettings.js').RuleSettings,
  *   entryRules: import('./rules/ruleSettings.js').RuleSettings,
  *   exitRules: import('./rules/ruleSettings.js').RuleSettings,
  * }} AutomationConfig
@@ -98,7 +100,7 @@ function noKinds() {
 
 /**
  * The configuration of a user who hasn't saved one: off, paper, intraday,
- * nothing chosen, every entry and exit rule inactive.
+ * nothing chosen, every strategy and entry and exit rule inactive.
  * @returns {AutomationConfig}
  */
 export function defaultAutomationConfig() {
@@ -107,6 +109,7 @@ export function defaultAutomationConfig() {
     mode: 'paper',
     horizons: { intraday: true, positional: false },
     kinds: noKinds(),
+    strategies: defaultRuleSettings(STRATEGIES),
     entryRules: defaultRuleSettings(ENTRY_RULES),
     exitRules: defaultRuleSettings(EXIT_RULES),
   };
@@ -121,7 +124,7 @@ export function defaultAutomationConfig() {
  */
 export function parseAutomationConfig(input) {
   if (!input || typeof input !== 'object') return { error: 'configuration is required' };
-  const { enabled, mode, horizons, kinds, entryRules, exitRules } = input;
+  const { enabled, mode, horizons, kinds, strategies, entryRules, exitRules } = input;
 
   if (typeof enabled !== 'boolean') return { error: 'enabled must be true or false' };
 
@@ -150,6 +153,8 @@ export function parseAutomationConfig(input) {
     parsedKinds[kind.id] = { BUY: sides.BUY, SELL: sides.SELL };
   }
 
+  const parsedStrategies = parseRuleSettings(STRATEGIES, strategies, 'strategies');
+  if (parsedStrategies.error !== undefined) return { error: parsedStrategies.error };
   const parsedEntryRules = parseRuleSettings(ENTRY_RULES, entryRules, 'entryRules');
   if (parsedEntryRules.error !== undefined) return { error: parsedEntryRules.error };
   const parsedExitRules = parseRuleSettings(EXIT_RULES, exitRules, 'exitRules');
@@ -161,6 +166,7 @@ export function parseAutomationConfig(input) {
       mode,
       horizons: /** @type {AutomationConfig['horizons']} */ (parsedHorizons),
       kinds: /** @type {AutomationConfig['kinds']} */ (parsedKinds),
+      strategies: parsedStrategies.settings,
       entryRules: parsedEntryRules.settings,
       exitRules: parsedExitRules.settings,
     },
@@ -170,7 +176,7 @@ export function parseAutomationConfig(input) {
 /**
  * A stored configuration brought up to date: trade types or horizons added
  * since it was saved come in switched off, and any that no longer exist are
- * dropped. The same goes for entry and exit rules.
+ * dropped. The same goes for strategies and entry and exit rules.
  * @param {any} stored
  * @returns {AutomationConfig}
  */
@@ -192,7 +198,58 @@ export function withDefaults(stored) {
     mode,
     horizons: /** @type {AutomationConfig['horizons']} */ (horizons),
     kinds: /** @type {AutomationConfig['kinds']} */ (kinds),
+    strategies: ruleSettingsWithDefaults(STRATEGIES, stored.strategies),
     entryRules: ruleSettingsWithDefaults(ENTRY_RULES, stored.entryRules),
     exitRules: ruleSettingsWithDefaults(EXIT_RULES, stored.exitRules),
   };
+}
+
+/**
+ * The trade type of an instrument: options, futures or a stock, of an index
+ * or a stock underlying. Null for something that can't be traded (an index itself).
+ * @param {string} instrumentType  CE, PE, FUT or EQ
+ * @param {boolean} isIndex  whether the underlying is an index (instruments table)
+ * @returns {TradeKindId | null}
+ */
+export function tradeKind(instrumentType, isIndex) {
+  if (instrumentType === 'CE' || instrumentType === 'PE') return isIndex ? 'index-option' : 'stock-option';
+  if (instrumentType === 'FUT') return isIndex ? 'index-future' : 'stock-future';
+  if (instrumentType === 'EQ') return isIndex ? null : 'stock';
+  return null;
+}
+
+/**
+ * @typedef {{ horizon: HorizonId, kind: TradeKindId, side: TradeSide }} GeneralTrade
+ * @typedef {{ id: string, check: (trade: GeneralTrade, config: AutomationConfig) => string | null }} GeneralCheck
+ */
+
+const horizonLabel = (/** @type {string} */ id) => HORIZONS.find((h) => h.id === id)?.label ?? id;
+const kindLabel = (/** @type {string} */ id) => TRADE_KINDS.find((k) => k.id === id)?.label ?? id;
+const sideLabel = (/** @type {string} */ side) => (side === 'BUY' ? 'Buy' : 'Sell');
+
+/**
+ * What the General tab allows, checked on every selected trade before the
+ * entry rules: a trade the user hasn't switched on is rejected with the reason.
+ * @type {GeneralCheck[]}
+ */
+export const GENERAL_CHECKS = [
+  { id: 'automation-on', check: (_trade, config) => (config.enabled ? null : 'Automation is off') },
+  { id: 'horizon-on', check: (trade, config) => (config.horizons[trade.horizon] ? null : `${horizonLabel(trade.horizon)} trades are off`) },
+  {
+    id: 'trade-type-on',
+    check: (trade, config) => (config.kinds[trade.kind]?.[trade.side] ? null : `${sideLabel(trade.side)} ${kindLabel(trade.kind)} is off`),
+  },
+];
+
+/**
+ * The first General setting that refuses this trade, or null.
+ * @param {GeneralTrade} trade
+ * @param {AutomationConfig} config
+ */
+export function checkGeneralSettings(trade, config) {
+  for (const { check } of GENERAL_CHECKS) {
+    const reason = check(trade, config);
+    if (reason) return reason;
+  }
+  return null;
 }

@@ -29,6 +29,18 @@ import maxDailyLoss from './maxDailyLoss.js';
  * @typedef {{ ok: true } | { ok: false, ruleId: string, reason: string }} EntryVerdict
  */
 
+/** The size of an automated trade while the Max lots rule is off. */
+export const DEFAULT_TRADE_LOTS = 1;
+
+/**
+ * How many lots an automated trade is: the Max lots value while that rule is active, else DEFAULT_TRADE_LOTS.
+ * @param {RuleSettings} settings  the user's entry rules
+ */
+export function tradeLots(settings) {
+  const setting = settings[maxLots.id];
+  return setting?.active ? Number(setting.params.max) : DEFAULT_TRADE_LOTS;
+}
+
 /** Every entry rule, in the order they're checked. @type {EntryRule[]} */
 export const ENTRY_RULES = [maxLots, maxOpenPositions, oneTradePerInstrument, maxDailyLoss];
 

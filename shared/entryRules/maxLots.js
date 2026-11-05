@@ -1,10 +1,14 @@
-/** Rule: a trade may not be bigger than a set number of lots (quantity ÷ the instrument's lot size). */
+/**
+ * Rule: a trade may not be bigger than a set number of lots (quantity ÷ the
+ * instrument's lot size). The trade engine also sizes automated trades with
+ * it (tradeLots in index.js): this many lots while it is active, 1 while it is off.
+ */
 
 /** @type {import('./index.js').EntryRule} */
 export default {
   id: 'max-lots',
   label: 'Max lots per trade',
-  description: 'Trades for more than this many lots are rejected.',
+  description: 'Automated trades are this many lots (1 lot while this rule is off); bigger trades are rejected.',
   params: [{ key: 'max', label: 'Lots', type: 'count' }],
   check: (trade, _ctx, { max }) => {
     const lots = trade.quantity / trade.lotSize;

@@ -17,6 +17,7 @@ export interface OptionChainRow {
 }
 import { apiClient } from './apiClient';
 import { istDateString } from '@/utils/marketStatus';
+import { buildOptionChain as buildChain, upcomingExpiries } from '../../shared/optionAnalysis/chain.js';
 
 /** In-memory cache of all instruments to avoid re-fetching */
 let instrumentsCache: any[] | null = null;
@@ -59,30 +60,12 @@ export function getLotSize(instrumentToken: number): number {
  * Get unique expiry dates sorted ascending
  */
 export function getExpiries(options: OptionInstrument[]): string[] {
-  // Expiries are YYYY-MM-DD, so they compare as strings against today's IST date.
-  const today = istDateString();
-  return [...new Set(options.map((o) => o.expiry))]
-    .filter((exp) => exp.slice(0, 10) >= today)
-    .sort();
+  return upcomingExpiries(options, istDateString());
 }
 
 /**
  * Build option chain rows for a given expiry
  */
 export function buildOptionChain(options: OptionInstrument[], expiry: string): OptionChainRow[] {
-  const filtered = options.filter((o) => o.expiry === expiry);
-  const strikeMap = new Map<number, { ce: OptionInstrument | null; pe: OptionInstrument | null }>();
-
-  for (const opt of filtered) {
-    if (!strikeMap.has(opt.strike)) {
-      strikeMap.set(opt.strike, { ce: null, pe: null });
-    }
-    const row = strikeMap.get(opt.strike)!;
-    if (opt.instrumentType === 'CE') row.ce = opt;
-    else row.pe = opt;
-  }
-
-  return Array.from(strikeMap.entries())
-    .map(([strike, { ce, pe }]) => ({ strike, ce, pe }))
-    .sort((a, b) => a.strike - b.strike);
+  return buildChain(options, expiry);
 }

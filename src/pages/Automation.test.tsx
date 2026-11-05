@@ -30,10 +30,26 @@ describe('Automation screen', () => {
 });
 
 describe('automationStatus', () => {
-  it('says on or off, and that nothing trades yet', () => {
+  it('says on or off, and that nothing trades while there are no strategies', () => {
     expect(automationStatus(null)).toBe('Loading…');
-    expect(automationStatus(defaultAutomationConfig())).toBe('Off · engine not built yet, nothing trades');
-    expect(automationStatus({ ...defaultAutomationConfig(), enabled: true })).toBe('On · engine not built yet, nothing trades');
+    expect(automationStatus(defaultAutomationConfig(), [])).toBe('Off · no strategies yet, nothing trades');
+    expect(automationStatus({ ...defaultAutomationConfig(), enabled: true }, [])).toBe('On · no strategies yet, nothing trades');
+  });
+
+  it('says no strategy is active by default', () => {
+    expect(automationStatus(defaultAutomationConfig())).toBe('Off · no strategy active');
+  });
+
+  it('counts the active strategies once there are some', () => {
+    const strategies = [{ id: 'a' }, { id: 'b' }];
+    const config = (active: string[]) => ({
+      ...defaultAutomationConfig(),
+      enabled: true,
+      strategies: Object.fromEntries(strategies.map((s) => [s.id, { active: active.includes(s.id), params: {} }])),
+    });
+    expect(automationStatus(config([]), strategies)).toBe('On · no strategy active');
+    expect(automationStatus(config(['a']), strategies)).toBe('On · 1 strategy active');
+    expect(automationStatus(config(['a', 'b']), strategies)).toBe('On · 2 strategies active');
   });
 });
 

@@ -9,6 +9,10 @@
  *
  * Uses the newest admin Kite session (see findWorkingAdminSession). With no
  * admin login today it waits and logs once.
+ *
+ * After each scheduled snapshot is saved, listeners (onScheduledSnapshot) are
+ * told, with the session and instrument list used: the trade engine runs then,
+ * on fresh data.
  */
 
 import { getAlwaysSnapshotSymbols, getTodayOiSnapshotTokens, getUnderlyings, saveOiSnapshot } from './db.js';
@@ -16,13 +20,12 @@ import { getOrFetchInstruments } from './instruments.js';
 import { istClock, isMarketOpen } from './marketClock.js';
 import { marketDateTime, marketTimeLabel } from '../shared/marketTime.js';
 import { findWorkingAdminSession } from './oiHistoryScheduler.js';
+import { fetchQuotes, KiteAuthError } from './kiteQuotes.js';
 
 /** Strikes each side of ATM. The analyzer shows ±15; the extra covers ATM drifting during the day. */
 const STRIKES_EACH_SIDE = 20;
 const SLOT_MS = 10 * 60 * 1000;
 const CHECK_INTERVAL_MS = 60 * 1000;
-const QUOTE_BATCH = 500; // Kite's limit per /quote request
-class KiteAuthError extends Error {}
 
 let adminKite = null; // { date, kite }
 let lastSlot = null;
@@ -30,6 +33,8 @@ let lastWaitingLogDate = null;
 // Captures run one at a time so the scheduled run and an on-demand run don't
 // hit Kite's quote rate limit together.
 let queue = Promise.resolve();
+/** @type {((event: { now: Date, kite: { apiKey: string, accessToken: string }, instruments: any[] }) => void)[]} */
+const snapshotListeners = [];
 
 function enqueue(fn) {
   const run = queue.then(fn);
@@ -47,21 +52,6 @@ async function getAdminKite(date) {
     lastWaitingLogDate = date;
   }
   return kite;
-}
-
-async function fetchQuotes(kite, keys) {
-  const quotes = {};
-  for (let i = 0; i < keys.length; i += QUOTE_BATCH) {
-    const qs = keys.slice(i, i + QUOTE_BATCH).map((k) => `i=${encodeURIComponent(k)}`).join('&');
-    const res = await fetch(`https://api.kite.trade/quote?${qs}`, {
-      headers: { Authorization: `token ${kite.apiKey}:${kite.accessToken}`, 'X-Kite-Version': '3' },
-    });
-    if (res.status === 401 || res.status === 403) throw new KiteAuthError(`Kite quote auth failed (${res.status})`);
-    if (!res.ok) throw new Error(`Kite quote failed: ${res.status} ${res.statusText}`);
-    const body = await res.json();
-    Object.assign(quotes, body.data || {});
-  }
-  return quotes;
 }
 
 /**
@@ -182,12 +172,12 @@ async function captureSymbols(symbols, kite, instruments, now = new Date()) {
 function capture(date, pickSymbols) {
   return enqueue(async () => {
     const kite = await getAdminKite(date);
-    if (!kite) return { symbols: [], count: 0 };
+    if (!kite) return { symbols: [], count: 0, kite: null, instruments: [] };
     try {
       const instruments = await getOrFetchInstruments(kite.apiKey, kite.accessToken);
       const symbols = await pickSymbols(instruments);
       const count = symbols.length > 0 ? await captureSymbols(symbols, kite, instruments) : 0;
-      return { symbols, count };
+      return { symbols, count, kite, instruments };
     } catch (err) {
       if (err instanceof KiteAuthError) adminKite = null;
       throw err;
@@ -215,14 +205,26 @@ async function tick() {
   const slot = Math.floor(Date.now() / SLOT_MS);
   if (slot === lastSlot) return;
 
-  const { date } = istClock();
-  const { symbols, count } = await capture(date, async (instruments) => (
-    [...new Set([...(await getAlwaysSnapshotSymbols()), ...(await snapshottedToday(instruments))])]
+  const now = new Date();
+  const { date } = istClock(now);
+  const { symbols, count, kite, instruments } = await capture(date, async (list) => (
+    [...new Set([...(await getAlwaysSnapshotSymbols()), ...(await snapshottedToday(list))])]
   ));
   if (count > 0) {
     lastSlot = slot;
     console.log(`[OI Snapshots] Saved ${count} options for ${symbols.join(', ')}`);
+    for (const listener of snapshotListeners) listener({ now, kite, instruments });
   }
+}
+
+/**
+ * Be told after each scheduled snapshot is saved (not after on-demand ones),
+ * with the time, the admin session and the instrument list it used. A
+ * listener handles its own errors.
+ * @param {(event: { now: Date, kite: { apiKey: string, accessToken: string }, instruments: any[] }) => void} listener
+ */
+export function onScheduledSnapshot(listener) {
+  snapshotListeners.push(listener);
 }
 
 /** Check every minute; snapshot once per 10-minute slot while the market is open. */

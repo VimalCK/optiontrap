@@ -4,14 +4,16 @@
  * Every trade the automation takes runs through the same lifecycle:
  * selected → validated (or rejected) → executed into paper trading → closed.
  * This page lists the trades (clicking one shows its lifecycle); the gear
- * opens the settings page (AutomationSettings). The engine that selects and
- * executes trades is not built yet, so nothing trades from here.
+ * opens the settings page (AutomationSettings). Trades are taken on the
+ * server by the trade engine (active strategies) and closed by the trade
+ * monitor (exit rules).
  *
  * Names and rules: shared/automation.js.
  */
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LIFECYCLE_STAGES, TRADE_KINDS } from '../../shared/automation.js';
+import { STRATEGIES } from '../../shared/strategies/index.js';
 import { marketDate } from '../../shared/marketTime.js';
 import { rangeProblem } from '@/components/TradeJournal/journalRange';
 import IconButton from '@/components/IconButton/IconButton';
@@ -127,10 +129,14 @@ export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean;
 
 // ── Page ──
 
-/** "On" or "Off", and what that means while the engine isn't built. */
-export function automationStatus(config: AutomationConfig | null): string {
+/** "On" or "Off", and whether anything can trade: a strategy must exist and be active. */
+export function automationStatus(config: AutomationConfig | null, strategies: { id: string }[] = STRATEGIES): string {
   if (!config) return 'Loading…';
-  return `${config.enabled ? 'On' : 'Off'} · engine not built yet, nothing trades`;
+  const onOff = config.enabled ? 'On' : 'Off';
+  if (strategies.length === 0) return `${onOff} · no strategies yet, nothing trades`;
+  const active = strategies.filter((s) => config.strategies[s.id]?.active).length;
+  if (active === 0) return `${onOff} · no strategy active`;
+  return `${onOff} · ${active} strateg${active === 1 ? 'y' : 'ies'} active`;
 }
 
 const Automation: React.FC = () => {
