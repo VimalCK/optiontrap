@@ -4,7 +4,7 @@
  * it doesn't open a new one and isn't counted.
  */
 
-/** @type {import('./index.js').AutomationRule} */
+/** @type {import('./index.js').EntryRule} */
 export default {
   id: 'max-open-positions',
   label: 'Max open automated positions',

@@ -1,6 +1,6 @@
 /** Rule: a trade may not be bigger than a set number of lots (quantity ÷ the instrument's lot size). */
 
-/** @type {import('./index.js').AutomationRule} */
+/** @type {import('./index.js').EntryRule} */
 export default {
   id: 'max-lots',
   label: 'Max lots per trade',

@@ -1,6 +1,6 @@
 /** Rule: stop taking automated trades once today's automated loss reaches a set amount. */
 
-/** @type {import('./index.js').AutomationRule} */
+/** @type {import('./index.js').EntryRule} */
 export default {
   id: 'max-daily-loss',
   label: 'Max loss per day',

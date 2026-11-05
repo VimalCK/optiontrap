@@ -57,19 +57,25 @@ describe('AutomationConfigForm', () => {
     expect(toggle(form({ ...defaultAutomationConfig(), enabled: true }))).toContain('aria-checked="true"');
   });
 
-  it('shows one section at a time: General without the rules, Validations with only the rules', () => {
+  it('shows one section at a time: General, Entry rules or Exit rules', () => {
     const general = form(defaultAutomationConfig());
     expect(general).toContain('Buy Stock');
     expect(general).not.toContain('Max lots per trade');
 
-    const validations = form(defaultAutomationConfig(), { section: 'validations' });
-    expect(validations).toContain('Max lots per trade');
-    expect(validations).not.toContain('Buy Stock');
-    expect(validations).not.toContain('aria-label="Automation"');
+    const entryRulesTab = form(defaultAutomationConfig(), { section: 'entry-rules' });
+    expect(entryRulesTab).toContain('Max lots per trade');
+    expect(entryRulesTab).not.toContain('Buy Stock');
+    expect(entryRulesTab).not.toContain('aria-label="Automation"');
+    expect(entryRulesTab).not.toContain('Stop-loss');
+
+    const exitRulesTab = form(defaultAutomationConfig(), { section: 'exit-rules' });
+    for (const label of ['Stop-loss', 'Target', 'Square off at']) expect(exitRulesTab).toContain(label);
+    expect(exitRulesTab).not.toContain('Max lots per trade');
+    expect(exitRulesTab).not.toContain('Buy Stock');
   });
 
   it('has no Save or Cancel of its own: the settings page has one for every tab', () => {
     expect(form(defaultAutomationConfig())).not.toContain('>Save<');
-    expect(form(defaultAutomationConfig(), { section: 'validations' })).not.toContain('>Cancel<');
+    expect(form(defaultAutomationConfig(), { section: 'entry-rules' })).not.toContain('>Cancel<');
   });
 });

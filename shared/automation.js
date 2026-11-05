@@ -7,15 +7,18 @@
  *
  * An automated trade's lifecycle, recorded stage by stage:
  *   selected   a signal picked it (intraday: from the server's OI snapshots)
- *   validated  it passed every active validation rule (shared/automationRules/)
+ *   validated  it passed every active entry rule (shared/entryRules/)
  *   rejected   a rule refused it, at selection or execution; it ends here
  *   executed   sent to paper (or, later, live) trading: it is now a position.
  *              Automated trades in the same instrument merge into one
  *              automated position (100 then 500 shows as 600), so several
  *              trades can point at the same position.
- *   closed     the position was exited; it ends here
+ *   closed     the position was exited, by the user or by an active exit
+ *              rule (shared/exitRules/); it ends here
  */
-import { defaultRuleSettings, parseRuleSettings, ruleSettingsWithDefaults } from './automationRules/index.js';
+import { defaultRuleSettings, parseRuleSettings, ruleSettingsWithDefaults } from './rules/ruleSettings.js';
+import { ENTRY_RULES } from './entryRules/index.js';
+import { EXIT_RULES } from './exitRules/index.js';
 
 /**
  * @typedef {'stock' | 'stock-option' | 'stock-future' | 'index-option' | 'index-future'} TradeKindId
@@ -28,7 +31,8 @@ import { defaultRuleSettings, parseRuleSettings, ruleSettingsWithDefaults } from
  *   mode: ExecutionModeId,
  *   horizons: Record<HorizonId, boolean>,
  *   kinds: Record<TradeKindId, Record<TradeSide, boolean>>,
- *   rules: import('./automationRules/index.js').RuleSettings,
+ *   entryRules: import('./rules/ruleSettings.js').RuleSettings,
+ *   exitRules: import('./rules/ruleSettings.js').RuleSettings,
  * }} AutomationConfig
  */
 
@@ -94,11 +98,18 @@ function noKinds() {
 
 /**
  * The configuration of a user who hasn't saved one: off, paper, intraday,
- * nothing chosen, every validation rule inactive.
+ * nothing chosen, every entry and exit rule inactive.
  * @returns {AutomationConfig}
  */
 export function defaultAutomationConfig() {
-  return { enabled: false, mode: 'paper', horizons: { intraday: true, positional: false }, kinds: noKinds(), rules: defaultRuleSettings() };
+  return {
+    enabled: false,
+    mode: 'paper',
+    horizons: { intraday: true, positional: false },
+    kinds: noKinds(),
+    entryRules: defaultRuleSettings(ENTRY_RULES),
+    exitRules: defaultRuleSettings(EXIT_RULES),
+  };
 }
 
 /**
@@ -110,7 +121,7 @@ export function defaultAutomationConfig() {
  */
 export function parseAutomationConfig(input) {
   if (!input || typeof input !== 'object') return { error: 'configuration is required' };
-  const { enabled, mode, horizons, kinds, rules } = input;
+  const { enabled, mode, horizons, kinds, entryRules, exitRules } = input;
 
   if (typeof enabled !== 'boolean') return { error: 'enabled must be true or false' };
 
@@ -139,8 +150,10 @@ export function parseAutomationConfig(input) {
     parsedKinds[kind.id] = { BUY: sides.BUY, SELL: sides.SELL };
   }
 
-  const parsedRules = parseRuleSettings(rules);
-  if (parsedRules.error !== undefined) return { error: parsedRules.error };
+  const parsedEntryRules = parseRuleSettings(ENTRY_RULES, entryRules, 'entryRules');
+  if (parsedEntryRules.error !== undefined) return { error: parsedEntryRules.error };
+  const parsedExitRules = parseRuleSettings(EXIT_RULES, exitRules, 'exitRules');
+  if (parsedExitRules.error !== undefined) return { error: parsedExitRules.error };
 
   return {
     config: {
@@ -148,7 +161,8 @@ export function parseAutomationConfig(input) {
       mode,
       horizons: /** @type {AutomationConfig['horizons']} */ (parsedHorizons),
       kinds: /** @type {AutomationConfig['kinds']} */ (parsedKinds),
-      rules: parsedRules.rules,
+      entryRules: parsedEntryRules.settings,
+      exitRules: parsedExitRules.settings,
     },
   };
 }
@@ -156,7 +170,7 @@ export function parseAutomationConfig(input) {
 /**
  * A stored configuration brought up to date: trade types or horizons added
  * since it was saved come in switched off, and any that no longer exist are
- * dropped. The same goes for validation rules.
+ * dropped. The same goes for entry and exit rules.
  * @param {any} stored
  * @returns {AutomationConfig}
  */
@@ -178,6 +192,7 @@ export function withDefaults(stored) {
     mode,
     horizons: /** @type {AutomationConfig['horizons']} */ (horizons),
     kinds: /** @type {AutomationConfig['kinds']} */ (kinds),
-    rules: ruleSettingsWithDefaults(stored.rules),
+    entryRules: ruleSettingsWithDefaults(ENTRY_RULES, stored.entryRules),
+    exitRules: ruleSettingsWithDefaults(EXIT_RULES, stored.exitRules),
   };
 }

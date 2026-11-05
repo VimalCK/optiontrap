@@ -3,7 +3,9 @@
  * page's tabs pick which):
  *   general      on/off, paper or live, intraday or positional, and which
  *                trade types may buy or sell
- *   validations  the validation rules (AutomationRulesForm)
+ *   entry-rules  the rules every trade must pass to be executed
+ *   exit-rules   the rules that close an open automated position
+ * (both lists shown by RuleSettingsForm)
  * Save and Cancel belong to the settings page, shared by every section.
  * Options that aren't built yet are shown but can't be chosen. Names and
  * rules: shared/automation.js.
@@ -12,14 +14,17 @@ import React from 'react';
 import { EXECUTION_MODES, HORIZONS, TRADE_KINDS, TRADE_SIDES } from '../../../shared/automation.js';
 import type { AutomationConfig, TradeKindId, TradeSide } from '@/services/automation';
 import Toggle from '@/components/Toggle/Toggle';
-import AutomationRulesForm from './AutomationRulesForm';
+import { ENTRY_RULES } from '../../../shared/entryRules/index.js';
+import { EXIT_RULES } from '../../../shared/exitRules/index.js';
+import RuleSettingsForm from './RuleSettingsForm';
 
-export type AutomationSettingsSection = 'general' | 'validations';
+export type AutomationSettingsSection = 'general' | 'entry-rules' | 'exit-rules';
 
 /** The settings sections, in tab order. */
 export const AUTOMATION_SETTINGS_SECTIONS: { id: AutomationSettingsSection; label: string }[] = [
   { id: 'general', label: 'General' },
-  { id: 'validations', label: 'Validations' },
+  { id: 'entry-rules', label: 'Entry rules' },
+  { id: 'exit-rules', label: 'Exit rules' },
 ];
 
 export interface AutomationConfigFormProps {
@@ -115,13 +120,30 @@ const GeneralSettings: React.FC<SectionProps> = ({ config, onChange }) => {
   );
 };
 
-const ValidationSettings: React.FC<SectionProps> = ({ config, onChange }) => (
-  <AutomationRulesForm rules={config.rules} onChange={(rules) => onChange({ ...config, rules })} />
+const EntryRuleSettings: React.FC<SectionProps> = ({ config, onChange }) => (
+  <RuleSettingsForm
+    rules={ENTRY_RULES}
+    settings={config.entryRules}
+    onChange={(entryRules) => onChange({ ...config, entryRules })}
+    label="Entry rules"
+    description="Every trade is checked against the active rules before it is executed; the first rule that refuses it rejects it."
+  />
+);
+
+const ExitRuleSettings: React.FC<SectionProps> = ({ config, onChange }) => (
+  <RuleSettingsForm
+    rules={EXIT_RULES}
+    settings={config.exitRules}
+    onChange={(exitRules) => onChange({ ...config, exitRules })}
+    label="Exit rules"
+    description="Open automated positions are watched against the active rules; the first rule that fires closes the position."
+  />
 );
 
 const SECTION_VIEWS: Record<AutomationSettingsSection, React.FC<SectionProps>> = {
   general: GeneralSettings,
-  validations: ValidationSettings,
+  'entry-rules': EntryRuleSettings,
+  'exit-rules': ExitRuleSettings,
 };
 
 const sectionLabel = (id: AutomationSettingsSection) => AUTOMATION_SETTINGS_SECTIONS.find((s) => s.id === id)?.label ?? id;

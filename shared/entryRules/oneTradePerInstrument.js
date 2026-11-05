@@ -1,6 +1,6 @@
 /** Rule: no second automated trade in an instrument while a position in it is open. */
 
-/** @type {import('./index.js').AutomationRule} */
+/** @type {import('./index.js').EntryRule} */
 export default {
   id: 'one-trade-per-instrument',
   label: 'One position per instrument',

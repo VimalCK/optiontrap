@@ -83,20 +83,30 @@ describe('withDefaults', () => {
     expect(withDefaults({ ...valid(), mode: 'live' }).mode).toBe('paper');
   });
 
-  it('gives a configuration saved before validation rules existed every rule, inactive', () => {
+  it('gives a configuration saved before entry or exit rules existed every rule, inactive', () => {
     const stored = valid();
-    delete stored.rules;
+    delete stored.entryRules;
+    delete stored.exitRules;
     expect(withDefaults(stored)).toEqual(valid());
   });
 });
 
-describe('parseAutomationConfig validation rules', () => {
+describe('parseAutomationConfig entry and exit rules', () => {
   it('keeps the rules as set, and refuses a configuration without them', () => {
     const config = valid();
-    config.rules['max-lots'] = { active: true, params: { max: 2 } };
+    config.entryRules['max-lots'] = { active: true, params: { max: 2 } };
     expect(parseAutomationConfig(config)).toEqual({ config });
-    delete config.rules;
-    expect(parseAutomationConfig(config)).toEqual({ error: 'rules is required' });
+    delete config.entryRules;
+    expect(parseAutomationConfig(config)).toEqual({ error: 'entryRules is required' });
+  });
+
+  it('keeps the exit rules as set, and refuses a configuration without them', () => {
+    const config = valid();
+    config.exitRules['stop-loss'] = { active: true, params: { amount: 2000 } };
+    config.exitRules['square-off'] = { active: true, params: { time: '15:00' } };
+    expect(parseAutomationConfig(config)).toEqual({ config });
+    delete config.exitRules;
+    expect(parseAutomationConfig(config)).toEqual({ error: 'exitRules is required' });
   });
 });
 
