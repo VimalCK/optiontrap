@@ -31,7 +31,7 @@ It never places real orders. The user is the sole developer; prod (optiontrap.co
 
 ## Git workflow
 
-- Everyday fixes are committed on `master`. Trade automation work is on branch `trade-automation`; ask before merging it.
+- Work is committed on `master` (automation included; its old `trade-automation` branch was merged and deleted).
 - Run `git branch --show-current` before committing.
 - **Commit only when asked; push only when explicitly asked** ("commit" and "push" are separate requests). Prod runs pushed master.
 - Commit with explicit paths, or check `git diff --cached` first, so unrelated staged work doesn't slip in.
@@ -250,6 +250,6 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
 - Live position P&L (Kite's formula): `sell_value − buy_value + quantity × ltp × multiplier`.
 - OI snapshots are taken every 10 minutes in market hours by `oiSnapshotScheduler.js`. OI history is fetched after close.
   Nightly jobs and the instrument sync run at 08:30 IST.
-- Automation (`trade-automation` branch): `shared/automation.js` defines trade kinds, sides, horizons (positional later),
+- Automation: `shared/automation.js` defines trade kinds, sides, horizons (positional later),
   execution modes (live later) and the lifecycle selected → validated/rejected → executed → closed (`canMoveTo`: no skipping
   validation, nothing rejected after executed). Automated trades go to paper trading only.
