@@ -167,8 +167,9 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   Money shows two decimals.
 - Components: `React.FC` with typed props, function components and hooks only. Pages are default exports. Export small
   pieces (and pure helpers) that tests need.
-- Forms: settings-style screens are full pages reached from a gear icon, with Save (returns to the parent screen) and Cancel.
-  Errors stay on the page with the server's message.
+- Forms: settings-style screens are full pages reached from a gear icon, with the shared `FormFooter` (Save / Cancel).
+  Save stays on the page and the button turns to "Saved" (a settings page may have several tabs to change); Cancel returns to the
+  parent screen. Errors stay on the page with the server's message.
 - **Reusable controls: build once, use everywhere.** Any UI element that appears (or will appear) on more than one
   screen is a shared component in its own folder, like the existing ones (`src/components/AppSelect/`,
   `src/components/TabBar/`, `src/components/TradingViewLink/`), with its own styles in one shared CSS file. Pages use the component; they don't copy markup or add page-specific CSS for the same look.

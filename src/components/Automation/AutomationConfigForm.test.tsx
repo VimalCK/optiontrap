@@ -7,29 +7,29 @@ import AutomationConfigForm, { type AutomationConfigFormProps } from './Automati
 const noop = () => {};
 const form = (config: AutomationConfig, extra: Partial<AutomationConfigFormProps> = {}) =>
   renderToStaticMarkup(
-    <AutomationConfigForm config={config} onChange={noop} onSave={noop} onCancel={noop} saving={false} error={null} {...extra} />,
+    <AutomationConfigForm config={config} section="general" onChange={noop} {...extra} />,
   );
 
-/** The tag of the checkbox labelled `label`, as rendered. */
-const checkbox = (html: string, label: string) => html.match(new RegExp(`<input[^>]*aria-label="${label}"[^>]*>`))?.[0] ?? '';
-const button = (html: string, label: string) => html.match(new RegExp(`<button[^>]*>${label}</button>`))?.[0] ?? '';
+/** The tag of the toggle labelled `label`, as rendered. */
+const toggle = (html: string, label: string) =>
+  [...html.matchAll(/<button[^>]*>/g)].map((m) => m[0]).find((tag) => tag.includes('role="switch"') && tag.includes(`aria-label="${label}"`)) ?? '';
 
 describe('AutomationConfigForm', () => {
-  it('lists every trade type with a Buy and a Sell box', () => {
+  it('lists every trade type with a Buy and a Sell toggle', () => {
     const html = form(defaultAutomationConfig());
     for (const kind of ['Stock', 'Stock option', 'Stock future', 'Index option', 'Index future']) {
-      expect(checkbox(html, `Buy ${kind}`)).not.toBe('');
-      expect(checkbox(html, `Sell ${kind}`)).not.toBe('');
+      expect(toggle(html, `Buy ${kind}`)).not.toBe('');
+      expect(toggle(html, `Sell ${kind}`)).not.toBe('');
     }
   });
 
-  it('ticks exactly the trade types and sides that are on', () => {
+  it('switches on exactly the trade types and sides that are on', () => {
     const config = defaultAutomationConfig();
     config.kinds['index-option'].SELL = true;
     const html = form(config);
-    expect(checkbox(html, 'Sell Index option')).toContain('checked');
-    expect(checkbox(html, 'Buy Index option')).not.toContain('checked');
-    expect(html.match(/aria-label="(Buy|Sell) [^"]+" checked/g)).toHaveLength(1);
+    expect(toggle(html, 'Sell Index option')).toContain('aria-checked="true"');
+    expect(toggle(html, 'Buy Index option')).toContain('aria-checked="false"');
+    expect(html.match(/aria-checked="true"[^>]*aria-label="(Buy|Sell) [^"]+"/g)).toHaveLength(1);
   });
 
   it('offers live trading and positional trades only as unavailable', () => {
@@ -41,25 +41,35 @@ describe('AutomationConfigForm', () => {
     expect(paper).toContain('checked');
     expect(html).toContain('Live trading<small> · not available yet</small>');
     expect(html).toContain('later, from OI history');
+    expect(toggle(html, 'Positional')).toContain('disabled');
+    expect(toggle(html, 'Intraday')).toContain('aria-checked="true"');
+    expect(toggle(html, 'Intraday')).not.toContain('disabled');
   });
 
-  it('says whether automation is on or off', () => {
-    expect(form(defaultAutomationConfig())).toContain('<span>Off</span>');
-    expect(form({ ...defaultAutomationConfig(), enabled: true })).toContain('<span>On</span>');
+  it('uses toggles, not checkboxes, for every on/off choice', () => {
+    expect(form(defaultAutomationConfig())).not.toContain('type="checkbox"');
   });
 
-  it('has Save and Cancel, both usable until a save is under way', () => {
-    const html = form(defaultAutomationConfig());
-    expect(button(html, 'Save')).not.toContain('disabled');
-    expect(button(html, 'Cancel')).not.toContain('disabled');
-
-    const busy = form(defaultAutomationConfig(), { saving: true });
-    expect(button(busy, 'Saving…')).toContain('disabled');
-    expect(button(busy, 'Cancel')).toContain('disabled');
+  it('says whether automation is on or off, with a toggle', () => {
+    const toggle = (html: string) => html.match(/<button[^>]*role="switch"[^>]*aria-label="Automation"[^>]*>/)?.[0] ?? '';
+    expect(toggle(form(defaultAutomationConfig()))).toContain('aria-checked="false"');
+    expect(form(defaultAutomationConfig())).toContain('<span class="toggle__text">Off</span>');
+    expect(toggle(form({ ...defaultAutomationConfig(), enabled: true }))).toContain('aria-checked="true"');
   });
 
-  it('shows why a save failed', () => {
-    expect(form(defaultAutomationConfig(), { error: 'Live trading is not available yet' }))
-      .toContain('Live trading is not available yet');
+  it('shows one section at a time: General without the rules, Validations with only the rules', () => {
+    const general = form(defaultAutomationConfig());
+    expect(general).toContain('Buy Stock');
+    expect(general).not.toContain('Max lots per trade');
+
+    const validations = form(defaultAutomationConfig(), { section: 'validations' });
+    expect(validations).toContain('Max lots per trade');
+    expect(validations).not.toContain('Buy Stock');
+    expect(validations).not.toContain('aria-label="Automation"');
+  });
+
+  it('has no Save or Cancel of its own: the settings page has one for every tab', () => {
+    expect(form(defaultAutomationConfig())).not.toContain('>Save<');
+    expect(form(defaultAutomationConfig(), { section: 'validations' })).not.toContain('>Cancel<');
   });
 });

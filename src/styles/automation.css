@@ -39,15 +39,6 @@
   margin: 0;
 }
 
-.automation-switch {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
 /* ── Configuration ── */
 
 .automation-config__row {
@@ -89,12 +80,78 @@
   cursor: not-allowed;
 }
 
-.automation-config__footer {
+/* ── Validation rules ── */
+
+.automation-rules {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+}
+
+.automation-rule {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  gap: 16px;
+  padding: 8px 0;
+  border-top: 1px solid var(--card-border);
+}
+
+.automation-rule__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.automation-rule__label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.automation-rule__description {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.automation-rule__params {
+  display: flex;
   gap: 12px;
-  margin-top: 12px;
+}
+
+.automation-rule__param {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.automation-rule__input {
+  width: 110px;
+}
+
+.automation-rule__toggle {
+  width: 110px;
+  flex-shrink: 0;
+}
+
+/* ── Settings page: the tabs, then one card filling the rest of the height, Save / Cancel at its bottom ── */
+
+.automation-settings {
+  min-height: 100%;
+}
+
+.automation-settings__card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.automation-settings__body {
+  flex: 1;
+  margin-bottom: 12px;
 }
 
 .automation-message {

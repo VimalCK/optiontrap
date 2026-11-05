@@ -7,7 +7,7 @@
  *
  * An automated trade's lifecycle, recorded stage by stage:
  *   selected   a signal picked it (intraday: from the server's OI snapshots)
- *   validated  it passed every validation rule
+ *   validated  it passed every active validation rule (shared/automationRules/)
  *   rejected   a rule refused it, at selection or execution; it ends here
  *   executed   sent to paper (or, later, live) trading: it is now a position.
  *              Automated trades in the same instrument merge into one
@@ -15,6 +15,7 @@
  *              trades can point at the same position.
  *   closed     the position was exited; it ends here
  */
+import { defaultRuleSettings, parseRuleSettings, ruleSettingsWithDefaults } from './automationRules/index.js';
 
 /**
  * @typedef {'stock' | 'stock-option' | 'stock-future' | 'index-option' | 'index-future'} TradeKindId
@@ -27,6 +28,7 @@
  *   mode: ExecutionModeId,
  *   horizons: Record<HorizonId, boolean>,
  *   kinds: Record<TradeKindId, Record<TradeSide, boolean>>,
+ *   rules: import('./automationRules/index.js').RuleSettings,
  * }} AutomationConfig
  */
 
@@ -91,11 +93,12 @@ function noKinds() {
 }
 
 /**
- * The configuration of a user who hasn't saved one: off, paper, intraday, nothing chosen.
+ * The configuration of a user who hasn't saved one: off, paper, intraday,
+ * nothing chosen, every validation rule inactive.
  * @returns {AutomationConfig}
  */
 export function defaultAutomationConfig() {
-  return { enabled: false, mode: 'paper', horizons: { intraday: true, positional: false }, kinds: noKinds() };
+  return { enabled: false, mode: 'paper', horizons: { intraday: true, positional: false }, kinds: noKinds(), rules: defaultRuleSettings() };
 }
 
 /**
@@ -107,7 +110,7 @@ export function defaultAutomationConfig() {
  */
 export function parseAutomationConfig(input) {
   if (!input || typeof input !== 'object') return { error: 'configuration is required' };
-  const { enabled, mode, horizons, kinds } = input;
+  const { enabled, mode, horizons, kinds, rules } = input;
 
   if (typeof enabled !== 'boolean') return { error: 'enabled must be true or false' };
 
@@ -136,12 +139,16 @@ export function parseAutomationConfig(input) {
     parsedKinds[kind.id] = { BUY: sides.BUY, SELL: sides.SELL };
   }
 
+  const parsedRules = parseRuleSettings(rules);
+  if (parsedRules.error !== undefined) return { error: parsedRules.error };
+
   return {
     config: {
       enabled,
       mode,
       horizons: /** @type {AutomationConfig['horizons']} */ (parsedHorizons),
       kinds: /** @type {AutomationConfig['kinds']} */ (parsedKinds),
+      rules: parsedRules.rules,
     },
   };
 }
@@ -149,7 +156,7 @@ export function parseAutomationConfig(input) {
 /**
  * A stored configuration brought up to date: trade types or horizons added
  * since it was saved come in switched off, and any that no longer exist are
- * dropped.
+ * dropped. The same goes for validation rules.
  * @param {any} stored
  * @returns {AutomationConfig}
  */
@@ -171,5 +178,6 @@ export function withDefaults(stored) {
     mode,
     horizons: /** @type {AutomationConfig['horizons']} */ (horizons),
     kinds: /** @type {AutomationConfig['kinds']} */ (kinds),
+    rules: ruleSettingsWithDefaults(stored.rules),
   };
 }

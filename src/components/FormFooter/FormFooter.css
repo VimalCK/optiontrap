@@ -1,0 +1,21 @@
+/* FormFooter: the shared Save / Cancel row (src/components/FormFooter). */
+
+.form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--card-border);
+}
+
+.form-footer__error {
+  margin-right: auto;
+  font-size: 13px;
+  color: #ef4444;
+}
+
+/* Wide enough for "Saving…", so Save / Saving… / Saved never move the row (button text is centred). */
+.form-footer__save {
+  min-width: 90px;
+}

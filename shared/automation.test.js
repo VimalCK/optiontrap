@@ -82,6 +82,22 @@ describe('withDefaults', () => {
   it('falls back to paper if a stored mode is not available', () => {
     expect(withDefaults({ ...valid(), mode: 'live' }).mode).toBe('paper');
   });
+
+  it('gives a configuration saved before validation rules existed every rule, inactive', () => {
+    const stored = valid();
+    delete stored.rules;
+    expect(withDefaults(stored)).toEqual(valid());
+  });
+});
+
+describe('parseAutomationConfig validation rules', () => {
+  it('keeps the rules as set, and refuses a configuration without them', () => {
+    const config = valid();
+    config.rules['max-lots'] = { active: true, params: { max: 2 } };
+    expect(parseAutomationConfig(config)).toEqual({ config });
+    delete config.rules;
+    expect(parseAutomationConfig(config)).toEqual({ error: 'rules is required' });
+  });
 });
 
 describe('lifecycle', () => {
