@@ -3,23 +3,17 @@
  *
  * Every trade the automation takes runs through the same lifecycle:
  * selected → validated (or rejected) → executed into paper trading → closed.
- * This page holds the configuration and shows each trade's lifecycle. The
- * engine that selects and executes trades is not built yet, so nothing
- * trades from here.
+ * This page shows each trade's lifecycle; the gear opens the settings page
+ * (AutomationSettings). The engine that selects and executes trades is not
+ * built yet, so nothing trades from here.
  *
  * Names and rules: shared/automation.js.
  */
 import React, { useEffect, useState } from 'react';
-import { EXECUTION_MODES, HORIZONS, LIFECYCLE_STAGES, TRADE_KINDS, TRADE_SIDES } from '../../shared/automation.js';
-import {
-  AutomationConfig,
-  AutoTrade,
-  fetchAutomationConfig,
-  fetchAutoTrades,
-  saveAutomationConfig,
-  TradeKindId,
-  TradeSide,
-} from '@/services/automation';
+import { useNavigate } from 'react-router-dom';
+import { LIFECYCLE_STAGES, TRADE_KINDS } from '../../shared/automation.js';
+import { SettingsIcon } from '@/components/icons/Icons';
+import { AutomationConfig, AutoTrade, fetchAutomationConfig, fetchAutoTrades } from '@/services/automation';
 import { isAbortError } from '@/services/apiClient';
 import { formatCalendarDate, istTimeLabel } from '@/utils/marketStatus';
 import '@/styles/automation.css';
@@ -36,109 +30,6 @@ export const LIFECYCLE_STEPS: { title: string; stages: string; text: string }[] 
   { title: 'Execution', stages: 'executed', text: 'Sent straight to paper trading, so it shows in Positions like any paper trade.' },
   { title: 'Completion', stages: 'closed', text: 'The position is monitored until it is exited; the exit and its reason are recorded.' },
 ];
-
-// ── Configuration ──
-
-interface ConfigFormProps {
-  config: AutomationConfig;
-  onChange: (config: AutomationConfig) => void;
-  onSave: () => void;
-  saving: boolean;
-  dirty: boolean;
-  message: { tone: 'ok' | 'error'; text: string } | null;
-}
-
-export const AutomationConfigForm: React.FC<ConfigFormProps> = ({ config, onChange, onSave, saving, dirty, message }) => {
-  const setSide = (kind: TradeKindId, side: TradeSide, on: boolean) =>
-    onChange({ ...config, kinds: { ...config.kinds, [kind]: { ...config.kinds[kind], [side]: on } } });
-
-  return (
-    <section className="card automation-config" aria-labelledby="automation-config-title">
-      <div className="automation-section__head">
-        <h3 id="automation-config-title" className="card__title">Configuration</h3>
-        <label className="automation-switch">
-          <input
-            type="checkbox"
-            checked={config.enabled}
-            onChange={(e) => onChange({ ...config, enabled: e.target.checked })}
-          />
-          <span>{config.enabled ? 'Automation on' : 'Automation off'}</span>
-        </label>
-      </div>
-
-      <div className="automation-config__row">
-        <span className="automation-config__label">Execution</span>
-        <div className="automation-config__options">
-          {EXECUTION_MODES.map((m) => (
-            <label key={m.id} className={`automation-option ${m.available ? '' : 'automation-option--unavailable'}`}>
-              <input
-                type="radio"
-                name="automation-mode"
-                value={m.id}
-                checked={config.mode === m.id}
-                disabled={!m.available}
-                onChange={() => onChange({ ...config, mode: m.id as AutomationConfig['mode'] })}
-              />
-              {m.label}
-              {!m.available && <small> · not available yet</small>}
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <div className="automation-config__row">
-        <span className="automation-config__label">Trades</span>
-        <div className="automation-config__options">
-          {HORIZONS.map((h) => (
-            <label key={h.id} className={`automation-option ${h.available ? '' : 'automation-option--unavailable'}`}>
-              <input
-                type="checkbox"
-                checked={config.horizons[h.id as keyof AutomationConfig['horizons']]}
-                disabled={!h.available}
-                onChange={(e) => onChange({ ...config, horizons: { ...config.horizons, [h.id]: e.target.checked } })}
-              />
-              {h.label}
-              <small>{h.id === 'intraday' ? ' · from OI snapshots' : ' · later, from OI history'}</small>
-            </label>
-          ))}
-        </div>
-      </div>
-
-      <table className="automation-table automation-kinds">
-        <thead>
-          <tr>
-            <th>Trade type</th>
-            {TRADE_SIDES.map((side) => <th key={side}>{side === 'BUY' ? 'Buy' : 'Sell'}</th>)}
-          </tr>
-        </thead>
-        <tbody>
-          {TRADE_KINDS.map((kind) => (
-            <tr key={kind.id}>
-              <td>{kind.label}</td>
-              {TRADE_SIDES.map((side) => (
-                <td key={side}>
-                  <input
-                    type="checkbox"
-                    aria-label={`${side === 'BUY' ? 'Buy' : 'Sell'} ${kind.label}`}
-                    checked={config.kinds[kind.id as TradeKindId][side as TradeSide]}
-                    onChange={(e) => setSide(kind.id as TradeKindId, side as TradeSide, e.target.checked)}
-                  />
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-
-      <div className="automation-config__footer">
-        {message && <span className={`automation-message automation-message--${message.tone}`}>{message.text}</span>}
-        <button className="app-btn app-btn--primary" onClick={onSave} disabled={!dirty || saving}>
-          {saving ? 'Saving…' : 'Save'}
-        </button>
-      </div>
-    </section>
-  );
-};
 
 // ── Lifecycle ──
 
@@ -226,12 +117,16 @@ export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean;
 
 // ── Page ──
 
+/** "On" or "Off", and what that means while the engine isn't built. */
+export function automationStatus(config: AutomationConfig | null): string {
+  if (!config) return 'Loading…';
+  return `${config.enabled ? 'On' : 'Off'} · engine not built yet, nothing trades`;
+}
+
 const Automation: React.FC = () => {
-  const [saved, setSaved] = useState<AutomationConfig | null>(null);
+  const navigate = useNavigate();
   const [config, setConfig] = useState<AutomationConfig | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<ConfigFormProps['message']>(null);
   const [trades, setTrades] = useState<AutoTrade[]>([]);
   const [tradesLoading, setTradesLoading] = useState(true);
   const [tradesError, setTradesError] = useState<string | null>(null);
@@ -239,8 +134,8 @@ const Automation: React.FC = () => {
   useEffect(() => {
     const controller = new AbortController();
     fetchAutomationConfig(controller.signal)
-      .then((c) => { setSaved(c); setConfig(c); })
-      .catch((err) => { if (!isAbortError(err)) setConfigError(errorText(err, 'Could not load the configuration')); });
+      .then(setConfig)
+      .catch((err) => { if (!isAbortError(err)) setConfigError(errorText(err, 'Could not load the settings')); });
     fetchAutoTrades(controller.signal)
       .then(setTrades)
       .catch((err) => { if (!isAbortError(err)) setTradesError(errorText(err, 'Could not load automated trades')); })
@@ -248,44 +143,22 @@ const Automation: React.FC = () => {
     return () => controller.abort();
   }, []);
 
-  const dirty = config !== null && JSON.stringify(config) !== JSON.stringify(saved);
-
-  const save = async () => {
-    if (!config) return;
-    setSaving(true);
-    setMessage(null);
-    try {
-      const stored = await saveAutomationConfig(config);
-      setSaved(stored);
-      setConfig(stored);
-      setMessage({ tone: 'ok', text: 'Saved' });
-    } catch (err) {
-      setMessage({ tone: 'error', text: errorText(err, 'Could not save') });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   return (
     <div className="automation">
       <header className="automation-header">
         <h1 className="automation-header__title">Automation</h1>
-        <span className="automation-header__status">
-          {saved?.enabled ? 'On' : 'Off'} · engine not built yet, nothing trades
-        </span>
+        <span className="automation-header__status">{configError ? 'Settings could not be loaded' : automationStatus(config)}</span>
+        <button
+          type="button"
+          className="automation-header__settings"
+          onClick={() => navigate('/automation/settings')}
+          title="Automation settings"
+          aria-label="Automation settings"
+        >
+          <SettingsIcon size={18} />
+        </button>
       </header>
 
-      {configError && <div className="card automation-message automation-message--error">{configError}</div>}
-      {config && (
-        <AutomationConfigForm
-          config={config}
-          onChange={(next) => { setConfig(next); setMessage(null); }}
-          onSave={save}
-          saving={saving}
-          dirty={dirty}
-          message={message}
-        />
-      )}
       <LifecycleSteps />
       <AutoTradesTable trades={trades} loading={tradesLoading} error={tradesError} />
     </div>

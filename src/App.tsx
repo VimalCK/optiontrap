@@ -13,6 +13,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Analytics = lazy(() => import('./pages/Analytics'));
 const Watchlist = lazy(() => import('./pages/Watchlist'));
 const Automation = lazy(() => import('./pages/Automation'));
+const AutomationSettings = lazy(() => import('./pages/AutomationSettings'));
 const Profile = lazy(() => import('./pages/Profile'));
 const Settings = lazy(() => import('./pages/Settings'));
 const Redirect = lazy(() => import('./pages/Redirect'));
@@ -98,6 +99,7 @@ const App: React.FC = () => {
                       <Route path="/analytics" element={<Analytics />} />
                       <Route path="/watchlist" element={<Watchlist />} />
                       <Route path="/automation" element={<Automation />} />
+                      <Route path="/automation/settings" element={<AutomationSettings />} />
                       <Route path="/profile" element={<Profile />} />
                       <Route path="/settings" element={<Settings />} />
                       {isAdmin && <Route path="/admin" element={<Admin />} />}

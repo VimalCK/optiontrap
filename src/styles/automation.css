@@ -218,3 +218,29 @@
   font-size: 13px;
   color: var(--text-secondary);
 }
+
+/* Gear in the top-right corner: opens the settings page. */
+.automation-header__settings {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background: var(--card-bg);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.automation-header__settings:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.automation-header__settings:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
