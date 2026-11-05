@@ -115,7 +115,7 @@ import { checkSubscriptionAccess, inactiveSubscription } from './subscriptionAcc
 import { backfillStockSetups, scanStock, syncStockCandles } from './stockCandles.js';
 import { startStockSetupScheduler } from './stockSetupScheduler.js';
 import { NIGHTLY_JOB_PREFIX, startNightlyJobs } from './nightlyJobs.js';
-import { parseDailyPnlQuery, parsePositionsQuery, parseStatsQuery } from './positionsQuery.js';
+import { parseDailyPnlQuery, parsePositionsQuery, parseRange, parseStatsQuery } from './positionsQuery.js';
 import { exitPaperTrade, openPaperTrade } from './paperTrading.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -824,10 +824,12 @@ app.put('/api/automation/config', requireAuth, requireSubscription, async (req, 
   res.json({ status: 'ok', data: await saveAutomationConfig(userId, config) });
 });
 
-// The latest automated trades, each with its lifecycle.
+// The automated trades created in ?from=…&to=… (market days, both required), each with its lifecycle.
 app.get('/api/automation/trades', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
-  res.json({ status: 'ok', data: await getAutoTrades(userId) });
+  const range = parseRange(req.query.from, req.query.to, { required: true });
+  if (range.error) return res.status(400).json({ status: 'error', message: range.error });
+  res.json({ status: 'ok', data: await getAutoTrades(userId, range) });
 });
 
 // ---------- Price alerts ----------

@@ -16,7 +16,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
-import { MARKET_TIME_ZONE, marketDayStartMs } from '../shared/marketTime.js';
+import { MARKET_TIME_ZONE, addDays, marketDateTime, marketDayStartMs } from '../shared/marketTime.js';
 import { buildDailyPnlQuery, buildPositionsQuery, buildStatsQueries } from './positionsQuery.js';
 import { withDefaults } from '../shared/automation.js';
 
@@ -954,15 +954,20 @@ function toAutoTrade(row) {
   };
 }
 
-/** The user's latest automated trades, newest first, each with its lifecycle events in order. */
-export async function getAutoTrades(userId, limit = 50) {
+/**
+ * The user's automated trades created from `from` to `to` (market days,
+ * inclusive), newest first, each with its lifecycle events in order. Served by
+ * auto_trades_user_created_idx (user_id, created_at DESC).
+ */
+export async function getAutoTrades(userId, { from, to }) {
   const result = await rows(
     `SELECT t.*,
        COALESCE((SELECT json_agg(json_build_object('stage', e.stage, 'at', e.at, 'detail', e.detail) ORDER BY e.at, e.id)
                  FROM auto_trade_events e WHERE e.auto_trade_id = t.id), '[]'::json) AS events
-     FROM auto_trades t WHERE t.user_id = $1
-     ORDER BY t.created_at DESC LIMIT $2`,
-    [userId, limit],
+     FROM auto_trades t
+     WHERE t.user_id = $1 AND t.created_at >= $2 AND t.created_at < $3
+     ORDER BY t.created_at DESC`,
+    [userId, marketDateTime(from).toISOString(), marketDateTime(addDays(to, 1)).toISOString()],
   );
   return result.map(toAutoTrade);
 }

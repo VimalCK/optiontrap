@@ -3,21 +3,29 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { defaultAutomationConfig } from '../../shared/automation.js';
 import type { AutoTrade } from '@/services/automation';
-import Automation, { AutoTradesTable, LifecycleSteps, automationStatus } from './Automation';
+import { marketDate } from '../../shared/marketTime.js';
+import Automation, { AutoTradesTable, TradeRangePicker, automationStatus } from './Automation';
 
 describe('Automation screen', () => {
   const html = renderToStaticMarkup(<MemoryRouter><Automation /></MemoryRouter>);
 
-  it('has the settings gear at the top of the first card, not in the page header, and no settings form of its own', () => {
+  it('has the settings gear at the top right of the trades card, not in the page header, and no settings form of its own', () => {
     const firstCard = html.match(/<section class="card".*?<\/section>/s)?.[0] ?? '';
-    expect(firstCard).toMatch(/<div class="automation-section__head"><h3[^>]*>How a trade runs<\/h3><button[^>]*aria-label="Automation settings"/);
+    expect(firstCard).toMatch(/<h3[^>]*>Automated trades<\/h3>/);
+    expect(firstCard).toMatch(/<div class="automation-section__actions">.*<button[^>]*aria-label="Automation settings"/s);
     expect(html.match(/<header.*?<\/header>/s)?.[0]).not.toContain('Automation settings');
     expect(html).not.toContain('automation-config');
   });
 
-  it('shows how a trade runs and the trades list', () => {
-    expect(html).toContain('How a trade runs');
-    expect(html).toContain('Automated trades');
+  it("shows only the trades list: no 'How a trade runs' card", () => {
+    expect(html).not.toContain('How a trade runs');
+    expect(html.match(/<section class="card"/g)).toHaveLength(1);
+  });
+
+  it("opens the trades list on today's trades, From and To both today", () => {
+    const today = marketDate();
+    const dates = [...html.matchAll(/<input[^>]*type="date"[^>]*>/g)].map((m) => m[0].match(/value="([^"]*)"/)?.[1]);
+    expect(dates).toEqual([today, today]);
   });
 });
 
@@ -26,13 +34,6 @@ describe('automationStatus', () => {
     expect(automationStatus(null)).toBe('Loading…');
     expect(automationStatus(defaultAutomationConfig())).toBe('Off · engine not built yet, nothing trades');
     expect(automationStatus({ ...defaultAutomationConfig(), enabled: true })).toBe('On · engine not built yet, nothing trades');
-  });
-});
-
-describe('LifecycleSteps', () => {
-  it('shows selection, validation, execution and completion in order', () => {
-    const steps = renderToStaticMarkup(<LifecycleSteps />);
-    expect([...steps.matchAll(/<strong>(\w+)<\/strong>/g)].map((m) => m[1])).toEqual(['Selection', 'Validation', 'Execution', 'Completion']);
   });
 });
 
@@ -45,7 +46,7 @@ describe('AutoTradesTable', () => {
   };
 
   it('says there are no trades yet', () => {
-    expect(renderToStaticMarkup(<AutoTradesTable trades={[]} />)).toContain('No automated trades yet');
+    expect(renderToStaticMarkup(<AutoTradesTable trades={[]} />)).toContain('No automated trades in this range');
   });
 
   it('shows each trade with its stage and reason, timed in IST', () => {
@@ -63,5 +64,29 @@ describe('AutoTradesTable', () => {
     const table = renderToStaticMarkup(<AutoTradesTable trades={[first, second]} />);
     expect(table).toContain('<td>1,000.00</td><td>–</td>');
     expect(table).toContain('<td>1,010.00</td><td>–</td>');
+  });
+});
+
+describe('TradeRangePicker', () => {
+  const html = renderToStaticMarkup(<TradeRangePicker range={{ from: '2026-11-01', to: '2026-11-05' }} onChange={() => {}} />);
+  const input = (label: string) => html.match(new RegExp(`${label}<input[^>]*>`))?.[0] ?? '';
+
+  it("shows the range picked, and won't let To go before From", () => {
+    expect(input('From')).toContain('value="2026-11-01"');
+    expect(input('From')).toContain('max="2026-11-05"');
+    expect(input('To')).toContain('value="2026-11-05"');
+    expect(input('To')).toContain('min="2026-11-01"');
+  });
+
+  it('has only the two date pickers, no shortcut buttons', () => {
+    expect(html).not.toContain('<button');
+  });
+});
+
+describe('AutoTradesTable controls', () => {
+  it("shows the range controls in the card's header, and says when the range has no trades", () => {
+    const html = renderToStaticMarkup(<AutoTradesTable trades={[]} controls={<span id="controls" />} />);
+    expect(html).toMatch(/<div class="automation-section__head"><h3[^>]*>Automated trades<\/h3><span id="controls"><\/span><\/div>/);
+    expect(html).toContain('No automated trades in this range');
   });
 });

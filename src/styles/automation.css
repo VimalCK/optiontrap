@@ -182,39 +182,25 @@
   color: var(--text-secondary);
 }
 
-/* ── Lifecycle ── */
-
-.automation-lifecycle {
-  margin: 12px 0 0;
-  padding: 0;
-  list-style: none;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+.automation-section__actions {
+  display: flex;
+  align-items: center;
   gap: 12px;
-  counter-reset: step;
 }
 
-.automation-lifecycle__step {
-  padding: 12px;
-  border: 1px solid var(--card-border);
-  border-radius: 8px;
-  counter-increment: step;
+/* ── Trades date range ── */
+
+.automation-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
 }
 
-.automation-lifecycle__step strong::before {
-  content: counter(step) '. ';
-  color: var(--accent);
-}
-
-.automation-lifecycle__stages {
-  display: block;
-  margin-top: 2px;
-  font-size: 11px;
-  color: var(--text-secondary);
-}
-
-.automation-lifecycle__step p {
-  margin: 6px 0 0;
-  font-size: 13px;
+.automation-range__label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
   color: var(--text-secondary);
 }

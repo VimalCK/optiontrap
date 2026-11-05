@@ -49,6 +49,8 @@ export function saveAutomationConfig(config: AutomationConfig): Promise<Automati
   return apiClient.put('/api/automation/config', config);
 }
 
-export function fetchAutoTrades(signal?: AbortSignal): Promise<AutoTrade[]> {
-  return apiClient.get('/api/automation/trades', { signal });
+/** Automated trades created from `from` to `to` (YYYY-MM-DD, IST days, inclusive), newest first. */
+export function fetchAutoTrades(range: { from: string; to: string }, signal?: AbortSignal): Promise<AutoTrade[]> {
+  const params = new URLSearchParams(range);
+  return apiClient.get(`/api/automation/trades?${params}`, { signal });
 }

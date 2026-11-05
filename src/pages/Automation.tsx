@@ -3,15 +3,17 @@
  *
  * Every trade the automation takes runs through the same lifecycle:
  * selected → validated (or rejected) → executed into paper trading → closed.
- * This page shows each trade's lifecycle; the gear opens the settings page
- * (AutomationSettings). The engine that selects and executes trades is not
- * built yet, so nothing trades from here.
+ * This page lists the trades (clicking one shows its lifecycle); the gear
+ * opens the settings page (AutomationSettings). The engine that selects and
+ * executes trades is not built yet, so nothing trades from here.
  *
  * Names and rules: shared/automation.js.
  */
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { LIFECYCLE_STAGES, TRADE_KINDS } from '../../shared/automation.js';
+import { marketDate } from '../../shared/marketTime.js';
+import { rangeProblem } from '@/components/TradeJournal/journalRange';
 import IconButton from '@/components/IconButton/IconButton';
 import { SettingsIcon } from '@/components/icons/Icons';
 import { AutomationConfig, AutoTrade, fetchAutomationConfig, fetchAutoTrades } from '@/services/automation';
@@ -25,35 +27,6 @@ const errorText = (err: unknown, fallback: string) => (err instanceof Error ? er
 const kindLabel = (id: string) => TRADE_KINDS.find((k) => k.id === id)?.label ?? id;
 const stageLabel = (id: string) => LIFECYCLE_STAGES.find((s) => s.id === id)?.label ?? id;
 
-/** What each lifecycle stage does, in order. */
-export const LIFECYCLE_STEPS: { title: string; stages: string; text: string }[] = [
-  { title: 'Selection', stages: 'selected', text: 'Intraday: a signal from the OI snapshots picks the trade. Positional (later): from OI history.' },
-  { title: 'Validation', stages: 'validated / rejected', text: 'Every trade must pass all validation rules; one that fails is rejected, with the reason kept.' },
-  { title: 'Execution', stages: 'executed', text: 'Sent straight to paper trading, so it shows in Positions like any paper trade.' },
-  { title: 'Completion', stages: 'closed', text: 'The position is monitored until it is exited; the exit and its reason are recorded.' },
-];
-
-// ── Lifecycle ──
-
-/** `action` sits at the card's top right (the settings gear). */
-export const LifecycleSteps: React.FC<{ action?: React.ReactNode }> = ({ action }) => (
-  <section className="card" aria-labelledby="automation-lifecycle-title">
-    <div className="automation-section__head">
-      <h3 id="automation-lifecycle-title" className="card__title">How a trade runs</h3>
-      {action}
-    </div>
-    <ol className="automation-lifecycle">
-      {LIFECYCLE_STEPS.map((step) => (
-        <li key={step.title} className="automation-lifecycle__step">
-          <strong>{step.title}</strong>
-          <span className="automation-lifecycle__stages">{step.stages}</span>
-          <p>{step.text}</p>
-        </li>
-      ))}
-    </ol>
-  </section>
-);
-
 // ── Trades ──
 
 /** A fill price, or a dash before there is one. */
@@ -64,16 +37,40 @@ const eventTime = (at: string) => {
   return `${formatCalendarDate(at.slice(0, 10), { day: 'numeric', month: 'short' })} ${istTimeLabel(date)}`;
 };
 
-export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean; error?: string | null }> = ({ trades, loading, error }) => {
+/** Wait this long after the last range change before fetching. */
+const FETCH_DELAY_MS = 400;
+
+export interface TradeRange { from: string; to: string }
+
+/** From / To dates for the trades list; To can't be before From. */
+export const TradeRangePicker: React.FC<{ range: TradeRange; onChange: (range: TradeRange) => void }> = ({ range, onChange }) => (
+  <div className="automation-range">
+    <label className="automation-range__label">
+      From
+      <input type="date" className="app-date-input" value={range.from} max={range.to || undefined}
+        onChange={(e) => onChange({ ...range, from: e.target.value })} />
+    </label>
+    <label className="automation-range__label">
+      To
+      <input type="date" className="app-date-input" value={range.to} min={range.from || undefined}
+        onChange={(e) => onChange({ ...range, to: e.target.value })} />
+    </label>
+  </div>
+);
+
+export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean; error?: string | null; controls?: React.ReactNode }> = ({ trades, loading, error, controls }) => {
   const [open, setOpen] = useState<string | null>(null);
 
   return (
     <section className="card" aria-labelledby="automation-trades-title">
-      <h3 id="automation-trades-title" className="card__title">Automated trades</h3>
+      <div className="automation-section__head">
+        <h3 id="automation-trades-title" className="card__title">Automated trades</h3>
+        {controls}
+      </div>
       {error && <p className="automation-message automation-message--error">{error}</p>}
       {loading && <p className="card__description">Loading…</p>}
       {!loading && !error && trades.length === 0 && (
-        <p className="card__description">No automated trades yet. Each one will show here with every stage of its lifecycle.</p>
+        <p className="card__description">No automated trades in this range. Each one will show here with every stage of its lifecycle.</p>
       )}
       {trades.length > 0 && (
         <table className="automation-table automation-trades">
@@ -140,21 +137,35 @@ const Automation: React.FC = () => {
   const navigate = useNavigate();
   const [config, setConfig] = useState<AutomationConfig | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
+  // Opens on today's trades; From / To fetches any other range.
+  const [range, setRange] = useState<TradeRange>(() => ({ from: marketDate(), to: marketDate() }));
   const [trades, setTrades] = useState<AutoTrade[]>([]);
   const [tradesLoading, setTradesLoading] = useState(true);
   const [tradesError, setTradesError] = useState<string | null>(null);
+  const problem = rangeProblem(range.from, range.to);
 
   useEffect(() => {
     const controller = new AbortController();
     fetchAutomationConfig(controller.signal)
       .then(setConfig)
       .catch((err) => { if (!isAbortError(err)) setConfigError(errorText(err, 'Could not load the settings')); });
-    fetchAutoTrades(controller.signal)
-      .then(setTrades)
-      .catch((err) => { if (!isAbortError(err)) setTradesError(errorText(err, 'Could not load automated trades')); })
-      .finally(() => { if (!controller.signal.aborted) setTradesLoading(false); });
     return () => controller.abort();
   }, []);
+
+  // Fetch exactly the range picked, shortly after the last change to it.
+  useEffect(() => {
+    if (problem) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setTradesLoading(true);
+      setTradesError(null);
+      fetchAutoTrades(range, controller.signal)
+        .then(setTrades)
+        .catch((err) => { if (!isAbortError(err)) setTradesError(errorText(err, 'Could not load automated trades')); })
+        .finally(() => { if (!controller.signal.aborted) setTradesLoading(false); });
+    }, FETCH_DELAY_MS);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [range, problem]);
 
   return (
     <div className="automation">
@@ -163,16 +174,21 @@ const Automation: React.FC = () => {
         <span className="automation-header__status">{configError ? 'Settings could not be loaded' : automationStatus(config)}</span>
       </header>
 
-      <LifecycleSteps
-        action={(
-          <IconButton
-            icon={<SettingsIcon size={18} />}
-            label="Automation settings"
-            onClick={() => navigate('/automation/settings')}
-          />
+      <AutoTradesTable
+        trades={trades}
+        loading={tradesLoading && !problem}
+        error={problem ?? tradesError}
+        controls={(
+          <div className="automation-section__actions">
+            <TradeRangePicker range={range} onChange={setRange} />
+            <IconButton
+              icon={<SettingsIcon size={18} />}
+              label="Automation settings"
+              onClick={() => navigate('/automation/settings')}
+            />
+          </div>
         )}
       />
-      <AutoTradesTable trades={trades} loading={tradesLoading} error={tradesError} />
     </div>
   );
 };

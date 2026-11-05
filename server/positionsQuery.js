@@ -49,7 +49,8 @@ function parseSegment(segment) {
   return SEGMENTS.includes(segment) ? { segment } : { error: `segment must be one of: ${SEGMENTS.join(', ')}` };
 }
 
-function parseRange(from, to, { required }) {
+/** A from/to date range (YYYY-MM-DD, market days) from a query; `required` makes both mandatory. */
+export function parseRange(from, to, { required }) {
   if (required && (from === undefined || to === undefined)) return { error: 'from and to are required' };
   if (from !== undefined && !isDate(from)) return { error: 'from must be a date, YYYY-MM-DD' };
   if (to !== undefined && !isDate(to)) return { error: 'to must be a date, YYYY-MM-DD' };
