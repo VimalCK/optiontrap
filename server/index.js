@@ -67,6 +67,9 @@ import {
   triggerPriceAlert,
   resetPriceAlert,
   deletePriceAlert,
+  getAutomationConfig,
+  saveAutomationConfig,
+  getAutoTrades,
   getPositions,
   getDailyPnl,
   getPositionStats,
@@ -99,6 +102,7 @@ import {
   getStockSetupSignals,
 } from './db.js';
 import { parsePriceAlertInput } from './priceAlerts.js';
+import { parseAutomationConfig } from '../shared/automation.js';
 import { PostgresSessionStore } from './sessionStore.js';
 import { createRateLimiter } from './rateLimit.js';
 import { cached } from './cache.js';
@@ -804,6 +808,26 @@ app.delete('/api/watchlists/:id/items/:itemId', requireAuth, requireSubscription
   }
 
   res.json({ status: 'ok' });
+});
+
+// ---------- Trade automation ----------
+
+app.get('/api/automation/config', requireAuth, requireSubscription, async (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  res.json({ status: 'ok', data: await getAutomationConfig(userId) });
+});
+
+app.put('/api/automation/config', requireAuth, requireSubscription, async (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const { config, error } = parseAutomationConfig(req.body);
+  if (error) return res.status(400).json({ status: 'error', message: error });
+  res.json({ status: 'ok', data: await saveAutomationConfig(userId, config) });
+});
+
+// The latest automated trades, each with its lifecycle.
+app.get('/api/automation/trades', requireAuth, requireSubscription, async (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  res.json({ status: 'ok', data: await getAutoTrades(userId) });
 });
 
 // ---------- Price alerts ----------

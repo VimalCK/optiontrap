@@ -18,6 +18,7 @@ import { fileURLToPath } from 'url';
 import pg from 'pg';
 import { MARKET_TIME_ZONE, marketDayStartMs } from '../shared/marketTime.js';
 import { buildDailyPnlQuery, buildPositionsQuery, buildStatsQueries } from './positionsQuery.js';
+import { withDefaults } from '../shared/automation.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
@@ -909,6 +910,59 @@ export async function resetPriceAlert(id, userId) {
 export async function deletePriceAlert(id, userId) {
   const res = await query('DELETE FROM price_alerts WHERE id = $1 AND user_id = $2', [id, userId]);
   return res.rowCount > 0;
+}
+
+// ---------------------------------------------------------------------------
+// Trade automation (per user; see shared/automation.js)
+// ---------------------------------------------------------------------------
+
+/** The user's automation configuration, or the defaults if none is saved. */
+export async function getAutomationConfig(userId) {
+  const row = await firstRow('SELECT config FROM automation_configs WHERE user_id = $1', [userId]);
+  return withDefaults(row?.config);
+}
+
+/** Store a configuration already checked by parseAutomationConfig. */
+export async function saveAutomationConfig(userId, config) {
+  const row = await firstRow(
+    `INSERT INTO automation_configs (user_id, config, updated_at) VALUES ($1, $2, now())
+     ON CONFLICT (user_id) DO UPDATE SET config = EXCLUDED.config, updated_at = now()
+     RETURNING config`,
+    [userId, JSON.stringify(config)],
+  );
+  return withDefaults(row.config);
+}
+
+function toAutoTrade(row) {
+  return {
+    id: row.id,
+    horizon: row.horizon,
+    kind: row.kind,
+    mode: row.mode,
+    tradingsymbol: row.tradingsymbol,
+    instrumentToken: Number(row.instrument_token),
+    side: row.side,
+    quantity: Number(row.quantity),
+    stage: row.stage,
+    reason: row.reason,
+    positionId: row.position_id,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+    events: (row.events ?? []).map((e) => ({ stage: e.stage, at: e.at, detail: e.detail })),
+  };
+}
+
+/** The user's latest automated trades, newest first, each with its lifecycle events in order. */
+export async function getAutoTrades(userId, limit = 50) {
+  const result = await rows(
+    `SELECT t.*,
+       COALESCE((SELECT json_agg(json_build_object('stage', e.stage, 'at', e.at, 'detail', e.detail) ORDER BY e.at, e.id)
+                 FROM auto_trade_events e WHERE e.auto_trade_id = t.id), '[]'::json) AS events
+     FROM auto_trades t WHERE t.user_id = $1
+     ORDER BY t.created_at DESC LIMIT $2`,
+    [userId, limit],
+  );
+  return result.map(toAutoTrade);
 }
 
 // ---------------------------------------------------------------------------

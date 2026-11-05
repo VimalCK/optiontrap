@@ -27,67 +27,194 @@
   color: var(--text-secondary);
 }
 
-.automation-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: var(--card-gap);
-}
-
-.automation-part {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.automation-part__top {
+.automation-section__head {
   display: flex;
   align-items: center;
-  gap: 10px;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
 }
 
-.automation-part__step {
+.automation-section__head .card__title {
+  margin: 0;
+}
+
+.automation-switch {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 24px;
-  height: 24px;
-  flex-shrink: 0;
-  border-radius: 50%;
-  background: var(--accent);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.automation-part__title {
-  margin: 0;
-  flex: 1;
-}
-
-.automation-part__badge {
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 11px;
+  gap: 8px;
+  font-size: 13px;
   font-weight: 600;
-  white-space: nowrap;
+  cursor: pointer;
 }
 
-.automation-part__badge--coming-next {
-  border: 1px solid var(--card-border);
+/* ── Configuration ── */
+
+.automation-config__row {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  padding: 8px 0;
+  border-top: 1px solid var(--card-border);
+}
+
+.automation-config__label {
+  width: 90px;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-secondary);
 }
 
-.automation-part__badge--live {
-  background: rgba(34, 197, 94, 0.15);
+.automation-config__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+
+.automation-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.automation-option small {
+  color: var(--text-secondary);
+}
+
+.automation-option--unavailable {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.automation-config__footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.automation-message {
+  font-size: 13px;
+}
+
+.automation-message--ok {
   color: #22c55e;
 }
 
-.automation-part__points {
+.automation-message--error {
+  color: #ef4444;
+}
+
+/* ── Tables ── */
+
+.automation-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.automation-table th,
+.automation-table td {
+  padding: 8px 10px;
+  border-top: 1px solid var(--card-border);
+  text-align: left;
+}
+
+.automation-table th {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.automation-kinds {
+  margin-top: 4px;
+}
+
+.automation-kinds th:not(:first-child),
+.automation-kinds td:not(:first-child) {
+  width: 80px;
+  text-align: center;
+}
+
+.automation-trades__row {
+  cursor: pointer;
+}
+
+.automation-trades__row:hover {
+  background: var(--hover-bg, rgba(127, 127, 127, 0.08));
+}
+
+.automation-trades__events ol {
   margin: 0;
   padding-left: 18px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.automation-trades__events code {
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.automation-stage {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  border: 1px solid var(--card-border);
+}
+
+.automation-stage--validated,
+.automation-stage--executed {
+  color: var(--accent);
+}
+
+.automation-stage--rejected {
+  color: #ef4444;
+}
+
+.automation-stage--closed {
+  color: var(--text-secondary);
+}
+
+/* ── Lifecycle ── */
+
+.automation-lifecycle {
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  counter-reset: step;
+}
+
+.automation-lifecycle__step {
+  padding: 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  counter-increment: step;
+}
+
+.automation-lifecycle__step strong::before {
+  content: counter(step) '. ';
+  color: var(--accent);
+}
+
+.automation-lifecycle__stages {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.automation-lifecycle__step p {
+  margin: 6px 0 0;
   font-size: 13px;
   color: var(--text-secondary);
 }
