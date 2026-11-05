@@ -9,7 +9,10 @@
  *   selected   a signal picked it (intraday: from the server's OI snapshots)
  *   validated  it passed every validation rule
  *   rejected   a rule refused it, at selection or execution; it ends here
- *   executed   sent to paper (or, later, live) trading: it is now a position
+ *   executed   sent to paper (or, later, live) trading: it is now a position.
+ *              Automated trades in the same instrument merge into one
+ *              automated position (100 then 500 shows as 600), so several
+ *              trades can point at the same position.
  *   closed     the position was exited; it ends here
  */
 

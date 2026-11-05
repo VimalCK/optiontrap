@@ -29,7 +29,7 @@ const refused = ({ rule, code, message }) => ({ ok: false, code, message, rule }
  *   optionally exchange, mode, note, targetPrice, stopLossPrice, strategyTag, confidence
  * @param {{ now?: Date, source?: 'manual' | 'auto' }} [options] now: when the trade happens (defaults
  *   to the current time). source: who placed it, set by the caller and never taken from the request;
- *   automated trades are never merged with other positions.
+ *   a trade merges only with open positions from the same source.
  */
 export async function openPaperTrade(userId, input, { now = new Date(), source = 'manual' } = {}) {
   const trade = normalizeTradeInput(input);

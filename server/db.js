@@ -1234,28 +1234,26 @@ async function insertPosition(userId, mode, position, quantity, now) {
 }
 
 /**
- * Open a position. A manual trade merges with the user's open manual
- * position in the same instrument: the same side averages in, the opposite
- * side nets out. An automated trade (source 'auto') never merges, so each one
- * keeps its own entry, stop loss and lifecycle, and manual positions are
- * never touched by the automation.
+ * Open a position. A trade merges with the user's open position in the same
+ * instrument from the same source: the same side averages in, the opposite
+ * side nets out. Manual trades merge with manual positions and automated
+ * trades (source 'auto') with automated ones, so 100 bought by the automation
+ * then 500 more shows as one automated position of 600, and the automation
+ * never changes a manual position (or the other way round).
  */
 export async function addPosition(userId, position) {
   const mode = position.mode || 'paper';
+  const source = position.source || 'manual';
   const now = new Date().toISOString();
 
-  if ((position.source || 'manual') !== 'manual') {
-    return insertPosition(userId, mode, position, position.quantity, now);
-  }
-
-  const openManual = (side) => firstRow(
+  const openSameSource = (side) => firstRow(
     `SELECT * FROM positions
-     WHERE user_id = $1 AND mode = $2 AND instrument_token = $3 AND side = $4 AND exited = 0 AND source = 'manual'`,
-    [userId, mode, position.instrumentToken, side],
+     WHERE user_id = $1 AND mode = $2 AND instrument_token = $3 AND side = $4 AND exited = 0 AND source = $5`,
+    [userId, mode, position.instrumentToken, side, source],
   );
 
   // Same-side existing → average in
-  const sameSide = await openManual(position.side);
+  const sameSide = await openSameSource(position.side);
 
   if (sameSide) {
     const totalQty = Number(sameSide.quantity) + position.quantity;
@@ -1284,7 +1282,7 @@ export async function addPosition(userId, position) {
   }
 
   // Opposite-side existing → net out
-  const opposite = await openManual(position.side === 'BUY' ? 'SELL' : 'BUY');
+  const opposite = await openSameSource(position.side === 'BUY' ? 'SELL' : 'BUY');
 
   if (opposite) {
     const oppQty = Number(opposite.quantity);
