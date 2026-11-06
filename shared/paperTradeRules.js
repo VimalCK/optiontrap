@@ -39,7 +39,8 @@ export const MARKET_CLOSED_MESSAGE =
  * Options need a strike, CE/PE and an expiry; futures an expiry; stocks neither.
  */
 export const INSTRUMENT_TYPES = ['CE', 'PE', 'FUT', 'EQ'];
-const OPTION_TYPES = ['CE', 'PE'];
+/** The instrument types that are options; an option's optionType is its instrument type. */
+export const OPTION_TYPES = ['CE', 'PE'];
 
 /** Exchange a trade defaults to when none is given: options and futures NFO, stocks NSE. */
 const defaultExchange = (/** @type {unknown} */ instrumentType) => (instrumentType === 'EQ' ? 'NSE' : 'NFO');

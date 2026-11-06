@@ -11,6 +11,7 @@ vi.mock('./autoTradeMonitor.js', () => ({ openAutoTradePnl: vi.fn(), refreshAuto
 
 const { createAutoTradeEngine, planTrade, refusal } = await import('./autoTradeEngine.js');
 const { defaultAutomationConfig } = await import('../shared/automation.js');
+const { checkPaperTrade, normalizeTradeInput } = await import('../shared/paperTradeRules.js');
 
 const NOON = new Date('2026-11-05T06:30:00Z'); // Thu 12:00 IST
 const KITE = { apiKey: 'k', accessToken: 't' };
@@ -67,6 +68,17 @@ function setup({ config = userConfig(), users = [{ userId: 'U1', config }], sign
 const moves = (db) => db.advanceAutoTrade.mock.calls.map(([, , from, to]) => `${from}→${to}`);
 
 describe('planTrade', () => {
+  it('plans trades the real paper trade rules accept: options carry their option type', () => {
+    const future = { ...option, instrumentToken: 404, tradingsymbol: 'NIFTY26NOVFUT', instrumentType: 'FUT', strike: null };
+    const instruments = new Map([...byToken, [404, future]]);
+    for (const signal of [sellOption, { instrumentToken: 404, side: 'BUY', reason: '' }, { instrumentToken: 202, side: 'BUY', reason: '' }]) {
+      const config = userConfig();
+      const { trade } = planTrade(signal, instruments, indexNames, config);
+      const verdict = checkPaperTrade('open', { trade: normalizeTradeInput({ ...trade, entryPrice: 100 }), now: NOON });
+      expect(verdict).toEqual({ ok: true });
+    }
+  });
+
   it('sizes the trade at the Max lots value × the lot size, with details from the instrument list', () => {
     const { trade } = planTrade(sellOption, byToken, indexNames, userConfig());
     expect(trade).toMatchObject({ kind: 'index-option', side: 'SELL', tradingsymbol: 'NIFTY26NOV24000PE', exchange: 'NFO', lotSize: 75, quantity: 150, horizon: 'intraday', mode: 'paper' });

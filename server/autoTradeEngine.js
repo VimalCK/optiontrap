@@ -38,6 +38,7 @@ import { openAutoTradePnl, refreshAutoTradeMonitor } from './autoTradeMonitor.js
 import { checkGeneralSettings, tradeKind } from '../shared/automation.js';
 import { checkEntryRules, tradeLots } from '../shared/entryRules/index.js';
 import { STRATEGIES } from '../shared/strategies/index.js';
+import { OPTION_TYPES } from '../shared/paperTradeRules.js';
 import { marketDayStartMs } from '../shared/marketTime.js';
 
 const LOG_PREFIX = '[Trade Engine]';
@@ -52,7 +53,7 @@ const HORIZON = 'intraday';
  *             strike: number | null, expiry: string | null, lotSize: number | null }} Instrument
  * @typedef {{ horizon: 'intraday', kind: import('../shared/automation.js').TradeKindId, mode: string, side: 'BUY' | 'SELL',
  *             tradingsymbol: string, instrumentToken: number, exchange: string, instrumentType: string,
- *             strike: number | null, expiry: string | null, lotSize: number, quantity: number }} PlannedTrade
+ *             optionType: string | null, strike: number | null, expiry: string | null, lotSize: number, quantity: number }} PlannedTrade
  */
 
 /** A stock trades in shares: its lot is 1. */
@@ -83,6 +84,7 @@ export function planTrade(signal, instrumentsByToken, indexNames, config) {
       instrumentToken: instrument.instrumentToken,
       exchange: instrument.exchange,
       instrumentType: instrument.instrumentType,
+      optionType: OPTION_TYPES.includes(instrument.instrumentType) ? instrument.instrumentType : null,
       strike: instrument.strike,
       expiry: instrument.expiry,
       lotSize,
