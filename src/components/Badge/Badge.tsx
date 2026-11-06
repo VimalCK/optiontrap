@@ -1,0 +1,29 @@
+/**
+ * Badge — the one small status pill (a trade's side, a lifecycle stage, …),
+ * so every screen shows statuses the same way. The tone picks the colour:
+ * positive green, negative red, accent (the theme's accent) or neutral grey;
+ * `dot` adds a leading dot for live states.
+ */
+import React from 'react';
+import './Badge.css';
+
+export type BadgeTone = 'positive' | 'negative' | 'accent' | 'neutral';
+
+export interface BadgeProps {
+  tone: BadgeTone;
+  children: React.ReactNode;
+  /** Show a leading dot (e.g. a state that is still in progress). */
+  dot?: boolean;
+  /** Read by screen readers instead of the text (e.g. "Side: Sell"). */
+  label?: string;
+  className?: string;
+}
+
+const Badge: React.FC<BadgeProps> = ({ tone, children, dot, label, className }) => (
+  <span className={['badge', `badge--${tone}`, className].filter(Boolean).join(' ')} aria-label={label}>
+    {dot && <span className="badge__dot" aria-hidden="true" />}
+    {children}
+  </span>
+);
+
+export default Badge;

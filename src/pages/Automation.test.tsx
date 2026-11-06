@@ -4,7 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { defaultAutomationConfig } from '../../shared/automation.js';
 import type { AutoTrade } from '@/services/automation';
 import { marketDate } from '../../shared/marketTime.js';
-import Automation, { AutoTradesTable, TradeRangePicker, automationStatus } from './Automation';
+import Automation, { AutoTradesTable, TradeRangePicker, TradeRow, automationStatus } from './Automation';
 
 describe('Automation screen', () => {
   const html = renderToStaticMarkup(<MemoryRouter><Automation /></MemoryRouter>);
@@ -65,21 +65,60 @@ describe('AutoTradesTable', () => {
     expect(renderToStaticMarkup(<AutoTradesTable trades={[]} />)).toContain('No automated trades in this range');
   });
 
-  it('shows each trade with its stage and reason, timed in IST', () => {
+  it('shows each trade with its side, stage and reason, timed in IST', () => {
     const table = renderToStaticMarkup(<AutoTradesTable trades={[trade]} />);
-    expect(table).toContain('NIFTY26NOV24000PE');
+    expect(table).toContain('<span class="automation-trades__symbol">NIFTY26NOV24000PE</span>');
     expect(table).toContain('Index option');
-    expect(table).toContain('automation-stage--rejected">Rejected<');
-    expect(table).toContain('Max open positions reached');
-    expect(table).toContain('10:30'); // 05:00 UTC
+    expect(table).toContain('<span class="badge badge--negative">Sell</span>');
+    expect(table).toContain('<span class="badge badge--negative">Rejected</span>');
+    expect(table).toContain('title="Max open positions reached">Max open positions reached<');
+    expect(table).toContain('<span class="automation-trades__time">10:30</span><span class="automation-trades__sub">5 Nov</span>'); // 05:00 UTC
+  });
+
+  it('marks an open position live, and shows closed P&L in profit or loss colours', () => {
+    const open = { ...trade, id: 'o', stage: 'executed' as const, reason: null, entryPrice: 100 };
+    const won = { ...open, id: 'w', stage: 'closed' as const, exitPrice: 90 };
+    const lost = { ...open, id: 'l', stage: 'closed' as const, exitPrice: 120 };
+    const table = renderToStaticMarkup(<AutoTradesTable trades={[open, won, lost]} />);
+    expect(table).toContain('<span class="badge badge--accent"><span class="badge__dot" aria-hidden="true"></span>Executed</span>');
+    expect(table).toContain('<td class="automation-trades__num automation-trades__pnl--profit">+750.00</td>');
+    expect(table).toContain('<td class="automation-trades__num automation-trades__pnl--loss">-1,500.00</td>');
+  });
+
+  it('has a chevron button per trade for its lifecycle, closed at first', () => {
+    const table = renderToStaticMarkup(<AutoTradesTable trades={[trade]} />);
+    const chevron = [...table.matchAll(/<button[^>]*>/g)].map((m) => m[0]).find((tag) => tag.includes('aria-label="Show lifecycle"')) ?? '';
+    expect(chevron).toContain('aria-expanded="false"');
+    expect(chevron).toContain('type="button"');
+    expect(table).not.toContain('automation-timeline');
   });
 
   it("shows each trade's own fill, even when trades merge into one position", () => {
     const first = { ...trade, id: 'a', stage: 'executed' as const, reason: null, entryPrice: 1000, positionId: 'p1' };
     const second = { ...first, id: 'b', quantity: 500, entryPrice: 1010 };
     const table = renderToStaticMarkup(<AutoTradesTable trades={[first, second]} />);
-    expect(table).toContain('<td>1,000.00</td><td>–</td>');
-    expect(table).toContain('<td>1,010.00</td><td>–</td>');
+    expect(table).toContain('<td class="automation-trades__num">1,000.00</td><td class="automation-trades__num">–</td>');
+    expect(table).toContain('<td class="automation-trades__num">1,010.00</td><td class="automation-trades__num">–</td>');
+  });
+});
+
+describe('TradeRow', () => {
+  it('shows the lifecycle as a timeline of plain sentences when open, with IST times', () => {
+    const trade: AutoTrade = {
+      id: 't', horizon: 'intraday', kind: 'index-option', mode: 'paper', tradingsymbol: 'NIFTY26N0924550PE', instrumentToken: 1,
+      side: 'SELL', quantity: 65, stage: 'executed', reason: null, entryPrice: 98.8, exitPrice: null, positionId: 'p',
+      createdAt: '2026-11-06T07:00:29.000Z', updatedAt: '2026-11-06T07:00:29.000Z',
+      events: [
+        { stage: 'selected', at: '2026-11-06T07:00:29.000Z', detail: { strategyId: 'option-analyzer-setups', reason: 'Wall Defense · score 53' } },
+        { stage: 'executed', at: '2026-11-06T07:00:29.000Z', detail: { entryPrice: 98.8 } },
+      ],
+    };
+    const html = renderToStaticMarkup(<table><tbody><TradeRow trade={trade} open onToggle={() => {}} /></tbody></table>);
+    expect(html).toContain('aria-label="Hide lifecycle"');
+    expect(html).toContain('6 Nov · 12:30 IST'); // 07:00 UTC
+    expect(html).toContain('<p class="automation-timeline__text">Option Analyzer setups · Wall Defense · score 53</p>');
+    expect(html).toContain('<p class="automation-timeline__text">Opened a paper position at ₹98.80</p>');
+    expect(html).not.toContain('strategyId');
   });
 });
 

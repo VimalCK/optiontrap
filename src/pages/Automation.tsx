@@ -12,32 +12,34 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { LIFECYCLE_STAGES, TRADE_KINDS } from '../../shared/automation.js';
+import { TRADE_KINDS } from '../../shared/automation.js';
 import { STRATEGIES } from '../../shared/strategies/index.js';
 import { marketDate } from '../../shared/marketTime.js';
 import { rangeProblem } from '@/components/TradeJournal/journalRange';
 import IconButton from '@/components/IconButton/IconButton';
-import { SettingsIcon } from '@/components/icons/Icons';
+import Badge from '@/components/Badge/Badge';
+import { ChevronDownIcon, SettingsIcon } from '@/components/icons/Icons';
+import {
+  closedPnl, eventSummary, sideLabel, sideTone, stageIsLive, stageLabel, stageTone, tradeReason, tradeStrategy,
+} from '@/components/Automation/autoTradeView';
 import { AutomationConfig, AutoTrade, fetchAutomationConfig, fetchAutoTrades } from '@/services/automation';
 import { isAbortError } from '@/services/apiClient';
-import { formatAmount } from '@/utils/formatAmount';
+import { formatAmount, formatSignedAmount } from '@/utils/formatAmount';
 import { formatCalendarDate, istTimeLabel } from '@/utils/marketStatus';
 import '@/styles/automation.css';
 
 const errorText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
 const kindLabel = (id: string) => TRADE_KINDS.find((k) => k.id === id)?.label ?? id;
-const stageLabel = (id: string) => LIFECYCLE_STAGES.find((s) => s.id === id)?.label ?? id;
 
 // ── Trades ──
 
 /** A fill price, or a dash before there is one. */
 const price = (value: number | null) => (value == null ? '–' : formatAmount(value));
 
-const eventTime = (at: string) => {
-  const date = new Date(at);
-  return `${formatCalendarDate(at.slice(0, 10), { day: 'numeric', month: 'short' })} ${istTimeLabel(date)}`;
-};
+/** The IST calendar day of a timestamp, e.g. "6 Nov". */
+const eventDay = (at: string) => formatCalendarDate(marketDate(new Date(at)), { day: 'numeric', month: 'short' });
+const eventTime = (at: string) => istTimeLabel(new Date(at));
 
 /** Wait this long after the last range change before fetching. */
 const FETCH_DELAY_MS = 400;
@@ -60,6 +62,73 @@ export const TradeRangePicker: React.FC<{ range: TradeRange; onChange: (range: T
   </div>
 );
 
+const TRADE_COLUMNS = 10;
+
+/** A closed trade's P&L in profit / loss colours; a dash while it is open. */
+const PnlCell: React.FC<{ pnl: number | null }> = ({ pnl }) => {
+  const tone = pnl == null ? '' : pnl >= 0 ? ' automation-trades__pnl--profit' : ' automation-trades__pnl--loss';
+  return <td className={`automation-trades__num${tone}`}>{pnl == null ? '–' : formatSignedAmount(pnl)}</td>;
+};
+
+/** One trade's lifecycle, oldest first, as a timeline of plain sentences. */
+const TradeTimeline: React.FC<{ trade: AutoTrade }> = ({ trade }) => (
+  <ol className="automation-timeline">
+    {trade.events.map((event, i) => (
+      <li key={i} className={`automation-timeline__step automation-timeline__step--${stageTone(event.stage)}`}>
+        <span className="automation-timeline__marker" aria-hidden="true" />
+        <div className="automation-timeline__body">
+          <div className="automation-timeline__head">
+            <Badge tone={stageTone(event.stage)}>{stageLabel(event.stage)}</Badge>
+            <time className="automation-timeline__time" dateTime={event.at}>{eventDay(event.at)} · {eventTime(event.at)} IST</time>
+          </div>
+          <p className="automation-timeline__text">{eventSummary(event)}</p>
+        </div>
+      </li>
+    ))}
+  </ol>
+);
+
+/** One trade's row; clicking it (or its chevron) shows the lifecycle beneath. */
+export const TradeRow: React.FC<{ trade: AutoTrade; open: boolean; onToggle: () => void }> = ({ trade: t, open, onToggle }) => {
+  const strategy = tradeStrategy(t);
+  const reason = tradeReason(t);
+  return (
+    <>
+      <tr className={`automation-trades__row${open ? ' automation-trades__row--open' : ''}`} onClick={onToggle}>
+        <td>
+          <span className="automation-trades__time">{eventTime(t.createdAt)}</span>
+          <span className="automation-trades__sub">{eventDay(t.createdAt)}</span>
+        </td>
+        <td>
+          <span className="automation-trades__symbol">{t.tradingsymbol}</span>
+          <span className="automation-trades__sub">{[kindLabel(t.kind), strategy].filter(Boolean).join(' · ')}</span>
+        </td>
+        <td><Badge tone={sideTone(t.side)}>{sideLabel(t.side)}</Badge></td>
+        <td className="automation-trades__num">{t.quantity}</td>
+        <td className="automation-trades__num">{price(t.entryPrice)}</td>
+        <td className="automation-trades__num">{price(t.exitPrice)}</td>
+        <PnlCell pnl={closedPnl(t)} />
+        <td><Badge tone={stageTone(t.stage)} dot={stageIsLive(t.stage)}>{stageLabel(t.stage)}</Badge></td>
+        <td className="automation-trades__reason" title={reason || undefined}>{reason}</td>
+        <td className="automation-trades__toggle" onClick={(e) => e.stopPropagation()}>
+          <IconButton
+            icon={<ChevronDownIcon />}
+            label={open ? 'Hide lifecycle' : 'Show lifecycle'}
+            expanded={open}
+            onClick={onToggle}
+            className="automation-trades__chevron"
+          />
+        </td>
+      </tr>
+      {open && (
+        <tr className="automation-trades__details">
+          <td colSpan={TRADE_COLUMNS}><TradeTimeline trade={t} /></td>
+        </tr>
+      )}
+    </>
+  );
+};
+
 export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean; error?: string | null; controls?: React.ReactNode }> = ({ trades, loading, error, controls }) => {
   const [open, setOpen] = useState<string | null>(null);
 
@@ -75,53 +144,29 @@ export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean;
         <p className="card__description">No automated trades in this range. Each one will show here with every stage of its lifecycle.</p>
       )}
       {trades.length > 0 && (
-        <table className="automation-table automation-trades">
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Symbol</th>
-              <th>Type</th>
-              <th>Side</th>
-              <th>Qty</th>
-              <th>Entry</th>
-              <th>Exit</th>
-              <th>Stage</th>
-              <th>Reason</th>
-            </tr>
-          </thead>
-          <tbody>
-            {trades.map((t) => (
-              <React.Fragment key={t.id}>
-                <tr className="automation-trades__row" onClick={() => setOpen(open === t.id ? null : t.id)}>
-                  <td>{eventTime(t.createdAt)}</td>
-                  <td>{t.tradingsymbol}</td>
-                  <td>{kindLabel(t.kind)}</td>
-                  <td>{t.side}</td>
-                  <td>{t.quantity}</td>
-                  <td>{price(t.entryPrice)}</td>
-                  <td>{price(t.exitPrice)}</td>
-                  <td><span className={`automation-stage automation-stage--${t.stage}`}>{stageLabel(t.stage)}</span></td>
-                  <td>{t.reason ?? ''}</td>
-                </tr>
-                {open === t.id && (
-                  <tr className="automation-trades__events">
-                    <td colSpan={9}>
-                      <ol>
-                        {t.events.map((e, i) => (
-                          <li key={i}>
-                            <span className={`automation-stage automation-stage--${e.stage}`}>{stageLabel(e.stage)}</span>
-                            {' '}{eventTime(e.at)}
-                            {e.detail != null && <code>{JSON.stringify(e.detail)}</code>}
-                          </li>
-                        ))}
-                      </ol>
-                    </td>
-                  </tr>
-                )}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
+        <div className="automation-trades__scroll">
+          <table className="automation-table automation-trades">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Instrument</th>
+                <th>Side</th>
+                <th className="automation-trades__num">Qty</th>
+                <th className="automation-trades__num">Entry</th>
+                <th className="automation-trades__num">Exit</th>
+                <th className="automation-trades__num">P&amp;L</th>
+                <th>Stage</th>
+                <th>Reason</th>
+                <th><span className="automation-trades__sr">Lifecycle</span></th>
+              </tr>
+            </thead>
+            <tbody>
+              {trades.map((t) => (
+                <TradeRow key={t.id} trade={t} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} />
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
     </section>
   );

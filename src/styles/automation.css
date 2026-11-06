@@ -202,47 +202,190 @@
   text-align: center;
 }
 
+/* ── Automated trades: one row per trade, its lifecycle as a timeline beneath ── */
+
+.automation-trades__scroll {
+  overflow-x: auto;
+}
+
+.automation-trades {
+  min-width: 920px;
+}
+
+.automation-trades th {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  border-top: none;
+  padding-top: 4px;
+}
+
+.automation-trades td {
+  padding: 10px;
+  vertical-align: middle;
+}
+
 .automation-trades__row {
   cursor: pointer;
+  transition: background var(--transition-speed);
 }
 
-.automation-trades__row:hover {
-  background: var(--hover-bg, rgba(127, 127, 127, 0.08));
+.automation-trades__row:hover,
+.automation-trades__row--open {
+  background: var(--card-hover-bg);
 }
 
-.automation-trades__events ol {
-  margin: 0;
-  padding-left: 18px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.automation-trades__time,
+.automation-trades__symbol {
+  display: block;
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
-.automation-trades__events code {
-  margin-left: 8px;
+.automation-trades__time {
+  font-variant-numeric: tabular-nums;
+}
+
+.automation-trades__sub {
+  display: block;
+  margin-top: 2px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.automation-trades .automation-trades__num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.automation-trades__pnl--profit {
+  color: #22c55e;
+  font-weight: 600;
+}
+
+.automation-trades__pnl--loss {
+  color: #ef4444;
+  font-weight: 600;
+}
+
+.automation-trades__reason {
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 12px;
   color: var(--text-secondary);
 }
 
-.automation-stage {
-  padding: 2px 8px;
-  border-radius: 999px;
+.automation-trades .automation-trades__toggle {
+  width: 40px;
+  text-align: right;
+}
+
+.automation-trades__chevron svg {
+  transition: transform var(--transition-speed);
+}
+
+.automation-trades__chevron[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+/* Read by screen readers only (the chevron column's heading). */
+.automation-trades__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.automation-trades__details > td {
+  padding: 4px 16px 16px 24px;
+  background: var(--card-hover-bg);
+  border-top: none;
+}
+
+/* The lifecycle: a marker per stage on a vertical line, its sentence beside it. */
+.automation-timeline {
+  list-style: none;
+  margin: 0;
+  padding: 12px 0 0;
+  border-top: 1px dashed var(--card-border);
+}
+
+.automation-timeline__step {
+  position: relative;
+  display: flex;
+  gap: 14px;
+  padding-bottom: 14px;
+}
+
+.automation-timeline__step:last-child {
+  padding-bottom: 0;
+}
+
+/* The line joining one marker to the next. */
+.automation-timeline__step:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  left: 5px;
+  top: 16px;
+  bottom: 0;
+  width: 2px;
+  background: var(--card-border);
+}
+
+.automation-timeline__marker {
+  position: relative;
+  flex-shrink: 0;
+  width: 12px;
+  height: 12px;
+  margin-top: 4px;
+  border-radius: 50%;
+  border: 2px solid var(--text-secondary);
+  background: var(--card-bg-solid);
+}
+
+.automation-timeline__step--accent .automation-timeline__marker {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--sidebar-active);
+}
+
+.automation-timeline__step--negative .automation-timeline__marker {
+  border-color: #ef4444;
+  background: #ef4444;
+}
+
+.automation-timeline__step--positive .automation-timeline__marker {
+  border-color: #22c55e;
+  background: #22c55e;
+}
+
+.automation-timeline__body {
+  min-width: 0;
+}
+
+.automation-timeline__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.automation-timeline__time {
   font-size: 11px;
-  font-weight: 600;
-  border: 1px solid var(--card-border);
-}
-
-.automation-stage--validated,
-.automation-stage--executed {
-  color: var(--accent);
-}
-
-.automation-stage--rejected {
-  color: #ef4444;
-}
-
-.automation-stage--closed {
   color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.automation-timeline__text {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
 }
 
 .automation-section__actions {
