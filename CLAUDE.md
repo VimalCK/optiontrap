@@ -259,8 +259,11 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   - The trade monitor (`server/autoTradeMonitor.js`) closes open automated positions when an exit rule fires, on live
     ticks from the server's own Kite ticker feed (`server/kiteTickerFeed.js`, admin session, LTP mode, one feed for all
     users). Rules compare P&L at the last traded price and exit at that price, through `exitPaperTrade`.
+  - `exitPaperTrade` closes the automated trades behind an automated position on every exit: with the exit rule's
+    reason from the monitor, or "Exited manually" (`MANUAL_EXIT`) from the Exit button. Positions are never deleted.
   - The trade engine (`server/autoTradeEngine.js`) runs after each scheduled OI snapshot (`onScheduledSnapshot`): every
     active strategy (`shared/strategies/`, plug-ins whose `select` returns `{ instrumentToken, side, reason }`) for every
     user with automation on. Each signal is sized at the Max lots entry rule's value (1 lot while it's off) × lot size, checked against the General settings
     (`GENERAL_CHECKS`) then the entry rules, opened via `openPaperTrade` (source auto) at the quote's LTP, and handed to the
-    monitor. No strategies exist yet; they come after the full-day OI snapshot study.
+    monitor. The first strategy, Option Analyzer setups, trades the Strategy card's suggestions, scored by the same
+    code (`shared/optionAnalysis/`, which the card re-exports).

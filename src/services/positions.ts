@@ -143,20 +143,6 @@ export async function exitPosition(id: string, exitPrice: number): Promise<void>
   await apiClient.patch(`/api/positions/${id}`, { exitPrice });
 }
 
-/**
- * Remove a position by ID (permanently delete).
- */
-export async function removePosition(id: string): Promise<void> {
-  await apiClient.delete(`/api/positions/${id}`);
-}
-
-/**
- * Clear all positions for a given mode.
- */
-export async function clearPositions(mode: 'paper' | 'live' = 'paper'): Promise<void> {
-  await apiClient.delete(`/api/positions?mode=${mode}`);
-}
-
 /** Key for the quote API: the position's own exchange (NSE for stocks, NFO for F&O). */
 export function positionQuoteKey(pos: Pick<Position, 'exchange' | 'tradingsymbol'>): string {
   return `${pos.exchange}:${pos.tradingsymbol}`;

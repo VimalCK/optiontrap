@@ -73,8 +73,6 @@ import {
   getPositions,
   getDailyPnl,
   getPositionStats,
-  removePositionById,
-  clearPositions,
   getTodayOiSnapshots,
   getLatestOiSnapshotTimestamp,
   getOiHistoryData,
@@ -928,26 +926,6 @@ app.patch('/api/positions/:id', requireAuth, requireSubscription, async (req, re
   const userId = req.session.kiteSession.userId;
   sendPaperTradeResult(res, await exitPaperTrade(userId, req.params.id, req.body?.exitPrice));
   refreshAutoTradeMonitor(userId); // stop watching it if it was automated
-});
-
-app.delete('/api/positions/:id', requireAuth, requireSubscription, async (req, res) => {
-  const userId = req.session.kiteSession.userId;
-  const removed = await removePositionById(req.params.id, userId);
-
-  if (!removed) {
-    return res.status(404).json({ status: 'error', message: 'Position not found' });
-  }
-
-  refreshAutoTradeMonitor(userId);
-  res.json({ status: 'ok' });
-});
-
-app.delete('/api/positions', requireAuth, requireSubscription, async (req, res) => {
-  const userId = req.session.kiteSession.userId;
-  const mode = req.query.mode || null;
-  await clearPositions(userId, mode);
-  refreshAutoTradeMonitor(userId);
-  res.json({ status: 'ok' });
 });
 
 // ---------- OI Snapshots (shared) ----------

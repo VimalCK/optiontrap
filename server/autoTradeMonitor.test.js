@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // The module creates a default monitor on import; keep its real dependencies out.
-vi.mock('./db.js', () => ({ getAllOpenAutoPositions: vi.fn(), getOpenAutoPositions: vi.fn(), getAutomationConfigs: vi.fn(), closeAutoTradesOfPosition: vi.fn() }));
+vi.mock('./db.js', () => ({ getAllOpenAutoPositions: vi.fn(), getOpenAutoPositions: vi.fn(), getAutomationConfigs: vi.fn() }));
 vi.mock('./paperTrading.js', () => ({ exitPaperTrade: vi.fn(), NOT_FOUND: 'NOT_FOUND' }));
 vi.mock('./oiHistoryScheduler.js', () => ({ findWorkingAdminSession: vi.fn() }));
 
-const { createAutoTradeMonitor, dueExits, positionPnl } = await import('./autoTradeMonitor.js');
+const { createAutoTradeMonitor, dueExits } = await import('./autoTradeMonitor.js');
 const { defaultRuleSettings } = await import('../shared/rules/ruleSettings.js');
 const { EXIT_RULES } = await import('../shared/exitRules/index.js');
 
@@ -24,15 +24,6 @@ const config = (active) => ({ exitRules: exitRules(active) });
 const sold = { id: 'p1', userId: 'U1', instrumentToken: 101, tradingsymbol: 'NIFTY26NOV24000PE', side: 'SELL', quantity: 75, entryPrice: 100 };
 // Bought 50 at 200, another user, another instrument.
 const bought = { id: 'p2', userId: 'U2', instrumentToken: 202, tradingsymbol: 'NIFTY26NOV24000CE', side: 'BUY', quantity: 50, entryPrice: 200 };
-
-describe('positionPnl', () => {
-  it('gains for a bought position as the price rises, and for a sold one as it falls', () => {
-    expect(positionPnl(bought, 210)).toBe(500);
-    expect(positionPnl(bought, 190)).toBe(-500);
-    expect(positionPnl(sold, 90)).toBe(750);
-    expect(positionPnl(sold, 120)).toBe(-1500);
-  });
-});
 
 describe('dueExits', () => {
   const rules = new Map([['U1', exitRules({ 'stop-loss': { amount: 1500 } })], ['U2', exitRules({ target: { amount: 500 } })]]);
@@ -65,7 +56,6 @@ describe('the monitor', () => {
       getAllOpenAutoPositions: vi.fn(async () => [sold, bought]),
       getOpenAutoPositions: vi.fn(async () => []),
       getAutomationConfigs: vi.fn(async (ids) => new Map(ids.map((id) => [id, config(id === 'U1' ? { 'stop-loss': { amount: 1500 } } : {})]))),
-      closeAutoTradesOfPosition: vi.fn(async () => ['t1']),
     };
     exitPosition = vi.fn(async () => ({ ok: true }));
     feeds = [];
@@ -91,16 +81,15 @@ describe('the monitor', () => {
     expect(feeds[0].watching.sort()).toEqual([101, 202]);
   });
 
-  it('exits on the tick that hits the stop-loss, at that last price, and closes the trades behind it', async () => {
+  it('exits on the tick that hits the stop-loss, at that last price, with the rule’s reason for the trades behind it', async () => {
     await monitor.checkMarket();
     await monitor.onTicks([{ instrumentToken: 101, lastPrice: 119.95 }]);
     expect(exitPosition).not.toHaveBeenCalled();
 
     await monitor.onTicks([{ instrumentToken: 101, lastPrice: 120 }]);
-    expect(exitPosition).toHaveBeenCalledWith('U1', 'p1', 120, { now: NOON });
-    expect(db.closeAutoTradesOfPosition).toHaveBeenCalledWith('U1', 'p1', 120, {
-      ruleId: 'stop-loss',
-      reason: 'Stop-loss hit: P&L ₹-1500.00, stop-loss ₹1500',
+    expect(exitPosition).toHaveBeenCalledWith('U1', 'p1', 120, {
+      now: NOON,
+      exitReason: { ruleId: 'stop-loss', reason: 'Stop-loss hit: P&L ₹-1500.00, stop-loss ₹1500' },
     });
     expect(monitor.watchedPositionIds()).toEqual(['p2']);
     expect(feeds[0].watching).toEqual([202]);
@@ -124,18 +113,16 @@ describe('the monitor', () => {
     exitPosition.mockResolvedValueOnce({ ok: false, code: 'MARKET_CLOSED', message: 'The market is closed.' });
     await monitor.onTicks([{ instrumentToken: 101, lastPrice: 121 }]);
     expect(monitor.watchedPositionIds()).toContain('p1');
-    expect(db.closeAutoTradesOfPosition).not.toHaveBeenCalled();
     await monitor.onTicks([{ instrumentToken: 101, lastPrice: 121 }]);
     expect(exitPosition).toHaveBeenCalledTimes(2);
-    expect(db.closeAutoTradesOfPosition).toHaveBeenCalledTimes(1);
+    expect(monitor.watchedPositionIds()).toEqual(['p2']);
   });
 
-  it('stops watching a position already exited elsewhere (e.g. by hand), without closing trades', async () => {
+  it('stops watching a position already exited elsewhere (e.g. by hand)', async () => {
     await monitor.checkMarket();
     exitPosition.mockResolvedValueOnce({ ok: false, code: 'NOT_FOUND', message: 'Position not found or already exited' });
     await monitor.onTicks([{ instrumentToken: 101, lastPrice: 121 }]);
     expect(monitor.watchedPositionIds()).toEqual(['p2']);
-    expect(db.closeAutoTradesOfPosition).not.toHaveBeenCalled();
   });
 
   it('squares off on the clock at the time set, on the last price, even with no new tick', async () => {
@@ -156,7 +143,7 @@ describe('the monitor', () => {
     await monitor.refreshUser('U2');
     expect(db.getOpenAutoPositions).toHaveBeenCalledWith('U2');
     await monitor.onTicks([{ instrumentToken: 202, lastPrice: 198 }]);
-    expect(exitPosition).toHaveBeenCalledWith('U2', 'p2', 198, { now: NOON });
+    expect(exitPosition).toHaveBeenCalledWith('U2', 'p2', 198, expect.objectContaining({ now: NOON }));
   });
 
   it("drops a user's positions they no longer hold on refresh, leaving other users' alone", async () => {

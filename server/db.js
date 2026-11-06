@@ -1059,7 +1059,7 @@ export async function getOpenAutoPositions(userId) {
  * @param {string} userId
  * @param {string} positionId
  * @param {number} exitPrice
- * @param {{ ruleId: string, reason: string }} detail
+ * @param {{ ruleId: string | null, reason: string }} detail  ruleId is null for a manual exit
  * @returns {Promise<string[]>}
  */
 export async function closeAutoTradesOfPosition(userId, positionId, exitPrice, detail) {
@@ -1491,19 +1491,6 @@ export async function exitPositionById(id, userId, exitPrice) {
     [exitPrice, now, id, userId],
   );
   return res.rowCount > 0;
-}
-
-export async function removePositionById(id, userId) {
-  const res = await query('DELETE FROM positions WHERE id = $1 AND user_id = $2', [id, userId]);
-  return res.rowCount > 0;
-}
-
-export async function clearPositions(userId, mode = null) {
-  if (mode) {
-    await query('DELETE FROM positions WHERE user_id = $1 AND mode = $2', [userId, mode]);
-  } else {
-    await query('DELETE FROM positions WHERE user_id = $1', [userId]);
-  }
 }
 
 // ---------------------------------------------------------------------------

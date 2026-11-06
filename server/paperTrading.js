@@ -6,6 +6,10 @@
  * checked against the same rules (shared/paperTradeRules.js) and recorded
  * the same way.
  *
+ * Exiting an automated position (source 'auto') also closes the automated
+ * trades behind it at the exit price, with why it was exited: the exit rule's
+ * reason from the trade monitor, or "Exited manually" from the Exit button.
+ *
  * Both functions return a result instead of throwing for a refused trade:
  *   { ok: true, position }                  done
  *   { ok: false, code, message, rule? }     refused; code is one of
@@ -13,11 +17,13 @@
  *     MARKET_CLOSED  a rule says not now
  *     NOT_FOUND      no such open position (exit only)
  */
-import { addPosition, exitPositionById, getOpenPosition } from './db.js';
+import { addPosition, closeAutoTradesOfPosition, exitPositionById, getOpenPosition } from './db.js';
 import { checkPaperTrade, normalizeTradeInput } from '../shared/paperTradeRules.js';
 
 export const NOT_FOUND = 'NOT_FOUND';
 const NOT_FOUND_MESSAGE = 'Position not found or already exited';
+/** Why an automated position was exited when no exit rule says so: the user did it. */
+export const MANUAL_EXIT = { ruleId: null, reason: 'Exited manually' };
 
 const refused = ({ rule, code, message }) => ({ ok: false, code, message, rule });
 
@@ -41,13 +47,15 @@ export async function openPaperTrade(userId, input, { now = new Date(), source =
 }
 
 /**
- * Exit one of `userId`'s open positions at `exitPrice`.
+ * Exit one of `userId`'s open positions at `exitPrice`; for an automated
+ * position, close the automated trades behind it too.
  * @param {string} userId
  * @param {string} positionId
  * @param {number | string | null | undefined} exitPrice
- * @param {{ now?: Date }} [options]
+ * @param {{ now?: Date, exitReason?: { ruleId: string | null, reason: string } }} [options]
+ *   exitReason: why, recorded on the automated trades (an exit rule's, or MANUAL_EXIT by default)
  */
-export async function exitPaperTrade(userId, positionId, exitPrice, { now = new Date() } = {}) {
+export async function exitPaperTrade(userId, positionId, exitPrice, { now = new Date(), exitReason = MANUAL_EXIT } = {}) {
   const position = await getOpenPosition(positionId, userId);
   if (!position) return { ok: false, code: NOT_FOUND, message: NOT_FOUND_MESSAGE };
 
@@ -57,5 +65,6 @@ export async function exitPaperTrade(userId, positionId, exitPrice, { now = new 
   // Another request may have exited it since the lookup.
   const exited = await exitPositionById(positionId, userId, Number(exitPrice));
   if (!exited) return { ok: false, code: NOT_FOUND, message: NOT_FOUND_MESSAGE };
+  if (position.source === 'auto') await closeAutoTradesOfPosition(userId, positionId, Number(exitPrice), exitReason);
   return { ok: true, position: { ...position, exited: true, exitPrice: Number(exitPrice) } };
 }

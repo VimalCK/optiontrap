@@ -4,6 +4,7 @@ vi.mock('./db.js', () => ({
   addPosition: vi.fn(),
   exitPositionById: vi.fn(),
   getOpenPosition: vi.fn(),
+  closeAutoTradesOfPosition: vi.fn(),
 }));
 
 const db = await import('./db.js');
@@ -110,6 +111,30 @@ describe('exitPaperTrade', () => {
     const result = await exitPaperTrade('U1', 'p1', 95, { now: CLOSED });
     expect(result).toMatchObject({ ok: false, code: 'MARKET_CLOSED', rule: 'market-open' });
     expect(db.exitPositionById).not.toHaveBeenCalled();
+  });
+
+  it('closes the automated trades behind an automated position, as exited manually unless told why', async () => {
+    db.getOpenPosition.mockResolvedValue({ ...position, source: 'auto' });
+    db.exitPositionById.mockResolvedValue(true);
+
+    expect((await exitPaperTrade('U1', 'p1', '95.5', { now: OPEN })).ok).toBe(true);
+    expect(db.closeAutoTradesOfPosition).toHaveBeenCalledWith('U1', 'p1', 95.5, { ruleId: null, reason: 'Exited manually' });
+
+    await exitPaperTrade('U1', 'p1', 90, { now: OPEN, exitReason: { ruleId: 'stop-loss', reason: 'Stop-loss hit' } });
+    expect(db.closeAutoTradesOfPosition).toHaveBeenLastCalledWith('U1', 'p1', 90, { ruleId: 'stop-loss', reason: 'Stop-loss hit' });
+  });
+
+  it('leaves automated trades alone for a manual position, or an exit that did not happen', async () => {
+    db.getOpenPosition.mockResolvedValue({ ...position, source: 'manual' });
+    db.exitPositionById.mockResolvedValue(true);
+    await exitPaperTrade('U1', 'p1', 95, { now: OPEN });
+
+    db.getOpenPosition.mockResolvedValue({ ...position, source: 'auto' });
+    db.exitPositionById.mockResolvedValue(false); // exited by another request meanwhile
+    await exitPaperTrade('U1', 'p1', 95, { now: OPEN });
+    await exitPaperTrade('U1', 'p1', 95, { now: CLOSED }); // refused
+
+    expect(db.closeAutoTradesOfPosition).not.toHaveBeenCalled();
   });
 
   it('lets a live position exit while the market is closed', async () => {

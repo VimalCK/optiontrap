@@ -14,13 +14,12 @@
  *   too, so "square off at" fires on time even if an instrument goes quiet.
  * - Rules compare the position's P&L at the last traded price, and the exit
  *   is at that last price. It goes through the one paper-trading exit
- *   (paperTrading.js, so the paper trade rules apply), then the automated
- *   trades behind the position are closed with the rule's reason.
+ *   (paperTrading.js, so the paper trade rules apply), which also closes the
+ *   automated trades behind the position, with the rule's reason.
  * - Exit rules protect open positions whether automation is switched on or
  *   off; switching it off stops new trades, not exits.
  */
 import {
-  closeAutoTradesOfPosition,
   getAllOpenAutoPositions,
   getAutomationConfigs,
   getOpenAutoPositions,
@@ -31,6 +30,7 @@ import { findWorkingAdminSession } from './oiHistoryScheduler.js';
 import { isMarketOpen } from './marketClock.js';
 import { marketDate } from '../shared/marketTime.js';
 import { checkExitRules } from '../shared/exitRules/index.js';
+import { paperPnl } from '../shared/paperPnl.js';
 
 /** How often the market-open state is checked (connect at the open, disconnect after the close). */
 const MARKET_CHECK_MS = 60 * 1000;
@@ -43,16 +43,6 @@ const LOG_PREFIX = '[Trade Monitor]';
  * @typedef {import('../shared/rules/ruleSettings.js').RuleSettings} RuleSettings
  * @typedef {{ position: WatchedPosition, exitPrice: number, ruleId: string, reason: string }} DueExit
  */
-
-/**
- * A paper position's P&L at `price`: bought gains as the price rises, sold as it falls.
- * @param {{ side: string, quantity: number, entryPrice: number }} position
- * @param {number} price
- */
-export function positionPnl(position, price) {
-  const perUnit = position.side === 'BUY' ? price - position.entryPrice : position.entryPrice - price;
-  return perUnit * position.quantity;
-}
 
 /**
  * The positions an exit rule says to close now, each at its last price.
@@ -70,7 +60,7 @@ export function dueExits(positions, lastPrices, exitRulesByUser, now) {
     const price = lastPrices.get(position.instrumentToken);
     const rules = exitRulesByUser.get(position.userId);
     if (price === undefined || !rules) continue;
-    const fired = checkExitRules({ ...position, pnl: positionPnl(position, price) }, { now }, rules);
+    const fired = checkExitRules({ ...position, pnl: paperPnl(position, price) }, { now }, rules);
     if (fired) due.push({ position, exitPrice: price, ...fired });
   }
   return due;
@@ -80,7 +70,7 @@ export function dueExits(positions, lastPrices, exitRulesByUser, now) {
  * A trade monitor. Everything it talks to is injectable, for tests.
  * @param {{
  *   db?: { getAllOpenAutoPositions: typeof getAllOpenAutoPositions, getOpenAutoPositions: typeof getOpenAutoPositions,
- *          getAutomationConfigs: typeof getAutomationConfigs, closeAutoTradesOfPosition: typeof closeAutoTradesOfPosition },
+ *          getAutomationConfigs: typeof getAutomationConfigs },
  *   exitPosition?: typeof exitPaperTrade,
  *   findKiteSession?: typeof findWorkingAdminSession,
  *   createFeed?: typeof createKiteTickerFeed,
@@ -89,7 +79,7 @@ export function dueExits(positions, lastPrices, exitRulesByUser, now) {
  * }} [deps]
  */
 export function createAutoTradeMonitor({
-  db = { getAllOpenAutoPositions, getOpenAutoPositions, getAutomationConfigs, closeAutoTradesOfPosition },
+  db = { getAllOpenAutoPositions, getOpenAutoPositions, getAutomationConfigs },
   exitPosition = exitPaperTrade,
   findKiteSession = findWorkingAdminSession,
   createFeed = createKiteTickerFeed,
@@ -129,14 +119,13 @@ export function createAutoTradeMonitor({
     log(`watching ${watched.size} open automated position(s)`);
   }
 
-  /** Exit one position at its due price, then close the automated trades behind it. */
+  /** Exit one position at its due price; the exit closes the automated trades behind it with the rule's reason. */
   async function exit({ position, exitPrice, ruleId, reason }) {
     if (exiting.has(position.id)) return;
     exiting.add(position.id);
     try {
-      const result = await exitPosition(position.userId, position.id, exitPrice, { now: clock() });
+      const result = await exitPosition(position.userId, position.id, exitPrice, { now: clock(), exitReason: { ruleId, reason } });
       if (result.ok) {
-        await db.closeAutoTradesOfPosition(position.userId, position.id, exitPrice, { ruleId, reason });
         log(`${position.tradingsymbol} [${position.userId}] exited at ${exitPrice}: ${reason}`);
       } else if (result.code !== NOT_FOUND) {
         log(`${position.tradingsymbol} [${position.userId}] could not exit: ${result.message}`);
@@ -216,7 +205,7 @@ export function createAutoTradeMonitor({
       let total = 0;
       for (const position of watched.values()) {
         const price = lastPrices.get(position.instrumentToken);
-        if (position.userId === userId && price !== undefined) total += positionPnl(position, price);
+        if (position.userId === userId && price !== undefined) total += paperPnl(position, price);
       }
       return total;
     },
