@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { AutoTrade } from '@/services/automation';
-import { closedPnl, eventSummary, sideTone, stageIsLive, stageTone, tradeReason, tradeStrategy } from './autoTradeView';
+import { closedPnl, eventSummary, horizonLabel, sideTone, stageIsLive, stageTone, stepTone } from './autoTradeView';
 
 const at = '2026-11-06T07:00:29.000Z'; // Fri 12:30 IST
 const selected = { stage: 'selected' as const, at, detail: { strategyId: 'option-analyzer-setups', reason: 'Wall Defense · score 62 · POP 54%' } };
@@ -36,21 +36,16 @@ describe('tones', () => {
     expect(stageIsLive('executed')).toBe(true);
     expect(stageIsLive('closed')).toBe(false);
   });
+
+  it('shows every lifecycle step green in the timeline, and only a rejection red', () => {
+    expect(['selected', 'validated', 'executed', 'closed'].map((s) => stepTone(s as AutoTrade['stage']))).toEqual(['positive', 'positive', 'positive', 'positive']);
+    expect(stepTone('rejected')).toBe('negative');
+  });
 });
 
-describe('tradeReason and tradeStrategy', () => {
-  it('gives why the strategy picked an open trade, and which strategy', () => {
-    expect(tradeReason(trade)).toBe('Wall Defense · score 62 · POP 54%');
-    expect(tradeStrategy(trade)).toBe('Option Analyzer setups');
-  });
-
-  it('gives why a trade was rejected or closed over why it was picked', () => {
-    expect(tradeReason({ ...trade, stage: 'rejected', reason: 'Sell Index option is off' })).toBe('Sell Index option is off');
-  });
-
-  it('is empty, with no strategy, when nothing was recorded', () => {
-    expect(tradeReason({ ...trade, events: [] })).toBe('');
-    expect(tradeStrategy({ ...trade, events: [] })).toBeNull();
+describe('horizonLabel', () => {
+  it('names how long the trade is held', () => {
+    expect(horizonLabel('intraday')).toBe('Intraday');
   });
 });
 

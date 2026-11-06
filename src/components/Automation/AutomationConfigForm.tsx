@@ -50,8 +50,8 @@ const GeneralSettings: React.FC<SectionProps> = ({ config, onChange }) => {
   return (
     <>
       <div className="automation-config__row">
-        <span className="automation-config__label">Automation</span>
-        <Toggle checked={config.enabled} label="Automation" onChange={(enabled) => onChange({ ...config, enabled })} />
+        <span className="automation-config__label">Algo Trading</span>
+        <Toggle checked={config.enabled} label="Algo Trading" onChange={(enabled) => onChange({ ...config, enabled })} />
       </div>
 
       <div className="automation-config__row">
@@ -166,7 +166,7 @@ const sectionLabel = (id: AutomationSettingsSection) => AUTOMATION_SETTINGS_SECT
 const AutomationConfigForm: React.FC<AutomationConfigFormProps> = ({ config, section, onChange }) => {
   const Section = SECTION_VIEWS[section];
   return (
-    <div className="automation-config" role="group" aria-label={`Automation settings · ${sectionLabel(section)}`}>
+    <div className="automation-config" role="group" aria-label={`Algo Trading settings · ${sectionLabel(section)}`}>
       <Section config={config} onChange={onChange} />
     </div>
   );

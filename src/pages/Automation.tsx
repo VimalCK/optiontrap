@@ -12,7 +12,6 @@
  */
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { TRADE_KINDS } from '../../shared/automation.js';
 import { STRATEGIES } from '../../shared/strategies/index.js';
 import { marketDate } from '../../shared/marketTime.js';
 import { rangeProblem } from '@/components/TradeJournal/journalRange';
@@ -20,7 +19,7 @@ import IconButton from '@/components/IconButton/IconButton';
 import Badge from '@/components/Badge/Badge';
 import { ChevronDownIcon, SettingsIcon } from '@/components/icons/Icons';
 import {
-  closedPnl, eventSummary, sideLabel, sideTone, stageIsLive, stageLabel, stageTone, tradeReason, tradeStrategy,
+  closedPnl, eventSummary, horizonLabel, sideLabel, sideTone, stageIsLive, stageLabel, stageTone, stepTone,
 } from '@/components/Automation/autoTradeView';
 import { AutomationConfig, AutoTrade, fetchAutomationConfig, fetchAutoTrades } from '@/services/automation';
 import { isAbortError } from '@/services/apiClient';
@@ -30,7 +29,6 @@ import '@/styles/automation.css';
 
 const errorText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
-const kindLabel = (id: string) => TRADE_KINDS.find((k) => k.id === id)?.label ?? id;
 
 // ── Trades ──
 
@@ -62,7 +60,7 @@ export const TradeRangePicker: React.FC<{ range: TradeRange; onChange: (range: T
   </div>
 );
 
-const TRADE_COLUMNS = 10;
+const TRADE_COLUMNS = 9;
 
 /** A closed trade's P&L in profit / loss colours; a dash while it is open. */
 const PnlCell: React.FC<{ pnl: number | null }> = ({ pnl }) => {
@@ -74,12 +72,11 @@ const PnlCell: React.FC<{ pnl: number | null }> = ({ pnl }) => {
 const TradeTimeline: React.FC<{ trade: AutoTrade }> = ({ trade }) => (
   <ol className="automation-timeline">
     {trade.events.map((event, i) => (
-      <li key={i} className={`automation-timeline__step automation-timeline__step--${stageTone(event.stage)}`}>
+      <li key={i} className={`automation-timeline__step automation-timeline__step--${stepTone(event.stage)}`}>
         <span className="automation-timeline__marker" aria-hidden="true" />
         <div className="automation-timeline__body">
           <div className="automation-timeline__head">
-            <Badge tone={stageTone(event.stage)}>{stageLabel(event.stage)}</Badge>
-            <time className="automation-timeline__time" dateTime={event.at}>{eventDay(event.at)} · {eventTime(event.at)} IST</time>
+            <Badge tone={stepTone(event.stage)}>{stageLabel(event.stage)}</Badge>
           </div>
           <p className="automation-timeline__text">{eventSummary(event)}</p>
         </div>
@@ -90,8 +87,6 @@ const TradeTimeline: React.FC<{ trade: AutoTrade }> = ({ trade }) => (
 
 /** One trade's row; clicking it (or its chevron) shows the lifecycle beneath. */
 export const TradeRow: React.FC<{ trade: AutoTrade; open: boolean; onToggle: () => void }> = ({ trade: t, open, onToggle }) => {
-  const strategy = tradeStrategy(t);
-  const reason = tradeReason(t);
   return (
     <>
       <tr className={`automation-trades__row${open ? ' automation-trades__row--open' : ''}`} onClick={onToggle}>
@@ -101,7 +96,7 @@ export const TradeRow: React.FC<{ trade: AutoTrade; open: boolean; onToggle: () 
         </td>
         <td>
           <span className="automation-trades__symbol">{t.tradingsymbol}</span>
-          <span className="automation-trades__sub">{[kindLabel(t.kind), strategy].filter(Boolean).join(' · ')}</span>
+          <span className="automation-trades__sub">{horizonLabel(t.horizon)}</span>
         </td>
         <td><Badge tone={sideTone(t.side)}>{sideLabel(t.side)}</Badge></td>
         <td className="automation-trades__num">{t.quantity}</td>
@@ -109,7 +104,6 @@ export const TradeRow: React.FC<{ trade: AutoTrade; open: boolean; onToggle: () 
         <td className="automation-trades__num">{price(t.exitPrice)}</td>
         <PnlCell pnl={closedPnl(t)} />
         <td><Badge tone={stageTone(t.stage)} dot={stageIsLive(t.stage)}>{stageLabel(t.stage)}</Badge></td>
-        <td className="automation-trades__reason" title={reason || undefined}>{reason}</td>
         <td className="automation-trades__toggle" onClick={(e) => e.stopPropagation()}>
           <IconButton
             icon={<ChevronDownIcon />}
@@ -133,7 +127,7 @@ export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean;
   const [open, setOpen] = useState<string | null>(null);
 
   return (
-    <section className="card" aria-labelledby="automation-trades-title">
+    <section className="card automation-trades-card" aria-labelledby="automation-trades-title">
       <div className="automation-section__head">
         <h3 id="automation-trades-title" className="card__title">Automated trades</h3>
         {controls}
@@ -156,7 +150,6 @@ export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean;
                 <th className="automation-trades__num">Exit</th>
                 <th className="automation-trades__num">P&amp;L</th>
                 <th>Stage</th>
-                <th>Reason</th>
                 <th><span className="automation-trades__sr">Lifecycle</span></th>
               </tr>
             </thead>
@@ -219,9 +212,9 @@ const Automation: React.FC = () => {
   }, [range, problem]);
 
   return (
-    <div className="automation">
+    <div className="automation automation--trades">
       <header className="automation-header">
-        <h1 className="automation-header__title">Automation</h1>
+        <h1 className="automation-header__title">Algo Trading</h1>
         <span className="automation-header__status">{configError ? 'Settings could not be loaded' : automationStatus(config)}</span>
       </header>
 
@@ -234,7 +227,7 @@ const Automation: React.FC = () => {
             <TradeRangePicker range={range} onChange={setRange} />
             <IconButton
               icon={<SettingsIcon size={18} />}
-              label="Automation settings"
+              label="Algo Trading settings"
               onClick={() => navigate('/automation/settings')}
             />
           </div>

@@ -1,11 +1,11 @@
 /**
- * How an automated trade reads on the Automation page: the badge tone of its
- * side and stage, its P&L once closed, the one-line reason for the row, and a
- * plain sentence for each lifecycle event (instead of the stored JSON).
+ * How an automated trade reads on the Algo Trading page: its horizon, the badge
+ * tone of its side and stage, its P&L once closed, and a plain sentence for each
+ * lifecycle event (instead of the stored JSON), which also carries the reasons.
  * Pure functions, so the page only renders. Stages: shared/automation.js;
  * strategies and rules: shared/strategies, shared/entryRules, shared/exitRules.
  */
-import { LIFECYCLE_STAGES } from '../../../shared/automation.js';
+import { HORIZONS, LIFECYCLE_STAGES } from '../../../shared/automation.js';
 import { STRATEGIES } from '../../../shared/strategies/index.js';
 import { ENTRY_RULES } from '../../../shared/entryRules/index.js';
 import { EXIT_RULES } from '../../../shared/exitRules/index.js';
@@ -27,10 +27,16 @@ const STAGE_TONES: Record<Stage, BadgeTone> = {
 
 export const stageTone = (stage: Stage): BadgeTone => STAGE_TONES[stage];
 
+/** A lifecycle step's tone in the timeline: every step green, a rejection red. */
+export const stepTone = (stage: Stage): BadgeTone => (stage === 'rejected' ? 'negative' : 'positive');
+
 /** An open position (executed, not yet closed) shows a live dot. */
 export const stageIsLive = (stage: Stage): boolean => stage === 'executed';
 
 export const stageLabel = (stage: string): string => LIFECYCLE_STAGES.find((s) => s.id === stage)?.label ?? stage;
+
+/** How long the trade is meant to be held, e.g. "Intraday". */
+export const horizonLabel = (horizon: string): string => HORIZONS.find((h) => h.id === horizon)?.label ?? horizon;
 
 export const sideTone = (side: AutoTrade['side']): BadgeTone => (side === 'BUY' ? 'positive' : 'negative');
 
@@ -52,16 +58,6 @@ const amount = (value: unknown): string | null => (typeof value === 'number' ? `
 
 const strategyLabel = (id: unknown): string | null => STRATEGIES.find((s) => s.id === id)?.label ?? text(id);
 const ruleLabel = (id: unknown): string | null => [...ENTRY_RULES, ...EXIT_RULES].find((r) => r.id === id)?.label ?? null;
-
-/** The strategy that selected the trade, if recorded. */
-export function tradeStrategy(trade: AutoTrade): string | null {
-  return strategyLabel(detailOf(trade.events.find((e) => e.stage === 'selected')).strategyId);
-}
-
-/** The row's one-line reason: why it was rejected or closed, else why the strategy picked it. */
-export function tradeReason(trade: AutoTrade): string {
-  return trade.reason ?? text(detailOf(trade.events.find((e) => e.stage === 'selected')).reason) ?? '';
-}
 
 /** One lifecycle event as a plain sentence. */
 export function eventSummary(event: AutoTradeEvent): string {

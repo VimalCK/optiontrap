@@ -10,16 +10,16 @@ describe('Automation screen', () => {
   const html = renderToStaticMarkup(<MemoryRouter><Automation /></MemoryRouter>);
 
   it('has the settings gear at the top right of the trades card, not in the page header, and no settings form of its own', () => {
-    const firstCard = html.match(/<section class="card".*?<\/section>/s)?.[0] ?? '';
+    const firstCard = html.match(/<section class="card[ "].*?<\/section>/s)?.[0] ?? '';
     expect(firstCard).toMatch(/<h3[^>]*>Automated trades<\/h3>/);
-    expect(firstCard).toMatch(/<div class="automation-section__actions">.*<button[^>]*aria-label="Automation settings"/s);
-    expect(html.match(/<header.*?<\/header>/s)?.[0]).not.toContain('Automation settings');
+    expect(firstCard).toMatch(/<div class="automation-section__actions">.*<button[^>]*aria-label="Algo Trading settings"/s);
+    expect(html.match(/<header.*?<\/header>/s)?.[0]).not.toContain('Algo Trading settings');
     expect(html).not.toContain('automation-config');
   });
 
   it("shows only the trades list: no 'How a trade runs' card", () => {
     expect(html).not.toContain('How a trade runs');
-    expect(html.match(/<section class="card"/g)).toHaveLength(1);
+    expect(html.match(/<section class="card[ "]/g)).toHaveLength(1);
   });
 
   it("opens the trades list on today's trades, From and To both today", () => {
@@ -65,13 +65,14 @@ describe('AutoTradesTable', () => {
     expect(renderToStaticMarkup(<AutoTradesTable trades={[]} />)).toContain('No automated trades in this range');
   });
 
-  it('shows each trade with its side, stage and reason, timed in IST', () => {
+  it('shows each trade with its horizon, side and stage, timed in IST', () => {
     const table = renderToStaticMarkup(<AutoTradesTable trades={[trade]} />);
     expect(table).toContain('<span class="automation-trades__symbol">NIFTY26NOV24000PE</span>');
-    expect(table).toContain('Index option');
+    expect(table).toContain('<span class="automation-trades__symbol">NIFTY26NOV24000PE</span><span class="automation-trades__sub">Intraday</span>');
     expect(table).toContain('<span class="badge badge--negative">Sell</span>');
     expect(table).toContain('<span class="badge badge--negative">Rejected</span>');
-    expect(table).toContain('title="Max open positions reached">Max open positions reached<');
+    expect(table).not.toContain('Max open positions reached'); // the reason is in the expanded lifecycle only
+    expect(table).not.toContain('>Reason<');
     expect(table).toContain('<span class="automation-trades__time">10:30</span><span class="automation-trades__sub">5 Nov</span>'); // 05:00 UTC
   });
 
@@ -103,7 +104,7 @@ describe('AutoTradesTable', () => {
 });
 
 describe('TradeRow', () => {
-  it('shows the lifecycle as a timeline of plain sentences when open, with IST times', () => {
+  it('shows the lifecycle as a timeline of plain sentences when open, the IST time only on the row', () => {
     const trade: AutoTrade = {
       id: 't', horizon: 'intraday', kind: 'index-option', mode: 'paper', tradingsymbol: 'NIFTY26N0924550PE', instrumentToken: 1,
       side: 'SELL', quantity: 65, stage: 'executed', reason: null, entryPrice: 98.8, exitPrice: null, positionId: 'p',
@@ -115,7 +116,8 @@ describe('TradeRow', () => {
     };
     const html = renderToStaticMarkup(<table><tbody><TradeRow trade={trade} open onToggle={() => {}} /></tbody></table>);
     expect(html).toContain('aria-label="Hide lifecycle"');
-    expect(html).toContain('6 Nov · 12:30 IST'); // 07:00 UTC
+    expect(html).toContain('<span class="automation-trades__time">12:30</span>'); // 07:00 UTC
+    expect(html.match(/<ol class="automation-timeline">.*<\/ol>/s)?.[0]).not.toMatch(/12:30|6 Nov/);
     expect(html).toContain('<p class="automation-timeline__text">Option Analyzer setups · Wall Defense · score 53</p>');
     expect(html).toContain('<p class="automation-timeline__text">Opened a paper position at ₹98.80</p>');
     expect(html).not.toContain('strategyId');

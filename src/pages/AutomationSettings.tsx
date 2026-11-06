@@ -68,7 +68,7 @@ const AutomationSettings: React.FC = () => {
         onChange={(id) => setSearchParams({ tab: id }, { replace: true })}
         className="analytics-tabs"
         tabClassName="analytics-tab"
-        ariaLabel="Automation settings sections"
+        ariaLabel="Algo Trading settings sections"
       />
 
       <section className="card automation-settings__card">

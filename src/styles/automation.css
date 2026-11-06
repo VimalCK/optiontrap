@@ -204,8 +204,34 @@
 
 /* ── Automated trades: one row per trade, its lifecycle as a timeline beneath ── */
 
+/* The trades card fills the rest of the page height; the table scrolls inside it
+   (both ways) under a header that stays in view. */
+.automation--trades {
+  /* Space around the page in the content area (content.css): the top offset and the
+     64px footer. */
+  --automation-page-outside: calc(var(--page-top-offset) + 64px);
+  height: calc(100vh - var(--automation-page-outside));
+}
+
+.automation-trades-card {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .automation-trades__scroll {
-  overflow-x: auto;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.automation-trades thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--card-bg-solid);
+  box-shadow: inset 0 -1px 0 var(--card-border);
 }
 
 .automation-trades {
@@ -270,15 +296,6 @@
   font-weight: 600;
 }
 
-.automation-trades__reason {
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12px;
-  color: var(--text-secondary);
-}
-
 .automation-trades .automation-trades__toggle {
   width: 40px;
   text-align: right;
@@ -327,62 +344,56 @@
   padding-bottom: 0;
 }
 
-/* The line joining one marker to the next. */
+/* The lifecycle chain is green: a small round marker per stage, joined by a green line
+   that runs from one marker's centre to the next. A line takes the colour of the step it
+   leaves, so the chain stays green up to a rejection and is red from it onwards. The marker's centre lines up with the stage badge's (10px down). */
 .automation-timeline__step:not(:last-child)::before {
   content: '';
   position: absolute;
-  left: 5px;
-  top: 16px;
-  bottom: 0;
+  left: 3px;
+  top: 10px;
+  bottom: -10px;
   width: 2px;
-  background: var(--card-border);
+  background: #22c55e;
+}
+
+.automation-timeline__step--negative::before {
+  background: #ef4444;
 }
 
 .automation-timeline__marker {
   position: relative;
+  z-index: 1;
   flex-shrink: 0;
-  width: 12px;
-  height: 12px;
-  margin-top: 4px;
+  width: 8px;
+  height: 8px;
+  margin-top: 6px;
   border-radius: 50%;
-  border: 2px solid var(--text-secondary);
-  background: var(--card-bg-solid);
-}
-
-.automation-timeline__step--accent .automation-timeline__marker {
-  border-color: var(--accent);
-  background: var(--accent);
-  box-shadow: 0 0 0 3px var(--sidebar-active);
-}
-
-.automation-timeline__step--negative .automation-timeline__marker {
-  border-color: #ef4444;
-  background: #ef4444;
-}
-
-.automation-timeline__step--positive .automation-timeline__marker {
-  border-color: #22c55e;
   background: #22c55e;
 }
 
+.automation-timeline__step--negative .automation-timeline__marker {
+  background: #ef4444;
+}
+
+/* Stage, time and sentence on one line; the sentence wraps beneath only when it doesn't fit. */
 .automation-timeline__body {
   min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
 }
 
+/* Wide enough for the longest stage badge, so every step's sentence starts in line. */
 .automation-timeline__head {
   display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.automation-timeline__time {
-  font-size: 11px;
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+  min-width: 5.5rem;
 }
 
 .automation-timeline__text {
-  margin: 4px 0 0;
+  margin: 0;
   font-size: 13px;
   color: var(--text-primary);
   overflow-wrap: anywhere;

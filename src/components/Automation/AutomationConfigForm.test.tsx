@@ -51,7 +51,7 @@ describe('AutomationConfigForm', () => {
   });
 
   it('says whether automation is on or off, with a toggle', () => {
-    const toggle = (html: string) => html.match(/<button[^>]*role="switch"[^>]*aria-label="Automation"[^>]*>/)?.[0] ?? '';
+    const toggle = (html: string) => html.match(/<button[^>]*role="switch"[^>]*aria-label="Algo Trading"[^>]*>/)?.[0] ?? '';
     expect(toggle(form(defaultAutomationConfig()))).toContain('aria-checked="false"');
     expect(form(defaultAutomationConfig())).toContain('<span class="toggle__text">Off</span>');
     expect(toggle(form({ ...defaultAutomationConfig(), enabled: true }))).toContain('aria-checked="true"');
@@ -65,7 +65,7 @@ describe('AutomationConfigForm', () => {
     const entryRulesTab = form(defaultAutomationConfig(), { section: 'entry-rules' });
     expect(entryRulesTab).toContain('Max lots per trade');
     expect(entryRulesTab).not.toContain('Buy Stock');
-    expect(entryRulesTab).not.toContain('aria-label="Automation"');
+    expect(entryRulesTab).not.toContain('aria-label="Algo Trading"');
     expect(entryRulesTab).not.toContain('Stop-loss');
 
     const exitRulesTab = form(defaultAutomationConfig(), { section: 'exit-rules' });
