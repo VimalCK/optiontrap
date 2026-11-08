@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { EXIT_RULES, checkExitRules } from './index.js';
 import { defaultRuleSettings } from '../rules/ruleSettings.js';
 
-const position = (pnl) => ({ instrumentToken: 101, tradingsymbol: 'NIFTY26NOV24000PE', pnl });
+/** A position at a P&L percentage; its ₹ P&L as for 75 units sold at 100, i.e. 75 × the percentage. */
+const position = (pnlPercent) => ({ instrumentToken: 101, tradingsymbol: 'NIFTY26NOV24000PE', pnlPercent, pnl: pnlPercent * 75 });
 const at = (iso) => ({ now: new Date(iso) });
 const noon = at('2026-11-05T06:30:00Z'); // Thu 12:00 IST
 
@@ -22,27 +23,27 @@ describe('the exit rule list', () => {
 
   it('starts every rule inactive; only square off has a time filled in, the 15:00 asked for', () => {
     expect(defaultRuleSettings(EXIT_RULES)).toEqual({
-      'stop-loss': { active: false, params: { amount: null } },
-      target: { active: false, params: { amount: null } },
+      'stop-loss': { active: false, params: { percent: null } },
+      target: { active: false, params: { percent: null } },
       'square-off': { active: false, params: { time: '15:00' } },
     });
   });
 });
 
 describe('stop-loss', () => {
-  it("exits once the position's loss reaches the amount, not before", () => {
-    expect(check('stop-loss', { amount: 2000 }, position(-1999.99))).toBeNull();
-    expect(check('stop-loss', { amount: 2000 }, position(500))).toBeNull();
-    expect(check('stop-loss', { amount: 2000 }, position(-2000))).toBe('Stop-loss hit: P&L ₹-2000.00, stop-loss ₹2000');
-    expect(check('stop-loss', { amount: 2000 }, position(-2500.5))).toBe('Stop-loss hit: P&L ₹-2500.50, stop-loss ₹2000');
+  it("exits once the position's loss reaches the percentage of its entry price, not before", () => {
+    expect(check('stop-loss', { percent: 20 }, position(-19.99))).toBeNull();
+    expect(check('stop-loss', { percent: 20 }, position(5))).toBeNull();
+    expect(check('stop-loss', { percent: 20 }, position(-20))).toBe('Stop-loss hit: P&L -20.00% (₹-1500.00), stop-loss 20%');
+    expect(check('stop-loss', { percent: 20 }, position(-150))).toBe('Stop-loss hit: P&L -150.00% (₹-11250.00), stop-loss 20%');
   });
 });
 
 describe('target', () => {
-  it("exits once the position's profit reaches the amount, not before", () => {
-    expect(check('target', { amount: 3000 }, position(2999.99))).toBeNull();
-    expect(check('target', { amount: 3000 }, position(-100))).toBeNull();
-    expect(check('target', { amount: 3000 }, position(3000))).toBe('Target hit: P&L ₹3000.00, target ₹3000');
+  it("exits once the position's profit reaches the percentage of its entry price, not before", () => {
+    expect(check('target', { percent: 40 }, position(39.99))).toBeNull();
+    expect(check('target', { percent: 40 }, position(-10))).toBeNull();
+    expect(check('target', { percent: 40 }, position(40))).toBe('Target hit: P&L 40.00% (₹3000.00), target 40%');
   });
 });
 
@@ -60,13 +61,13 @@ describe('checkExitRules', () => {
   });
 
   it('exits with the first active rule that fires, in list order', () => {
-    const rules = settings({ 'stop-loss': { amount: 1000 }, 'square-off': { time: '11:00' } });
-    expect(checkExitRules(position(-1500), noon, rules)).toEqual({ ruleId: 'stop-loss', reason: 'Stop-loss hit: P&L ₹-1500.00, stop-loss ₹1000' });
-    expect(checkExitRules(position(200), noon, rules)).toEqual({ ruleId: 'square-off', reason: 'Squared off at 11:00 IST' });
+    const rules = settings({ 'stop-loss': { percent: 10 }, 'square-off': { time: '11:00' } });
+    expect(checkExitRules(position(-20), noon, rules)).toEqual({ ruleId: 'stop-loss', reason: 'Stop-loss hit: P&L -20.00% (₹-1500.00), stop-loss 10%' });
+    expect(checkExitRules(position(2), noon, rules)).toEqual({ ruleId: 'square-off', reason: 'Squared off at 11:00 IST' });
   });
 
   it('keeps a position open when no active rule fires', () => {
-    const rules = settings({ 'stop-loss': { amount: 1000 }, target: { amount: 2000 }, 'square-off': { time: '15:00' } });
-    expect(checkExitRules(position(500), noon, rules)).toBeNull();
+    const rules = settings({ 'stop-loss': { percent: 10 }, target: { percent: 20 }, 'square-off': { time: '15:00' } });
+    expect(checkExitRules(position(5), noon, rules)).toBeNull();
   });
 });

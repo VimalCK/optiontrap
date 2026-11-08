@@ -58,10 +58,8 @@ describe('eventSummary', () => {
       .toBe('Closed at ₹700.00 · Stop-loss hit');
   });
 
-  it('names the entry rule behind a rejection, and keeps a General setting\'s reason as it is', () => {
-    expect(eventSummary({ stage: 'rejected', at, detail: { ruleId: 'max-open-positions', reason: '10 open already' } }))
-      .toBe('Max open automated positions · 10 open already');
-    expect(eventSummary({ stage: 'rejected', at, detail: { ruleId: null, reason: 'Sell Index option is off' } })).toBe('Sell Index option is off');
+  it('gives why a validated trade could not be placed', () => {
+    expect(eventSummary({ stage: 'rejected', at, detail: { ruleId: null, reason: 'Market is closed' } })).toBe('Market is closed');
   });
 
   it('still says something for an event with no detail', () => {

@@ -144,7 +144,7 @@ describe('parseAutomationConfig entry and exit rules', () => {
 
   it('keeps the exit rules as set, and refuses a configuration without them', () => {
     const config = valid();
-    config.exitRules['stop-loss'] = { active: true, params: { amount: 2000 } };
+    config.exitRules['stop-loss'] = { active: true, params: { percent: 20 } };
     config.exitRules['square-off'] = { active: true, params: { time: '15:00' } };
     expect(parseAutomationConfig(config)).toEqual({ config });
     delete config.exitRules;
@@ -159,8 +159,8 @@ describe('lifecycle', () => {
     expect(canMoveTo('executed', 'closed')).toBe(true);
   });
 
-  it('can be rejected at selection or validation, but not after execution', () => {
-    expect(canMoveTo('selected', 'rejected')).toBe(true);
+  it('is rejected only after validation (it cannot be placed), never at selection or after execution', () => {
+    expect(canMoveTo('selected', 'rejected')).toBe(false);
     expect(canMoveTo('validated', 'rejected')).toBe(true);
     expect(canMoveTo('executed', 'rejected')).toBe(false);
   });

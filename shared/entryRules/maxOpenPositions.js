@@ -7,9 +7,9 @@
 /** @type {import('./index.js').EntryRule} */
 export default {
   id: 'max-open-positions',
-  label: 'Max open automated positions',
-  description: 'A trade that would open one more position than this is rejected.',
-  params: [{ key: 'max', label: 'Positions', type: 'count' }],
+  label: 'Maximum open positions',
+  description: 'No new trade is placed while this many automated positions are already open.',
+  params: [{ key: 'max', label: 'Positions', type: 'count', hideLabel: true }],
   check: (trade, ctx, { max }) => {
     const mergesIntoOpen = ctx.openAutoPositions.some((p) => p.instrumentToken === trade.instrumentToken);
     if (mergesIntoOpen || ctx.openAutoPositions.length < max) return null;

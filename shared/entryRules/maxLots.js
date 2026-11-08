@@ -8,8 +8,8 @@
 export default {
   id: 'max-lots',
   label: 'Max lots per trade',
-  description: 'Automated trades are this many lots (1 lot while this rule is off); bigger trades are rejected.',
-  params: [{ key: 'max', label: 'Lots', type: 'count' }],
+  description: 'Each automated trade is this many lots (1 lot while this rule is off).',
+  params: [{ key: 'max', label: 'Lots', type: 'count', hideLabel: true }],
   check: (trade, _ctx, { max }) => {
     const lots = trade.quantity / trade.lotSize;
     return lots > max ? `${lots} lots is above the ${max} allowed per trade` : null;

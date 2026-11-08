@@ -5,7 +5,7 @@
  */
 
 /**
- * @typedef {'count' | 'amount' | 'time'} ParamTypeId
+ * @typedef {'count' | 'amount' | 'percent' | 'time'} ParamTypeId
  * @typedef {{ input: 'number' | 'time', step?: string, mustBe: string, parse: (value: unknown) => number | string | undefined }} ParamType
  */
 
@@ -24,6 +24,12 @@ export const PARAM_TYPES = {
     input: 'number',
     step: '0.01',
     mustBe: 'an amount above 0',
+    parse: (value) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined),
+  },
+  percent: {
+    input: 'number',
+    step: '0.01',
+    mustBe: 'a percentage above 0',
     parse: (value) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined),
   },
   time: {

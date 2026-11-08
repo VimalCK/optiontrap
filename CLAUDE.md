@@ -252,8 +252,8 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
 - OI snapshots are taken every 10 minutes in market hours by `oiSnapshotScheduler.js`. OI history is fetched after close.
   Nightly jobs and the instrument sync run at 08:30 IST.
 - Automation: `shared/automation.js` defines trade kinds, sides, horizons (positional later),
-  execution modes (live later) and the lifecycle selected → validated/rejected → executed → closed (`canMoveTo`: no skipping
-  validation, nothing rejected after executed). Automated trades go to paper trading only.
+  execution modes (live later) and the lifecycle selected → validated → executed → closed (`canMoveTo`: no skipping
+  validation; rejected only after validation, when a trade can't be placed). Automated trades go to paper trading only.
   - Entry and exit rules are plug-ins: one file per rule in `shared/entryRules/` / `shared/exitRules/`, sharing the rule
     shape and settings logic in `shared/rules/`. Add a rule by adding its file to the list; never add `if`s in callers.
   - The trade monitor (`server/autoTradeMonitor.js`) closes open automated positions when an exit rule fires, on live
@@ -264,6 +264,7 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   - The trade engine (`server/autoTradeEngine.js`) runs after each scheduled OI snapshot (`onScheduledSnapshot`): every
     active strategy (`shared/strategies/`, plug-ins whose `select` returns `{ instrumentToken, side, reason }`) for every
     user with automation on. Each signal is sized at the Max lots entry rule's value (1 lot while it's off) × lot size, checked against the General settings
-    (`GENERAL_CHECKS`) then the entry rules, opened via `openPaperTrade` (source auto) at the quote's LTP, and handed to the
+    (`GENERAL_CHECKS`) then the entry rules *before anything is saved* (a refused signal is only logged: entry rules decide
+    whether to enter, they don't make trade records), opened via `openPaperTrade` (source auto) at the quote's LTP, and handed to the
     monitor. The first strategy, Option Analyzer setups, trades the Strategy card's suggestions, scored by the same
     code (`shared/optionAnalysis/`, which the card re-exports).

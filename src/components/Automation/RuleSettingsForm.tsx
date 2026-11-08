@@ -41,9 +41,10 @@ const RuleRow: React.FC<{ rule: RuleInfo; setting: RuleSetting; onChange: (setti
         const type = PARAM_TYPES[param.type];
         return (
           <label key={param.key} className="automation-rule__param">
-            {param.label}
+            {!param.hideLabel && param.label}
             <input
               type={type.input}
+              aria-label={param.hideLabel ? param.label : undefined}
               step={type.step}
               className="app-input automation-rule__input"
               value={setting.params[param.key] ?? ''}

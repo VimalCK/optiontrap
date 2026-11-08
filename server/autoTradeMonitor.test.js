@@ -26,13 +26,13 @@ const sold = { id: 'p1', userId: 'U1', instrumentToken: 101, tradingsymbol: 'NIF
 const bought = { id: 'p2', userId: 'U2', instrumentToken: 202, tradingsymbol: 'NIFTY26NOV24000CE', side: 'BUY', quantity: 50, entryPrice: 200 };
 
 describe('dueExits', () => {
-  const rules = new Map([['U1', exitRules({ 'stop-loss': { amount: 1500 } })], ['U2', exitRules({ target: { amount: 500 } })]]);
+  const rules = new Map([['U1', exitRules({ 'stop-loss': { percent: 20 } })], ['U2', exitRules({ target: { percent: 5 } })]]);
 
   it("fires each owner's own rules on the position's P&L at the last price, exiting at that price", () => {
     const prices = new Map([[101, 120], [202, 210]]);
     expect(dueExits([sold, bought], prices, rules, NOON)).toEqual([
-      { position: sold, exitPrice: 120, ruleId: 'stop-loss', reason: 'Stop-loss hit: P&L ₹-1500.00, stop-loss ₹1500' },
-      { position: bought, exitPrice: 210, ruleId: 'target', reason: 'Target hit: P&L ₹500.00, target ₹500' },
+      { position: sold, exitPrice: 120, ruleId: 'stop-loss', reason: 'Stop-loss hit: P&L -20.00% (₹-1500.00), stop-loss 20%' },
+      { position: bought, exitPrice: 210, ruleId: 'target', reason: 'Target hit: P&L 5.00% (₹500.00), target 5%' },
     ]);
   });
 
@@ -55,7 +55,7 @@ describe('the monitor', () => {
     db = {
       getAllOpenAutoPositions: vi.fn(async () => [sold, bought]),
       getOpenAutoPositions: vi.fn(async () => []),
-      getAutomationConfigs: vi.fn(async (ids) => new Map(ids.map((id) => [id, config(id === 'U1' ? { 'stop-loss': { amount: 1500 } } : {})]))),
+      getAutomationConfigs: vi.fn(async (ids) => new Map(ids.map((id) => [id, config(id === 'U1' ? { 'stop-loss': { percent: 20 } } : {})]))),
     };
     exitPosition = vi.fn(async () => ({ ok: true }));
     feeds = [];
@@ -89,7 +89,7 @@ describe('the monitor', () => {
     await monitor.onTicks([{ instrumentToken: 101, lastPrice: 120 }]);
     expect(exitPosition).toHaveBeenCalledWith('U1', 'p1', 120, {
       now: NOON,
-      exitReason: { ruleId: 'stop-loss', reason: 'Stop-loss hit: P&L ₹-1500.00, stop-loss ₹1500' },
+      exitReason: { ruleId: 'stop-loss', reason: 'Stop-loss hit: P&L -20.00% (₹-1500.00), stop-loss 20%' },
     });
     expect(monitor.watchedPositionIds()).toEqual(['p2']);
     expect(feeds[0].watching).toEqual([202]);
@@ -139,7 +139,7 @@ describe('the monitor', () => {
   it('applies changed exit rules from the next tick after a refresh', async () => {
     await monitor.checkMarket();
     db.getOpenAutoPositions.mockResolvedValueOnce([bought]);
-    db.getAutomationConfigs.mockResolvedValueOnce(new Map([['U2', config({ 'stop-loss': { amount: 100 } })]]));
+    db.getAutomationConfigs.mockResolvedValueOnce(new Map([['U2', config({ 'stop-loss': { percent: 1 } })]]));
     await monitor.refreshUser('U2');
     expect(db.getOpenAutoPositions).toHaveBeenCalledWith('U2');
     await monitor.onTicks([{ instrumentToken: 202, lastPrice: 198 }]);

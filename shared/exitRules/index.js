@@ -19,8 +19,8 @@ import squareOff from './squareOff.js';
 
 /**
  * @typedef {import('../rules/ruleSettings.js').RuleSettings} RuleSettings
- * @typedef {{ instrumentToken: number, tradingsymbol: string, pnl: number }} OpenAutoPosition
- *   pnl is the position's live P&L in ₹
+ * @typedef {{ instrumentToken: number, tradingsymbol: string, pnl: number, pnlPercent: number }} OpenAutoPosition
+ *   pnl is the position's live P&L in ₹; pnlPercent the same as a percentage of its entry price
  * @typedef {{ now: Date }} ExitRuleContext
  * @typedef {import('../rules/ruleSettings.js').Rule<OpenAutoPosition, ExitRuleContext>} ExitRule
  */

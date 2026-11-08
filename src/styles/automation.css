@@ -138,6 +138,12 @@
   width: 110px;
 }
 
+/* Numbers sit at the right of their box, like amounts in a table; the time picker keeps its own layout. */
+.automation-rule__input[type='number'] {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
 .automation-rule__toggle {
   width: 110px;
   flex-shrink: 0;

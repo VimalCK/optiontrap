@@ -74,7 +74,9 @@ export const LIFECYCLE_STAGES = [
 
 /** The stages a trade may move to from each stage. @type {Record<string, string[]>} */
 const NEXT_STAGES = {
-  selected: ['validated', 'rejected'],
+  // The settings and entry rules refuse a signal before it is saved, so a saved
+  // trade is rejected only after validation, when it cannot be placed.
+  selected: ['validated'],
   validated: ['executed', 'rejected'],
   executed: ['closed'],
   rejected: [],

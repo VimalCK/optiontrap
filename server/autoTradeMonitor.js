@@ -30,7 +30,7 @@ import { findWorkingAdminSession } from './oiHistoryScheduler.js';
 import { isMarketOpen } from './marketClock.js';
 import { marketDate } from '../shared/marketTime.js';
 import { checkExitRules } from '../shared/exitRules/index.js';
-import { paperPnl } from '../shared/paperPnl.js';
+import { paperPnl, paperPnlPercent } from '../shared/paperPnl.js';
 
 /** How often the market-open state is checked (connect at the open, disconnect after the close). */
 const MARKET_CHECK_MS = 60 * 1000;
@@ -60,7 +60,7 @@ export function dueExits(positions, lastPrices, exitRulesByUser, now) {
     const price = lastPrices.get(position.instrumentToken);
     const rules = exitRulesByUser.get(position.userId);
     if (price === undefined || !rules) continue;
-    const fired = checkExitRules({ ...position, pnl: paperPnl(position, price) }, { now }, rules);
+    const fired = checkExitRules({ ...position, pnl: paperPnl(position, price), pnlPercent: paperPnlPercent(position, price) }, { now }, rules);
     if (fired) due.push({ position, exitPrice: price, ...fired });
   }
   return due;

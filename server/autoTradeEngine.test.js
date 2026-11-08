@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 // The module creates a default engine on import; keep its real dependencies out.
 vi.mock('./db.js', () => ({
   advanceAutoTrade: vi.fn(), createAutoTrade: vi.fn(), getAutomatedUsers: vi.fn(), getOpenAutoPositions: vi.fn(),
-  getTodayAutoRealisedPnl: vi.fn(), getTodayOiSnapshots: vi.fn(), getUnderlyings: vi.fn(),
+  getTodayAutoExits: vi.fn(), getTodayAutoRealisedPnl: vi.fn(), getTodayOiSnapshots: vi.fn(), getUnderlyings: vi.fn(),
 }));
 vi.mock('./paperTrading.js', () => ({ openPaperTrade: vi.fn() }));
 vi.mock('./kiteQuotes.js', () => ({ fetchQuotes: vi.fn() }));
@@ -50,6 +50,7 @@ function setup({ config = userConfig(), users = [{ userId: 'U1', config }], sign
     advanceAutoTrade: vi.fn().mockResolvedValue(true),
     getOpenAutoPositions: vi.fn().mockResolvedValue([]),
     getTodayAutoRealisedPnl: vi.fn().mockResolvedValue(0),
+    getTodayAutoExits: vi.fn().mockResolvedValue([]),
   };
   const deps = {
     db,
@@ -135,16 +136,28 @@ describe('createAutoTradeEngine run', () => {
     expect(onExecuted).toHaveBeenCalledWith('U1');
   });
 
-  it('rejects at selection when an entry rule refuses, and opens nothing', async () => {
+  it('saves nothing when an entry rule refuses the signal: it only logs why, and opens nothing', async () => {
     const config = userConfig();
     config.entryRules['max-daily-loss'] = { active: true, params: { amount: 1000 } };
     const engine = setup({ config });
     engine.db.getTodayAutoRealisedPnl.mockResolvedValue(-800);
     engine.openPnl.mockReturnValue(-300); // booked + open = -1100
     await engine.run();
-    expect(moves(engine.db)).toEqual(['selected→rejected']);
-    expect(engine.db.advanceAutoTrade.mock.calls[0][5]).toMatchObject({ ruleId: 'max-daily-loss' });
+    expect(engine.db.createAutoTrade).not.toHaveBeenCalled();
+    expect(engine.db.advanceAutoTrade).not.toHaveBeenCalled();
     expect(engine.openPosition).not.toHaveBeenCalled();
+    expect(engine.log).toHaveBeenCalledWith(expect.stringContaining("did not enter NIFTY26NOV24000PE: Today's automated loss ₹1100.00"));
+  });
+
+  it("doesn't re-enter an instrument within the Wait after exit minutes of its last exit today", async () => {
+    const config = userConfig();
+    config.entryRules['wait-after-exit'] = { active: true, params: { minutes: 15 } };
+    const engine = setup({ config });
+    engine.db.getTodayAutoExits.mockResolvedValue([{ instrumentToken: 101, exitTime: new Date(NOON.getTime() - 10 * 60_000) }]);
+    await engine.run();
+    expect(engine.db.getTodayAutoExits).toHaveBeenCalledWith('U1', '2026-11-04T18:30:00.000Z'); // the IST day's start
+    expect(engine.db.createAutoTrade).not.toHaveBeenCalled();
+    expect(engine.log).toHaveBeenCalledWith(expect.stringContaining('was exited at 11:50 IST; waiting until 12:05 IST'));
   });
 
   it('rejects after validation when there is no last price', async () => {

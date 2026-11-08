@@ -9,8 +9,10 @@
  *   id           stable name, the key of its setting in the user's config
  *   label        what the settings page calls it
  *   description  one line on what it does
- *   params       the values the user sets for it: { key, label, type, default? }
- *                (types in paramTypes.js; default only when the user has named one)
+ *   params       the values the user sets for it: { key, label, type, default?, hideLabel? }
+ *                (types in paramTypes.js; default only when the user has named one;
+ *                hideLabel when the rule's own name already says what the value is, so
+ *                the label is only the input's accessible name and appears in messages)
  *   check(subject, ctx, params)  null to let it pass, or the reason it fires
  */
 import { PARAM_TYPES } from './paramTypes.js';
@@ -18,7 +20,7 @@ import { PARAM_TYPES } from './paramTypes.js';
 /**
  * @typedef {import('./paramTypes.js').ParamTypeId} ParamTypeId
  * @typedef {number | string | null} ParamValue
- * @typedef {{ key: string, label: string, type: ParamTypeId, default?: number | string }} RuleParam
+ * @typedef {{ key: string, label: string, type: ParamTypeId, default?: number | string, hideLabel?: boolean }} RuleParam
  * @typedef {{ active: boolean, params: Record<string, ParamValue> }} RuleSetting
  * @typedef {Record<string, RuleSetting>} RuleSettings
  * @typedef {{ id: string, label: string, description: string, params: RuleParam[] }} RuleInfo

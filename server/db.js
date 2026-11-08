@@ -1036,6 +1036,25 @@ export async function getTodayAutoRealisedPnl(userId, todayStart) {
   return Number(row.pnl);
 }
 
+/**
+ * Each instrument's latest automated paper exit since `todayStart` (ISO), for
+ * the Wait after exit entry rule. Served by positions_closed_idx (user_id,
+ * mode, exit_time).
+ * @param {string} userId
+ * @param {string} todayStart
+ * @returns {Promise<{ instrumentToken: number, exitTime: Date }[]>}
+ */
+export async function getTodayAutoExits(userId, todayStart) {
+  const result = await rows(
+    `SELECT instrument_token, MAX(exit_time) AS exit_time
+     FROM positions
+     WHERE user_id = $1 AND mode = 'paper' AND exited = 1 AND exit_time >= $2 AND source = 'auto'
+     GROUP BY instrument_token`,
+    [userId, todayStart],
+  );
+  return result.map((row) => ({ instrumentToken: Number(row.instrument_token), exitTime: new Date(row.exit_time) }));
+}
+
 /** Every user's open automated paper positions, for the trade monitor. Served by positions_open_auto_idx. */
 export async function getAllOpenAutoPositions() {
   const result = await rows("SELECT * FROM positions WHERE source = 'auto' AND exited = 0 AND mode = 'paper'");

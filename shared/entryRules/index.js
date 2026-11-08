@@ -17,14 +17,18 @@ import maxLots from './maxLots.js';
 import maxOpenPositions from './maxOpenPositions.js';
 import oneTradePerInstrument from './oneTradePerInstrument.js';
 import maxDailyLoss from './maxDailyLoss.js';
+import waitAfterExit from './waitAfterExit.js';
 
 /**
  * @typedef {import('../rules/ruleSettings.js').RuleSettings} RuleSettings
  * @typedef {{ instrumentToken: number, tradingsymbol: string, side: string, quantity: number, lotSize: number }} CandidateTrade
  * @typedef {{
+ *   now: Date,
  *   openAutoPositions: { instrumentToken: number }[],
  *   todayAutoPnl: number,
+ *   todayAutoExits: { instrumentToken: number, exitTime: Date }[],
  * }} EntryRuleContext
+ *   todayAutoExits: each instrument's latest automated exit today
  * @typedef {import('../rules/ruleSettings.js').Rule<CandidateTrade, EntryRuleContext>} EntryRule
  * @typedef {{ ok: true } | { ok: false, ruleId: string, reason: string }} EntryVerdict
  */
@@ -42,7 +46,7 @@ export function tradeLots(settings) {
 }
 
 /** Every entry rule, in the order they're checked. @type {EntryRule[]} */
-export const ENTRY_RULES = [maxLots, maxOpenPositions, oneTradePerInstrument, maxDailyLoss];
+export const ENTRY_RULES = [maxLots, maxOpenPositions, maxDailyLoss, waitAfterExit, oneTradePerInstrument];
 
 /**
  * Run the user's active entry rules on a trade; the first that refuses it gives the reason.

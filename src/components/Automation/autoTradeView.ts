@@ -3,12 +3,10 @@
  * tone of its side and stage, its P&L once closed, and a plain sentence for each
  * lifecycle event (instead of the stored JSON), which also carries the reasons.
  * Pure functions, so the page only renders. Stages: shared/automation.js;
- * strategies and rules: shared/strategies, shared/entryRules, shared/exitRules.
+ * strategies: shared/strategies.
  */
 import { HORIZONS, LIFECYCLE_STAGES } from '../../../shared/automation.js';
 import { STRATEGIES } from '../../../shared/strategies/index.js';
-import { ENTRY_RULES } from '../../../shared/entryRules/index.js';
-import { EXIT_RULES } from '../../../shared/exitRules/index.js';
 import { paperPnl } from '../../../shared/paperPnl.js';
 import type { BadgeTone } from '@/components/Badge/Badge';
 import type { AutoTrade, AutoTradeEvent } from '@/services/automation';
@@ -57,7 +55,6 @@ const text = (value: unknown): string | null => (typeof value === 'string' && va
 const amount = (value: unknown): string | null => (typeof value === 'number' ? `₹${formatAmount(value)}` : null);
 
 const strategyLabel = (id: unknown): string | null => STRATEGIES.find((s) => s.id === id)?.label ?? text(id);
-const ruleLabel = (id: unknown): string | null => [...ENTRY_RULES, ...EXIT_RULES].find((r) => r.id === id)?.label ?? null;
 
 /** One lifecycle event as a plain sentence. */
 export function eventSummary(event: AutoTradeEvent): string {
@@ -69,7 +66,7 @@ export function eventSummary(event: AutoTradeEvent): string {
     case 'validated':
       return 'Passed the General settings and every active entry rule';
     case 'rejected':
-      return joined(ruleLabel(detail.ruleId), text(detail.reason)) || 'Rejected';
+      return text(detail.reason) ?? 'Rejected';
     case 'executed':
       return amount(detail.entryPrice) ? `Opened a paper position at ${amount(detail.entryPrice)}` : 'Opened a paper position';
     case 'closed':

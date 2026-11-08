@@ -28,6 +28,7 @@ import {
   createAutoTrade,
   getAutomatedUsers,
   getOpenAutoPositions,
+  getTodayAutoExits,
   getTodayAutoRealisedPnl,
   getTodayOiSnapshots,
   getUnderlyings,
@@ -113,7 +114,8 @@ export function refusal(trade, config, ctx) {
  * @param {{
  *   db?: { getAutomatedUsers: typeof getAutomatedUsers, getTodayOiSnapshots: typeof getTodayOiSnapshots, getUnderlyings: typeof getUnderlyings,
  *          createAutoTrade: typeof createAutoTrade, advanceAutoTrade: typeof advanceAutoTrade,
- *          getOpenAutoPositions: typeof getOpenAutoPositions, getTodayAutoRealisedPnl: typeof getTodayAutoRealisedPnl },
+ *          getOpenAutoPositions: typeof getOpenAutoPositions, getTodayAutoRealisedPnl: typeof getTodayAutoRealisedPnl,
+ *          getTodayAutoExits: typeof getTodayAutoExits },
  *   strategies?: Strategy[],
  *   openPosition?: typeof openPaperTrade,
  *   quotes?: typeof fetchQuotes,
@@ -123,7 +125,7 @@ export function refusal(trade, config, ctx) {
  * }} [deps]
  */
 export function createAutoTradeEngine({
-  db = { getAutomatedUsers, getTodayOiSnapshots, getUnderlyings, createAutoTrade, advanceAutoTrade, getOpenAutoPositions, getTodayAutoRealisedPnl },
+  db = { getAutomatedUsers, getTodayOiSnapshots, getUnderlyings, createAutoTrade, advanceAutoTrade, getOpenAutoPositions, getTodayAutoRealisedPnl, getTodayAutoExits },
   strategies = STRATEGIES,
   openPosition = openPaperTrade,
   quotes = fetchQuotes,
@@ -145,7 +147,13 @@ export function createAutoTradeEngine({
       .map((signal) => ({ ...signal, strategyId: strategy.id })));
   }
 
-  /** Take one signal through the lifecycle for one user. */
+  /**
+   * Take one signal through the lifecycle for one user. The General settings
+   * and entry rules decide whether to enter at all, so a signal they refuse is
+   * only logged, never saved: a trade is recorded once it is validated, and is
+   * rejected after that only when it cannot be placed (no price, or paper
+   * trading refuses it, e.g. outside market hours).
+   */
   async function take(userId, config, signal, { instrumentsByToken, indexNames, prices, now }) {
     const planned = planTrade(signal, instrumentsByToken, indexNames, config);
     if (planned.error !== undefined) {
@@ -153,21 +161,27 @@ export function createAutoTradeEngine({
       return;
     }
     const { trade } = planned;
-    const id = await db.createAutoTrade(userId, trade, { strategyId: signal.strategyId, reason: signal.reason });
-    const reject = (from, reason, ruleId = null) => db.advanceAutoTrade(userId, id, from, 'rejected', { reason }, { ruleId, reason });
-
+    const todayStart = new Date(marketDayStartMs(now.getTime())).toISOString();
     const ctx = {
+      now,
       openAutoPositions: await db.getOpenAutoPositions(userId),
-      todayAutoPnl: (await db.getTodayAutoRealisedPnl(userId, new Date(marketDayStartMs(now.getTime())).toISOString())) + openPnl(userId),
+      todayAutoPnl: (await db.getTodayAutoRealisedPnl(userId, todayStart)) + openPnl(userId),
+      todayAutoExits: await db.getTodayAutoExits(userId, todayStart),
     };
     const refused = refusal(trade, config, ctx);
-    if (refused) return reject('selected', refused.reason, refused.ruleId);
+    if (refused) {
+      log(`${signal.strategyId} [${userId}] did not enter ${trade.tradingsymbol}: ${refused.reason}`);
+      return;
+    }
+
+    const id = await db.createAutoTrade(userId, trade, { strategyId: signal.strategyId, reason: signal.reason });
     await db.advanceAutoTrade(userId, id, 'selected', 'validated', {}, {});
+    const reject = (/** @type {string} */ reason) => db.advanceAutoTrade(userId, id, 'validated', 'rejected', { reason }, { ruleId: null, reason });
 
     const entryPrice = prices.get(`${trade.exchange}:${trade.tradingsymbol}`);
-    if (!entryPrice) return reject('validated', `No last price for ${trade.tradingsymbol}`);
+    if (!entryPrice) return reject(`No last price for ${trade.tradingsymbol}`);
     const opened = await openPosition(userId, { ...trade, entryPrice }, { now, source: 'auto' });
-    if (!opened.ok) return reject('validated', opened.message);
+    if (!opened.ok) return reject(opened.message);
 
     await db.advanceAutoTrade(userId, id, 'validated', 'executed', { entryPrice, positionId: opened.position.id }, { entryPrice, positionId: opened.position.id });
     onExecuted(userId);

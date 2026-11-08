@@ -5,7 +5,8 @@ import { PARAM_TYPES } from '../rules/paramTypes.js';
 
 // 3 lots of 75.
 const trade = { instrumentToken: 101, tradingsymbol: 'NIFTY26NOV24000PE', side: 'SELL', quantity: 225, lotSize: 75 };
-const ctx = (extra = {}) => ({ openAutoPositions: [], todayAutoPnl: 0, ...extra });
+const NOON = new Date('2026-11-05T06:30:00Z'); // Thu 12:00 IST
+const ctx = (extra = {}) => ({ now: NOON, openAutoPositions: [], todayAutoPnl: 0, todayAutoExits: [], ...extra });
 
 /** All rules inactive, except those given here (active, with these values). */
 const settings = (active = {}) => {
@@ -18,8 +19,8 @@ const check = (id, params, extraCtx = {}, t = trade) =>
   ENTRY_RULES.find((r) => r.id === id).check(t, ctx(extraCtx), params);
 
 describe('the entry rule list', () => {
-  it('is max lots, max open positions, one position per instrument and max loss per day', () => {
-    expect(ENTRY_RULES.map((r) => r.id)).toEqual(['max-lots', 'max-open-positions', 'one-trade-per-instrument', 'max-daily-loss']);
+  it('is max lots, max open positions, max loss per day, wait after exit and, last, one position per instrument', () => {
+    expect(ENTRY_RULES.map((r) => r.id)).toEqual(['max-lots', 'max-open-positions', 'max-daily-loss', 'wait-after-exit', 'one-trade-per-instrument']);
   });
 
   it('has unique ids, every value of a known kind, and no defaults: nothing is limited until the user sets it', () => {
@@ -87,6 +88,22 @@ describe('max-daily-loss', () => {
     expect(check('max-daily-loss', { amount: 5000 }, { todayAutoPnl: 2000 })).toBeNull();
     expect(check('max-daily-loss', { amount: 5000 }, { todayAutoPnl: -5000 }))
       .toBe("Today's automated loss ₹5000.00 has reached the ₹5000 limit");
+  });
+});
+
+describe('wait-after-exit', () => {
+  const exitedAt = (minutesBeforeNoon, instrumentToken = 101) => ({ todayAutoExits: [{ instrumentToken, exitTime: new Date(NOON.getTime() - minutesBeforeNoon * 60_000) }] });
+
+  it('refuses the same instrument until the minutes have passed since its last exit', () => {
+    expect(check('wait-after-exit', { minutes: 15 }, exitedAt(10)))
+      .toBe('NIFTY26NOV24000PE was exited at 11:50 IST; waiting until 12:05 IST');
+    expect(check('wait-after-exit', { minutes: 15 }, exitedAt(15))).toBeNull();
+    expect(check('wait-after-exit', { minutes: 15 }, exitedAt(40))).toBeNull();
+  });
+
+  it('lets in an instrument not exited today, even straight after another was', () => {
+    expect(check('wait-after-exit', { minutes: 15 })).toBeNull();
+    expect(check('wait-after-exit', { minutes: 15 }, exitedAt(1, 202))).toBeNull();
   });
 });
 

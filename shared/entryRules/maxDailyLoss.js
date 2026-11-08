@@ -4,7 +4,7 @@
 export default {
   id: 'max-daily-loss',
   label: 'Max loss per day',
-  description: "Once today's automated P&L (booked and open) is down this much, new trades are rejected.",
+  description: "Don't take any new trade once today's loss is already this much or more: booked P&L plus open positions at their live price.",
   params: [{ key: 'amount', label: 'Loss (₹)', type: 'amount' }],
   check: (_trade, ctx, { amount }) => (ctx.todayAutoPnl <= -amount
     ? `Today's automated loss ₹${(-ctx.todayAutoPnl).toFixed(2)} has reached the ₹${amount} limit`
