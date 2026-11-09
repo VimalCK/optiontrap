@@ -16,17 +16,19 @@ import { firstRuleThatFires } from '../rules/ruleSettings.js';
 import stopLoss from './stopLoss.js';
 import target from './target.js';
 import squareOff from './squareOff.js';
+import maxDailyLoss from './maxDailyLoss.js';
 
 /**
  * @typedef {import('../rules/ruleSettings.js').RuleSettings} RuleSettings
  * @typedef {{ instrumentToken: number, tradingsymbol: string, pnl: number, pnlPercent: number }} OpenAutoPosition
  *   pnl is the position's live P&L in ₹; pnlPercent the same as a percentage of its entry price
- * @typedef {{ now: Date }} ExitRuleContext
+ * @typedef {{ now: Date, todayAutoPnl: number }} ExitRuleContext
+ *   todayAutoPnl is the owner's automated P&L today in ₹: booked plus open positions at their last price
  * @typedef {import('../rules/ruleSettings.js').Rule<OpenAutoPosition, ExitRuleContext>} ExitRule
  */
 
 /** Every exit rule, in the order they're checked. @type {ExitRule[]} */
-export const EXIT_RULES = [stopLoss, target, squareOff];
+export const EXIT_RULES = [stopLoss, target, squareOff, maxDailyLoss];
 
 /**
  * Run the user's active exit rules on an open position: the first that fires

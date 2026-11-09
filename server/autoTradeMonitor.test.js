@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // The module creates a default monitor on import; keep its real dependencies out.
-vi.mock('./db.js', () => ({ getAllOpenAutoPositions: vi.fn(), getOpenAutoPositions: vi.fn(), getAutomationConfigs: vi.fn() }));
+vi.mock('./db.js', () => ({ getAllOpenAutoPositions: vi.fn(), getOpenAutoPositions: vi.fn(), getAutomationConfigs: vi.fn(), getTodayAutoRealisedPnl: vi.fn() }));
 vi.mock('./paperTrading.js', () => ({ exitPaperTrade: vi.fn(), NOT_FOUND: 'NOT_FOUND' }));
 vi.mock('./oiHistoryScheduler.js', () => ({ findWorkingAdminSession: vi.fn() }));
 
-const { createAutoTradeMonitor, dueExits } = await import('./autoTradeMonitor.js');
+const { createAutoTradeMonitor, dueExits, openPnlByUser } = await import('./autoTradeMonitor.js');
 const { defaultRuleSettings } = await import('../shared/rules/ruleSettings.js');
 const { EXIT_RULES } = await import('../shared/exitRules/index.js');
 
@@ -25,21 +25,36 @@ const sold = { id: 'p1', userId: 'U1', instrumentToken: 101, tradingsymbol: 'NIF
 // Bought 50 at 200, another user, another instrument.
 const bought = { id: 'p2', userId: 'U2', instrumentToken: 202, tradingsymbol: 'NIFTY26NOV24000CE', side: 'BUY', quantity: 50, entryPrice: 200 };
 
+describe('openPnlByUser', () => {
+  it("totals each user's open P&L at the last prices, counting positions with no price yet as 0", () => {
+    const another = { ...sold, id: 'p3', instrumentToken: 303 };
+    expect(openPnlByUser([sold, bought, another], new Map([[101, 110], [202, 210]])))
+      .toEqual(new Map([['U1', -750], ['U2', 500]]));
+  });
+});
+
 describe('dueExits', () => {
   const rules = new Map([['U1', exitRules({ 'stop-loss': { percent: 20 } })], ['U2', exitRules({ target: { percent: 5 } })]]);
+  const state = (lastPrices, exitRulesByUser = rules, todayPnlByUser = new Map()) => ({ lastPrices, exitRulesByUser, todayPnlByUser, now: NOON });
 
   it("fires each owner's own rules on the position's P&L at the last price, exiting at that price", () => {
     const prices = new Map([[101, 120], [202, 210]]);
-    expect(dueExits([sold, bought], prices, rules, NOON)).toEqual([
+    expect(dueExits([sold, bought], state(prices))).toEqual([
       { position: sold, exitPrice: 120, ruleId: 'stop-loss', reason: 'Stop-loss hit: P&L -20.00% (₹-1500.00), stop-loss 20%' },
       { position: bought, exitPrice: 210, ruleId: 'target', reason: 'Target hit: P&L 5.00% (₹500.00), target 5%' },
     ]);
   });
 
   it('keeps positions open when no rule fires, with no price yet, or with no rules loaded', () => {
-    expect(dueExits([sold, bought], new Map([[101, 119.95], [202, 209.95]]), rules, NOON)).toEqual([]);
-    expect(dueExits([sold], new Map(), rules, NOON)).toEqual([]);
-    expect(dueExits([{ ...sold, userId: 'U9' }], new Map([[101, 500]]), rules, NOON)).toEqual([]);
+    expect(dueExits([sold, bought], state(new Map([[101, 119.95], [202, 209.95]])))).toEqual([]);
+    expect(dueExits([sold], state(new Map()))).toEqual([]);
+    expect(dueExits([{ ...sold, userId: 'U9' }], state(new Map([[101, 500]])))).toEqual([]);
+  });
+
+  it("gives the rules the owner's P&L for the day, so max loss per day closes their positions", () => {
+    const maxLoss = new Map([['U1', exitRules({ 'max-daily-loss': { amount: 5000 } })], ['U2', exitRules({ 'max-daily-loss': { amount: 5000 } })]]);
+    const due = dueExits([sold, bought], state(new Map([[101, 101], [202, 201]]), maxLoss, new Map([['U1', -5000], ['U2', -4999]])));
+    expect(due.map((d) => [d.position.id, d.ruleId])).toEqual([['p1', 'max-daily-loss']]);
   });
 });
 
@@ -56,6 +71,7 @@ describe('the monitor', () => {
       getAllOpenAutoPositions: vi.fn(async () => [sold, bought]),
       getOpenAutoPositions: vi.fn(async () => []),
       getAutomationConfigs: vi.fn(async (ids) => new Map(ids.map((id) => [id, config(id === 'U1' ? { 'stop-loss': { percent: 20 } } : {})]))),
+      getTodayAutoRealisedPnl: vi.fn(async () => 0),
     };
     exitPosition = vi.fn(async () => ({ ok: true }));
     feeds = [];
@@ -134,6 +150,33 @@ describe('the monitor', () => {
     now = new Date('2026-11-05T09:30:00Z'); // 15:00 IST
     await monitor.checkClock();
     expect(exitPosition.mock.calls.map((c) => [c[1], c[2]])).toEqual([['p1', 101], ['p2', 199]]);
+  });
+
+  it("squares off all of a user's positions, winners too, once their day's loss (booked + open) reaches the limit", async () => {
+    // U1: sold 75 at 100 (p1), bought 50 at 200 (p4), sold 75 at 100 (p5); ₹1,000 already booked as a loss today.
+    const boughtU1 = { ...bought, id: 'p4', userId: 'U1', instrumentToken: 404 };
+    const winner = { ...sold, id: 'p5', instrumentToken: 505 };
+    db.getAllOpenAutoPositions.mockResolvedValue([sold, boughtU1, winner, bought]);
+    db.getAutomationConfigs.mockImplementation(async (ids) => new Map(ids.map((id) => [id, config({ 'max-daily-loss': { amount: 5000 } })])));
+    db.getTodayAutoRealisedPnl.mockImplementation(async (userId) => (userId === 'U1' ? -1000 : 0));
+    await monitor.checkMarket();
+    expect(db.getTodayAutoRealisedPnl).toHaveBeenCalledWith('U1', '2026-11-04T18:30:00.000Z'); // midnight IST
+
+    // Open: p1 −2,250, p4 −2,000, p5 +750 → day −4,500: under the limit.
+    await monitor.onTicks([{ instrumentToken: 101, lastPrice: 130 }, { instrumentToken: 404, lastPrice: 160 }, { instrumentToken: 505, lastPrice: 90 }, { instrumentToken: 202, lastPrice: 200 }]);
+    expect(exitPosition).not.toHaveBeenCalled();
+
+    // p1 to 137 (−2,775) → day −5,025: p1 exits on its tick, booking its loss.
+    db.getTodayAutoRealisedPnl.mockImplementation(async (userId) => (userId === 'U1' ? -3775 : 0));
+    await monitor.onTicks([{ instrumentToken: 101, lastPrice: 137 }]);
+    expect(exitPosition).toHaveBeenCalledWith('U1', 'p1', 137, expect.objectContaining({
+      exitReason: { ruleId: 'max-daily-loss', reason: "Max loss per day hit: today's automated P&L ₹-5025.00, limit ₹5000" },
+    }));
+
+    // The day is still −5,025 (now mostly booked), so the rest go on the next check, the winner too; U2's stays.
+    await monitor.checkClock();
+    expect(exitPosition.mock.calls.map((c) => c[1])).toEqual(['p1', 'p4', 'p5']);
+    expect(monitor.watchedPositionIds()).toEqual(['p2']);
   });
 
   it('applies changed exit rules from the next tick after a refresh', async () => {

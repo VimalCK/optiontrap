@@ -4,7 +4,7 @@ import { defaultRuleSettings } from '../rules/ruleSettings.js';
 
 /** A position at a P&L percentage; its ₹ P&L as for 75 units sold at 100, i.e. 75 × the percentage. */
 const position = (pnlPercent) => ({ instrumentToken: 101, tradingsymbol: 'NIFTY26NOV24000PE', pnlPercent, pnl: pnlPercent * 75 });
-const at = (iso) => ({ now: new Date(iso) });
+const at = (iso, todayAutoPnl = 0) => ({ now: new Date(iso), todayAutoPnl });
 const noon = at('2026-11-05T06:30:00Z'); // Thu 12:00 IST
 
 /** All rules inactive, except those given here (active, with these values). */
@@ -17,8 +17,8 @@ const settings = (active = {}) => {
 const check = (id, params, pos = position(0), ctx = noon) => EXIT_RULES.find((r) => r.id === id).check(pos, ctx, params);
 
 describe('the exit rule list', () => {
-  it('is stop-loss, target and square off', () => {
-    expect(EXIT_RULES.map((r) => r.id)).toEqual(['stop-loss', 'target', 'square-off']);
+  it('is stop-loss, target, square off and max loss per day', () => {
+    expect(EXIT_RULES.map((r) => r.id)).toEqual(['stop-loss', 'target', 'square-off', 'max-daily-loss']);
   });
 
   it('starts every rule inactive; only square off has a time filled in, the 15:00 asked for', () => {
@@ -26,7 +26,23 @@ describe('the exit rule list', () => {
       'stop-loss': { active: false, params: { percent: null } },
       target: { active: false, params: { percent: null } },
       'square-off': { active: false, params: { time: '15:00' } },
+      'max-daily-loss': { active: false, params: { amount: null } },
     });
+  });
+});
+
+describe('max-daily-loss', () => {
+  const NOON_ISO = '2026-11-05T06:30:00Z'; // Thu 12:00 IST
+
+  it("exits once today's automated P&L reaches the loss, not before", () => {
+    expect(check('max-daily-loss', { amount: 5000 }, position(0), at(NOON_ISO, -4999.99))).toBeNull();
+    expect(check('max-daily-loss', { amount: 5000 }, position(0), at(NOON_ISO, 2000))).toBeNull();
+    expect(check('max-daily-loss', { amount: 5000 }, position(0), at(NOON_ISO, -5000)))
+      .toBe("Max loss per day hit: today's automated P&L ₹-5000.00, limit ₹5000");
+  });
+
+  it('exits a winning position too, since the limit is on the whole day', () => {
+    expect(check('max-daily-loss', { amount: 5000 }, position(30), at(NOON_ISO, -5500))).not.toBeNull();
   });
 });
 

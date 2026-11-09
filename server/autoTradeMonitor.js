@@ -1,7 +1,7 @@
 /**
  * The trade monitor: closes open automated paper positions when one of their
  * owner's active exit rules fires (shared/exitRules/: stop-loss, target,
- * square off at a time), on the live tick that crosses it.
+ * square off at a time, max loss per day), on the live tick that crosses it.
  *
  * - Watches every open automated position, across all users, while the
  *   market is open (IST, trading days). Positions are loaded when the market
@@ -14,7 +14,9 @@
  *   that instrument. A clock check every second runs them on the last price
  *   too, so "square off at" fires on time even if an instrument goes quiet.
  * - Rules compare the position's P&L at the last traded price, and the exit
- *   is at that last price. It goes through the one paper-trading exit
+ *   is at that last price. The owner's P&L for the day (booked, loaded from
+ *   the DB and reloaded after each exit, plus open at the last prices) is
+ *   there too, for the max loss per day rule. The exit goes through the one paper-trading exit
  *   (paperTrading.js, so the paper trade rules apply), which also closes the
  *   automated trades behind the position, with the rule's reason.
  * - Exit rules protect open positions whether automation is switched on or
@@ -24,12 +26,13 @@ import {
   getAllOpenAutoPositions,
   getAutomationConfigs,
   getOpenAutoPositions,
+  getTodayAutoRealisedPnl,
 } from './db.js';
 import { exitPaperTrade, NOT_FOUND } from './paperTrading.js';
 import { openSharedTickerFeed } from './sharedTickerFeed.js';
 import { findWorkingAdminSession } from './oiHistoryScheduler.js';
 import { isMarketOpen } from './marketClock.js';
-import { marketDate } from '../shared/marketTime.js';
+import { marketDate, marketDayStartMs } from '../shared/marketTime.js';
 import { checkExitRules } from '../shared/exitRules/index.js';
 import { paperPnl, paperPnlPercent } from '../shared/paperPnl.js';
 
@@ -46,22 +49,38 @@ const LOG_PREFIX = '[Trade Monitor]';
  */
 
 /**
+ * Each user's open P&L at the last prices; positions with no price yet count as 0.
+ * @param {Iterable<WatchedPosition>} positions
+ * @param {Map<number, number>} lastPrices  instrument token → last traded price
+ * @returns {Map<string, number>} user id → open P&L in ₹
+ */
+export function openPnlByUser(positions, lastPrices) {
+  const totals = new Map();
+  for (const position of positions) {
+    const price = lastPrices.get(position.instrumentToken);
+    if (price !== undefined) totals.set(position.userId, (totals.get(position.userId) ?? 0) + paperPnl(position, price));
+  }
+  return totals;
+}
+
+/**
  * The positions an exit rule says to close now, each at its last price.
  * Positions with no price yet, or whose owner has no rules loaded, stay open.
+ * `todayPnlByUser` is each owner's automated P&L today, booked plus open
+ * (0 when missing), for the max loss per day rule.
  * @param {WatchedPosition[]} positions
- * @param {Map<number, number>} lastPrices  instrument token → last traded price
- * @param {Map<string, RuleSettings>} exitRulesByUser
- * @param {Date} now
+ * @param {{ lastPrices: Map<number, number>, exitRulesByUser: Map<string, RuleSettings>, todayPnlByUser: Map<string, number>, now: Date }} state
  * @returns {DueExit[]}
  */
-export function dueExits(positions, lastPrices, exitRulesByUser, now) {
+export function dueExits(positions, { lastPrices, exitRulesByUser, todayPnlByUser, now }) {
   /** @type {DueExit[]} */
   const due = [];
   for (const position of positions) {
     const price = lastPrices.get(position.instrumentToken);
     const rules = exitRulesByUser.get(position.userId);
     if (price === undefined || !rules) continue;
-    const fired = checkExitRules({ ...position, pnl: paperPnl(position, price), pnlPercent: paperPnlPercent(position, price) }, { now }, rules);
+    const ctx = { now, todayAutoPnl: todayPnlByUser.get(position.userId) ?? 0 };
+    const fired = checkExitRules({ ...position, pnl: paperPnl(position, price), pnlPercent: paperPnlPercent(position, price) }, ctx, rules);
     if (fired) due.push({ position, exitPrice: price, ...fired });
   }
   return due;
@@ -71,7 +90,7 @@ export function dueExits(positions, lastPrices, exitRulesByUser, now) {
  * A trade monitor. Everything it talks to is injectable, for tests.
  * @param {{
  *   db?: { getAllOpenAutoPositions: typeof getAllOpenAutoPositions, getOpenAutoPositions: typeof getOpenAutoPositions,
- *          getAutomationConfigs: typeof getAutomationConfigs },
+ *          getAutomationConfigs: typeof getAutomationConfigs, getTodayAutoRealisedPnl: typeof getTodayAutoRealisedPnl },
  *   exitPosition?: typeof exitPaperTrade,
  *   findKiteSession?: typeof findWorkingAdminSession,
  *   createFeed?: typeof openSharedTickerFeed,
@@ -80,7 +99,7 @@ export function dueExits(positions, lastPrices, exitRulesByUser, now) {
  * }} [deps]
  */
 export function createAutoTradeMonitor({
-  db = { getAllOpenAutoPositions, getOpenAutoPositions, getAutomationConfigs },
+  db = { getAllOpenAutoPositions, getOpenAutoPositions, getAutomationConfigs, getTodayAutoRealisedPnl },
   exitPosition = exitPaperTrade,
   findKiteSession = findWorkingAdminSession,
   createFeed = openSharedTickerFeed,
@@ -91,6 +110,8 @@ export function createAutoTradeMonitor({
   const watched = new Map();
   /** @type {Map<string, RuleSettings>} */
   const exitRulesByUser = new Map();
+  /** @type {Map<string, number>} user id → automated P&L booked today */
+  const bookedPnlByUser = new Map();
   /** @type {Map<number, number>} */
   const lastPrices = new Map();
   /** Positions being exited right now, so a burst of ticks exits each once. */
@@ -103,9 +124,16 @@ export function createAutoTradeMonitor({
 
   const watchedTokens = () => [...new Set([...watched.values()].map((p) => p.instrumentToken))];
 
-  /** Track exactly these users' positions and exit rules, replacing what was held for them. */
+  /** Reload the user's automated P&L booked today from the DB. */
+  async function loadBookedPnl(/** @type {string} */ userId) {
+    const todayStart = new Date(marketDayStartMs(clock().getTime())).toISOString();
+    bookedPnlByUser.set(userId, await db.getTodayAutoRealisedPnl(userId, todayStart));
+  }
+
+  /** Track exactly these users' positions, exit rules and booked P&L, replacing what was held for them. */
   async function track(userIds, positions) {
     const configs = await db.getAutomationConfigs(userIds);
+    await Promise.all(userIds.map(loadBookedPnl));
     for (const [id, position] of watched) if (userIds.includes(position.userId)) watched.delete(id);
     for (const userId of userIds) exitRulesByUser.set(userId, configs.get(userId).exitRules);
     for (const position of positions) watched.set(position.id, position);
@@ -116,6 +144,7 @@ export function createAutoTradeMonitor({
     const positions = await db.getAllOpenAutoPositions();
     watched.clear();
     exitRulesByUser.clear();
+    bookedPnlByUser.clear();
     await track([...new Set(positions.map((p) => p.userId))], positions);
     log(`watching ${watched.size} open automated position(s)`);
   }
@@ -134,6 +163,9 @@ export function createAutoTradeMonitor({
       }
       watched.delete(position.id); // exited now, or already exited elsewhere
       feed?.watch(watchedTokens());
+      // After the delete, so the exit is never counted as both open and booked.
+      await loadBookedPnl(position.userId)
+        .catch((err) => log(`[${position.userId}] could not reload today's booked P&L: ${err.message}`));
     } catch (err) {
       log(`${position.tradingsymbol} [${position.userId}] exit failed: ${/** @type {Error} */ (err).message}`);
     } finally {
@@ -143,7 +175,15 @@ export function createAutoTradeMonitor({
 
   /** Run the exit rules on these positions at their last prices, and exit the ones due. */
   function check(positions) {
-    return Promise.all(dueExits(positions, lastPrices, exitRulesByUser, clock()).map(exit));
+    const state = { lastPrices, exitRulesByUser, todayPnlByUser: todayPnlByUser(), now: clock() };
+    return Promise.all(dueExits(positions, state).map(exit));
+  }
+
+  /** Each user's automated P&L today: booked plus every watched position at its last price. */
+  function todayPnlByUser() {
+    const totals = openPnlByUser(watched.values(), lastPrices);
+    for (const [userId, booked] of bookedPnlByUser) totals.set(userId, (totals.get(userId) ?? 0) + booked);
+    return totals;
   }
 
   /** @param {import('../shared/kiteTicks.js').Tick[]} ticks */
@@ -202,14 +242,7 @@ export function createAutoTradeMonitor({
       if (!feed && watched.size > 0 && isMarketOpen(clock())) await startFeed(marketDate(clock()));
     },
     /** The user's open automated P&L at the last prices (positions with no price yet count as 0). */
-    openPnl(/** @type {string} */ userId) {
-      let total = 0;
-      for (const position of watched.values()) {
-        const price = lastPrices.get(position.instrumentToken);
-        if (position.userId === userId && price !== undefined) total += paperPnl(position, price);
-      }
-      return total;
-    },
+    openPnl: (/** @type {string} */ userId) => openPnlByUser(watched.values(), lastPrices).get(userId) ?? 0,
     /** What is being watched, for tests and logs. */
     watchedPositionIds: () => [...watched.keys()],
   };
