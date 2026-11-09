@@ -5,6 +5,7 @@ import { isAbortError } from '@/services/apiClient';
 import type { PriceAlertCondition } from '@/services/priceAlerts';
 import StockSetupsGuide from './StockSetupsGuide';
 import SetupScorecard from './SetupScorecard';
+import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import { realizedVol, REALIZED_WINDOW, TRADING_DAYS } from '@/services/fairValue';
 // Also opened from OI History, where the watchlist styles aren't otherwise loaded.
 import '@/styles/watchlist.css';
@@ -284,6 +285,7 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
         <div className="wl-sz__header">
           <div className="wl-sz__title">
             <h3 id="wl-sz-title">{tradingsymbol}</h3>
+            <TradingViewLink symbol={tradingsymbol} size={16} className="wl-sz__chart-link" />
             <button
               className={`wl-sz__icon-btn wl-sz__icon-btn--small ${view !== 'details' ? 'wl-sz__icon-btn--active' : ''}`}
               onClick={() => setView((v) => (v === 'details' ? 'guide' : 'details'))}

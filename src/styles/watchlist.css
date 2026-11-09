@@ -1122,6 +1122,8 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
   border-bottom: 1px solid var(--sz-line);
 }
 .wl-sz__title { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; }
+/* The title row already spaces its items, so the chart link drops its own side margins. */
+.wl-sz__title .wl-sz__chart-link { margin: 0; flex-shrink: 0; }
 .wl-sz__title h3 {
   margin: 0;
   overflow: hidden;
