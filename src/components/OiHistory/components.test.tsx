@@ -155,7 +155,7 @@ describe('StrikeOiChart', () => {
     const fairMap = new Map<string, Map<string, StrikeHistoryEntry>>([
       ['2026-10-22', new Map([['2026-10-27', { ...entry(101, 202), ceFair: 90, ceRichPct: 0.122, ceFairLabel: 'Expensive' }]])],
       ['2026-10-23', new Map([['2026-10-27', { ...entry(111, 222), ceFair: 120, ceRichPct: -0.075, ceFairLabel: 'Cheap' }]])],
-      ['2026-10-24', new Map([['2026-10-27', { ...entry(105, 210), ceFair: 101, ceRichPct: 0.04, ceFairLabel: 'Expensive' }]])],
+      ['2026-10-24', new Map([['2026-10-27', { ...entry(105, 210), ceFair: 98, ceRichPct: 0.071, ceFairLabel: 'Fair' }]])],
     ]);
     const render = (showFair: boolean) =>
       renderToStaticMarkup(<StrikeOiChart optionType="CE" maxPrice={120} {...props} dates={[...props.dates, '2026-10-24']} dateMap={fairMap} showFair={showFair} />).replace(/<!-- -->/g, '');
@@ -176,8 +176,9 @@ describe('StrikeOiChart', () => {
     expect(on).toContain('-8%');
     expect(on).toContain('#f59e0b');
     expect(on).toContain('#38bdf8');
-    // Gaps of 5% or less get no bar, and there are no connectors from price to fair value.
-    expect(on).not.toContain('+4%');
+    // Only days labelled Expensive or Cheap get a bar: a 7% gap the model calls Fair (IV within a
+    // vol point of the curve, e.g. a cheap far-OTM option) gets none. No connectors from price to fair value.
+    expect(on).not.toContain('+7%');
     expect(on.match(/<rect /g)?.length).toBe(2);
     expect(on).not.toContain('stroke-width="1.6"');
     // Fair line is light grey and the gap to the price line is one grey shaded area.

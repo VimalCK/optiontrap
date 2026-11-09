@@ -2,10 +2,7 @@ import React from 'react';
 import type { StrikeHistoryEntry } from './types';
 import { formatOiCompact } from './helpers';
 import { ChartXAxis } from './ChartXAxis';
-import { FAIR_LINE_COLOR, richnessColor } from '@/services/fairValue';
-
-/** Rich / cheap gaps at or below this share of fair value are not drawn. */
-const MIN_RICH_PCT = 0.05;
+import { FAIR_LINE_COLOR, richnessColor, type Richness } from '@/services/fairValue';
 
 interface StrikeOiChartProps {
   optionType: 'CE' | 'PE';
@@ -28,6 +25,7 @@ export const StrikeOiChart: React.FC<StrikeOiChartProps> = ({ optionType, dates,
   const volumeKey = optionType === 'CE' ? 'ceVolume' : 'peVolume';
   const fairKey = optionType === 'CE' ? 'ceFair' : 'peFair';
   const richKey = optionType === 'CE' ? 'ceRichPct' : 'peRichPct';
+  const labelKey = optionType === 'CE' ? 'ceFairLabel' : 'peFairLabel';
   const W = 700, H = 162, PAD_L = 50, PAD_R = 50, PAD_T = 16, PAD_B = 30;
   const plotW = W - PAD_L - PAD_R;
   const plotH = H - PAD_T - PAD_B;
@@ -57,21 +55,23 @@ export const StrikeOiChart: React.FC<StrikeOiChartProps> = ({ optionType, dates,
 
   // Fair-value line per expiry
   const fairLines = showFair ? expiries.map((exp) => {
-    const pts: { x: number; y: number; priceY: number | null; pct: number | null }[] = [];
+    const pts: { x: number; y: number; priceY: number | null; pct: number | null; label: Richness | null }[] = [];
     dates.forEach((d, i) => {
       const entry = dateMap.get(d)?.get(exp);
       const fair = entry?.[fairKey];
       if (!entry || fair == null || !(fair > 0)) return;
-      pts.push({ x: xAt(i), y: yAt(fair), priceY: entry[closeKey] > 0 ? yAt(entry[closeKey]) : null, pct: entry[richKey] ?? null });
+      pts.push({ x: xAt(i), y: yAt(fair), priceY: entry[closeKey] > 0 ? yAt(entry[closeKey]) : null, pct: entry[richKey] ?? null, label: entry[labelKey] ?? null });
     });
     return { exp, pts, points: pts.map((p) => `${p.x},${p.y}`).join(' ') };
   }).filter((l) => l.pts.length > 0) : [];
 
-  // In the fair-value view the bars show the rich / cheap gap instead of OI or volume; small gaps are left out.
+  // In the fair-value view the bars show the rich / cheap gap instead of OI or volume, only on days the
+  // model labels the option Expensive or Cheap (its IV off the curve by RICH_IV_GAP or more). A % gap
+  // alone would flag noise on cheap far-OTM options, where a few ticks are a large share of the price.
   const richPoints = fairLines
     .flatMap((l) => l.pts)
-    .filter((p): p is typeof p & { pct: number } => p.pct !== null && Math.abs(p.pct) > MIN_RICH_PCT)
-    .map((p) => ({ ...p, color: richnessColor(p.pct > 0 ? 'Expensive' : 'Cheap') }));
+    .filter((p): p is typeof p & { pct: number } => p.pct !== null && (p.label === 'Expensive' || p.label === 'Cheap'))
+    .map((p) => ({ ...p, color: richnessColor(p.label) }));
   const maxRichPct = Math.max(0.1, ...richPoints.map((p) => Math.abs(p.pct)));
 
   // Grey shading between the price line and the fair-value line
