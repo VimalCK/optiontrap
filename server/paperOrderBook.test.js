@@ -26,7 +26,8 @@ const input = (extra = {}) => ({
 /** An order as the database returns it. */
 const stored = (id, extra = {}) => ({
   id, userId: 'U1', tradingsymbol: 'NIFTY26N1024000CE', instrumentToken: 101, instrumentType: 'CE', exchange: 'NFO', strike: 24000,
-  optionType: 'CE', expiry: '2026-11-10', side: 'BUY', quantity: 75, limitPrice: 50, status: 'open', fillPrice: null, positionId: null, ...extra,
+  optionType: 'CE', expiry: '2026-11-10', side: 'BUY', quantity: 75, limitPrice: 50, status: 'open', fillPrice: null, positionId: null,
+  source: 'manual', autoTradeId: null, ...extra,
 });
 
 describe('the order book', () => {
@@ -41,13 +42,13 @@ describe('the order book', () => {
     now = NOON;
     lastPrice = 60;
     db = {
-      createPaperOrder: vi.fn(async (userId, order) => stored('o1', { userId, side: order.side, limitPrice: order.limitPrice })),
+      createPaperOrder: vi.fn(async (userId, order, placedBy) => stored('o1', { userId, side: order.side, limitPrice: order.limitPrice, ...placedBy })),
       getOpenPaperOrders: vi.fn(async () => []),
       claimPaperOrderFill: vi.fn(async (id, fillPrice) => stored(id, { status: 'filled', fillPrice })),
       setPaperOrderPosition: vi.fn(async () => {}),
-      cancelUnfilledPaperOrder: vi.fn(async () => {}),
+      cancelUnfilledPaperOrder: vi.fn(async (id, reason) => stored(id, { status: 'cancelled', statusReason: reason })),
       cancelPaperOrder: vi.fn(async (userId, id) => stored(id, { status: 'cancelled', statusReason: CANCELLED_BY_USER })),
-      cancelOpenPaperOrdersPlacedBefore: vi.fn(async () => 0),
+      cancelOpenPaperOrdersPlacedBefore: vi.fn(async () => []),
     };
     openPosition = vi.fn(async () => ({ ok: true, position: { id: 'pos1' } }));
     feeds = [];
@@ -70,7 +71,7 @@ describe('the order book', () => {
     it('leaves a buy above the last price open, watching its instrument on the admin feed', async () => {
       const result = await book.place('U1', input(), USER_KITE);
       expect(result).toEqual({ ok: true, order: expect.objectContaining({ id: 'o1', status: 'open' }) });
-      expect(db.createPaperOrder).toHaveBeenCalledWith('U1', expect.objectContaining({ limitPrice: 50, instrumentType: 'CE', exchange: 'NFO' }));
+      expect(db.createPaperOrder).toHaveBeenCalledWith('U1', expect.objectContaining({ limitPrice: 50, instrumentType: 'CE', exchange: 'NFO' }), { source: 'manual' });
       expect(openPosition).not.toHaveBeenCalled();
       expect(book.waitingOrderIds()).toEqual(['o1']);
       expect(feeds[0].options.kite).toEqual(ADMIN_KITE);
@@ -81,7 +82,7 @@ describe('the order book', () => {
       lastPrice = 40;
       const result = await book.place('U1', input(), USER_KITE);
       expect(db.claimPaperOrderFill).toHaveBeenCalledWith('o1', 40);
-      expect(openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ instrumentToken: 101, side: 'BUY', quantity: 75, entryPrice: 40 }), { now: NOON });
+      expect(openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ instrumentToken: 101, side: 'BUY', quantity: 75, entryPrice: 40 }), { now: NOON, source: 'manual' });
       expect(db.setPaperOrderPosition).toHaveBeenCalledWith('o1', 'pos1');
       expect(result).toEqual({ ok: true, order: expect.objectContaining({ status: 'filled', fillPrice: 40, positionId: 'pos1' }) });
       expect(book.waitingOrderIds()).toEqual([]);
@@ -91,7 +92,7 @@ describe('the order book', () => {
     it('fills a sell at once when the last price is at or above its limit', async () => {
       lastPrice = 50;
       await book.place('U1', input({ side: 'SELL' }), USER_KITE);
-      expect(openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ side: 'SELL', entryPrice: 50 }), { now: NOON });
+      expect(openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ side: 'SELL', entryPrice: 50 }), { now: NOON, source: 'manual' });
     });
 
     it('refuses an invalid order or one outside market hours, saving nothing', async () => {
@@ -120,7 +121,7 @@ describe('the order book', () => {
       expect(db.claimPaperOrderFill).not.toHaveBeenCalled();
       await book.onTicks([{ instrumentToken: 101, lastPrice: 49.5 }]);
       expect(db.claimPaperOrderFill).toHaveBeenCalledWith('o1', 50);
-      expect(openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ entryPrice: 50 }), { now: NOON });
+      expect(openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ entryPrice: 50 }), { now: NOON, source: 'manual' });
       expect(db.setPaperOrderPosition).toHaveBeenCalledWith('o1', 'pos1');
       expect(book.waitingOrderIds()).toEqual([]);
       expect(feeds[0].watching).toEqual([]);
@@ -168,6 +169,72 @@ describe('the order book', () => {
     it('answers not found for an order that is not open (or not theirs)', async () => {
       db.cancelPaperOrder.mockResolvedValueOnce(null);
       expect(await book.cancel('U1', 'nope')).toEqual({ ok: false, code: 'NOT_FOUND', message: 'Order not found or no longer open' });
+    });
+  });
+
+  describe('automated orders', () => {
+    it("places an order for an automated trade at the engine's last price, linked to the trade, with no quote of its own", async () => {
+      const quotes = vi.fn();
+      const autoBook = createPaperOrderBook({ db, openPosition, quotes, findKiteSession: async () => ADMIN_KITE,
+        createFeed: () => ({ watch: vi.fn(), close: vi.fn() }), clock: () => NOON, log: () => {} });
+      const result = await autoBook.placeAuto('U1', input({ limitPrice: 48 }), { lastPrice: 60, autoTradeId: 't1' });
+      expect(quotes).not.toHaveBeenCalled();
+      expect(db.createPaperOrder).toHaveBeenCalledWith('U1', expect.objectContaining({ limitPrice: 48 }), { source: 'auto', autoTradeId: 't1' });
+      expect(result).toEqual({ ok: true, order: expect.objectContaining({ status: 'open', source: 'auto', autoTradeId: 't1' }) });
+      expect(autoBook.waitingOrderIds()).toEqual(['o1']);
+    });
+
+    it('opens an automated position when it fills', async () => {
+      await book.placeAuto('U1', input(), { lastPrice: 60, autoTradeId: 't1' });
+      await book.onTicks([{ instrumentToken: 101, lastPrice: 49 }]);
+      expect(openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ entryPrice: 50 }), { now: NOON, source: 'auto' });
+    });
+
+    it('refuses an automated order the paper trade rules refuse, saving nothing', async () => {
+      now = AFTER_CLOSE;
+      expect(await book.placeAuto('U1', input(), { lastPrice: 60, autoTradeId: 't1' }))
+        .toEqual({ ok: false, code: 'MARKET_CLOSED', message: MARKET_CLOSED_MESSAGE });
+      expect(db.createPaperOrder).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('telling listeners an order settled', () => {
+    let settled;
+
+    beforeEach(() => {
+      settled = [];
+      book.onSettled((order) => { settled.push(order); });
+    });
+
+    it('when it fills, with the position it opened', async () => {
+      await book.place('U1', input(), USER_KITE);
+      expect(settled).toEqual([]); // waiting is not settled
+      await book.onTicks([{ instrumentToken: 101, lastPrice: 49 }]);
+      expect(settled).toEqual([expect.objectContaining({ id: 'o1', status: 'filled', fillPrice: 50, positionId: 'pos1' })]);
+    });
+
+    it('when its fill is refused, cancelled with why', async () => {
+      await book.place('U1', input(), USER_KITE);
+      openPosition.mockResolvedValueOnce({ ok: false, code: 'MARKET_CLOSED', message: MARKET_CLOSED_MESSAGE });
+      await book.onTicks([{ instrumentToken: 101, lastPrice: 49 }]);
+      expect(settled).toEqual([expect.objectContaining({ status: 'cancelled', statusReason: MARKET_CLOSED_MESSAGE })]);
+    });
+
+    it('when the user cancels it, and for every order cancelled at the close', async () => {
+      await book.place('U1', input(), USER_KITE);
+      await book.cancel('U1', 'o1');
+      db.cancelOpenPaperOrdersPlacedBefore.mockResolvedValueOnce([stored('o7', { status: 'cancelled', statusReason: CANCELLED_AT_CLOSE })]);
+      now = AFTER_CLOSE;
+      await book.checkMarket();
+      expect(settled.map((o) => [o.id, o.statusReason])).toEqual([['o1', CANCELLED_BY_USER], ['o7', CANCELLED_AT_CLOSE]]);
+    });
+
+    it("keeps going when a listener fails: the fill itself stands", async () => {
+      book.onSettled(() => { throw new Error('listener broke'); });
+      await book.place('U1', input(), USER_KITE);
+      await book.onTicks([{ instrumentToken: 101, lastPrice: 49 }]);
+      expect(db.setPaperOrderPosition).toHaveBeenCalledWith('o1', 'pos1');
+      expect(settled).toHaveLength(1);
     });
   });
 

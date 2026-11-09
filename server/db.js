@@ -1540,27 +1540,44 @@ function toPaperOrder(row) {
     statusReason: row.status_reason,
     fillPrice: row.fill_price,
     positionId: row.position_id,
+    source: row.source,
+    autoTradeId: row.auto_trade_id,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
 }
 
 /**
- * Record a new open limit order for the user and return it.
+ * Record a new open limit order for the user and return it. Who placed it is
+ * set by the caller, never read from the order: by hand ('manual'), or by the
+ * trade engine for an automated trade ('auto', with that trade's id).
  * @param {string} userId
  * @param {import('../shared/paperOrders.js').LimitOrder} order
+ * @param {{ source?: 'manual' | 'auto', autoTradeId?: string | null }} [placedBy]
  */
-export async function createPaperOrder(userId, order) {
+export async function createPaperOrder(userId, order, { source = 'manual', autoTradeId = null } = {}) {
   const { strike, optionType, expiry } = instrumentColumns(order);
   const row = await firstRow(
     `INSERT INTO paper_orders (id, user_id, tradingsymbol, instrument_token, instrument_type, exchange, strike, option_type, expiry,
-       side, quantity, limit_price, note, target_price, stop_loss_price, strategy_tag, confidence)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+       side, quantity, limit_price, note, target_price, stop_loss_price, strategy_tag, confidence, source, auto_trade_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
      RETURNING *`,
     [crypto.randomUUID(), userId, order.tradingsymbol, order.instrumentToken, order.instrumentType, order.exchange, strike, optionType, expiry,
-     order.side, order.quantity, order.limitPrice, ...positionMetaValues(order)],
+     order.side, order.quantity, order.limitPrice, ...positionMetaValues(order), source, autoTradeId],
   );
   return toPaperOrder(row);
+}
+
+/**
+ * The user's automated limit orders still waiting to fill, for the entry
+ * rules (each counts as the position it will open). Served by
+ * paper_orders_open_auto_idx.
+ * @param {string} userId
+ * @returns {Promise<{ instrumentToken: number }[]>}
+ */
+export async function getWaitingAutoOrders(userId) {
+  const result = await rows("SELECT instrument_token FROM paper_orders WHERE user_id = $1 AND status = 'open' AND source = 'auto'", [userId]);
+  return result.map((row) => ({ instrumentToken: Number(row.instrument_token) }));
 }
 
 /**
@@ -1609,14 +1626,17 @@ export async function setPaperOrderPosition(id, positionId) {
 /**
  * Cancel an order that was claimed for a fill but whose trade was refused
  * (e.g. the market closed in between), with the refusal as the reason.
+ * Returns the cancelled order, or null when it wasn't such an order.
  * Served by the primary key.
  */
 export async function cancelUnfilledPaperOrder(id, reason) {
-  await query(
+  const row = await firstRow(
     `UPDATE paper_orders SET status = 'cancelled', status_reason = $2, fill_price = NULL, updated_at = now()
-     WHERE id = $1 AND status = 'filled' AND position_id IS NULL`,
+     WHERE id = $1 AND status = 'filled' AND position_id IS NULL
+     RETURNING *`,
     [id, reason],
   );
+  return row ? toPaperOrder(row) : null;
 }
 
 /**
@@ -1636,15 +1656,16 @@ export async function cancelPaperOrder(userId, id, reason) {
 /**
  * Cancel every user's open orders placed before `before` (an ISO time), with
  * `reason`: at the market close, and any left open from an earlier day.
- * Returns how many were cancelled. Served by paper_orders_open_idx.
+ * Returns the cancelled orders. Served by paper_orders_open_idx.
  */
 export async function cancelOpenPaperOrdersPlacedBefore(before, reason) {
-  const res = await query(
+  const result = await rows(
     `UPDATE paper_orders SET status = 'cancelled', status_reason = $2, updated_at = now()
-     WHERE status = 'open' AND created_at < $1`,
+     WHERE status = 'open' AND created_at < $1
+     RETURNING *`,
     [before, reason],
   );
-  return res.rowCount;
+  return result.map(toPaperOrder);
 }
 
 // ---------------------------------------------------------------------------

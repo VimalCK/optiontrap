@@ -3,8 +3,9 @@ import { describe, it, expect, vi } from 'vitest';
 // The module creates a default engine on import; keep its real dependencies out.
 vi.mock('./db.js', () => ({
   advanceAutoTrade: vi.fn(), createAutoTrade: vi.fn(), getAutomatedUsers: vi.fn(), getOpenAutoPositions: vi.fn(),
-  getTodayAutoExits: vi.fn(), getTodayAutoRealisedPnl: vi.fn(), getTodayOiSnapshots: vi.fn(), getUnderlyings: vi.fn(),
+  getTodayAutoExits: vi.fn(), getTodayAutoRealisedPnl: vi.fn(), getTodayOiSnapshots: vi.fn(), getUnderlyings: vi.fn(), getWaitingAutoOrders: vi.fn(),
 }));
+vi.mock('./paperOrderBook.js', () => ({ onPaperOrderSettled: vi.fn(), placeAutoLimitOrder: vi.fn() }));
 vi.mock('./paperTrading.js', () => ({ openPaperTrade: vi.fn() }));
 vi.mock('./kiteQuotes.js', () => ({ fetchQuotes: vi.fn() }));
 vi.mock('./autoTradeMonitor.js', () => ({ openAutoTradePnl: vi.fn(), refreshAutoTradeMonitor: vi.fn() }));
@@ -41,7 +42,7 @@ const strategy = (signals) => ({
 });
 
 /** An engine with fakes for everything it talks to. */
-function setup({ config = userConfig(), users = [{ userId: 'U1', config }], signals = [sellOption], prices = { 'NFO:NIFTY26NOV24000PE': 120 }, opened = { ok: true, position: { id: 'pos1' } } } = {}) {
+function setup({ config = userConfig(), users = [{ userId: 'U1', config }], signals = [sellOption], prices = { 'NFO:NIFTY26NOV24000PE': 120 }, opened = { ok: true, position: { id: 'pos1' } }, placed = { ok: true, order: { status: 'open' } } } = {}) {
   const db = {
     getAutomatedUsers: vi.fn().mockResolvedValue(users),
     getTodayOiSnapshots: vi.fn().mockResolvedValue([]),
@@ -51,18 +52,20 @@ function setup({ config = userConfig(), users = [{ userId: 'U1', config }], sign
     getOpenAutoPositions: vi.fn().mockResolvedValue([]),
     getTodayAutoRealisedPnl: vi.fn().mockResolvedValue(0),
     getTodayAutoExits: vi.fn().mockResolvedValue([]),
+    getWaitingAutoOrders: vi.fn().mockResolvedValue([]),
   };
   const deps = {
     db,
     strategies: [strategy(signals)],
     openPosition: vi.fn().mockResolvedValue(opened),
+    placeOrder: vi.fn().mockResolvedValue(placed),
     quotes: vi.fn().mockResolvedValue(Object.fromEntries(Object.entries(prices).map(([k, p]) => [k, { last_price: p }]))),
     openPnl: vi.fn().mockReturnValue(0),
     onExecuted: vi.fn(),
     log: vi.fn(),
   };
   const engine = createAutoTradeEngine(deps);
-  return { ...deps, run: () => engine.run({ now: NOON, kite: KITE, instruments }) };
+  return { ...deps, engine, run: () => engine.run({ now: NOON, kite: KITE, instruments }) };
 }
 
 /** The stage moves recorded, as 'from→to'. */
@@ -104,7 +107,7 @@ describe('planTrade', () => {
 });
 
 describe('refusal', () => {
-  const ctx = { openAutoPositions: [], todayAutoPnl: 0 };
+  const ctx = { openAutoPositions: [], waitingAutoOrders: [], todayAutoPnl: 0 };
   const trade = planTrade(sellOption, byToken, indexNames, userConfig()).trade;
 
   it('allows a trade the settings allow', () => {
@@ -218,5 +221,65 @@ describe('createAutoTradeEngine run', () => {
     await engine.run();
     expect(engine.log).toHaveBeenCalledWith(expect.stringContaining('db down'));
     expect(engine.onExecuted).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('entering through a limit order (Entry limit offset on)', () => {
+  /** userConfig with Entry limit offset at `percent`. */
+  const offsetConfig = (percent = 20) => {
+    const config = userConfig();
+    config.entryRules['entry-limit-offset'] = { active: true, params: { percent } };
+    return config;
+  };
+
+  it('places a sell limit that percentage above the last price, linked to the trade, and opens nothing yet', async () => {
+    const { db, run, openPosition, placeOrder, onExecuted } = setup({ config: offsetConfig(20) });
+    await run();
+    expect(placeOrder).toHaveBeenCalledWith('U1', expect.objectContaining({ tradingsymbol: 'NIFTY26NOV24000PE', side: 'SELL', quantity: 150, limitPrice: 144 }),
+      { lastPrice: 120, autoTradeId: 'T1' });
+    expect(openPosition).not.toHaveBeenCalled();
+    expect(moves(db)).toEqual(['selected→validated']); // validated while the order waits
+    expect(onExecuted).not.toHaveBeenCalled();
+  });
+
+  it('rejects the trade when the order is refused', async () => {
+    const { db, run } = setup({ config: offsetConfig(), placed: { ok: false, code: 'MARKET_CLOSED', message: 'The market is closed.' } });
+    await run();
+    expect(moves(db)).toEqual(['selected→validated', 'validated→rejected']);
+    expect(db.advanceAutoTrade.mock.calls[1][4]).toEqual({ reason: 'The market is closed.' });
+  });
+
+  it("doesn't place a second order in an instrument whose automated order is still waiting", async () => {
+    const config = offsetConfig();
+    config.entryRules['one-trade-per-instrument'] = { active: true, params: {} };
+    const engine = setup({ config });
+    engine.db.getWaitingAutoOrders.mockResolvedValue([{ instrumentToken: 101 }]);
+    await engine.run();
+    expect(engine.placeOrder).not.toHaveBeenCalled();
+    expect(engine.log).toHaveBeenCalledWith(expect.stringContaining('An automated limit order in NIFTY26NOV24000PE is already waiting'));
+  });
+});
+
+describe('settleOrder', () => {
+  const autoOrder = (extra) => ({ userId: 'U1', autoTradeId: 'T1', source: 'auto', side: 'SELL', quantity: 150, tradingsymbol: 'NIFTY26NOV24000PE', ...extra });
+
+  it('executes the trade at the fill price into the position the order opened, and hands it to the trade monitor', async () => {
+    const { db, engine, onExecuted } = setup();
+    await engine.settleOrder(autoOrder({ status: 'filled', fillPrice: 144, positionId: 'pos9' }));
+    expect(db.advanceAutoTrade).toHaveBeenCalledWith('U1', 'T1', 'validated', 'executed', { entryPrice: 144, positionId: 'pos9' }, { entryPrice: 144, positionId: 'pos9' });
+    expect(onExecuted).toHaveBeenCalledWith('U1');
+  });
+
+  it('rejects the trade with why its order was cancelled', async () => {
+    const { db, engine, onExecuted } = setup();
+    await engine.settleOrder(autoOrder({ status: 'cancelled', statusReason: 'Cancelled at market close' }));
+    expect(db.advanceAutoTrade).toHaveBeenCalledWith('U1', 'T1', 'validated', 'rejected', { reason: 'Cancelled at market close' }, { ruleId: null, reason: 'Cancelled at market close' });
+    expect(onExecuted).not.toHaveBeenCalled();
+  });
+
+  it('ignores orders placed by hand', async () => {
+    const { db, engine } = setup();
+    await engine.settleOrder(autoOrder({ source: 'manual', autoTradeId: null, status: 'filled', fillPrice: 50, positionId: 'p' }));
+    expect(db.advanceAutoTrade).not.toHaveBeenCalled();
   });
 });

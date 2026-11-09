@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_TRADE_LOTS, ENTRY_RULES, checkEntryRules, tradeLots } from './index.js';
+import { DEFAULT_TRADE_LOTS, ENTRY_RULES, checkEntryRules, entryLimitPrice, tradeLots } from './index.js';
 import { defaultRuleSettings, parseRuleSettings } from '../rules/ruleSettings.js';
 import { PARAM_TYPES } from '../rules/paramTypes.js';
 
 // 3 lots of 75.
 const trade = { instrumentToken: 101, tradingsymbol: 'NIFTY26NOV24000PE', side: 'SELL', quantity: 225, lotSize: 75 };
 const NOON = new Date('2026-11-05T06:30:00Z'); // Thu 12:00 IST
-const ctx = (extra = {}) => ({ now: NOON, openAutoPositions: [], todayAutoPnl: 0, todayAutoExits: [], ...extra });
+const ctx = (extra = {}) => ({ now: NOON, openAutoPositions: [], waitingAutoOrders: [], todayAutoPnl: 0, todayAutoExits: [], ...extra });
 
 /** All rules inactive, except those given here (active, with these values). */
 const settings = (active = {}) => {
@@ -19,8 +19,9 @@ const check = (id, params, extraCtx = {}, t = trade) =>
   ENTRY_RULES.find((r) => r.id === id).check(t, ctx(extraCtx), params);
 
 describe('the entry rule list', () => {
-  it('is max lots, max open positions, max loss per day, wait after exit and, last, one position per instrument', () => {
-    expect(ENTRY_RULES.map((r) => r.id)).toEqual(['max-lots', 'max-open-positions', 'max-daily-loss', 'wait-after-exit', 'one-trade-per-instrument']);
+  it('is max lots, max open positions, max loss per day, wait after exit, one position per instrument and entry limit offset', () => {
+    expect(ENTRY_RULES.map((r) => r.id))
+      .toEqual(['max-lots', 'max-open-positions', 'max-daily-loss', 'wait-after-exit', 'one-trade-per-instrument', 'entry-limit-offset']);
   });
 
   it('has unique ids, every value of a known kind, and no defaults: nothing is limited until the user sets it', () => {
@@ -66,11 +67,17 @@ describe('max-open-positions', () => {
   it('rejects a trade that would open one position too many', () => {
     expect(check('max-open-positions', { max: 3 }, { openAutoPositions: open })).toBeNull();
     expect(check('max-open-positions', { max: 2 }, { openAutoPositions: open }))
-      .toBe('2 automated positions already open, the most allowed is 2');
+      .toBe('2 automated positions already open or waiting to fill, the most allowed is 2');
   });
 
   it('allows a trade that merges into a position already open', () => {
     expect(check('max-open-positions', { max: 2 }, { openAutoPositions: open }, { ...trade, instrumentToken: 2 })).toBeNull();
+  });
+
+  it('counts a waiting automated limit order as the position it will open, once per instrument', () => {
+    const waiting = { openAutoPositions: [{ instrumentToken: 1 }], waitingAutoOrders: [{ instrumentToken: 2 }] };
+    expect(check('max-open-positions', { max: 2 }, waiting)).toBe('2 automated positions already open or waiting to fill, the most allowed is 2');
+    expect(check('max-open-positions', { max: 2 }, { ...waiting, waitingAutoOrders: [{ instrumentToken: 1 }] })).toBeNull(); // will merge into the open one
   });
 });
 
@@ -79,6 +86,34 @@ describe('one-trade-per-instrument', () => {
     expect(check('one-trade-per-instrument', {}, { openAutoPositions: [{ instrumentToken: 5 }] })).toBeNull();
     expect(check('one-trade-per-instrument', {}, { openAutoPositions: [{ instrumentToken: 101 }] }))
       .toBe('An automated position in NIFTY26NOV24000PE is already open');
+  });
+
+  it('rejects a trade in an instrument with an automated limit order still waiting', () => {
+    expect(check('one-trade-per-instrument', {}, { waitingAutoOrders: [{ instrumentToken: 101 }] }))
+      .toBe('An automated limit order in NIFTY26NOV24000PE is already waiting');
+  });
+});
+
+describe('entry-limit-offset', () => {
+  const offset = (percent, active = true) => settings(active ? { 'entry-limit-offset': { percent } } : {});
+
+  it('never refuses a trade: it only prices the entry', () => {
+    expect(check('entry-limit-offset', { percent: 20 })).toBeNull();
+  });
+
+  it('prices a buy that percentage below the last price and a sell that percentage above it', () => {
+    expect(entryLimitPrice(offset(20), 'BUY', 60)).toBe(48);
+    expect(entryLimitPrice(offset(20), 'SELL', 60)).toBe(72);
+    expect(entryLimitPrice(offset(15), 'BUY', 300)).toBe(255);
+  });
+
+  it('rounds to the 0.05 tick in the trade’s favour: a buy down, a sell up', () => {
+    expect(entryLimitPrice(offset(10), 'BUY', 123.45)).toBe(111.1); // 111.105 → 111.10
+    expect(entryLimitPrice(offset(10), 'SELL', 123.45)).toBe(135.8); // 135.795 → 135.80
+  });
+
+  it('is null while the rule is off: the engine enters at the last price', () => {
+    expect(entryLimitPrice(offset(20, false), 'BUY', 60)).toBeNull();
   });
 });
 

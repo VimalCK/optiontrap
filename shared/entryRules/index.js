@@ -18,6 +18,7 @@ import maxOpenPositions from './maxOpenPositions.js';
 import oneTradePerInstrument from './oneTradePerInstrument.js';
 import maxDailyLoss from './maxDailyLoss.js';
 import waitAfterExit from './waitAfterExit.js';
+import entryLimitOffset from './entryLimitOffset.js';
 
 /**
  * @typedef {import('../rules/ruleSettings.js').RuleSettings} RuleSettings
@@ -25,9 +26,11 @@ import waitAfterExit from './waitAfterExit.js';
  * @typedef {{
  *   now: Date,
  *   openAutoPositions: { instrumentToken: number }[],
+ *   waitingAutoOrders: { instrumentToken: number }[],
  *   todayAutoPnl: number,
  *   todayAutoExits: { instrumentToken: number, exitTime: Date }[],
  * }} EntryRuleContext
+ *   waitingAutoOrders: automated limit orders not filled yet, each a position about to open
  *   todayAutoExits: each instrument's latest automated exit today
  * @typedef {import('../rules/ruleSettings.js').Rule<CandidateTrade, EntryRuleContext>} EntryRule
  * @typedef {{ ok: true } | { ok: false, ruleId: string, reason: string }} EntryVerdict
@@ -45,8 +48,32 @@ export function tradeLots(settings) {
   return setting?.active ? Number(setting.params.max) : DEFAULT_TRADE_LOTS;
 }
 
+/** NSE's price step for options and futures: a limit price is a multiple of it. */
+const PRICE_TICK = 0.05;
+/** Absorbs floating-point error when counting ticks (48 / 0.05 is 959.999…, not 960). */
+const TICK_EPSILON = 1e-9;
+
+/**
+ * The limit price an automated entry is placed at: the Entry limit offset
+ * percentage better than `lastPrice` (a buy below, a sell above), rounded to
+ * the tick in the trade's favour; or null while that rule is off (enter at
+ * the last price).
+ * @param {RuleSettings} settings  the user's entry rules
+ * @param {'BUY' | 'SELL'} side
+ * @param {number} lastPrice
+ */
+export function entryLimitPrice(settings, side, lastPrice) {
+  const setting = settings[entryLimitOffset.id];
+  if (!setting?.active) return null;
+  const factor = Number(setting.params.percent) / 100;
+  const ticks = side === 'BUY'
+    ? Math.floor((lastPrice * (1 - factor)) / PRICE_TICK + TICK_EPSILON)
+    : Math.ceil((lastPrice * (1 + factor)) / PRICE_TICK - TICK_EPSILON);
+  return Number((ticks * PRICE_TICK).toFixed(2));
+}
+
 /** Every entry rule, in the order they're checked. @type {EntryRule[]} */
-export const ENTRY_RULES = [maxLots, maxOpenPositions, maxDailyLoss, waitAfterExit, oneTradePerInstrument];
+export const ENTRY_RULES = [maxLots, maxOpenPositions, maxDailyLoss, waitAfterExit, oneTradePerInstrument, entryLimitOffset];
 
 /**
  * Run the user's active entry rules on a trade; the first that refuses it gives the reason.

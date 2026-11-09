@@ -19,6 +19,13 @@
  *              last traded price, then handed to the trade monitor, which
  *              closes it when an exit rule fires
  *
+ * With the Entry limit offset entry rule on, a validated trade is entered
+ * through a paper limit order instead (paperOrderBook.js, source auto) at a
+ * better price than the last one. It stays validated while the order waits;
+ * when the order fills it is executed at the limit, and when the order is
+ * cancelled (by the user, or at the close) it is rejected with why
+ * (settleOrder, told by the order book).
+ *
  * The instrument's details (symbol, type, expiry, lot size, index or stock)
  * come from the instrument list, never from the strategy. With no strategy
  * active for anyone, a run does nothing.
@@ -32,12 +39,14 @@ import {
   getTodayAutoRealisedPnl,
   getTodayOiSnapshots,
   getUnderlyings,
+  getWaitingAutoOrders,
 } from './db.js';
 import { openPaperTrade } from './paperTrading.js';
 import { fetchQuotes } from './kiteQuotes.js';
 import { openAutoTradePnl, refreshAutoTradeMonitor } from './autoTradeMonitor.js';
+import { onPaperOrderSettled, placeAutoLimitOrder } from './paperOrderBook.js';
 import { checkGeneralSettings, tradeKind } from '../shared/automation.js';
-import { checkEntryRules, tradeLots } from '../shared/entryRules/index.js';
+import { checkEntryRules, entryLimitPrice, tradeLots } from '../shared/entryRules/index.js';
 import { STRATEGIES } from '../shared/strategies/index.js';
 import { OPTION_TYPES } from '../shared/paperTradeRules.js';
 import { marketDayStartMs } from '../shared/marketTime.js';
@@ -115,9 +124,10 @@ export function refusal(trade, config, ctx) {
  *   db?: { getAutomatedUsers: typeof getAutomatedUsers, getTodayOiSnapshots: typeof getTodayOiSnapshots, getUnderlyings: typeof getUnderlyings,
  *          createAutoTrade: typeof createAutoTrade, advanceAutoTrade: typeof advanceAutoTrade,
  *          getOpenAutoPositions: typeof getOpenAutoPositions, getTodayAutoRealisedPnl: typeof getTodayAutoRealisedPnl,
- *          getTodayAutoExits: typeof getTodayAutoExits },
+ *          getTodayAutoExits: typeof getTodayAutoExits, getWaitingAutoOrders: typeof getWaitingAutoOrders },
  *   strategies?: Strategy[],
  *   openPosition?: typeof openPaperTrade,
+ *   placeOrder?: typeof placeAutoLimitOrder,
  *   quotes?: typeof fetchQuotes,
  *   openPnl?: typeof openAutoTradePnl,
  *   onExecuted?: typeof refreshAutoTradeMonitor,
@@ -125,9 +135,10 @@ export function refusal(trade, config, ctx) {
  * }} [deps]
  */
 export function createAutoTradeEngine({
-  db = { getAutomatedUsers, getTodayOiSnapshots, getUnderlyings, createAutoTrade, advanceAutoTrade, getOpenAutoPositions, getTodayAutoRealisedPnl, getTodayAutoExits },
+  db = { getAutomatedUsers, getTodayOiSnapshots, getUnderlyings, createAutoTrade, advanceAutoTrade, getOpenAutoPositions, getTodayAutoRealisedPnl, getTodayAutoExits, getWaitingAutoOrders },
   strategies = STRATEGIES,
   openPosition = openPaperTrade,
+  placeOrder = placeAutoLimitOrder,
   quotes = fetchQuotes,
   openPnl = openAutoTradePnl,
   onExecuted = refreshAutoTradeMonitor,
@@ -165,6 +176,7 @@ export function createAutoTradeEngine({
     const ctx = {
       now,
       openAutoPositions: await db.getOpenAutoPositions(userId),
+      waitingAutoOrders: await db.getWaitingAutoOrders(userId),
       todayAutoPnl: (await db.getTodayAutoRealisedPnl(userId, todayStart)) + openPnl(userId),
       todayAutoExits: await db.getTodayAutoExits(userId, todayStart),
     };
@@ -180,6 +192,15 @@ export function createAutoTradeEngine({
 
     const entryPrice = prices.get(`${trade.exchange}:${trade.tradingsymbol}`);
     if (!entryPrice) return reject(`No last price for ${trade.tradingsymbol}`);
+    const limitPrice = entryLimitPrice(config.entryRules, trade.side, entryPrice);
+    if (limitPrice !== null) {
+      const placed = await placeOrder(userId, { ...trade, limitPrice }, { lastPrice: entryPrice, autoTradeId: id });
+      if (!placed.ok) return reject(placed.message);
+      if (placed.order.status === 'open') {
+        log(`${trade.side} ${trade.quantity} ${trade.tradingsymbol} limit at ${limitPrice} (last ${entryPrice}) placed [${userId}] (${signal.strategyId})`);
+      }
+      return; // the order book tells settleOrder when it fills or is cancelled
+    }
     const opened = await openPosition(userId, { ...trade, entryPrice }, { now, source: 'auto' });
     if (!opened.ok) return reject(opened.message);
 
@@ -189,6 +210,29 @@ export function createAutoTradeEngine({
   }
 
   return {
+    /**
+     * Move an automated trade on when its limit order settles: executed at
+     * the fill price into the position it opened (then watched by the trade
+     * monitor), or rejected with why the order was cancelled. Orders placed
+     * by hand are ignored.
+     * @param {import('./paperOrderBook.js').PaperOrder} order
+     */
+    async settleOrder(order) {
+      if (order.source !== 'auto' || !order.autoTradeId) return;
+      const { userId, autoTradeId: id } = order;
+      if (order.status === 'filled') {
+        const entryPrice = order.fillPrice;
+        await db.advanceAutoTrade(userId, id, 'validated', 'executed', { entryPrice, positionId: order.positionId }, { entryPrice, positionId: order.positionId });
+        onExecuted(userId);
+        log(`${order.side} ${order.quantity} ${order.tradingsymbol} limit filled at ${entryPrice} [${userId}]`);
+        return;
+      }
+      if (order.status === 'cancelled') {
+        const reason = order.statusReason ?? 'Limit order cancelled';
+        await db.advanceAutoTrade(userId, id, 'validated', 'rejected', { reason }, { ruleId: null, reason });
+      }
+    },
+
     /**
      * One run after a scheduled snapshot: every active strategy for every
      * user with automation on, each signal taken through the lifecycle.
@@ -236,9 +280,13 @@ export function createAutoTradeEngine({
 
 const engine = createAutoTradeEngine();
 
-/** Run the engine after each scheduled OI snapshot; a failed run is logged, never thrown. */
+/**
+ * Run the engine after each scheduled OI snapshot, and move automated trades
+ * on when their limit orders settle; a failed run is logged, never thrown.
+ */
 export function startAutoTradeEngine(/** @type {typeof import('./oiSnapshotScheduler.js').onScheduledSnapshot} */ onScheduledSnapshot) {
   onScheduledSnapshot((event) => {
     engine.run(event).catch((err) => console.warn(`${LOG_PREFIX} run failed:`, err.message));
   });
+  onPaperOrderSettled(engine.settleOrder);
 }

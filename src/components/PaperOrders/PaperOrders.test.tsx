@@ -6,7 +6,7 @@ import type { PaperOrder } from '@/services/paperOrders';
 const order = (id: string, extra: Partial<PaperOrder> = {}): PaperOrder => ({
   id, tradingsymbol: 'NIFTY26N1024000CE', instrumentToken: 101, instrumentType: 'CE', exchange: 'NFO', strike: 24000,
   optionType: 'CE', expiry: '2026-11-10', side: 'BUY', quantity: 75, limitPrice: 50, status: 'open', statusReason: null,
-  fillPrice: null, positionId: null, createdAt: '2026-11-05T06:30:00.000Z', updatedAt: '2026-11-05T06:30:00.000Z', ...extra, // Thu 12:00 IST
+  fillPrice: null, positionId: null, source: 'manual', autoTradeId: null, createdAt: '2026-11-05T06:30:00.000Z', updatedAt: '2026-11-05T06:30:00.000Z', ...extra, // Thu 12:00 IST
 });
 
 describe('orderStatus', () => {
@@ -39,6 +39,12 @@ describe('PaperOrdersTable', () => {
     expect(html).toContain('positions-table__side--sell');
     expect(html).toContain('<td>50.00</td>');
     expect(html).toContain('Filled @ 50.00');
+  });
+
+  it('tags an order the trade automation placed as Auto, like its position', () => {
+    const auto = renderToStaticMarkup(<PaperOrdersTable orders={[order('c', { source: 'auto', autoTradeId: 't1' })]} onCancel={() => {}} />);
+    expect(auto).toContain('<span class="positions-table__source" title="Placed by the trade automation">Auto</span>');
+    expect(html).not.toContain('positions-table__source');
   });
 
   it('offers Cancel only on open orders', () => {

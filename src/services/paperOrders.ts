@@ -12,8 +12,10 @@ import type { NewPosition, Position } from './positions';
 
 export type PaperOrderStatus = 'open' | 'filled' | 'cancelled';
 
-export interface PaperOrder extends Pick<Position, 'tradingsymbol' | 'instrumentToken' | 'instrumentType' | 'exchange' | 'strike' | 'optionType' | 'expiry' | 'side' | 'quantity'> {
+export interface PaperOrder extends Pick<Position, 'tradingsymbol' | 'instrumentToken' | 'instrumentType' | 'exchange' | 'strike' | 'optionType' | 'expiry' | 'side' | 'quantity' | 'source'> {
   id: string;
+  /** The automated trade it enters, for an order the trade automation placed (source auto). */
+  autoTradeId: string | null;
   limitPrice: number;
   status: PaperOrderStatus;
   /** Why it was cancelled: by the user, at the market close, or a refused fill. */

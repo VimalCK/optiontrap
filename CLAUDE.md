@@ -254,6 +254,10 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   it fills at its limit on the first live tick that reaches it, through `openPaperTrade` (source manual). Open orders are cancelled
   at the close. The order book and the trade monitor share one Kite feed (`server/sharedTickerFeed.js`; Kite allows 3 connections).
   Only the Option Chain order panel has Limit; the B/S buttons and other screens place market orders (`POST /api/positions`).
+  The trade engine also enters through a limit order (source auto, linked by `auto_trade_id`) when the Entry limit offset entry
+  rule is on: a buy that % below the LTP, a sell that % above. The trade stays validated while it waits; the order book tells the
+  engine (`onSettled` → `settleOrder`) when it fills (executed) or is cancelled (rejected). Waiting auto orders count in the
+  Max open positions and One position per instrument rules.
 - OI snapshots are taken every 10 minutes in market hours by `oiSnapshotScheduler.js`. OI history is fetched after close.
   Nightly jobs and the instrument sync run at 08:30 IST.
 - Automation: `shared/automation.js` defines trade kinds, sides, horizons (positional later),

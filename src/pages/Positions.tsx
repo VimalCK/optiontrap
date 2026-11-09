@@ -781,7 +781,6 @@ const PaperPositions: React.FC = () => {
                 <tr key={pos.id} className={pos.exited ? 'positions-table__row--exited' : ''}>
                   <td>
                     <PositionInstrument instrument={pos}>
-                      {pos.source === 'auto' && <span className="positions-table__source" title="Placed by the trade automation">Auto</span>}
                       <TradingViewLink symbol={pos.tradingsymbol} exchange={pos.exchange} />
                     </PositionInstrument>
                     {(pos.strategyTag || pos.confidence != null || pos.targetPrice != null || pos.stopLossPrice != null || pos.note) && (
