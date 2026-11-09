@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { fetchAutoTrades } from './automation';
+import { fetchAutoTradeResults, fetchAutoTrades } from './automation';
 import { ApiError } from './apiClient';
 
 /** Make fetch answer with `status` and a JSON body, the way the server does. */
@@ -33,5 +33,16 @@ describe('fetchAutoTrades', () => {
 
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).message).toBe('from must not be after to');
+  });
+});
+
+describe('fetchAutoTradeResults', () => {
+  it('asks for the results of exactly the range picked', async () => {
+    const fetchMock = serverReplies(200, { status: 'ok', data: { summary: { trades: 0 } } });
+
+    const results = await fetchAutoTradeResults({ from: '2026-10-11', to: '2026-11-09' });
+
+    expect(fetchMock.mock.calls[0][0]).toBe('/api/automation/results?from=2026-10-11&to=2026-11-09');
+    expect(results).toEqual({ summary: { trades: 0 } });
   });
 });

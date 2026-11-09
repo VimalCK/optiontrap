@@ -132,7 +132,7 @@ describe('createAutoTradeEngine run', () => {
   it('executes a signal: selected, validated, then executed at the last price as an automated position', async () => {
     const { db, run, openPosition, onExecuted } = setup();
     await run();
-    expect(db.createAutoTrade).toHaveBeenCalledWith('U1', expect.objectContaining({ quantity: 150, side: 'SELL' }), { strategyId: 'test', reason: 'test signal' });
+    expect(db.createAutoTrade).toHaveBeenCalledWith('U1', expect.objectContaining({ quantity: 150, side: 'SELL' }), { strategyId: 'test', setup: null, reason: 'test signal' });
     expect(moves(db)).toEqual(['selected→validated', 'validated→executed']);
     expect(openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ tradingsymbol: 'NIFTY26NOV24000PE', entryPrice: 120, quantity: 150 }), { now: NOON, source: 'auto' });
     expect(db.advanceAutoTrade.mock.calls[1][4]).toEqual({ entryPrice: 120, positionId: 'pos1' });

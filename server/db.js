@@ -19,6 +19,7 @@ import pg from 'pg';
 import { MARKET_TIME_ZONE, addDays, marketDateTime, marketDayStartMs } from '../shared/marketTime.js';
 import { buildDailyPnlQuery, buildPositionsQuery, buildStatsQueries } from './positionsQuery.js';
 import { withDefaults } from '../shared/automation.js';
+import { MAX_DRAWDOWN_SQL, RESULTS_SQL, resultsParams, toResults } from './autoTradeResults.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
@@ -960,7 +961,8 @@ export async function getAutomatedUsers() {
  * event, in one transaction. Returns the new trade's id.
  * @param {string} userId
  * @param {{ horizon: string, kind: string, mode: string, tradingsymbol: string, instrumentToken: number, side: string, quantity: number }} trade
- * @param {object} detail  why it was selected (strategy, reason)
+ * @param {{ strategyId: string, setup?: string | null, reason: string }} detail  why it was selected; the
+ *   strategy and setup are also kept as columns, for Win/Loss Patterns
  * @returns {Promise<string>}
  */
 export async function createAutoTrade(userId, trade, detail) {
@@ -969,9 +971,10 @@ export async function createAutoTrade(userId, trade, detail) {
   try {
     await client.query('BEGIN');
     await client.query(
-      `INSERT INTO auto_trades (id, user_id, horizon, kind, mode, tradingsymbol, instrument_token, side, quantity, stage)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'selected')`,
-      [id, userId, trade.horizon, trade.kind, trade.mode, trade.tradingsymbol, trade.instrumentToken, trade.side, trade.quantity],
+      `INSERT INTO auto_trades (id, user_id, horizon, kind, mode, tradingsymbol, instrument_token, side, quantity, stage, strategy_id, setup)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'selected', $10, $11)`,
+      [id, userId, trade.horizon, trade.kind, trade.mode, trade.tradingsymbol, trade.instrumentToken, trade.side, trade.quantity,
+        detail.strategyId, detail.setup ?? null],
     );
     await client.query("INSERT INTO auto_trade_events (auto_trade_id, stage, detail) VALUES ($1, 'selected', $2)", [id, JSON.stringify(detail)]);
     await client.query('COMMIT');
@@ -1073,7 +1076,7 @@ export async function getOpenAutoPositions(userId) {
 /**
  * Close the user's executed automated trades behind a position that was just
  * exited: each gets the exit price and stage 'closed', with an event saying
- * why (`detail`). One transaction, so a trade is never closed without its
+ * why (`detail`; its ruleId is kept as exit_rule_id). One transaction, so a trade is never closed without its
  * event. Served by auto_trades_position_idx. Returns the ids closed.
  * @param {string} userId
  * @param {string} positionId
@@ -1086,10 +1089,10 @@ export async function closeAutoTradesOfPosition(userId, positionId, exitPrice, d
   try {
     await client.query('BEGIN');
     const closed = await client.query(
-      `UPDATE auto_trades SET stage = 'closed', exit_price = $3, reason = $4, updated_at = now()
+      `UPDATE auto_trades SET stage = 'closed', exit_price = $3, reason = $4, exit_rule_id = $5, updated_at = now()
        WHERE position_id = $1 AND user_id = $2 AND stage = 'executed'
        RETURNING id`,
-      [positionId, userId, exitPrice, detail.reason],
+      [positionId, userId, exitPrice, detail.reason, detail.ruleId],
     );
     const ids = closed.rows.map((row) => row.id);
     if (ids.length > 0) {
@@ -1146,6 +1149,17 @@ export async function getAutoTrades(userId, { from, to }) {
     [userId, marketDateTime(from).toISOString(), marketDateTime(addDays(to, 1)).toISOString()],
   );
   return result.map(toAutoTrade);
+}
+
+/**
+ * Win/Loss Patterns: the user's closed automated trades entered from `from`
+ * to `to` (market days, inclusive), measured and grouped in SQL
+ * (server/autoTradeResults.js). Served by auto_trades_user_closed_idx.
+ */
+export async function getAutoTradeResults(userId, range) {
+  const params = resultsParams(userId, range);
+  const [groups, drawdown] = await Promise.all([rows(RESULTS_SQL, params), firstRow(MAX_DRAWDOWN_SQL, params)]);
+  return toResults(groups, drawdown.max_drawdown);
 }
 
 // ---------------------------------------------------------------------------

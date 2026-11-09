@@ -47,6 +47,7 @@ describe('underlyingSetups', () => {
       expect(setup.side).toBe('SELL');
       expect(snapshots[3].prices[setup.instrumentToken]).toBe(setup.premium);
       expect(setup.reason).toContain(`premium ₹${setup.premium.toFixed(2)}`);
+      expect(setup.reason.startsWith(`${setup.setup} · `)).toBe(true); // the setup is the card's pattern
       expect(['CE', 'PE']).toContain(traded?.instrumentType);
     }
   });
@@ -62,7 +63,7 @@ describe('underlyingSetups', () => {
 });
 
 describe('optionAnalyzerSetups', () => {
-  const setup = (underlying, instrumentToken, side, score, premium) => ({ underlying, instrumentToken, side, score, premium, reason: `${underlying} ${instrumentToken}` });
+  const setup = (underlying, instrumentToken, side, score, premium) => ({ underlying, instrumentToken, side, score, premium, setup: 'Bull put', reason: `${underlying} ${instrumentToken}` });
   // Best first per underlying, as prepare gives them.
   const prepared = [
     setup('X', 1, 'SELL', 80, 3),
@@ -89,9 +90,9 @@ describe('optionAnalyzerSetups', () => {
     expect(pick({ minScore: 50, minPremium: 10 }, (s) => s.side === 'SELL')).toEqual([3, 4]);
   });
 
-  it('gives signals with just the instrument, side and reason', () => {
+  it('gives signals with just the instrument, side, reason and setup', () => {
     expect(optionAnalyzerSetups.select(prepared, { minScore: 50, minPremium: 1 }, { allows: all })[0])
-      .toEqual({ instrumentToken: 1, side: 'SELL', reason: 'X 1' });
+      .toEqual({ instrumentToken: 1, side: 'SELL', reason: 'X 1', setup: 'Bull put' });
   });
 
   it('prepares setups for each snapshotted underlying with options', () => {

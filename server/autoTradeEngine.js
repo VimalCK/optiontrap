@@ -186,7 +186,7 @@ export function createAutoTradeEngine({
       return;
     }
 
-    const id = await db.createAutoTrade(userId, trade, { strategyId: signal.strategyId, reason: signal.reason });
+    const id = await db.createAutoTrade(userId, trade, { strategyId: signal.strategyId, setup: signal.setup ?? null, reason: signal.reason });
     await db.advanceAutoTrade(userId, id, 'selected', 'validated', {}, {});
     const reject = (/** @type {string} */ reason) => db.advanceAutoTrade(userId, id, 'validated', 'rejected', { reason }, { ruleId: null, reason });
 

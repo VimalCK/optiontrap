@@ -149,14 +149,6 @@
   padding-inline: 7px;
 }
 
-.analytics-content .analytics-coming-soon {
-  max-width: 460px;
-  min-height: 220px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-}
-
 @media (max-width: 700px) {
   .analytics-tabs {
     width: 100%;

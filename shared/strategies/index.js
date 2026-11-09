@@ -14,7 +14,7 @@
  *                           (e.g. scoring every chain)
  *   select(prepared, params, { allows })
  *                           one user's signals, with their settings:
- *                           { instrumentToken, side, reason }. `allows` says
+ *                           { instrumentToken, side, reason, setup? }. `allows` says
  *                           whether their General settings allow a trade
  *                           (buy or sell, trade type), so a strategy can pick
  *                           its best allowed trade instead of one they'd refuse.
@@ -27,7 +27,9 @@
 import { optionAnalyzerSetups } from './optionAnalyzerSetups.js';
 
 /**
- * @typedef {{ instrumentToken: number, side: 'BUY' | 'SELL', reason: string }} Signal
+ * A signal: what to trade and why. `setup` names the pattern it traded (e.g.
+ * "Bull put"), so Win/Loss Patterns can group results by it.
+ * @typedef {{ instrumentToken: number, side: 'BUY' | 'SELL', reason: string, setup?: string }} Signal
  * @typedef {{ instrumentToken: number, tradingsymbol: string, name: string, exchange: string, instrumentType: string,
  *             strike: number, expiry: string | null }} StrategyInstrument
  * @typedef {{ name: string, instrumentToken: number | null, isIndex: boolean }} StrategyUnderlying

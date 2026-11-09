@@ -1,6 +1,7 @@
 /**
- * Trade automation API: the user's configuration and their automated trades
- * with each one's lifecycle. Names and rules are in shared/automation.js.
+ * Trade automation API: the user's configuration, their automated trades
+ * with each one's lifecycle, and the closed trades' results (Win/Loss
+ * Patterns). Names and rules are in shared/automation.js.
  */
 import { apiClient } from './apiClient';
 
@@ -47,6 +48,44 @@ export function fetchAutomationConfig(signal?: AbortSignal): Promise<AutomationC
 
 export function saveAutomationConfig(config: AutomationConfig): Promise<AutomationConfig> {
   return apiClient.put('/api/automation/config', config);
+}
+
+/**
+ * One group of closed automated trades and its figures. `key` is what the
+ * group shares: a strategy id, setup, exit rule id (null: exited manually),
+ * entry slot (minutes after IST midnight), side or IST day.
+ */
+export interface ResultGroup<K = string | null> {
+  key: K;
+  trades: number;
+  wins: number;
+  losses: number;
+  pnl: number;
+  /** Sum of the winning trades' P&L. */
+  grossProfit: number;
+  /** Sum of the losing trades' losses, as a positive amount. */
+  grossLoss: number;
+  best: number | null;
+  worst: number | null;
+}
+
+/** Closed automated trades entered in a range, measured and grouped on the server. */
+export interface AutoTradeResults {
+  summary: ResultGroup<null>;
+  /** The largest fall of the running P&L from a peak, trade by trade in exit order. */
+  maxDrawdown: number;
+  byStrategy: ResultGroup[];
+  bySetup: ResultGroup[];
+  byExitRule: ResultGroup[];
+  byEntrySlot: ResultGroup<number>[];
+  bySide: ResultGroup<TradeSide>[];
+  byDay: ResultGroup<string>[];
+}
+
+/** Results of the closed automated trades entered from `from` to `to` (YYYY-MM-DD, IST days, inclusive). */
+export function fetchAutoTradeResults(range: { from: string; to: string }, signal?: AbortSignal): Promise<AutoTradeResults> {
+  const params = new URLSearchParams(range);
+  return apiClient.get(`/api/automation/results?${params}`, { signal });
 }
 
 /** Automated trades created from `from` to `to` (YYYY-MM-DD, IST days, inclusive), newest first. */

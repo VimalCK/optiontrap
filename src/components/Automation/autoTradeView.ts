@@ -54,7 +54,8 @@ const detailOf = (event: AutoTradeEvent | undefined): Detail =>
 const text = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null);
 const amount = (value: unknown): string | null => (typeof value === 'number' ? `₹${formatAmount(value)}` : null);
 
-const strategyLabel = (id: unknown): string | null => STRATEGIES.find((s) => s.id === id)?.label ?? text(id);
+/** A strategy's name from its id, e.g. "Option Analyzer setups". */
+export const strategyLabel = (id: unknown): string | null => STRATEGIES.find((s) => s.id === id)?.label ?? text(id);
 
 /** One lifecycle event as a plain sentence. */
 export function eventSummary(event: AutoTradeEvent): string {

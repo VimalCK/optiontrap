@@ -77,6 +77,7 @@ export function underlyingSetups(underlying, options, { now, snapshots }) {
       side: single.side,
       score: suggestion.score,
       premium: suggestion.premium,
+      setup: suggestion.pattern,
       reason: `${suggestion.pattern} · score ${Math.round(suggestion.score)}${pop} · premium ₹${suggestion.premium.toFixed(2)}`,
     });
   }
@@ -119,6 +120,6 @@ export const optionAnalyzerSetups = {
       if (setup.score < params.minScore || setup.premium < params.minPremium || !allows(setup)) continue;
       best.set(setup.underlying, setup);
     }
-    return [...best.values()].map(({ instrumentToken, side, reason }) => ({ instrumentToken, side, reason }));
+    return [...best.values()].map(({ instrumentToken, side, reason, setup }) => ({ instrumentToken, side, reason, setup }));
   },
 };

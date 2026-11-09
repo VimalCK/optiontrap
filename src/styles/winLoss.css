@@ -1,0 +1,354 @@
+/* Win/Loss Patterns (components/WinLossPatterns): results of closed automated trades. */
+
+.winloss__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.winloss__message {
+  font-size: 13px;
+}
+
+.winloss__empty {
+  margin: 0;
+  padding: 40px 16px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+  border: 1px dashed var(--card-border);
+  border-radius: var(--radius);
+}
+
+/* Scoped under .winloss so they win over the values' own text colour. */
+.winloss .winloss--profit {
+  color: #22c55e;
+}
+
+.winloss .winloss--loss {
+  color: #ef4444;
+}
+
+/* ── Summary: four headline figures, then the supporting ones ── */
+
+.winloss-summary {
+  margin-bottom: 20px;
+}
+
+.winloss-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.winloss-kpi {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+}
+
+.winloss-kpi__label,
+.winloss-stat__label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.winloss-kpi__value {
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.15;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.winloss-kpi__note {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.winloss-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+  padding: 0 16px;
+}
+
+.winloss-stat {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.winloss-stat__value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Win / loss bar: green share of wins, then red share of losses ── */
+
+.winloss-bar {
+  display: flex;
+  gap: 2px;
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--card-border);
+  overflow: hidden;
+}
+
+.winloss-bar__wins,
+.winloss-bar__losses {
+  display: block;
+  height: 100%;
+}
+
+.winloss-bar__wins {
+  background: #22c55e;
+  border-radius: 2px 0 0 2px;
+}
+
+.winloss-bar__losses {
+  background: #ef4444;
+  border-radius: 0 2px 2px 0;
+}
+
+/* ── Panels: the daily chart across the top, then the breakdowns ── */
+
+.winloss-panels {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.winloss-panel {
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  background: var(--card-bg);
+}
+
+.winloss-panel--wide {
+  grid-column: 1 / -1;
+}
+
+.winloss-panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.winloss-panel__title {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.winloss-panel__aside {
+  font-size: 12px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.winloss-panel__scroll {
+  overflow-x: auto;
+}
+
+/* ── Tables ── */
+
+.winloss-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.winloss-table th,
+.winloss-table td {
+  padding: 8px 8px;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.winloss-table th:first-child,
+.winloss-table td:first-child {
+  padding-left: 0;
+  text-align: left;
+  white-space: normal;
+}
+
+.winloss-table th:last-child,
+.winloss-table td:last-child {
+  padding-right: 0;
+}
+
+.winloss-table th {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.winloss-table td {
+  color: var(--text-primary);
+  border-top: 1px solid var(--card-border);
+}
+
+.winloss-table tbody tr:first-child td {
+  border-top: none;
+}
+
+.winloss-table tbody tr:hover td {
+  background: var(--card-hover-bg);
+}
+
+.winloss-table__rate {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  min-width: 64px;
+}
+
+/* ── Daily P&L bars, from a zero line ── */
+
+.winloss-chart {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  height: 180px;
+  padding-bottom: 20px;
+  position: relative;
+}
+
+.winloss-chart__day {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+  position: relative;
+  border-radius: 4px;
+  cursor: default;
+}
+
+.winloss-chart__day:hover {
+  background: var(--card-hover-bg);
+}
+
+/* Profits only: all the height above the zero line; losses only: all below; both: half each. */
+.winloss-chart__up {
+  flex: 1 1 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  border-bottom: 1px solid var(--text-secondary);
+}
+
+.winloss-chart__down {
+  flex: 0 0 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+}
+
+.winloss-chart--both .winloss-chart__down {
+  flex: 1 1 0;
+}
+
+.winloss-chart--losses .winloss-chart__up {
+  flex: 0 0 0;
+}
+
+.winloss-chart--losses .winloss-chart__down {
+  flex: 1 1 0;
+}
+
+.winloss-chart__bar {
+  display: block;
+  width: 70%;
+  max-width: 28px;
+  min-height: 2px;
+}
+
+.winloss-chart__bar--profit {
+  background: #22c55e;
+  border-radius: 4px 4px 0 0;
+}
+
+.winloss-chart__bar--loss {
+  background: #ef4444;
+  border-radius: 0 0 4px 4px;
+}
+
+.winloss-chart__label {
+  position: absolute;
+  bottom: -20px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.winloss-details {
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.winloss-details summary {
+  cursor: pointer;
+  color: var(--text-secondary);
+}
+
+.winloss-details summary:hover {
+  color: var(--text-primary);
+}
+
+.winloss-details .winloss-table {
+  margin-top: 8px;
+}
+
+@media (max-width: 900px) {
+  .winloss-kpis,
+  .winloss-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .winloss-panels {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 420px) {
+  .winloss-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .winloss-kpi__value {
+    font-size: 20px;
+  }
+}

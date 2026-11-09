@@ -102,8 +102,8 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   recorded with a checksum in `schema_migrations`. Line endings are normalised to LF (`.gitattributes`: `*.sql eol=lf`).
 - An applied migration whose content changes **blocks server startup**.
 - **If the latest migration hasn't reached prod yet, edit it instead of adding a new file.** Check with
-  `git log origin/master..HEAD`. Everything up to `021_delete_entry_rule_rejections.sql` is in prod, so the next schema change is a new
-  `022_…` file (which can then be edited until it is pushed).
+  `git log origin/master..HEAD`. Everything up to `022_snapshot_contracts_and_auto_limit_orders.sql` is in prod, so the next schema change is a new
+  `023_…` file (which can then be edited until it is pushed).
   - After editing it, the local DB's row for it must be deleted so it re-applies. The user does this themselves; tell them the command:
     `docker exec optiontrap-postgres psql -U optiontrap -d optiontrap -c "DELETE FROM schema_migrations WHERE name = '<file>'"`.
 - Migrations must work on an existing DB with data: `IF NOT EXISTS`, backfill before `NOT NULL`, add constraints in a

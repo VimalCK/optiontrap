@@ -70,6 +70,7 @@ import {
   getAutomationConfig,
   saveAutomationConfig,
   getAutoTrades,
+  getAutoTradeResults,
   getPaperOrders,
   getPositions,
   getDailyPnl,
@@ -834,6 +835,14 @@ app.get('/api/automation/trades', requireAuth, requireSubscription, async (req, 
   const range = parseRange(req.query.from, req.query.to, { required: true });
   if (range.error) return res.status(400).json({ status: 'error', message: range.error });
   res.json({ status: 'ok', data: await getAutoTrades(userId, range) });
+});
+
+// Win/Loss Patterns: closed automated trades entered in ?from=…&to=… (market days, both required), measured and grouped.
+app.get('/api/automation/results', requireAuth, requireSubscription, async (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const range = parseRange(req.query.from, req.query.to, { required: true });
+  if (range.error) return res.status(400).json({ status: 'error', message: range.error });
+  res.json({ status: 'ok', data: await getAutoTradeResults(userId, range) });
 });
 
 // ---------- Price alerts ----------

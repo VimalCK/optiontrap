@@ -16,8 +16,9 @@ import { STRATEGIES } from '../../shared/strategies/index.js';
 import { marketDate } from '../../shared/marketTime.js';
 import { rangeProblem } from '@/components/TradeJournal/journalRange';
 import IconButton from '@/components/IconButton/IconButton';
+import DateRangePicker, { type DateRange } from '@/components/DateRangePicker/DateRangePicker';
 import Badge from '@/components/Badge/Badge';
-import { ChevronDownIcon, SettingsIcon } from '@/components/icons/Icons';
+import { AnalyticsIcon, ChevronDownIcon, SettingsIcon } from '@/components/icons/Icons';
 import {
   closedPnl, eventSummary, horizonLabel, sideLabel, sideTone, stageIsLive, stageLabel, stageTone, stepTone,
 } from '@/components/Automation/autoTradeView';
@@ -41,24 +42,6 @@ const eventTime = (at: string) => istTimeLabel(new Date(at));
 
 /** Wait this long after the last range change before fetching. */
 const FETCH_DELAY_MS = 400;
-
-export interface TradeRange { from: string; to: string }
-
-/** From / To dates for the trades list; To can't be before From. */
-export const TradeRangePicker: React.FC<{ range: TradeRange; onChange: (range: TradeRange) => void }> = ({ range, onChange }) => (
-  <div className="automation-range">
-    <label className="automation-range__label">
-      From
-      <input type="date" className="app-date-input" value={range.from} max={range.to || undefined}
-        onChange={(e) => onChange({ ...range, from: e.target.value })} />
-    </label>
-    <label className="automation-range__label">
-      To
-      <input type="date" className="app-date-input" value={range.to} min={range.from || undefined}
-        onChange={(e) => onChange({ ...range, to: e.target.value })} />
-    </label>
-  </div>
-);
 
 const TRADE_COLUMNS = 9;
 
@@ -182,7 +165,7 @@ const Automation: React.FC = () => {
   const [config, setConfig] = useState<AutomationConfig | null>(null);
   const [configError, setConfigError] = useState<string | null>(null);
   // Opens on today's trades; From / To fetches any other range.
-  const [range, setRange] = useState<TradeRange>(() => ({ from: marketDate(), to: marketDate() }));
+  const [range, setRange] = useState<DateRange>(() => ({ from: marketDate(), to: marketDate() }));
   const [trades, setTrades] = useState<AutoTrade[]>([]);
   const [tradesLoading, setTradesLoading] = useState(true);
   const [tradesError, setTradesError] = useState<string | null>(null);
@@ -224,7 +207,12 @@ const Automation: React.FC = () => {
         error={problem ?? tradesError}
         controls={(
           <div className="automation-section__actions">
-            <TradeRangePicker range={range} onChange={setRange} />
+            <DateRangePicker range={range} onChange={setRange} />
+            <IconButton
+              icon={<AnalyticsIcon size={18} />}
+              label="Win/Loss Patterns"
+              onClick={() => navigate('/analytics?tab=winloss')}
+            />
             <IconButton
               icon={<SettingsIcon size={18} />}
               label="Algo Trading settings"

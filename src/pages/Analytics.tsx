@@ -1,12 +1,12 @@
 import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { AnalyticsIcon } from '@/components/icons/Icons';
 import TabBar from '@/components/TabBar/TabBar';
 
 // Each tab is large; load it only when the tab is opened.
 const OptionChain = lazy(() => import('@/components/OptionChain/OptionChain'));
 const TradeJournal = lazy(() => import('@/components/TradeJournal/TradeJournal'));
 const OiHistory = lazy(() => import('@/components/OiHistory/OiHistory'));
+const WinLossPatterns = lazy(() => import('@/components/WinLossPatterns/WinLossPatterns'));
 import '@/styles/analytics.css';
 
 type AnalyticsTab = 'analyzer' | 'journal' | 'winloss' | 'history';
@@ -62,15 +62,7 @@ const Analytics: React.FC = () => {
             initialTradeId={tradeId ?? undefined}
           />
         )}
-        {tab === 'winloss'  && (
-          <div className="card analytics-coming-soon">
-            <div className="card__icon"><AnalyticsIcon /></div>
-            <h3 className="card__title">Win/Loss Patterns</h3>
-            <p className="card__description">
-              Identify patterns in your winning and losing trades over time. Coming soon.
-            </p>
-          </div>
-        )}
+        {tab === 'winloss'  && <WinLossPatterns />}
         {tab === 'history' && <OiHistory />}
         </Suspense>
       </div>

@@ -72,6 +72,9 @@ export const LIFECYCLE_STAGES = [
   { id: 'closed', label: 'Closed', final: true },
 ];
 
+/** Win/Loss Patterns groups closed trades by entry time in IST slots this many minutes long. */
+export const RESULTS_ENTRY_SLOT_MINUTES = 30;
+
 /** The stages a trade may move to from each stage. @type {Record<string, string[]>} */
 const NEXT_STAGES = {
   // The settings and entry rules refuse a signal before it is saved, so a saved
