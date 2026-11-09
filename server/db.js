@@ -1669,6 +1669,7 @@ const OI_SNAPSHOT_MAPS = {
   bids: 'bids',
   asks: 'asks',
   tradeTimes: 'trade_times',
+  contracts: 'contracts',
 };
 const OI_SNAPSHOT_MAP_COLUMNS = Object.values(OI_SNAPSHOT_MAPS);
 

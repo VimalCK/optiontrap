@@ -162,6 +162,20 @@ describe('the 10-minute rounds', () => {
     expect(round.bids).not.toHaveProperty('9001'); // spot rows: last price only
   });
 
+  it('says what every token is, for every underlying captured: options and spot rows', async () => {
+    await startScheduler();
+    await scheduler.watchOiSnapshotSymbol('RELIANCE');
+
+    const [round, reliance] = state.saves;
+    const option = INSTRUMENTS.find((i) => i.tradingsymbol === 'BANKNIFTY52100PE');
+    expect(round.contracts[option.instrumentToken]).toEqual({ symbol: 'BANKNIFTY52100PE', underlying: 'BANKNIFTY', type: 'PE', strike: 52100, expiry: '2026-11-24' });
+    expect(round.contracts[9001]).toEqual({ symbol: 'NIFTY 50', underlying: 'NIFTY', type: 'SPOT' });
+    expect(Object.keys(round.contracts).sort()).toEqual([...Object.keys(round.prices)].sort()); // every token saved is described
+    expect(reliance.contracts[9003]).toEqual({ symbol: 'RELIANCE', underlying: 'RELIANCE', type: 'SPOT' });
+    expect(Object.values(reliance.contracts).filter((c) => c.type !== 'SPOT')).toHaveLength(10);
+    expect(Object.values(reliance.contracts).every((c) => c.underlying === 'RELIANCE')).toBe(true);
+  });
+
   it('snapshots a symbol ticked in Settings from the next round', async () => {
     await startScheduler(); // 10:02 round
     state.always = ['NIFTY', 'BANKNIFTY', 'RELIANCE'];

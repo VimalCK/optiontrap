@@ -7,6 +7,10 @@
  * today's snapshots), and store one shared snapshot row. Nobody needs to keep
  * the analyzer open.
  *
+ * Each snapshot also says what every token in it is (`contracts`: the option's
+ * symbol, underlying, type, strike and expiry, or an underlying's spot row), so
+ * an exported snapshot can be analysed on its own.
+ *
  * Uses the newest admin Kite session (see findWorkingAdminSession). With no
  * admin login today it waits and logs once.
  *
@@ -87,6 +91,18 @@ export function kiteQuoteTimeMs(value) {
   return marketDateTime(date).getTime() + ((Number(h) * 60 + Number(m)) * 60 + Number(s)) * 1000;
 }
 
+/** What an option's token is, for the snapshot's `contracts` map. */
+const optionContract = (option) => ({
+  symbol: option.tradingsymbol,
+  underlying: option.name,
+  type: option.instrumentType,
+  strike: option.strike,
+  expiry: option.expiry ? option.expiry.slice(0, 10) : null,
+});
+
+/** What an underlying's price token is, for the snapshot's `contracts` map. */
+const spotContract = (underlying, symbol) => ({ symbol, underlying, type: 'SPOT' });
+
 /** Option chains of each underlying in the instrument list, by underlying name. */
 function optionsByUnderlying(instruments) {
   const byName = new Map();
@@ -123,7 +139,7 @@ async function captureSymbols(symbols, kite, instruments, now = new Date()) {
   const options = optionsByUnderlying(instruments);
   const spotRows = new Map((await getUnderlyings())
     .filter((u) => symbols.includes(u.name) && u.instrumentToken !== null)
-    .map((u) => [u.name, { token: String(u.instrumentToken), key: `${u.exchange}:${u.tradingsymbol}` }]));
+    .map((u) => [u.name, { token: String(u.instrumentToken), key: `${u.exchange}:${u.tradingsymbol}`, symbol: u.tradingsymbol }]));
 
   const spotQuotes = await fetchQuotes(kite, [...spotRows.values()].map((row) => row.key));
   const spotOf = (symbol) => spotQuotes[spotRows.get(symbol)?.key]?.last_price || 0;
@@ -138,15 +154,19 @@ async function captureSymbols(symbols, kite, instruments, now = new Date()) {
   const bids = {};
   const asks = {};
   const tradeTimes = {};
-  for (const { token, key } of spotRows.values()) {
+  const contracts = {};
+  for (const [underlying, { token, key, symbol }] of spotRows) {
     const q = spotQuotes[key];
-    if (q?.last_price > 0) prices[token] = q.last_price;
-    if (q?.ohlc?.close > 0) close[token] = q.ohlc.close;
+    if (!q) continue;
+    contracts[token] = spotContract(underlying, symbol);
+    if (q.last_price > 0) prices[token] = q.last_price;
+    if (q.ohlc?.close > 0) close[token] = q.ohlc.close;
   }
   for (const o of chain) {
     const q = quotes[`NFO:${o.tradingsymbol}`];
     if (!q) continue;
     const token = String(o.instrumentToken);
+    contracts[token] = optionContract(o);
     if (q.oi > 0) data[token] = q.oi;
     if (q.last_price > 0) prices[token] = q.last_price;
     if (q.ohlc?.close > 0) close[token] = q.ohlc.close;
@@ -160,7 +180,7 @@ async function captureSymbols(symbols, kite, instruments, now = new Date()) {
   }
   if (Object.keys(data).length === 0) return 0;
 
-  await saveOiSnapshot({ timestamp: now.getTime(), timeLabel: marketTimeLabel(now), data, prices, close, volumes, bids, asks, tradeTimes });
+  await saveOiSnapshot({ timestamp: now.getTime(), timeLabel: marketTimeLabel(now), data, prices, close, volumes, bids, asks, tradeTimes, contracts });
   return Object.keys(data).length;
 }
 
