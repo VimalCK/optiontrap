@@ -732,3 +732,15 @@
 .payoff-chart__spot--loss .payoff-chart__spot-pnl {
   fill: #ef4444;
 }
+
+/* ── Paper limit orders (components/PaperOrders): a card above the positions, in the positions table style ── */
+
+.paper-orders {
+  margin-bottom: var(--card-gap);
+}
+
+.paper-orders__error {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: #ef4444;
+}

@@ -70,6 +70,7 @@ import {
   getAutomationConfig,
   saveAutomationConfig,
   getAutoTrades,
+  getPaperOrders,
   getPositions,
   getDailyPnl,
   getPositionStats,
@@ -117,6 +118,7 @@ import { refreshAutoTradeMonitor, startAutoTradeMonitor } from './autoTradeMonit
 import { startAutoTradeEngine } from './autoTradeEngine.js';
 import { parseDailyPnlQuery, parsePositionsQuery, parseRange, parseStatsQuery } from './positionsQuery.js';
 import { exitPaperTrade, openPaperTrade } from './paperTrading.js';
+import { cancelLimitOrder, placeLimitOrder, startPaperOrderBook } from './paperOrderBook.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -908,7 +910,8 @@ app.get('/api/positions/stats', requireAuth, requireSubscription, async (req, re
 
 // Paper trades are opened and exited only through server/paperTrading.js,
 // which applies shared/paperTradeRules.js; the automation uses the same calls.
-const PAPER_TRADE_HTTP_STATUS = { INVALID_TRADE: 400, MARKET_CLOSED: 409, NOT_FOUND: 404 };
+// NO_PRICE: Kite gave no last price to decide a limit order against.
+const PAPER_TRADE_HTTP_STATUS = { INVALID_TRADE: 400, MARKET_CLOSED: 409, NOT_FOUND: 404, NO_PRICE: 502 };
 
 const sendPaperTradeResult = (res, result) => {
   if (result.ok) return res.json({ status: 'ok', data: result.position });
@@ -926,6 +929,40 @@ app.patch('/api/positions/:id', requireAuth, requireSubscription, async (req, re
   const userId = req.session.kiteSession.userId;
   sendPaperTradeResult(res, await exitPaperTrade(userId, req.params.id, req.body?.exitPrice));
   refreshAutoTradeMonitor(userId); // stop watching it if it was automated
+});
+
+// ---------- Paper limit orders (see server/paperOrderBook.js) ----------
+
+/** Reply with an order result: the order, or the refusal with its status. */
+const sendOrderResult = (res, result, okStatus = 200) => {
+  if (result.ok) return res.status(okStatus).json({ status: 'ok', data: result.order });
+  return res.status(PAPER_TRADE_HTTP_STATUS[result.code] ?? 400)
+    .json({ status: 'error', code: result.code, message: result.message });
+};
+
+// The user's limit orders placed in ?from=…&to=… (market days, both required), newest first.
+app.get('/api/paper-orders', requireAuth, requireSubscription, async (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  const range = parseRange(req.query.from, req.query.to, { required: true });
+  if (range.error) return res.status(400).json({ status: 'error', message: range.error });
+  res.json({ status: 'ok', data: await getPaperOrders(userId, range) });
+});
+
+// Place a limit order: 201 with the order, filled at once when the last price allows, else open.
+app.post('/api/paper-orders', requireAuth, requireSubscription, async (req, res) => {
+  const { userId, apiKey, accessToken } = req.session.kiteSession;
+  try {
+    sendOrderResult(res, await placeLimitOrder(userId, req.body || {}, { apiKey, accessToken }), 201);
+  } catch (err) {
+    console.error('[Paper Orders] POST error:', err.message);
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+// Cancel an open order: the only change an order takes, { status: 'cancelled' }.
+app.patch('/api/paper-orders/:id', requireAuth, requireSubscription, async (req, res) => {
+  if (req.body?.status !== 'cancelled') return res.status(400).json({ status: 'error', message: "status must be 'cancelled'" });
+  sendOrderResult(res, await cancelLimitOrder(req.session.kiteSession.userId, req.params.id));
 });
 
 // ---------- OI Snapshots (shared) ----------
@@ -1594,6 +1631,8 @@ async function start() {
   startAutoTradeMonitor();
   // Turn active strategies' signals into automated paper trades after each scheduled snapshot.
   startAutoTradeEngine(onScheduledSnapshot);
+  // Fill paper limit orders on live ticks in market hours; cancel the open ones at the close.
+  startPaperOrderBook();
 
   server.listen(PORT, () => {
     console.log(`${ts()} ${GREEN}Server${RESET} OptionTrap running on port ${PORT}`);

@@ -1513,6 +1513,141 @@ export async function exitPositionById(id, userId, exitPrice) {
 }
 
 // ---------------------------------------------------------------------------
+// Paper limit orders (see shared/paperOrders.js and server/paperOrderBook.js)
+// ---------------------------------------------------------------------------
+
+/** A paper_orders row as the app's order object. */
+function toPaperOrder(row) {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    tradingsymbol: row.tradingsymbol,
+    instrumentToken: Number(row.instrument_token),
+    instrumentType: row.instrument_type,
+    exchange: row.exchange,
+    strike: row.strike,
+    optionType: row.option_type,
+    expiry: row.expiry,
+    side: row.side,
+    quantity: Number(row.quantity),
+    limitPrice: row.limit_price,
+    note: row.note || '',
+    targetPrice: row.target_price,
+    stopLossPrice: row.stop_loss_price,
+    strategyTag: row.strategy_tag || '',
+    confidence: row.confidence === null || row.confidence === undefined ? null : Number(row.confidence),
+    status: row.status,
+    statusReason: row.status_reason,
+    fillPrice: row.fill_price,
+    positionId: row.position_id,
+    createdAt: row.created_at.toISOString(),
+    updatedAt: row.updated_at.toISOString(),
+  };
+}
+
+/**
+ * Record a new open limit order for the user and return it.
+ * @param {string} userId
+ * @param {import('../shared/paperOrders.js').LimitOrder} order
+ */
+export async function createPaperOrder(userId, order) {
+  const { strike, optionType, expiry } = instrumentColumns(order);
+  const row = await firstRow(
+    `INSERT INTO paper_orders (id, user_id, tradingsymbol, instrument_token, instrument_type, exchange, strike, option_type, expiry,
+       side, quantity, limit_price, note, target_price, stop_loss_price, strategy_tag, confidence)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+     RETURNING *`,
+    [crypto.randomUUID(), userId, order.tradingsymbol, order.instrumentToken, order.instrumentType, order.exchange, strike, optionType, expiry,
+     order.side, order.quantity, order.limitPrice, ...positionMetaValues(order)],
+  );
+  return toPaperOrder(row);
+}
+
+/**
+ * The user's orders placed from `from` to `to` (market days, inclusive),
+ * newest first. Served by paper_orders_user_created_idx (user_id, created_at DESC).
+ */
+export async function getPaperOrders(userId, { from, to }) {
+  const result = await rows(
+    `SELECT * FROM paper_orders
+     WHERE user_id = $1 AND created_at >= $2 AND created_at < $3
+     ORDER BY created_at DESC`,
+    [userId, marketDateTime(from).toISOString(), marketDateTime(addDays(to, 1)).toISOString()],
+  );
+  return result.map(toPaperOrder);
+}
+
+/**
+ * Every user's open orders placed at or after `since` (an ISO time), oldest
+ * first, for the order book. Served by paper_orders_open_idx.
+ */
+export async function getOpenPaperOrders(since) {
+  const result = await rows("SELECT * FROM paper_orders WHERE status = 'open' AND created_at >= $1 ORDER BY created_at", [since]);
+  return result.map(toPaperOrder);
+}
+
+/**
+ * Mark an open order filled at `fillPrice`, only if it is still open, so an
+ * order fills once even when a cancel or another tick races it. Returns the
+ * filled order, or null when it was no longer open. Served by the primary key.
+ */
+export async function claimPaperOrderFill(id, fillPrice) {
+  const row = await firstRow(
+    `UPDATE paper_orders SET status = 'filled', fill_price = $2, updated_at = now()
+     WHERE id = $1 AND status = 'open'
+     RETURNING *`,
+    [id, fillPrice],
+  );
+  return row ? toPaperOrder(row) : null;
+}
+
+/** Link a filled order to the position it opened. Served by the primary key. */
+export async function setPaperOrderPosition(id, positionId) {
+  await query('UPDATE paper_orders SET position_id = $2, updated_at = now() WHERE id = $1', [id, positionId]);
+}
+
+/**
+ * Cancel an order that was claimed for a fill but whose trade was refused
+ * (e.g. the market closed in between), with the refusal as the reason.
+ * Served by the primary key.
+ */
+export async function cancelUnfilledPaperOrder(id, reason) {
+  await query(
+    `UPDATE paper_orders SET status = 'cancelled', status_reason = $2, fill_price = NULL, updated_at = now()
+     WHERE id = $1 AND status = 'filled' AND position_id IS NULL`,
+    [id, reason],
+  );
+}
+
+/**
+ * Cancel one of the user's orders if it is still open. Returns the cancelled
+ * order, or null when there is no such open order. Served by the primary key.
+ */
+export async function cancelPaperOrder(userId, id, reason) {
+  const row = await firstRow(
+    `UPDATE paper_orders SET status = 'cancelled', status_reason = $3, updated_at = now()
+     WHERE id = $1 AND user_id = $2 AND status = 'open'
+     RETURNING *`,
+    [id, userId, reason],
+  );
+  return row ? toPaperOrder(row) : null;
+}
+
+/**
+ * Cancel every user's open orders placed before `before` (an ISO time), with
+ * `reason`: at the market close, and any left open from an earlier day.
+ * Returns how many were cancelled. Served by paper_orders_open_idx.
+ */
+export async function cancelOpenPaperOrdersPlacedBefore(before, reason) {
+  const res = await query(
+    `UPDATE paper_orders SET status = 'cancelled', status_reason = $2, updated_at = now()
+     WHERE status = 'open' AND created_at < $1`,
+    [before, reason],
+  );
+  return res.rowCount;
+}
+
+// ---------------------------------------------------------------------------
 // OI Snapshots (shared across all users)
 // ---------------------------------------------------------------------------
 

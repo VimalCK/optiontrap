@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { getPositions, exitPosition, tradeErrorMessage, Position, instrumentName, positionQuoteKey } from '@/services/positions';
+import { getPositions, exitPosition, tradeErrorMessage, Position, positionQuoteKey } from '@/services/positions';
 
 import { fetchQuotes, KitePosition } from '@/services/kiteApi';
 import { positionsPnl } from '@/services/livePositions';
@@ -8,6 +8,8 @@ import { useLivePositions } from '@/hooks/useLivePositions';
 import { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe } from '@/services/tickerSingleton';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
+import PositionInstrument from '@/components/PositionInstrument/PositionInstrument';
+import PaperOrders from '@/components/PaperOrders/PaperOrders';
 import { formatCalendarDate, isMarketLive } from '@/utils/marketStatus';
 import {
   computeRiskGroups,
@@ -721,15 +723,20 @@ const PaperPositions: React.FC = () => {
 
   if (positions.length === 0) {
     return (
-      <div className="card">
-        <h3 className="card__title">No Open Positions</h3>
-        <p className="card__description">Click on any LTP cell in the Option Chain to add a position.</p>
-      </div>
+      <>
+        <PaperOrders onFilled={loadPositions} />
+        <div className="card">
+          <h3 className="card__title">No Open Positions</h3>
+          <p className="card__description">Click on any LTP cell in the Option Chain to add a position.</p>
+        </div>
+      </>
     );
   }
 
   return (
     <>
+      <PaperOrders onFilled={loadPositions} />
+
       {exitError && (
         <div className="card holdings-error" style={{ marginBottom: 'var(--card-gap)' }}>
           <p>{exitError}</p>
@@ -773,14 +780,10 @@ const PaperPositions: React.FC = () => {
               return (
                 <tr key={pos.id} className={pos.exited ? 'positions-table__row--exited' : ''}>
                   <td>
-                    <span className="positions-table__instrument">
-                      <span className="positions-table__name">{instrumentName(pos)}</span>
-                      {pos.strike != null && <span className="positions-table__strike">{pos.strike}</span>}
-                      <span className={`positions-table__type positions-table__type--${pos.instrumentType.toLowerCase()}`}>{pos.instrumentType}</span>
-                      {pos.expiry && <span className="positions-table__expiry">{formatCalendarDate(pos.expiry, { day: '2-digit', month: 'short' })}</span>}
+                    <PositionInstrument instrument={pos}>
                       {pos.source === 'auto' && <span className="positions-table__source" title="Placed by the trade automation">Auto</span>}
                       <TradingViewLink symbol={pos.tradingsymbol} exchange={pos.exchange} />
-                    </span>
+                    </PositionInstrument>
                     {(pos.strategyTag || pos.confidence != null || pos.targetPrice != null || pos.stopLossPrice != null || pos.note) && (
                       <div className="positions-table__meta">
                         {pos.strategyTag && <span className="positions-table__tag">{pos.strategyTag}</span>}

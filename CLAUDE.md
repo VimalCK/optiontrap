@@ -102,8 +102,8 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   recorded with a checksum in `schema_migrations`. Line endings are normalised to LF (`.gitattributes`: `*.sql eol=lf`).
 - An applied migration whose content changes **blocks server startup**.
 - **If the latest migration hasn't reached prod yet, edit it instead of adding a new file.** Check with
-  `git log origin/master..HEAD`. Everything up to `020_auto_trade_monitor.sql` is in prod, so the next schema change is a new
-  `021_…` file (which can then be edited until it is pushed).
+  `git log origin/master..HEAD`. Everything up to `021_delete_entry_rule_rejections.sql` is in prod, so the next schema change is a new
+  `022_…` file (which can then be edited until it is pushed).
   - After editing it, the local DB's row for it must be deleted so it re-applies. The user does this themselves; tell them the command:
     `docker exec optiontrap-postgres psql -U optiontrap -d optiontrap -c "DELETE FROM schema_migrations WHERE name = '<file>'"`.
 - Migrations must work on an existing DB with data: `IF NOT EXISTS`, backfill before `NOT NULL`, add constraints in a
@@ -249,6 +249,11 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   manual↔manual, never across).
 - Share count for holdings: `quantity + t1_quantity + collateral_quantity − used_quantity`.
 - Live position P&L (Kite's formula): `sell_value − buy_value + quantity × ltp × multiplier`.
+- Paper limit orders (`shared/paperOrders.js`, `server/paperOrderBook.js`, table `paper_orders`) work like Zerodha's: a buy fills
+  at the limit or lower, a sell at the limit or higher. One that can fill when placed fills at once at the last price; otherwise
+  it fills at its limit on the first live tick that reaches it, through `openPaperTrade` (source manual). Open orders are cancelled
+  at the close. The order book and the trade monitor share one Kite feed (`server/sharedTickerFeed.js`; Kite allows 3 connections).
+  Only the Option Chain order panel has Limit; the B/S buttons and other screens place market orders (`POST /api/positions`).
 - OI snapshots are taken every 10 minutes in market hours by `oiSnapshotScheduler.js`. OI history is fetched after close.
   Nightly jobs and the instrument sync run at 08:30 IST.
 - Automation: `shared/automation.js` defines trade kinds, sides, horizons (positional later),

@@ -8,7 +8,8 @@
  *   opens, and one user's again when their positions or settings change
  *   (refreshUser, called by the routes and, later, the trade engine).
  * - Prices come from the server's own Kite ticker feed (kiteTickerFeed.js,
- *   admin session, LTP mode): one feed for all users, subscribed to exactly
+ *   admin session, LTP mode, shared with the paper order book through
+ *   sharedTickerFeed.js): one feed for all users, subscribed to exactly
  *   the instruments held. Each tick runs the exit rules of every position in
  *   that instrument. A clock check every second runs them on the last price
  *   too, so "square off at" fires on time even if an instrument goes quiet.
@@ -25,7 +26,7 @@ import {
   getOpenAutoPositions,
 } from './db.js';
 import { exitPaperTrade, NOT_FOUND } from './paperTrading.js';
-import { createKiteTickerFeed } from './kiteTickerFeed.js';
+import { openSharedTickerFeed } from './sharedTickerFeed.js';
 import { findWorkingAdminSession } from './oiHistoryScheduler.js';
 import { isMarketOpen } from './marketClock.js';
 import { marketDate } from '../shared/marketTime.js';
@@ -73,7 +74,7 @@ export function dueExits(positions, lastPrices, exitRulesByUser, now) {
  *          getAutomationConfigs: typeof getAutomationConfigs },
  *   exitPosition?: typeof exitPaperTrade,
  *   findKiteSession?: typeof findWorkingAdminSession,
- *   createFeed?: typeof createKiteTickerFeed,
+ *   createFeed?: typeof openSharedTickerFeed,
  *   clock?: () => Date,
  *   log?: (message: string) => void,
  * }} [deps]
@@ -82,7 +83,7 @@ export function createAutoTradeMonitor({
   db = { getAllOpenAutoPositions, getOpenAutoPositions, getAutomationConfigs },
   exitPosition = exitPaperTrade,
   findKiteSession = findWorkingAdminSession,
-  createFeed = createKiteTickerFeed,
+  createFeed = openSharedTickerFeed,
   clock = () => new Date(),
   log = (message) => console.log(`${LOG_PREFIX} ${message}`),
 } = {}) {
@@ -94,7 +95,7 @@ export function createAutoTradeMonitor({
   const lastPrices = new Map();
   /** Positions being exited right now, so a burst of ticks exits each once. */
   const exiting = new Set();
-  /** @type {ReturnType<typeof createKiteTickerFeed> | null} */
+  /** @type {ReturnType<typeof openSharedTickerFeed> | null} */
   let feed = null;
   /** The market day positions were loaded for, and the day "no admin login" was last logged. */
   let loadedDate = null;

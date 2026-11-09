@@ -8,10 +8,18 @@ import { calculateExpectedMove } from '@/services/edgeScore';
 import { watchSnapshotSymbol, withSpot, getTodaySnapshots, getLatestSnapshotTimestamp, calculateVelocity, analyzeVelocityPattern, OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
 import { computeStrikeSignals } from '@/services/combinedSignal';
 import { addPosition, tradeErrorMessage } from '@/services/positions';
+import { placeLimitOrder, placedOrderMessage } from '@/services/paperOrders';
+import OrderModalSwitch from './OrderModalSwitch';
 import { computeLiveFlow, describeFlow, flowColor } from '@/services/oiFlow';
 import { OiChartGuide, SellStrategyGuide, BuyStrategyGuide, PositionAnalyzerGuide } from './AnalyzerGuides';
 
 type PaperTradeSide = 'BUY' | 'SELL';
+type OrderMode = 'paper' | 'live';
+/** Market fills at once at the price given; limit waits for the price (services/paperOrders.ts). */
+type OrderType = 'market' | 'limit';
+
+const ORDER_MODE_OPTIONS: { value: OrderMode; label: string }[] = [{ value: 'paper', label: 'Paper' }, { value: 'live', label: 'Live' }];
+const ORDER_TYPE_OPTIONS: { value: OrderType; label: string }[] = [{ value: 'market', label: 'Market' }, { value: 'limit', label: 'Limit' }];
 
 import { fetchQuotes, fetchPreviousDayOI } from '@/services/kiteApi';
 import { isAbortError } from '@/services/apiClient';
@@ -85,9 +93,10 @@ const OptionChain: React.FC = () => {
   const [orderStopLossPrice, setOrderStopLossPrice] = useState('');
   const [orderStrategyTag, setOrderStrategyTag] = useState('Manual');
   const [orderConfidence, setOrderConfidence] = useState(70);
-  const [orderMode, setOrderMode] = useState<'paper' | 'live'>(() => {
-    return (localStorage.getItem('optiontrap_order_mode') as 'paper' | 'live') || 'paper';
+  const [orderMode, setOrderMode] = useState<OrderMode>(() => {
+    return (localStorage.getItem('optiontrap_order_mode') as OrderMode) || 'paper';
   });
+  const [orderType, setOrderType] = useState<OrderType>('market');
   const [oiVelocity, setOiVelocity] = useState<Map<number, OiVelocity>>(new Map());
   const [allSnapshots, setSnapshots] = useState<OiSnapshot[]>([]);
   const snapshots = useMemo(() => withSpot(allSnapshots, spotToken), [allSnapshots, spotToken]);
@@ -188,6 +197,27 @@ const OptionChain: React.FC = () => {
     });
     showToast(`${side} ${strike}${optionType} @ ${entryPrice.toFixed(2)}`, 'green');
   }, [selectedExpiry, showToast]);
+
+  /** Place a paper limit order; the toast says whether it filled at once, waits, or was refused. */
+  const placeLimitTrade = useCallback(async ({
+    instrument,
+    limitPrice,
+    ...order
+  }: Omit<Parameters<typeof placePaperTrade>[0], 'entryPrice'> & { limitPrice: number }) => {
+    const placed = await placeLimitOrder({
+      ...order,
+      tradingsymbol: instrument.tradingsymbol,
+      instrumentToken: instrument.instrumentToken,
+      limitPrice,
+      expiry: selectedExpiry,
+    });
+    showToast(placedOrderMessage(placed, `${order.side} ${order.strike}${order.optionType}`), placed.status === 'cancelled' ? 'red' : 'green');
+  }, [selectedExpiry, showToast]);
+
+  const chooseOrderMode = useCallback((mode: OrderMode) => {
+    setOrderMode(mode);
+    localStorage.setItem('optiontrap_order_mode', mode);
+  }, []);
 
   const handleTicks = useCallback((ticks: Tick[]) => {
     // Update spot price eagerly (not a Map, no clone needed)
@@ -791,6 +821,18 @@ const OptionChain: React.FC = () => {
         if (!row) return null;
         const instrument = orderForm.optionType === 'CE' ? row.ce : row.pe;
         if (!instrument) return null;
+        const isLimit = orderMode === 'paper' && orderType === 'limit';
+        const submitOrder = async (side: PaperTradeSide) => {
+          const order = { instrument, strike: orderForm.strike, optionType: orderForm.optionType, side, quantity: orderQty, ...buildOrderMeta() };
+          try {
+            if (isLimit) await placeLimitTrade({ ...order, limitPrice: orderPrice });
+            else await placePaperTrade({ ...order, entryPrice: orderPrice });
+            resetOrderMeta();
+          } catch (err) {
+            showToast(tradeErrorMessage(err, isLimit ? 'Failed to place order' : undefined), 'red');
+          }
+          setOrderForm(null);
+        };
         return (
           <div className="oc-order-modal-overlay" onClick={() => setOrderForm(null)} onKeyDown={(e) => { if (e.key === 'Escape') setOrderForm(null); }} tabIndex={-1} ref={(el) => el?.focus()}>
             <div className="oc-order-modal" onClick={(e) => e.stopPropagation()}>
@@ -799,10 +841,10 @@ const OptionChain: React.FC = () => {
                 <button className="oc-order-modal__close" onClick={() => setOrderForm(null)}>✕</button>
               </div>
               <div className="oc-order-modal__body">
-                <div className="oc-order-modal__mode">
-                  <button className={`oc-order-modal__mode-btn ${orderMode === 'paper' ? 'active' : ''}`} onClick={() => { setOrderMode('paper'); localStorage.setItem('optiontrap_order_mode', 'paper'); }}>Paper</button>
-                  <button className={`oc-order-modal__mode-btn ${orderMode === 'live' ? 'active' : ''}`} onClick={() => { setOrderMode('live'); localStorage.setItem('optiontrap_order_mode', 'live'); }}>Live</button>
-                </div>
+                <OrderModalSwitch label="Trading mode" options={ORDER_MODE_OPTIONS} value={orderMode} onChange={chooseOrderMode} />
+                {orderMode === 'paper' && (
+                  <OrderModalSwitch label="Order type" options={ORDER_TYPE_OPTIONS} value={orderType} onChange={setOrderType} />
+                )}
                 <div className="oc-order-modal__fields">
                   <div className="oc-order-modal__field">
                     <span>Quantity (Lot: {instrument.lotSize})</span>
@@ -815,7 +857,7 @@ const OptionChain: React.FC = () => {
                     </div>
                   </div>
                   <div className="oc-order-modal__field">
-                    <span>Price</span>
+                    <span>{isLimit ? 'Limit price' : 'Price'}</span>
                     <div className="oc-order-modal__number">
                       <input type="number" value={orderPrice} onChange={(e) => setOrderPrice(Number(e.target.value))} min={0} step={0.05} />
                       <div className="oc-order-modal__number-btns">
@@ -860,14 +902,8 @@ const OptionChain: React.FC = () => {
                 )}
                 {orderMode === 'paper' && (
                   <>
-                    <button className="oc-order-panel__btn oc-order-panel__btn--buy" onClick={async () => {
-                      try { await placePaperTrade({ instrument, strike: orderForm.strike, optionType: orderForm.optionType, side: 'BUY', quantity: orderQty, entryPrice: orderPrice, ...buildOrderMeta() }); resetOrderMeta(); } catch (err) { showToast(tradeErrorMessage(err), 'red'); }
-                      setOrderForm(null);
-                    }}>Buy</button>
-                    <button className="oc-order-panel__btn oc-order-panel__btn--sell" onClick={async () => {
-                      try { await placePaperTrade({ instrument, strike: orderForm.strike, optionType: orderForm.optionType, side: 'SELL', quantity: orderQty, entryPrice: orderPrice, ...buildOrderMeta() }); resetOrderMeta(); } catch (err) { showToast(tradeErrorMessage(err), 'red'); }
-                      setOrderForm(null);
-                    }}>Sell</button>
+                    <button type="button" className="oc-order-panel__btn oc-order-panel__btn--buy" onClick={() => submitOrder('BUY')}>Buy</button>
+                    <button type="button" className="oc-order-panel__btn oc-order-panel__btn--sell" onClick={() => submitOrder('SELL')}>Sell</button>
                   </>
                 )}
               </div>
