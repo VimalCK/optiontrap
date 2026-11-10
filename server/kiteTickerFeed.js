@@ -24,6 +24,15 @@ const RECONNECT_DELAY_MS = 5000;
 const KITE_TICKER_URL = 'wss://ws.kite.trade';
 
 /**
+ * Kite's ticker URL for one Kite login, with the key and token encoded as query values.
+ * Used by this feed and by the browser proxy (`/ws` in server/index.js).
+ * @param {{ apiKey: string, accessToken: string }} kite
+ */
+export function kiteTickerUrl(kite) {
+  return `${KITE_TICKER_URL}?api_key=${encodeURIComponent(kite.apiKey)}&access_token=${encodeURIComponent(kite.accessToken)}`;
+}
+
+/**
  * @typedef {import('../shared/kiteTicks.js').Tick} Tick
  * @typedef {{ apiKey: string, accessToken: string }} KiteSession
  * @typedef {(url: string) => any} OpenSocket  opens a WebSocket (injected in tests)
@@ -121,7 +130,7 @@ function createConnection({ url, openSocket, onTicks, onAuthError, log }) {
  * }} options
  */
 export function createKiteTickerFeed({ kite, onTicks, onAuthError, openSocket = (url) => new WebSocket(url), log = console.log }) {
-  const url = `${KITE_TICKER_URL}?api_key=${encodeURIComponent(kite.apiKey)}&access_token=${encodeURIComponent(kite.accessToken)}`;
+  const url = kiteTickerUrl(kite);
   /** @type {ReturnType<typeof createConnection>[]} */
   let connections = [];
 

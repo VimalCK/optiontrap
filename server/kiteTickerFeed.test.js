@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'node:events';
-import { createKiteTickerFeed, groupTokens, MAX_CONNECTIONS, MAX_TOKENS_PER_CONNECTION } from './kiteTickerFeed.js';
+import { createKiteTickerFeed, groupTokens, kiteTickerUrl, MAX_CONNECTIONS, MAX_TOKENS_PER_CONNECTION } from './kiteTickerFeed.js';
 
 /** Stands in for a ws WebSocket: records what is sent and lets a test emit events. */
 class FakeSocket extends EventEmitter {
@@ -117,5 +117,14 @@ describe('createKiteTickerFeed', () => {
     vi.advanceTimersByTime(60_000);
     expect(sockets).toHaveLength(2);
     expect(sockets[1].closed).toBe(true);
+  });
+});
+
+describe('kiteTickerUrl', () => {
+  it("encodes the key and token so they can't add parameters to Kite's URL", () => {
+    const url = new URL(kiteTickerUrl({ apiKey: 'key&x=1', accessToken: 'tok#frag' }));
+    expect([...url.searchParams.keys()]).toEqual(['api_key', 'access_token']);
+    expect(url.searchParams.get('api_key')).toBe('key&x=1');
+    expect(url.searchParams.get('access_token')).toBe('tok#frag');
   });
 });

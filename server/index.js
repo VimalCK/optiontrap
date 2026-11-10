@@ -117,6 +117,8 @@ import { catchAsyncErrors, sendFailure, sendServerError } from './asyncRoutes.js
 import { securityHeaders } from './securityHeaders.js';
 import { startLoggedInSession } from './loginSession.js';
 import { kiteLoginUrl } from './kiteLogin.js';
+import { signedSessionId } from './wsSessionCookie.js';
+import { kiteTickerUrl } from './kiteTickerFeed.js';
 import { resolveSessionSecret } from './sessionSecret.js';
 import { createConcurrencyLimit } from './concurrencyLimit.js';
 import { allowOnlyKnownKiteCalls } from './kiteProxyAllowlist.js';
@@ -1461,22 +1463,8 @@ server.on('upgrade', (request, socket, head) => {
     return;
   }
 
-  // Parse cookies from upgrade request
-  const cookies = {};
-  (request.headers.cookie || '').split(';').forEach((c) => {
-    const [name, ...rest] = c.trim().split('=');
-    if (name) cookies[name] = rest.join('=');
-  });
-
-  const rawSid = cookies['optiontrap_sid'];
-  if (!rawSid) {
-    socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
-    socket.destroy();
-    return;
-  }
-
-  const sid = cookieParser.signedCookie(decodeURIComponent(rawSid), SESSION_SECRET);
-  if (!sid || sid === rawSid) {
+  const sid = signedSessionId(request.headers.cookie, 'optiontrap_sid', SESSION_SECRET);
+  if (!sid) {
     socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
     socket.destroy();
     return;
@@ -1530,8 +1518,7 @@ wss.on('connection', (clientWs) => {
 
   console.log(`${ts()} ${GREEN}WS${RESET} connected ${GREY}[${userId}]${RESET}`);
 
-  const kiteWsUrl = `wss://ws.kite.trade?api_key=${apiKey}&access_token=${accessToken}`;
-  const kiteWs = new WebSocket(kiteWsUrl);
+  const kiteWs = new WebSocket(kiteTickerUrl({ apiKey, accessToken }));
   kiteWs.binaryType = 'arraybuffer';
 
   // Stop reading from the browser until Kite is connected, so its messages wait in
