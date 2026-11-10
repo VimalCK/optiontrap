@@ -114,14 +114,17 @@ import { startAutoTradeEngine } from './autoTradeEngine.js';
 import { parseDailyPnlQuery, parsePositionsQuery, parseRange, parseStatsQuery } from './positionsQuery.js';
 import { exitPaperTrade, openPaperTrade } from './paperTrading.js';
 import { catchAsyncErrors, sendServerError } from './asyncRoutes.js';
+import { resolveSessionSecret } from './sessionSecret.js';
 import { cancelLimitOrder, placeLimitOrder, startPaperOrderBook } from './paperOrderBook.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
-const SESSION_SECRET = process.env.SESSION_SECRET || 'insecure-dev-secret';
 const FRONTEND_ORIGIN = process.env.FRONTEND_ORIGIN || 'http://localhost:3000';
 const IS_PROD = process.env.NODE_ENV === 'production';
+const sessionSecret = resolveSessionSecret({ secret: process.env.SESSION_SECRET, isProd: IS_PROD });
+if (sessionSecret.error) throw new Error(sessionSecret.error);
+const SESSION_SECRET = sessionSecret.value;
 const APP_VERSION = (process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || 'local').slice(0, 7);
 
 // ---------- Log colours ----------
