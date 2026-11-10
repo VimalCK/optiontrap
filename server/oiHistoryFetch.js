@@ -2,6 +2,11 @@
  * Fetch one scrip + expiry month of daily OI history from Kite and store it.
  * Used by POST /api/oi-history/fetch (which streams progress to the browser)
  * and by the after-close scheduler (which has no browser).
+ *
+ * OI history is shared by every user, so callers asking for the same scrip,
+ * month and strikes at once share one fetch (server/sharedRuns.js), and fetches
+ * for the same month wait their turn in memory before taking the database lock,
+ * so waiting never holds one of the pool's connections.
  */
 
 import {
@@ -17,6 +22,7 @@ import {
   withNamedAdvisoryLock,
 } from './db.js';
 import { getOrFetchInstruments } from './instruments.js';
+import { createKeyedQueue, createSharedRuns } from './sharedRuns.js';
 import { marketDate } from '../shared/marketTime.js';
 
 /** Get current date in IST as YYYY-MM-DD */
@@ -30,6 +36,35 @@ export class OiHistoryFetchError extends Error {
     super(message);
     this.name = 'OiHistoryFetchError';
     this.status = status;
+  }
+}
+
+const sharedFetches = createSharedRuns();
+const monthQueue = createKeyedQueue();
+
+/** Requests with the same key fetch the same rows, so they can share one run. */
+export function oiHistoryFetchKey({ scrip, expiryMonth, strikeMode = 'atmRange', specificStrike }) {
+  return [scrip, expiryMonth, strikeMode, strikeMode === 'specific' ? Number(specificStrike) : ''].join('|');
+}
+
+/**
+ * Fetch one month of OI history, or join the same fetch if one is already running.
+ * A joined run that fails (e.g. on its starter's Kite login) is run again with this
+ * caller's own login, so one user's error never reaches another.
+ * Options and result are those of fetchOiHistoryMonthNow.
+ */
+export async function fetchOiHistoryMonth(options) {
+  const { send = () => {}, signal } = options;
+  const key = oiHistoryFetchKey(options);
+  const work = ({ emit, signal: runSignal }) => fetchOiHistoryMonthNow({ ...options, send: emit, signal: runSignal });
+
+  const joined = sharedFetches.join(key, work, { onEvent: send, signal });
+  if (!joined.started) send('step', { step: 0, message: 'Joining a fetch already running for this month...' });
+  try {
+    return await joined.result;
+  } catch (err) {
+    if (joined.started || signal?.aborted) throw err;
+    return sharedFetches.join(key, work, { onEvent: send, signal }).result;
   }
 }
 
@@ -47,7 +82,7 @@ export class OiHistoryFetchError extends Error {
  * @param {AbortSignal} [options.signal]  stops Kite calls and skips the save
  * @returns {Promise<{ rowCount: number, tradingDays: number, skippedDays: number, fetchedDays: number, uniqueTokens: number, message?: string }>}
  */
-export async function fetchOiHistoryMonth({
+export async function fetchOiHistoryMonthNow({
   scrip,
   expiryMonth,
   strikeMode = 'atmRange',
@@ -122,7 +157,14 @@ export async function fetchOiHistoryMonth({
   // Different scrips/months lock independently and run fully in parallel.
   // A waiting caller re-checks stored dates inside the lock (below) and skips
   // whatever the previous caller just fetched — avoiding duplicate Kite calls.
-  return withNamedAdvisoryLock(`oi-history:${scrip}:${expiryMonth}`, async () => {
+  // In-process fetches for this month queue in memory first, so only one at a time waits on the lock.
+  const lockName = `oi-history:${scrip}:${expiryMonth}`;
+  return monthQueue.run(lockName, () => {
+    throwIfCancelled();
+    return withNamedAdvisoryLock(lockName, () => fetchMissingDays());
+  });
+
+  async function fetchMissingDays() {
     // Step 2: For each trading day, compute ATM. Past stored dates are skipped;
     // today is always refreshed because intraday OI can change until close.
     // This runs INSIDE the lock so a waiting caller sees the latest stored dates.
@@ -308,5 +350,5 @@ export async function fetchOiHistoryMonth({
       fetchedDays: allDays.length,
       uniqueTokens: uniqueTokens.size,
     };
-  });
+  }
 }
