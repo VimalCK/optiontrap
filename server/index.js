@@ -115,6 +115,7 @@ import { parseDailyPnlQuery, parsePositionsQuery, parseRange, parseStatsQuery } 
 import { exitPaperTrade, openPaperTrade } from './paperTrading.js';
 import { catchAsyncErrors, sendServerError } from './asyncRoutes.js';
 import { resolveSessionSecret } from './sessionSecret.js';
+import { createConnectionCounter, MAX_CLIENT_MESSAGE_BYTES, MAX_CONNECTIONS_PER_USER } from './wsLimits.js';
 import { cancelLimitOrder, placeLimitOrder, startPaperOrderBook } from './paperOrderBook.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1453,7 +1454,8 @@ app.use('/api', requireAuth, requireSubscription, apiLimiter, createProxyMiddlew
 
 // ---------- WebSocket Proxy ----------
 
-const wss = new WebSocketServer({ noServer: true });
+const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_CLIENT_MESSAGE_BYTES });
+const wsConnections = createConnectionCounter(MAX_CONNECTIONS_PER_USER);
 /** Close code telling the browser its Kite session has expired (mirrored in src/services/kiteTicker.ts). */
 const WS_SESSION_EXPIRED = 4001;
 
@@ -1523,13 +1525,23 @@ wss.on('connection', (clientWs) => {
     return;
   }
 
+  if (!wsConnections.tryAcquire(userId)) {
+    console.log(`${ts()} ${RED}WS${RESET} rejected — already ${MAX_CONNECTIONS_PER_USER} connections ${GREY}[${userId}]${RESET}`);
+    clientWs.close(1008, 'Too many connections');
+    return;
+  }
+  clientWs.once('close', () => wsConnections.release(userId));
+
   console.log(`${ts()} ${GREEN}WS${RESET} connected ${GREY}[${userId}]${RESET}`);
 
   const kiteWsUrl = `wss://ws.kite.trade?api_key=${apiKey}&access_token=${accessToken}`;
   const kiteWs = new WebSocket(kiteWsUrl);
   kiteWs.binaryType = 'arraybuffer';
 
-  // Buffer client messages until upstream Kite connection is ready
+  // Stop reading from the browser until Kite is connected, so its messages wait in
+  // the socket (TCP backpressure) instead of piling up in memory. Only what arrived
+  // with the upgrade itself can reach this buffer, so it stays small.
+  clientWs.pause();
   const pendingMessages = [];
   let kiteReady = false;
 
@@ -1540,6 +1552,7 @@ wss.on('connection', (clientWs) => {
       kiteWs.send(data, { binary: isBinary });
     }
     pendingMessages.length = 0;
+    clientWs.resume();
   });
 
   // Kite answers an expired or revoked access token with 403 on the handshake.
@@ -1580,6 +1593,8 @@ wss.on('connection', (clientWs) => {
     if (clientWs.readyState === WebSocket.OPEN) {
       clientWs.close(1000, 'Kite disconnected');
     }
+    // Read again (if Kite never connected) so the browser's close reply ends the connection now.
+    clientWs.resume();
   });
 
   kiteWs.on('error', (err) => {
