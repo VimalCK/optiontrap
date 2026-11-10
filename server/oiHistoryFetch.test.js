@@ -62,7 +62,7 @@ describe('fetchOiHistoryMonth sharing', () => {
     const b = fetchOiHistoryMonth(request('b'));
     release();
 
-    await expect(a).rejects.toThrow('Incorrect');
+    await expect(a).rejects.toThrow('Kite answered 403');
     expect(await b).toEqual(expect.objectContaining({ rowCount: 0 }));
     expect(fetchMock.mock.calls.map(([, { headers }]) => headers.Authorization)).toEqual(['token key:a', 'token key:b']);
   });

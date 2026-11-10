@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import express from 'express';
-import { catchAsyncErrors, sendServerError } from './asyncRoutes.js';
+import { catchAsyncErrors, sendFailure, sendServerError } from './asyncRoutes.js';
 
 let server;
 let base;
@@ -17,6 +17,12 @@ beforeAll(async () => {
     res.status(201).json({ status: 'ok' });
   });
   app.get('/sync-throw', () => { throw new Error('boom'); });
+  app.get('/db-failure', (_req, res) => {
+    sendFailure(res, new Error('relation "watchlists" does not exist'), { log: '[Test] load', message: 'Failed to load watchlists' });
+  });
+  app.get('/kite-failure', (_req, res) => {
+    sendFailure(res, new Error('Kite: Incorrect `api_key` or `access_token`'), { log: '[Test] Kite', message: 'Failed to load instruments', status: 502 });
+  });
   app.get('/ok', (_req, res) => res.json({ status: 'ok', data: app.get('trust proxy') }));
   app.use(sendServerError);
   await new Promise((resolve) => { server = app.listen(0, resolve); });
@@ -50,5 +56,19 @@ describe('catchAsyncErrors', () => {
 
   it('still lets app.get read a setting', async () => {
     expect(await (await fetch(`${base}/ok`)).json()).toEqual({ status: 'ok', data: 1 });
+  });
+});
+
+describe('sendFailure', () => {
+  it("replies with the route's message, not the database error's text", async () => {
+    const res = await fetch(`${base}/db-failure`);
+    expect(res.status).toBe(500);
+    expect(await res.json()).toEqual({ status: 'error', message: 'Failed to load watchlists' });
+  });
+
+  it('keeps the given status and hides Kite error text', async () => {
+    const res = await fetch(`${base}/kite-failure`);
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({ status: 'error', message: 'Failed to load instruments' });
   });
 });

@@ -1,4 +1,8 @@
-/** Sends errors from async Express 4 routes to the error handler instead of crashing the process. */
+/**
+ * Error replies for Express routes: async errors go to the error handler instead of
+ * crashing the process, and a failure reply never carries the error's own text
+ * (a Postgres or Kite message can expose SQL, table names or upstream details).
+ */
 
 const ROUTE_METHODS = ['get', 'post', 'put', 'patch', 'delete'];
 
@@ -24,6 +28,12 @@ export function catchAsyncErrors(app) {
       return register(path, ...handlers.map(passErrorsToNext));
     };
   }
+}
+
+/** Log a route's caught error in full and reply with the route's fixed `message`, never the error's text. */
+export function sendFailure(res, err, { log, message, status = 500 }) {
+  console.error(`${log}:`, err);
+  res.status(status).json({ status: 'error', message });
 }
 
 /** The last middleware: a JSON error reply (body-parser 4xx kept, anything else 500). */

@@ -355,12 +355,16 @@ export async function getUserSubscription(userId) {
   return mapSubscription(row);
 }
 
-export async function activateSubscription(userId, planId = 'one_month', provider = 'internal') {
-  const plan = await firstRow('SELECT id, duration_count, duration_unit FROM subscription_plans WHERE id = $1 AND is_active = 1', [planId]);
-
-  if (!plan) {
-    throw new Error('Subscription plan not found');
+/** The asked-for plan doesn't exist or isn't active; the message is safe to show the user. */
+export class SubscriptionPlanNotFoundError extends Error {
+  constructor() {
+    super('Subscription plan not found');
+    this.name = 'SubscriptionPlanNotFoundError';
   }
+}
+
+export async function activateSubscription(userId, planId = 'one_month', provider = 'internal') {
+  const plan = await requirePlan(planId);
 
   const id = crypto.randomUUID();
   const startsAt = formatDbTimestamp(new Date());
@@ -432,7 +436,7 @@ async function requirePlan(planId) {
     'SELECT id, duration_count, duration_unit FROM subscription_plans WHERE id = $1 AND is_active = 1',
     [planId],
   );
-  if (!plan) throw new Error('Subscription plan not found');
+  if (!plan) throw new SubscriptionPlanNotFoundError();
   return plan;
 }
 

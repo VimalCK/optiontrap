@@ -143,8 +143,8 @@ export async function fetchOiHistoryMonthNow({
     signal,
   });
   if (!spotRes.ok) {
-    const body = await spotRes.text();
-    throw new OiHistoryFetchError(`Failed to fetch ${scrip} index candles: ${body}`, spotRes.status);
+    console.warn(`[OI History] ${scrip} spot candles failed (${spotRes.status}):`, await spotRes.text());
+    throw new OiHistoryFetchError(`Failed to fetch ${scrip} spot candles (Kite answered ${spotRes.status})`, spotRes.status);
   }
 
   const spotData = await spotRes.json();

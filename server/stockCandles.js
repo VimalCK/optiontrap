@@ -43,6 +43,11 @@ export class StockCandleError extends Error {
   }
 }
 
+/** Why a candle sync failed, in words safe to show the user: Kite's HTTP status, never Kite's or the database's own text. */
+export function candleSyncWarning(err) {
+  return err instanceof StockCandleError && err.status ? `Kite answered ${err.status}` : 'server error';
+}
+
 /**
  * Epoch ms of the latest moment Kite's daily candles settled: the most recent
  * weekday 15:45 IST at or before `now`. A stock checked after that needs no new fetch.

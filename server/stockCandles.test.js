@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { completedCandles, historyRewritten, lastSettledAt } from './stockCandles.js';
+import { candleSyncWarning, completedCandles, historyRewritten, lastSettledAt, StockCandleError } from './stockCandles.js';
 
 // IST is UTC+05:30: 10:15 UTC is the 15:45 IST settle time.
 const utc = (iso) => new Date(`${iso}Z`);
@@ -35,5 +35,15 @@ describe('historyRewritten', () => {
 
   it('flags a split: stored closes no longer match', () => {
     expect(historyRewritten(stored, [{ date: '2026-10-27', close: 500 }, { date: '2026-10-28', close: 505 }])).toBe(true);
+  });
+});
+
+describe('candleSyncWarning', () => {
+  it("names Kite's status, never Kite's own text", () => {
+    expect(candleSyncWarning(new StockCandleError('Kite historical data: <html>gateway</html>', 503))).toBe('Kite answered 503');
+  });
+
+  it("hides a database error's text", () => {
+    expect(candleSyncWarning(new Error('relation "stock_candles" does not exist'))).toBe('server error');
   });
 });

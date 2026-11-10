@@ -48,6 +48,7 @@ import {
   adminActivateSubscription,
   adminExtendSubscription,
   adminCancelSubscription,
+  SubscriptionPlanNotFoundError,
   createWatchlist,
   getWatchlists,
   getWatchlistItems,
@@ -105,14 +106,14 @@ import { OI_HISTORY_JOB, startOiHistoryScheduler } from './oiHistoryScheduler.js
 import { onScheduledSnapshot, startOiSnapshotScheduler, watchOiSnapshotSymbol } from './oiSnapshotScheduler.js';
 import { startInstrumentSync } from './instrumentSyncScheduler.js';
 import { checkSubscriptionAccess, inactiveSubscription } from './subscriptionAccess.js';
-import { backfillStockSetups, scanStock, syncStockCandles } from './stockCandles.js';
+import { backfillStockSetups, candleSyncWarning, scanStock, syncStockCandles } from './stockCandles.js';
 import { startStockSetupScheduler } from './stockSetupScheduler.js';
 import { NIGHTLY_JOB_PREFIX, startNightlyJobs } from './nightlyJobs.js';
 import { refreshAutoTradeMonitor, startAutoTradeMonitor } from './autoTradeMonitor.js';
 import { startAutoTradeEngine } from './autoTradeEngine.js';
 import { parseDailyPnlQuery, parsePositionsQuery, parseRange, parseStatsQuery } from './positionsQuery.js';
 import { exitPaperTrade, openPaperTrade } from './paperTrading.js';
-import { catchAsyncErrors, sendServerError } from './asyncRoutes.js';
+import { catchAsyncErrors, sendFailure, sendServerError } from './asyncRoutes.js';
 import { resolveSessionSecret } from './sessionSecret.js';
 import { createConcurrencyLimit } from './concurrencyLimit.js';
 import { allowOnlyKnownKiteCalls } from './kiteProxyAllowlist.js';
@@ -378,9 +379,7 @@ app.post('/auth/token', async (req, res) => {
     console.log(`${ts()} ${GREEN}AUTH${RESET} logged in: ${data.user_id} (${data.user_name})`);
     res.json({ status: 'ok', data: safe });
   } catch (err) {
-    console.error(`${ts()} ${RED}AUTH${RESET} exchange error:`, err);
-    const errMsg = err instanceof Error ? err.message : String(err);
-    res.status(500).json({ status: 'error', message: `Token exchange error: ${errMsg}` });
+    sendFailure(res, err, { log: `${ts()} ${RED}AUTH${RESET} exchange error`, message: 'Login failed on the server · try again' });
   }
 });
 
@@ -522,6 +521,12 @@ app.get('/api/subscription/status', requireAuth, async (req, res) => {
   res.json({ status: 'ok', data: subscription });
 });
 
+/** Reply to a failed subscription change: 400 for an unknown plan, otherwise a generic 500. */
+const sendSubscriptionFailure = (res, err, log) => {
+  if (err instanceof SubscriptionPlanNotFoundError) return res.status(400).json({ status: 'error', message: err.message });
+  sendFailure(res, err, { log, message: 'Failed to update the subscription' });
+};
+
 // Activate a plan for the signed-in user: creates a subscription.
 app.post('/api/subscriptions', requireAuth, async (req, res) => {
   const { planId = 'one_month' } = req.body || {};
@@ -530,7 +535,7 @@ app.post('/api/subscriptions', requireAuth, async (req, res) => {
     const subscription = await activateSubscription(req.session.kiteSession.userId, planId, 'internal');
     res.status(201).json({ status: 'ok', data: subscription });
   } catch (err) {
-    res.status(400).json({ status: 'error', message: err.message || 'Failed to activate subscription' });
+    sendSubscriptionFailure(res, err, '[Subscription] activate error');
   }
 });
 
@@ -692,8 +697,7 @@ app.post('/api/admin/users/:userId/subscription', requireAuth, requireAdmin, asy
 
     res.json({ status: 'ok', data: subscription });
   } catch (err) {
-    console.error(`${ts()} ${RED}ADMIN${RESET} subscription update error:`, err);
-    res.status(400).json({ status: 'error', message: err.message || 'Failed to update subscription' });
+    sendSubscriptionFailure(res, err, `${ts()} ${RED}ADMIN${RESET} subscription update error`);
   }
 });
 
@@ -798,8 +802,7 @@ app.put('/api/watchlists/:id/items/order', requireAuth, requireSubscription, asy
     }
     res.json({ status: 'ok' });
   } catch (err) {
-    console.error('[Watchlist] Reorder error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
+    sendFailure(res, err, { log: '[Watchlist] Reorder error', message: 'Failed to save the watchlist order' });
   }
 });
 
@@ -967,8 +970,7 @@ app.post('/api/paper-orders', requireAuth, requireSubscription, async (req, res)
   try {
     sendOrderResult(res, await placeLimitOrder(userId, req.body || {}, { apiKey, accessToken }), 201);
   } catch (err) {
-    console.error('[Paper Orders] POST error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
+    sendFailure(res, err, { log: '[Paper Orders] POST error', message: 'Failed to place the order' });
   }
 });
 
@@ -985,8 +987,7 @@ app.get('/api/oi-snapshots', requireAuth, requireSubscription, async (req, res) 
     const snapshots = await getTodayOiSnapshots();
     res.json({ status: 'ok', data: snapshots });
   } catch (err) {
-    console.error('[OI Snapshots] GET error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
+    sendFailure(res, err, { log: '[OI Snapshots] GET error', message: 'Failed to load OI snapshots' });
   }
 });
 
@@ -995,8 +996,7 @@ app.get('/api/oi-snapshots/latest', requireAuth, requireSubscription, async (req
     const timestamp = await getLatestOiSnapshotTimestamp();
     res.json({ status: 'ok', data: { timestamp } });
   } catch (err) {
-    console.error('[OI Snapshots] GET latest error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
+    sendFailure(res, err, { log: '[OI Snapshots] GET latest error', message: 'Failed to load the latest OI snapshot time' });
   }
 });
 
@@ -1093,8 +1093,8 @@ async function streamOiHistoryFetch(req, res) {
       send('error', { message: err.message });
       return res.end();
     }
-    console.error('[OI History] Fetch error:', err.message);
-    send('error', { message: err.message });
+    console.error('[OI History] Fetch error:', err);
+    send('error', { message: 'OI history fetch failed on the server' });
     res.end();
   }
 }
@@ -1132,8 +1132,7 @@ app.get('/api/oi-history/expiry-months', requireAuth, requireSubscription, async
     ])].sort();
     res.json({ status: 'ok', data: months });
   } catch (err) {
-    console.error('[OI History] Expiry months error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
+    sendFailure(res, err, { log: '[OI History] Expiry months error', message: 'Failed to load expiry months' });
   }
 });
 
@@ -1151,8 +1150,7 @@ app.get('/api/oi-history', requireAuth, requireSubscription, async (req, res) =>
     const data = await getOiHistoryDataByExpiryMonth(scrip, expiryMonth, from || null);
     res.json({ status: 'ok', data });
   } catch (err) {
-    console.error('[OI History] GET error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
+    sendFailure(res, err, { log: '[OI History] GET error', message: 'Failed to load OI history' });
   }
 });
 
@@ -1163,8 +1161,7 @@ app.get('/api/oi-history/futures', requireAuth, requireSubscription, async (req,
     const data = await getOiHistoryFuturesData(scrip, expiryMonth, from || null);
     res.json({ status: 'ok', data });
   } catch (err) {
-    console.error('[OI History] Futures GET error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
+    sendFailure(res, err, { log: '[OI History] Futures GET error', message: 'Failed to load futures OI history' });
   }
 });
 
@@ -1193,20 +1190,20 @@ app.get('/api/stocks/:token/candles', requireAuth, requireSubscription, async (r
       synced = !sync.skipped;
     } catch (err) {
       console.warn(`[Stocks] Candle sync failed for ${stock.tradingsymbol}:`, err.message);
-      warning = err.message;
+      warning = candleSyncWarning(err);
     }
 
     const [candles, market] = await Promise.all([getStockCandles(token), reference ? getStockCandles(reference.instrumentToken) : []]);
     if (!candles.length) {
-      return res.status(502).json({ status: 'error', message: warning || 'Kite returned no daily candles for this stock' });
+      const message = warning ? `Couldn't load daily candles from Kite (${warning})` : 'Kite returned no daily candles for this stock';
+      return res.status(502).json({ status: 'error', message });
     }
     // Keep the watchlist's Setups column in step with what the panel shows.
     if (synced) await scanStock(stock, market).catch((err) => console.warn(`[Stocks] Scan failed for ${stock.tradingsymbol}:`, err.message));
 
     res.json({ status: 'ok', data: { stock, candles: compactCandles(candles), market: compactCandles(market), marketLabel: reference?.label ?? null, warning } });
   } catch (err) {
-    console.error('[Stocks] Candles GET error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
+    sendFailure(res, err, { log: '[Stocks] Candles GET error', message: 'Failed to load daily candles' });
   }
 });
 
@@ -1231,8 +1228,7 @@ app.post('/api/stocks/:token/setup-history', requireAuth, requireSubscription, a
     console.log(`[Stocks] Setup history for ${stock.tradingsymbol}: ${counts.found} setup(s)`);
     res.json({ status: 'ok', data: counts });
   } catch (err) {
-    console.error('[Stocks] Setup history error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
+    sendFailure(res, err, { log: '[Stocks] Setup history error', message: 'Failed to build the setup history' });
   }
 });
 
@@ -1241,8 +1237,7 @@ app.get('/api/stocks/scans', requireAuth, requireSubscription, async (req, res) 
   try {
     res.json({ status: 'ok', data: await getStockScansForUser(req.session.kiteSession.userId) });
   } catch (err) {
-    console.error('[Stocks] Scans GET error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
+    sendFailure(res, err, { log: '[Stocks] Scans GET error', message: 'Failed to load stock scans' });
   }
 });
 
@@ -1254,8 +1249,7 @@ app.get('/api/stocks/:token/setups', requireAuth, requireSubscription, async (re
     const [stats, recent] = await Promise.all([getStockSetupStats(token), getStockSetupSignals(token, 30)]);
     res.json({ status: 'ok', data: { stats, recent } });
   } catch (err) {
-    console.error('[Stocks] Setups GET error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
+    sendFailure(res, err, { log: '[Stocks] Setups GET error', message: 'Failed to load stock setups' });
   }
 });
 
@@ -1360,8 +1354,7 @@ app.delete('/api/oi-history', requireAuth, requireAdmin, async (req, res) => {
     console.log(`[OI History] Deleted ${deleted} rows for month ${month}`);
     res.json({ status: 'ok', data: { deleted } });
   } catch (err) {
-    console.error('[OI History] DELETE error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
+    sendFailure(res, err, { log: '[OI History] DELETE error', message: 'Failed to delete OI history' });
   }
 });
 
@@ -1372,8 +1365,7 @@ app.get('/api/fno-symbols', requireAuth, requireSubscription, async (req, res) =
     const symbols = await getFnoSymbols();
     res.json({ status: 'ok', data: symbols });
   } catch (err) {
-    console.error('[F&O Symbols] Error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
+    sendFailure(res, err, { log: '[F&O Symbols] Error', message: 'Failed to load F&O symbols' });
   }
 });
 
@@ -1386,8 +1378,7 @@ app.get('/api/underlyings', requireAuth, requireSubscription, async (req, res) =
   try {
     res.json({ status: 'ok', data: await getUnderlyings() });
   } catch (err) {
-    console.error('[Underlyings] Error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
+    sendFailure(res, err, { log: '[Underlyings] Error', message: 'Failed to load underlyings' });
   }
 });
 
@@ -1405,8 +1396,7 @@ app.patch('/api/admin/underlyings/:name', requireAuth, requireAdmin, async (req,
     if (!underlying) return res.status(404).json({ status: 'error', message: `No price instrument for ${req.params.name}` });
     res.json({ status: 'ok', data: underlying });
   } catch (err) {
-    console.error('[Underlyings] Update error:', err.message);
-    res.status(500).json({ status: 'error', message: err.message });
+    sendFailure(res, err, { log: '[Underlyings] Update error', message: 'Failed to update the underlying' });
   }
 });
 
@@ -1418,8 +1408,7 @@ app.get('/api/instruments', requireAuth, requireSubscription, async (req, res) =
     const instruments = await getOrFetchInstruments(apiKey, accessToken);
     res.json({ status: 'ok', data: instruments });
   } catch (err) {
-    console.error('[Instruments] Error:', err.message);
-    res.status(502).json({ status: 'error', message: err.message });
+    sendFailure(res, err, { log: '[Instruments] Error', message: 'Failed to load instruments from Kite', status: 502 });
   }
 });
 
