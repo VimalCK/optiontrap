@@ -1,5 +1,6 @@
 import type { FuturesHistoryRow, RolloverPattern } from './types';
 import { marketDate, marketMonth } from '../../../shared/marketTime.js';
+import { formatCalendarDate } from '@/utils/marketStatus';
 
 export const RECENT_SCRIPS_KEY = 'optiontrap_oi_history_recent_scrips';
 export const MAX_RECENT_SCRIPS = 5;
@@ -94,10 +95,9 @@ export function formatMonthShortLabel(month: string): string {
   return `${mon} '${String(y).slice(2)}`;
 }
 
-/** Format a full date (YYYY-MM-DD) to label (e.g., "Mon, Jul 1") */
+/** Format a full date (YYYY-MM-DD) to label, day first (e.g., "Wed, 1 Jul") */
 export function formatFullDateLabel(date: string): string {
-  const [y, m, d] = date.split('-').map(Number);
-  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  return formatCalendarDate(date, { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
 /** Determine price direction: 'up' if price rose, 'down' if fell, null if unknown */

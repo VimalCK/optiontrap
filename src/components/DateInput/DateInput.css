@@ -1,0 +1,107 @@
+/* DateInput: the shared date picker button and its calendar popup. */
+
+.date-input {
+  position: relative;
+  display: inline-block;
+}
+
+.date-input__field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.date-input__field svg {
+  color: var(--text-secondary);
+}
+
+.date-input__placeholder {
+  color: var(--text-secondary);
+}
+
+.date-input__popup {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 50;
+  width: 252px;
+  padding: 10px;
+  background: var(--card-bg-solid);
+  border: 1px solid var(--card-border);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px var(--card-shadow);
+}
+
+.date-input__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.date-input__month {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.date-input__grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.date-input__weekday {
+  text-align: center;
+  font-size: 11px;
+  color: var(--text-secondary);
+  padding: 4px 0;
+}
+
+.date-input__day {
+  height: 30px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-primary);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.date-input__day:hover:not(:disabled) {
+  background: var(--card-hover-bg);
+}
+
+.date-input__day--today {
+  border-color: var(--accent);
+}
+
+.date-input__day--selected,
+.date-input__day--selected:hover:not(:disabled) {
+  background: var(--accent);
+  color: #fff;
+}
+
+.date-input__day:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.date-input__footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+
+.date-input__clear {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 4px 6px;
+}

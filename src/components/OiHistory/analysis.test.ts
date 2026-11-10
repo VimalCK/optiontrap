@@ -192,8 +192,8 @@ describe('labels', () => {
   });
 
   it('formats expiry labels with a monthly marker', () => {
-    expect(expiryLabel('2026-07-07', true)).toBe('Jul 7 (M)');
-    expect(expiryLabel('2026-10-20', false)).toBe('Oct 20');
+    expect(expiryLabel('2026-07-07', true)).toBe('7 Jul (M)');
+    expect(expiryLabel('2026-10-20', false)).toBe('20 Oct');
   });
 });
 

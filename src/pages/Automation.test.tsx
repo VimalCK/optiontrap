@@ -4,6 +4,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { defaultAutomationConfig } from '../../shared/automation.js';
 import type { AutoTrade } from '@/services/automation';
 import { marketDate } from '../../shared/marketTime.js';
+import { formatNumericDate } from '@/utils/marketStatus';
 import Automation, { AutoTradesTable, TradeRow, automationStatus } from './Automation';
 
 describe('Automation screen', () => {
@@ -23,8 +24,8 @@ describe('Automation screen', () => {
   });
 
   it("opens the trades list on today's trades, From and To both today", () => {
-    const today = marketDate();
-    const dates = [...html.matchAll(/<input[^>]*type="date"[^>]*>/g)].map((m) => m[0].match(/value="([^"]*)"/)?.[1]);
+    const today = formatNumericDate(marketDate());
+    const dates = [...html.matchAll(/aria-label="(?:From|To): ([^"]*)"/g)].map((m) => m[1]);
     expect(dates).toEqual([today, today]);
   });
 });

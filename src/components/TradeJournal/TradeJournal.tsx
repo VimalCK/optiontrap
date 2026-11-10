@@ -15,6 +15,8 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PnLHeatmap from './PnLHeatmap';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
+import DateInput from '@/components/DateInput/DateInput';
+import { formatNumericDate } from '@/utils/marketStatus';
 import { marketDate } from '../../../shared/marketTime.js';
 import { isDateValue, presetRange, rangeProblem, subtractMonths } from './journalRange';
 import {
@@ -223,22 +225,10 @@ const TradeJournal: React.FC<{
             />
 
             <div className="tj-date-range">
-              <label className="tj-date-label">From</label>
-              <input
-                type="date"
-                className="app-date-input"
-                value={rangeStart}
-                max={rangeEnd || undefined}
-                onChange={(e) => pickStart(e.target.value)}
-              />
-              <label className="tj-date-label">To</label>
-              <input
-                type="date"
-                className="app-date-input"
-                value={rangeEnd}
-                min={rangeStart || undefined}
-                onChange={(e) => pickEnd(e.target.value)}
-              />
+              <span className="tj-date-label">From</span>
+              <DateInput label="From" value={rangeStart} max={rangeEnd || undefined} onChange={pickStart} />
+              <span className="tj-date-label">To</span>
+              <DateInput label="To" value={rangeEnd} min={rangeStart || undefined} onChange={pickEnd} />
             </div>
 
             <div className="tj-presets">
@@ -320,7 +310,7 @@ const TradeJournal: React.FC<{
                         <tr className="tj-group-row" onClick={() => toggleDate(day.date)}>
                           <td className="tj-group-date">
                             <span className="tj-group-chevron">{isExpanded ? '▾' : '▸'}</span>
-                            {day.date}
+                            {formatNumericDate(day.date)}
                             <span className="tj-group-count">{day.trades} trade{day.trades !== 1 ? 's' : ''}</span>
                           </td>
                           <td className="tj-group-empty" />

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { formatNumericDate } from '@/utils/marketStatus';
 import { useNavigate } from 'react-router-dom';
 import { DashboardIcon } from '@/components/icons/Icons';
 import { heldQuantity } from '@/services/holdings';
@@ -343,7 +344,7 @@ const Dashboard: React.FC = () => {
               <button type="button" className="dashboard-trade dashboard-trade--clickable" key={trade.id} onClick={() => goToJournalTrade(trade)}>
                 <div>
                   <strong>{trade.symbol}</strong>
-                  <span>{trade.mode.toUpperCase()} | {trade.side} x {trade.quantity} | {trade.date}</span>
+                  <span>{trade.mode.toUpperCase()} | {trade.side} x {trade.quantity} | {formatNumericDate(trade.date)}</span>
                 </div>
                 <strong className={`dashboard-tone--${getTone(trade.pnl)}`}>{formatMoney(trade.pnl, true)}</strong>
               </button>

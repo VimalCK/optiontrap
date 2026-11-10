@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { formatNumericDate } from '@/utils/marketStatus';
 import { analyzeStock, MIN_CANDLES, type StockAnalysis, type Zone, type StockState, type MarketCheck } from '../../../shared/stockSetups.js';
 import { backfillSetupHistory, fetchExpectedMove, fetchStockCandles, type ExpectedMove, type StockCandles } from '@/services/stockSetups';
 import { isAbortError } from '@/services/apiClient';
@@ -331,7 +332,7 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
               <span className="wl-sz__price">{rs(analysis.price)}</span>
               <span className="wl-sz__quote-meta">
                 <span className={`wl-sz-state wl-sz-state--${analysis.state}`}>{STATE_LABEL[analysis.state]}</span>
-                {livePrice === undefined && `Close ${analysis.date}`}
+                {livePrice === undefined && `Close ${formatNumericDate(analysis.date)}`}
               </span>
             </div>
           )}
@@ -360,7 +361,7 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
               Loading daily candles…
             </div>
           )}
-          {data?.warning && <div className="wl-sz-message wl-sz-message--warn">Couldn&apos;t refresh from Kite ({data.warning}). Showing stored candles up to {lastDate}.</div>}
+          {data?.warning && <div className="wl-sz-message wl-sz-message--warn">Couldn&apos;t refresh from Kite ({data.warning}). Showing stored candles up to {lastDate && formatNumericDate(lastDate)}.</div>}
           {data && !analysis && <div className="wl-sz-message">Not enough history yet: zones need at least {MIN_CANDLES} trading days ({data.candles.length} stored).</div>}
 
           {analysis && (
@@ -389,7 +390,7 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
 
               {analysis.setups.length > 0 ? (
                 <section className="wl-sz-section">
-                  <h4>Setups on {analysis.date}</h4>
+                  <h4>Setups on {formatNumericDate(analysis.date)}</h4>
                   <div className="wl-sz-setups">
                     {analysis.setups.map((setup) => {
                       const buy = setup.direction === 'buy';
@@ -503,7 +504,7 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
         </div>
 
         <div className="wl-sz__footer">
-          Based on {data ? `${data.candles.length} trading days` : 'past prices'}{lastDate ? ` up to ${lastDate}` : ''}. Zones improve the odds, not certainty; sell setups on cash stocks are exits, not shorts.
+          Based on {data ? `${data.candles.length} trading days` : 'past prices'}{lastDate ? ` up to ${formatNumericDate(lastDate)}` : ''}. Zones improve the odds, not certainty; sell setups on cash stocks are exits, not shorts.
         </div>
       </div>
     </div>

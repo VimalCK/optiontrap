@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { formatNumericDate } from '@/utils/marketStatus';
 import type { SignalPerformanceSummary, TradeSetupData, TradeSignalRow } from './types';
 import { summarizeSignalBreakdown, MIN_SCORED_FOR_VERDICT } from './signalStats';
 import { formatPct, formatPcr, todayIST } from './helpers';
@@ -79,7 +80,7 @@ export const SignalResultsGrid: React.FC<{ rows: TradeSignalRow[]; today?: strin
                     <td className="oi-history__signal-grid-signal">{row.action} {row.option_type} {row.strike}</td>
                     <td>{shortDate(row.expiry)}</td>
                     <td>{formatPrice(row.entry_premium)}</td>
-                    <td title={row.outcome_date ? `as of ${row.outcome_date}` : undefined}>{formatPrice(row.outcome_price)}</td>
+                    <td title={row.outcome_date ? `as of ${formatNumericDate(row.outcome_date)}` : undefined}>{formatPrice(row.outcome_price)}</td>
                     <td className={row.outcome_return === null ? '' : row.outcome_return >= 0 ? 'is-up' : 'is-down'}>{formatReturn(row.outcome_return)}</td>
                     <td>{formatReturn(row.max_favorable_return)}</td>
                     <td>{formatReturn(row.max_adverse_return)}</td>
@@ -217,7 +218,7 @@ export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
       </div>
       <div className="oi-history__setup-titlebar-meta">
         <strong>{selectedStrike ?? '-'} STRIKE</strong>
-        <span>{filterDate} · {expiries.length} expiry{expiries.length === 1 ? '' : 'ies'}</span>
+        <span>{formatNumericDate(filterDate)} · {expiries.length} expiry{expiries.length === 1 ? '' : 'ies'}</span>
       </div>
     </div>
     <div className="oi-history__setup-choice-grid">

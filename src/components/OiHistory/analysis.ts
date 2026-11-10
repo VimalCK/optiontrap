@@ -1,5 +1,6 @@
 import type { RolloverPattern, StrikeBias, DailyBias, PriceTrendDirection, StrikeBiasDay, StrikeBiasSummary, PriceTrendSummary, TradeBiasSummary, TradeSetupStatus, ChecklistStatus, TradeSetupChecklistItem, TradeLevelRow, TradeLevelContext, TradeSetupSummary, SellingSetupType, SellingSetupSummary, StrikeHistoryEntry, PremiumDecaySide, PremiumDecaySummary, OptionMomentumSide, OptionMomentumSummary } from './types';
 import { priceDirection, classifyOptionMove, patternBiasScore, pctChange, formatPct } from './helpers';
+import { formatCalendarDate, formatNumericDate } from '@/utils/marketStatus';
 
 export function summarizePriceTrend(dates: string[], spotByDate: Map<string, number>): PriceTrendSummary {
   const values = dates
@@ -252,7 +253,7 @@ export function summarizeOptionMomentum(
     const adversePenalty = adverseTrend && priceTrend.strength === 'Strong' ? 3 : adverseTrend ? 1 : 0;
     const distanceScore = Math.abs(levels.selectedDistancePct ?? 999) <= 0.8 ? 1 : 0;
     const score = momentumScore + recentScore + oiScore + activityScore + distanceScore - adversePenalty;
-    const reason = `${optionType} premium ${formatPct(momentumPct)} since ${first.date}` +
+    const reason = `${optionType} premium ${formatPct(momentumPct)} since ${formatNumericDate(first.date)}` +
       `${recentMomentumPct !== null ? `, recent ${formatPct(recentMomentumPct)}` : ''}` +
       `${latestVolume > 0 ? `, volume ${latestVolume.toLocaleString('en-IN')}` : ''}.`;
     return { optionType, firstClose, latestClose, momentumPct, recentMomentumPct, oiChangePct, latestVolume, averageVolume, daysToExpiry, score, reason };
@@ -489,7 +490,7 @@ export function summarizePremiumDecay(
     const distancePctFromSpot = Math.abs(levels.selectedDistancePct ?? 999);
     const distanceStrength = distancePctFromSpot <= 2.5 ? 1 : 0;
     const score = decayStrength + recentDecayStrength + timeStrength + activityStrength + oiStrength + distanceStrength - adversePenalty;
-    const reason = `${optionType} premium ${formatPct(decayPct)} since ${first.date}` +
+    const reason = `${optionType} premium ${formatPct(decayPct)} since ${formatNumericDate(first.date)}` +
       `${daysToExpiry !== null ? `, ${daysToExpiry} DTE` : ''}` +
       `${latestVolume > 0 ? `, volume ${latestVolume.toLocaleString('en-IN')}` : ''}.`;
 
@@ -892,12 +893,9 @@ export function patternColor(p: RolloverPattern): string {
   return 'var(--text-secondary)';
 }
 
-/** Short expiry label: '2026-07-07' → 'Jul 7' with (W) or (M) suffix */
+/** Short expiry label, day first: '2026-07-07' → '7 Jul', with ' (M)' for a monthly expiry */
 export function expiryLabel(expiry: string, isMonthly: boolean): string {
-  const d = new Date(expiry + 'T00:00:00');
-  const month = d.toLocaleDateString('en-US', { month: 'short' });
-  const day = d.getDate();
-  return `${month} ${day}${isMonthly ? ' (M)' : ''}`;
+  return `${formatCalendarDate(expiry, { day: 'numeric', month: 'short' })}${isMonthly ? ' (M)' : ''}`;
 }
 
 /**

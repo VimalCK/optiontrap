@@ -89,7 +89,7 @@ describe('OiSnapshotTable', () => {
     expect(html).toContain('22500');
     expect(html).toContain('1.9M (+90%)');
     expect(html).toContain('Long Buildup');
-    expect(html).toContain('Oct 27 (M)');
+    expect(html).toContain('27 Oct (M)');
     expect(html).toContain('oi-history__row--atm');
     expect(html.match(/oi-history__action-btn--buy/g)).toHaveLength(2);
     expect(html).not.toContain('oi-history__flow-label');
@@ -225,7 +225,7 @@ describe('SignalResultsGrid', () => {
     expect(html.match(/<tr class="is-loss">/g)).toHaveLength(1);
     expect(html).toContain('SELL CE 22700');
     expect(html).toContain('BUY PE 22500');
-    expect(html).toContain('Oct 14');
+    expect(html).toContain('14 Oct');
     expect(html).toContain('122.30');
     expect(html).toContain('+54.5%');
     expect(html).toContain('-12.5%');

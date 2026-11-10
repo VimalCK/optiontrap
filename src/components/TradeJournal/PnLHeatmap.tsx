@@ -6,6 +6,7 @@
  */
 
 import React, { useMemo } from 'react';
+import { formatNumericDate } from '@/utils/marketStatus';
 import { createPortal } from 'react-dom';
 
 interface PnLHeatmapProps {
@@ -242,7 +243,7 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, endDate, months = 12 
             zIndex: 9999,
           }}
         >
-          <span className="heatmap-tooltip__date">{tooltip.date}</span>
+          <span className="heatmap-tooltip__date">{formatNumericDate(tooltip.date)}</span>
           {tooltip.pnl !== null ? (
             <span className={`heatmap-tooltip__pnl ${tooltip.pnl > 0 ? 'heatmap-positive' : tooltip.pnl < 0 ? 'heatmap-negative' : ''}`}>
               {tooltip.pnl >= 0 ? '+' : ''}

@@ -64,7 +64,7 @@ describe('month and date labels', () => {
   it('formats month and date labels', () => {
     expect(formatMonthLabel('2026-07')).toBe('July 2026');
     expect(formatMonthShortLabel('2026-07')).toBe("Jul '26");
-    expect(formatFullDateLabel('2026-07-01')).toBe('Wed, Jul 1');
+    expect(formatFullDateLabel('2026-07-01')).toBe('Wed, 1 Jul');
   });
 });
 

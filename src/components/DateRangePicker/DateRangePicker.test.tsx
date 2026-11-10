@@ -4,16 +4,14 @@ import DateRangePicker from './DateRangePicker';
 
 describe('DateRangePicker', () => {
   const html = renderToStaticMarkup(<DateRangePicker range={{ from: '2026-11-01', to: '2026-11-05' }} onChange={() => {}} />);
-  const input = (label: string) => html.match(new RegExp(`${label}<input[^>]*>`))?.[0] ?? '';
+  const picker = (label: string) => html.match(new RegExp(`<button[^>]*aria-label="${label}: [^"]*"[^>]*>.*?</button>`))?.[0] ?? '';
 
-  it("shows the range picked, and won't let To go before From", () => {
-    expect(input('From')).toContain('value="2026-11-01"');
-    expect(input('From')).toContain('max="2026-11-05"');
-    expect(input('To')).toContain('value="2026-11-05"');
-    expect(input('To')).toContain('min="2026-11-01"');
+  it('shows the range picked, day first', () => {
+    expect(picker('From')).toContain('01-11-2026');
+    expect(picker('To')).toContain('05-11-2026');
   });
 
   it('has only the two date pickers, no shortcut buttons', () => {
-    expect(html).not.toContain('<button');
+    expect(html.match(/<button/g)).toHaveLength(2);
   });
 });

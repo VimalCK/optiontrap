@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatNumericDate } from '@/utils/marketStatus';
 import type { ScanSummary } from '@/services/stockSetups';
 
 const STATE_TEXT: Record<ScanSummary['state'], string> = {
@@ -21,8 +22,8 @@ const SetupChip: React.FC<{ scan: ScanSummary | undefined; onOpen: () => void }>
   const setup = scan.setups[0];
   const extra = scan.setups.length > 1 ? ` +${scan.setups.length - 1}` : '';
   const title = setup
-    ? `${setup.label} on ${scan.date}: entry ₹${setup.entry.toFixed(2)}, stop ₹${setup.stop.toFixed(2)}, target ₹${setup.target.toFixed(2)}`
-    : `No setup on ${scan.date}. ${STATE_TEXT[scan.state]}${scan.support ? `; support ₹${scan.support.low.toFixed(2)}–₹${scan.support.high.toFixed(2)}` : ''}`;
+    ? `${setup.label} on ${formatNumericDate(scan.date)}: entry ₹${setup.entry.toFixed(2)}, stop ₹${setup.stop.toFixed(2)}, target ₹${setup.target.toFixed(2)}`
+    : `No setup on ${formatNumericDate(scan.date)}. ${STATE_TEXT[scan.state]}${scan.support ? `; support ₹${scan.support.low.toFixed(2)}–₹${scan.support.high.toFixed(2)}` : ''}`;
   return (
     <button
       type="button"
