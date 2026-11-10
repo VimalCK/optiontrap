@@ -16,9 +16,10 @@ import { STRATEGIES } from '../../shared/strategies/index.js';
 import { marketDate } from '../../shared/marketTime.js';
 import { rangeProblem } from '@/components/TradeJournal/journalRange';
 import IconButton from '@/components/IconButton/IconButton';
+import EmptyState from '@/components/EmptyState/EmptyState';
 import DateRangePicker, { type DateRange } from '@/components/DateRangePicker/DateRangePicker';
 import Badge from '@/components/Badge/Badge';
-import { AnalyticsIcon, ChevronDownIcon, SettingsIcon } from '@/components/icons/Icons';
+import { AnalyticsIcon, AutomationIcon, ChevronDownIcon, SettingsIcon } from '@/components/icons/Icons';
 import {
   closedPnl, eventSummary, horizonLabel, sideLabel, sideTone, stageIsLive, stageLabel, stageTone, stepTone,
 } from '@/components/Automation/autoTradeView';
@@ -118,7 +119,11 @@ export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean;
       {error && <p className="automation-message automation-message--error">{error}</p>}
       {loading && <p className="card__description">Loading…</p>}
       {!loading && !error && trades.length === 0 && (
-        <p className="card__description">No automated trades in this range. Each one will show here with every stage of its lifecycle.</p>
+        <EmptyState
+          icon={<AutomationIcon size={64} />}
+          title="No automated trades in this range"
+          description="Each one will show here with every stage of its lifecycle."
+        />
       )}
       {trades.length > 0 && (
         <div className="automation-trades__scroll">
