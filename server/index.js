@@ -115,6 +115,7 @@ import { exitPaperTrade, openPaperTrade } from './paperTrading.js';
 import { catchAsyncErrors, sendServerError } from './asyncRoutes.js';
 import { resolveSessionSecret } from './sessionSecret.js';
 import { createConcurrencyLimit } from './concurrencyLimit.js';
+import { allowOnlyKnownKiteCalls } from './kiteProxyAllowlist.js';
 import { MAX_CLIENT_MESSAGE_BYTES, MAX_CONNECTIONS_PER_USER } from './wsLimits.js';
 import { cancelLimitOrder, placeLimitOrder, startPaperOrderBook } from './paperOrderBook.js';
 
@@ -1424,10 +1425,9 @@ app.get('/api/instruments', requireAuth, requireSubscription, async (req, res) =
 
 // ---------- API Proxy ----------
 
-app.use('/api', requireAuth, requireSubscription, apiLimiter, createProxyMiddleware({
+app.use('/api', requireAuth, requireSubscription, apiLimiter, allowOnlyKnownKiteCalls, createProxyMiddleware({
   target: 'https://api.kite.trade',
   changeOrigin: true,
-  secure: false,
   pathRewrite: { '^/api': '' },
   on: {
     proxyReq: (proxyReq, req) => {
