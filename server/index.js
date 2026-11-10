@@ -116,6 +116,7 @@ import { exitPaperTrade, openPaperTrade } from './paperTrading.js';
 import { catchAsyncErrors, sendFailure, sendServerError } from './asyncRoutes.js';
 import { securityHeaders } from './securityHeaders.js';
 import { startLoggedInSession } from './loginSession.js';
+import { kiteLoginUrl } from './kiteLogin.js';
 import { resolveSessionSecret } from './sessionSecret.js';
 import { createConcurrencyLimit } from './concurrencyLimit.js';
 import { allowOnlyKnownKiteCalls } from './kiteProxyAllowlist.js';
@@ -279,16 +280,8 @@ app.get('/auth/status', (req, res) => {
 
 // Get Kite OAuth login URL — apiKey comes from client (stored in localStorage)
 app.get('/auth/login-url', (req, res) => {
-  const apiKey = req.query.api_key;
-
-  if (!apiKey) {
-    return res.status(400).json({
-      status: 'error',
-      message: 'api_key query parameter is required',
-    });
-  }
-
-  const url = `https://kite.zerodha.com/connect/login?v=3&api_key=${apiKey}`;
+  const { url, error } = kiteLoginUrl(req.query.api_key);
+  if (error) return res.status(400).json({ status: 'error', message: error });
   res.json({ url });
 });
 
