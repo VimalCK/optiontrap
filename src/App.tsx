@@ -2,7 +2,6 @@ import React, { useState, useCallback, useEffect, lazy, Suspense } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useKiteSession } from '@/hooks/useKiteSession';
 import { tickerConnect, tickerDisconnect } from '@/services/tickerSingleton';
-import { apiClient } from '@/services/apiClient';
 import FeedbackButton from '@/components/Feedback/FeedbackButton';
 import Sidebar from './components/Sidebar/Sidebar';
 import MarketStrip from './components/MarketStrip/MarketStrip';
@@ -46,16 +45,6 @@ const App: React.FC = () => {
     const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
     return stored === 'true';
   });
-  const [appVersion, setAppVersion] = useState('local');
-
-  useEffect(() => {
-    apiClient.get<{ version: string }>('/api/version')
-      .then((result) => {
-        if (result.version) setAppVersion(result.version);
-      })
-      .catch(() => { /* Keep the local fallback when the server is unavailable. */ });
-  }, []);
-
   useEffect(() => {
     localStorage.setItem(SIDEBAR_STORAGE_KEY, String(sidebarCollapsed));
   }, [sidebarCollapsed]);
@@ -90,7 +79,7 @@ const App: React.FC = () => {
                 <main className={`content ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
                   <div className="content__inner">
                     <MarketStrip />
-                    {/* Inner boundary keeps the sidebar and footer visible while a page loads. */}
+                    {/* Inner boundary keeps the sidebar visible while a page loads. */}
                     <Suspense fallback={null}>
                     <Routes>
                       <Route path="/" element={<Navigate to="/portfolio" replace />} />
@@ -107,7 +96,6 @@ const App: React.FC = () => {
                     </Routes>
                     </Suspense>
                   </div>
-                  <footer className="content__footer">&copy; 2026 OptionTrap <span className="content__footer-version">· v{appVersion}</span></footer>
                 </main>
                 {!isAdmin && <FeedbackButton />}
               </div>

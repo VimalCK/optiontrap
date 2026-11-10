@@ -3,7 +3,8 @@ import { useNavigate } from 'react-router-dom';
 import { ConnectionIcon, PowerIcon } from '@/components/icons/Icons';
 import { getSession, logout, deleteAccount, KiteSession } from '@/services/kiteAuth';
 import { fetchMargins, Margins } from '@/services/kiteApi';
-import { apiClient } from '@/services/apiClient';
+import { apiClient, isAbortError } from '@/services/apiClient';
+import { fetchAppVersion } from '@/services/appVersion';
 import { formatDuration } from '@/services/subscription';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import '@/styles/settings.css';
@@ -55,6 +56,7 @@ const Profile: React.FC = () => {
   const [margins, setMargins] = useState<Margins | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [appVersion, setAppVersion] = useState<string | null>(null);
   const subscription = session?.subscription;
   const daysRemaining = getDaysRemaining(subscription?.expiresAt);
 
@@ -66,6 +68,16 @@ const Profile: React.FC = () => {
       fetchProfile();
       loadMargins();
     }
+  }, []);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchAppVersion(controller.signal)
+      .then(setAppVersion)
+      .catch((err) => {
+        if (!isAbortError(err)) console.error('[Profile] Failed to fetch the app version:', err);
+      });
+    return () => controller.abort();
   }, []);
 
   const fetchProfile = async () => {
@@ -317,6 +329,8 @@ const Profile: React.FC = () => {
           )}
         </div>
       </div>
+
+      {appVersion && <p className="profile-version">&copy; 2026 OptionTrap · v{appVersion}</p>}
     </div>
   );
 };

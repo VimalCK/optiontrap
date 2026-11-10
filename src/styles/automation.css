@@ -213,9 +213,8 @@
 /* The trades card fills the rest of the page height; the table scrolls inside it
    (both ways) under a header that stays in view. */
 .automation--trades {
-  /* Space around the page in the content area (content.css): the top offset and the
-     64px footer. */
-  --automation-page-outside: calc(var(--page-top-offset) + 64px);
+  /* Space around the page in the content area (content.css): the top and bottom padding. */
+  --automation-page-outside: calc(var(--page-top-offset) * 2);
   height: calc(100vh - var(--automation-page-outside));
 }
 
