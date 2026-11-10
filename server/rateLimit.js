@@ -10,6 +10,14 @@
  */
 
 /**
+ * The client's IP: Cloudflare's CF-Connecting-IP in prod (Cloudflare overwrites any value the client
+ * sends), else the socket address. Never X-Forwarded-For, whose first entry the client controls.
+ */
+export function clientIp(req) {
+  return req.headers['cf-connecting-ip'] || req.socket?.remoteAddress || 'unknown';
+}
+
+/**
  * Create a rate-limiting middleware.
  *
  * @param {object}   opts
@@ -37,14 +45,7 @@ export function createRateLimiter({
 
   if (cleanup.unref) cleanup.unref();
 
-  const defaultKeyFn = (req) => {
-    // Trust X-Forwarded-For when behind a reverse proxy (nginx, Cloudflare)
-    const forwarded = req.headers['x-forwarded-for'];
-    if (forwarded) return String(forwarded).split(',')[0].trim();
-    return req.ip || req.socket?.remoteAddress || 'unknown';
-  };
-
-  const getKey = keyFn || defaultKeyFn;
+  const getKey = keyFn || clientIp;
 
   const middleware = (req, res, next) => {
     const key = getKey(req);

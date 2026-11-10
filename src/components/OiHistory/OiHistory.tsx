@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { handleKiteAuthFailure, isKiteAuthFailure } from '@/services/authSession';
 import { apiClient, isAbortError } from '@/services/apiClient';
 import { useAbortSignal } from '@/hooks/useAbortSignal';
+import { useKiteSession } from '@/hooks/useKiteSession';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { addPosition, tradeErrorMessage } from '@/services/positions';
 import { getLotSize } from '@/services/optionChain';
@@ -378,7 +379,8 @@ const OiHistory: React.FC = () => {
     if (scrip) loadData();
   }, [scrip, selectedExpiryMonth, loadData]);
 
-  /** Delete all OI history for the selected scrip */
+  /** Delete all OI history for the selected scrip (admins only: the history is shared by every user) */
+  const isAdmin = useKiteSession().session?.isAdmin === true;
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isDataMenuOpen, setIsDataMenuOpen] = useState(false);
   const dataMenuRef = useRef<HTMLDivElement | null>(null);
@@ -1252,6 +1254,7 @@ const OiHistory: React.FC = () => {
               {fetching ? 'Fetching...' : 'Fetch'}
             </button>
 
+            {isAdmin && (
             <div className="oi-history__data-menu" ref={dataMenuRef}>
               <button
                 type="button"
@@ -1278,6 +1281,7 @@ const OiHistory: React.FC = () => {
               </div>
               )}
             </div>
+            )}
           </div>
 
         </div>

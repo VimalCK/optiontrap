@@ -17,12 +17,6 @@
 
 import 'dotenv/config';
 
-// Disable TLS cert verification for outbound requests to Kite API.
-// Required on Windows where Node.js doesn't use the system certificate store.
-if (!process.env.NODE_TLS_REJECT_UNAUTHORIZED) {
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-}
-
 import express from 'express';
 import session from 'express-session';
 import cookieParser from 'cookie-parser';
@@ -104,7 +98,7 @@ import {
 import { parsePriceAlertInput } from './priceAlerts.js';
 import { parseAutomationConfig } from '../shared/automation.js';
 import { PostgresSessionStore } from './sessionStore.js';
-import { createRateLimiter } from './rateLimit.js';
+import { clientIp, createRateLimiter } from './rateLimit.js';
 import { cached } from './cache.js';
 import { getOrFetchInstruments } from './instruments.js';
 import { fetchOiHistoryMonth, OiHistoryFetchError, todayIST } from './oiHistoryFetch.js';
@@ -119,6 +113,7 @@ import { refreshAutoTradeMonitor, startAutoTradeMonitor } from './autoTradeMonit
 import { startAutoTradeEngine } from './autoTradeEngine.js';
 import { parseDailyPnlQuery, parsePositionsQuery, parseRange, parseStatsQuery } from './positionsQuery.js';
 import { exitPaperTrade, openPaperTrade } from './paperTrading.js';
+import { catchAsyncErrors, sendServerError } from './asyncRoutes.js';
 import { cancelLimitOrder, placeLimitOrder, startPaperOrderBook } from './paperOrderBook.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -146,6 +141,7 @@ function ts() {
 
 const app = express();
 const server = createServer(app);
+catchAsyncErrors(app);
 
 const accessDeps = { getUserSubscription, isUserAdmin };
 
@@ -214,7 +210,7 @@ const authLimiter = createRateLimiter({
 const apiLimiter = createRateLimiter({
   windowMs: 60_000,
   max: 120,
-  keyFn: (req) => req.session?.kiteSession?.userId || req.ip || 'unknown',
+  keyFn: (req) => req.session?.kiteSession?.userId || clientIp(req),
   message: 'API rate limit exceeded, please slow down',
 });
 
@@ -719,7 +715,7 @@ app.post('/api/watchlists', requireAuth, requireSubscription, async (req, res) =
   const userId = req.session.kiteSession.userId;
   const { name } = req.body;
 
-  if (!name || !name.trim()) {
+  if (typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ status: 'error', message: 'Watchlist name is required' });
   }
 
@@ -732,7 +728,7 @@ app.patch('/api/watchlists/:id', requireAuth, requireSubscription, async (req, r
   const userId = req.session.kiteSession.userId;
   const { name } = req.body;
 
-  if (!name || !name.trim()) {
+  if (typeof name !== 'string' || !name.trim()) {
     return res.status(400).json({ status: 'error', message: 'Name is required' });
   }
 
@@ -1311,9 +1307,10 @@ app.patch('/api/oi-history/signals/:id/outcome', requireAuth, requireSubscriptio
 
 /**
  * DELETE /api/oi-history?scrip=NIFTY
- * Deletes all OI history rows for the given scrip.
+ * Deletes all OI history rows for the given scrip. Admins only: the history is
+ * shared by every user, not owned by the one asking.
  */
-app.delete('/api/oi-history', requireAuth, requireSubscription, async (req, res) => {
+app.delete('/api/oi-history', requireAuth, requireAdmin, async (req, res) => {
   try {
     const { scrip, month, expiryMonth } = req.query;
 
@@ -1614,6 +1611,8 @@ if (IS_PROD) {
     }
   });
 }
+
+app.use(sendServerError);
 
 // ---------- Start ----------
 
