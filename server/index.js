@@ -114,6 +114,7 @@ import { startAutoTradeEngine } from './autoTradeEngine.js';
 import { parseDailyPnlQuery, parsePositionsQuery, parseRange, parseStatsQuery } from './positionsQuery.js';
 import { exitPaperTrade, openPaperTrade } from './paperTrading.js';
 import { catchAsyncErrors, sendFailure, sendServerError } from './asyncRoutes.js';
+import { securityHeaders } from './securityHeaders.js';
 import { resolveSessionSecret } from './sessionSecret.js';
 import { createConcurrencyLimit } from './concurrencyLimit.js';
 import { allowOnlyKnownKiteCalls } from './kiteProxyAllowlist.js';
@@ -191,6 +192,8 @@ const sessionMiddleware = session({
 
 // ---------- Middleware ----------
 
+app.disable('x-powered-by');
+app.use(securityHeaders);
 app.use(cookieParser(SESSION_SECRET));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
