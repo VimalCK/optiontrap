@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { handleKiteAuthFailure, isKiteAuthFailure } from '@/services/authSession';
-import { apiClient, isAbortError } from '@/services/apiClient';
+import { apiClient, isAbortError, responseErrorMessage } from '@/services/apiClient';
 import { useAbortSignal } from '@/hooks/useAbortSignal';
 import { useKiteSession } from '@/hooks/useKiteSession';
 import AppSelect from '@/components/AppSelect/AppSelect';
@@ -255,8 +255,7 @@ const OiHistory: React.FC = () => {
     });
 
     if (!res.ok) {
-      const body = await res.text().catch(() => '');
-      throw new Error(body || `Server error (${res.status})`);
+      throw new Error(await responseErrorMessage(res));
     }
     if (!res.body) {
       throw new Error('Server returned an empty response');

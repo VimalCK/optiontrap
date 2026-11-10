@@ -1971,29 +1971,6 @@ function mapOiHistoryRow(obj) {
   };
 }
 
-export async function getOiHistoryData(scrip, fromDate, toDate) {
-  let sql = `SELECT date, instrument_token, tradingsymbol, strike, option_type, expiry,
-             open, high, low, close, volume, oi, spot_close
-             FROM oi_history WHERE scrip = $1`;
-  const params = [scrip];
-
-  if (fromDate && toDate) {
-    sql += ' AND date >= $2 AND date <= $3';
-    params.push(fromDate, toDate);
-  } else if (fromDate) {
-    sql += ' AND date >= $2';
-    params.push(fromDate);
-  } else if (toDate) {
-    sql += ' AND date <= $2';
-    params.push(toDate);
-  }
-
-  sql += ' ORDER BY date, strike, option_type';
-
-  const result = await rows(sql, params);
-  return result.map(mapOiHistoryRow);
-}
-
 export async function getOiHistoryDataByExpiryMonth(scrip, expiryMonth, fromDate = null) {
   let sql = `SELECT date, instrument_token, tradingsymbol, strike, option_type, expiry,
              open, high, low, close, volume, oi, spot_close

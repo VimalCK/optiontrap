@@ -56,6 +56,11 @@ async function readBody(response: Response): Promise<unknown> {
   return response.text().catch(() => '');
 }
 
+/** The server's error message from a failed response, for callers of `apiClient.raw`. */
+export async function responseErrorMessage(response: Response): Promise<string> {
+  return getErrorMessage(await readBody(response), response.status);
+}
+
 async function request<T>(url: string, options: ApiRequestOptions = {}): Promise<T> {
   const headers = new Headers(options.headers);
   const { body, ...requestOptions } = options;

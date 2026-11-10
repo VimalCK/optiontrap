@@ -71,7 +71,6 @@ import {
   getPositionStats,
   getTodayOiSnapshots,
   getLatestOiSnapshotTimestamp,
-  getOiHistoryData,
   getOiHistoryDataByExpiryMonth,
   getOiHistoryFuturesData,
   saveTradeSetupSignal,
@@ -115,7 +114,8 @@ import { parseDailyPnlQuery, parsePositionsQuery, parseRange, parseStatsQuery } 
 import { exitPaperTrade, openPaperTrade } from './paperTrading.js';
 import { catchAsyncErrors, sendServerError } from './asyncRoutes.js';
 import { resolveSessionSecret } from './sessionSecret.js';
-import { createConnectionCounter, MAX_CLIENT_MESSAGE_BYTES, MAX_CONNECTIONS_PER_USER } from './wsLimits.js';
+import { createConcurrencyLimit } from './concurrencyLimit.js';
+import { MAX_CLIENT_MESSAGE_BYTES, MAX_CONNECTIONS_PER_USER } from './wsLimits.js';
 import { cancelLimitOrder, placeLimitOrder, startPaperOrderBook } from './paperOrderBook.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -1028,8 +1028,26 @@ app.post('/api/oi-snapshots/watched-symbols', requireAuth, requireSubscription, 
  *   progress — { done, total, pct, batch, totalBatches, symbol }
  *   done     — { rowCount, tradingDays, skippedDays, fetchedDays, uniqueTokens }
  *   error    — { message }
+ *
+ * One fetch at a time per user (429 otherwise): each makes many Kite calls and
+ * large writes, and the OI History page runs its months one after another.
  */
+const oiHistoryFetches = createConcurrencyLimit(1);
+
 app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, res) => {
+  const userId = req.session.kiteSession.userId;
+  if (!oiHistoryFetches.tryAcquire(userId)) {
+    return res.status(429).json({ status: 'error', message: 'An OI history fetch is already running · wait for it to finish' });
+  }
+  try {
+    await streamOiHistoryFetch(req, res);
+  } finally {
+    oiHistoryFetches.release(userId);
+  }
+});
+
+/** Run one OI history fetch, streaming its progress to `res` as SSE. */
+async function streamOiHistoryFetch(req, res) {
   // Set up SSE headers
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -1078,7 +1096,7 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
     send('error', { message: err.message });
     res.end();
   }
-});
+}
 
 /**
  * GET /api/oi-history/expiry-months?scrip=NIFTY
@@ -1119,20 +1137,17 @@ app.get('/api/oi-history/expiry-months', requireAuth, requireSubscription, async
 });
 
 /**
- * GET /api/oi-history?scrip=NIFTY&expiryMonth=YYYY-MM
- * Returns stored OI history data for the selected expiry month.
+ * GET /api/oi-history?scrip=NIFTY&expiryMonth=YYYY-MM[&from=YYYY-MM-DD]
+ * Returns stored OI history data for one expiry month. The month is required, so
+ * a request can't read a scrip's whole stored history at once.
  */
 app.get('/api/oi-history', requireAuth, requireSubscription, async (req, res) => {
   try {
-    const { scrip, from, to, expiryMonth } = req.query;
-    if (!scrip) {
-      return res.status(400).json({ status: 'error', message: 'scrip is required' });
+    const { scrip, from, expiryMonth } = req.query;
+    if (!scrip || !expiryMonth) {
+      return res.status(400).json({ status: 'error', message: 'scrip and expiryMonth are required' });
     }
-    if (expiryMonth) {
-      const data = await getOiHistoryDataByExpiryMonth(scrip, expiryMonth, from || null);
-      return res.json({ status: 'ok', data });
-    }
-    const data = await getOiHistoryData(scrip, from, to);
+    const data = await getOiHistoryDataByExpiryMonth(scrip, expiryMonth, from || null);
     res.json({ status: 'ok', data });
   } catch (err) {
     console.error('[OI History] GET error:', err.message);
@@ -1455,7 +1470,7 @@ app.use('/api', requireAuth, requireSubscription, apiLimiter, createProxyMiddlew
 // ---------- WebSocket Proxy ----------
 
 const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_CLIENT_MESSAGE_BYTES });
-const wsConnections = createConnectionCounter(MAX_CONNECTIONS_PER_USER);
+const wsConnections = createConcurrencyLimit(MAX_CONNECTIONS_PER_USER);
 /** Close code telling the browser its Kite session has expired (mirrored in src/services/kiteTicker.ts). */
 const WS_SESSION_EXPIRED = 4001;
 
