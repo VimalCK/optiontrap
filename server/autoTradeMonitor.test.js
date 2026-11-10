@@ -106,6 +106,7 @@ describe('the monitor', () => {
     expect(exitPosition).toHaveBeenCalledWith('U1', 'p1', 120, {
       now: NOON,
       exitReason: { ruleId: 'stop-loss', reason: 'Stop-loss hit: P&L -20.00% (₹-1500.00), stop-loss 20%' },
+      fillFrom: { apiKey: 'key', accessToken: 'token' }, // a market exit at the bid / ask, quoted with the feed's session
     });
     expect(monitor.watchedPositionIds()).toEqual(['p2']);
     expect(feeds[0].watching).toEqual([202]);

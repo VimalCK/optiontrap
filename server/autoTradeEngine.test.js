@@ -139,6 +139,14 @@ describe('createAutoTradeEngine run', () => {
     expect(onExecuted).toHaveBeenCalledWith('U1');
   });
 
+  it('fills a market entry at the bid / ask in the same quote: a sell at the best bid', async () => {
+    const { db, run, openPosition, quotes } = setup();
+    quotes.mockResolvedValue({ 'NFO:NIFTY26NOV24000PE': { last_price: 120, depth: { buy: [{ price: 119.6 }], sell: [{ price: 120.4 }] } } });
+    await run();
+    expect(openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ entryPrice: 119.6 }), { now: NOON, source: 'auto' });
+    expect(db.advanceAutoTrade.mock.calls[1][4]).toEqual({ entryPrice: 119.6, positionId: 'pos1' });
+  });
+
   it('saves nothing when an entry rule refuses the signal: it only logs why, and opens nothing', async () => {
     const config = userConfig();
     config.entryRules['max-daily-loss'] = { active: true, params: { amount: 1000 } };

@@ -6,7 +6,8 @@
  * as bars (with a running total), then the same figures grouped by setup,
  * exit, entry time, strategy and side. The server does the grouping
  * (GET /api/automation/results); ratios and names come from winLossStats.ts.
- * P&L is before costs (brokerage, taxes, slippage).
+ * P&L is after each trade's charges (shared/paperCharges.js), at the bid / ask fills
+ * paper trading uses; the summary also shows the charges paid.
  */
 import React, { useEffect, useState } from 'react';
 import { addDays, marketDate } from '../../../shared/marketTime.js';
@@ -75,6 +76,7 @@ export const ResultsSummary: React.FC<{ results: AutoTradeResults }> = ({ result
       <Stat label="Avg loss" value={amount(averageLoss(summary))} tone={averageLoss(summary)} />
       <Stat label="Best trade" value={amount(summary.best)} tone={summary.best} />
       <Stat label="Worst trade" value={amount(summary.worst)} tone={summary.worst} />
+      <Stat label="Charges paid" value={formatAmount(summary.charges)} />
     </div>
   </div>
 );
@@ -203,7 +205,7 @@ const WinLossPatterns: React.FC = () => {
       <div className="winloss__head">
         <div>
           <h3 id="winloss-title" className="card__title">Win/Loss Patterns</h3>
-          <p className="card__description">Closed automated trades entered in this range · P&amp;L before costs</p>
+          <p className="card__description">Closed automated trades entered in this range · P&amp;L after charges</p>
         </div>
         <DateRangePicker range={range} onChange={setRange} />
       </div>

@@ -30,7 +30,11 @@ export interface TradeEntry {
   quantity: number;
   entryPrice: number;
   exitPrice: number;
+  /** P&L after charges (the server's journal P&L SQL subtracts them the same way). */
   pnl: number;
+  /** What Zerodha would charge for its entry and exit; 0 for trades closed before charges were kept. */
+  charges: number;
+  chargeBreakdown?: Position['chargeBreakdown'];
   note?: string;
   targetPrice?: number | null;
   stopLossPrice?: number | null;
@@ -55,15 +59,27 @@ export function positionToSegment(pos: Position): Segment {
   return pos.instrumentType === 'FUT' ? 'futures' : 'stocks';
 }
 
+const CHARGE_LABELS: [keyof NonNullable<Position['chargeBreakdown']>, string][] = [
+  ['brokerage', 'Brokerage'], ['stt', 'STT'], ['exchange', 'Exchange'], ['sebi', 'SEBI'], ['stamp', 'Stamp duty'], ['gst', 'GST'], ['dp', 'DP'],
+];
+
+/** A trade's charges, one per line ("Brokerage ₹40.00"), for a tooltip; a note when none were recorded. */
+export function chargesTitle(breakdown: Position['chargeBreakdown'] | undefined): string {
+  if (!breakdown) return 'No charges recorded (closed before charges were kept)';
+  return CHARGE_LABELS.filter(([key]) => breakdown[key] > 0).map(([key, label]) => `${label} ₹${breakdown[key].toFixed(2)}`).join('\n');
+}
+
 /**
  * Convert an exited Position into a TradeEntry.
  */
 export function positionToEntry(pos: Position): TradeEntry {
   const exitPrice = pos.exitPrice ?? 0;
-  const pnl =
+  const charges = pos.charges ?? 0;
+  const gross =
     pos.side === 'BUY'
       ? (exitPrice - pos.entryPrice) * pos.quantity
       : (pos.entryPrice - exitPrice) * pos.quantity;
+  const pnl = gross - charges;
 
   return {
     id: pos.id,
@@ -75,6 +91,8 @@ export function positionToEntry(pos: Position): TradeEntry {
     entryPrice: pos.entryPrice,
     exitPrice,
     pnl: Number(pnl.toFixed(2)),
+    charges,
+    chargeBreakdown: pos.chargeBreakdown ?? null,
     note: pos.note,
     targetPrice: pos.targetPrice,
     stopLossPrice: pos.stopLossPrice,

@@ -20,6 +20,7 @@ import { formatNumericDate } from '@/utils/marketStatus';
 import { marketDate } from '../../../shared/marketTime.js';
 import { isDateValue, presetRange, rangeProblem, subtractMonths } from './journalRange';
 import {
+  chargesTitle,
   getPaperDailyPnl,
   getPaperTrades,
   DailyPnl,
@@ -296,7 +297,8 @@ const TradeJournal: React.FC<{
                     <th>Qty</th>
                     <th>Entry</th>
                     <th>Exit</th>
-                    <th>P&L</th>
+                    <th title="What Zerodha would charge for the entry and exit">Charges</th>
+                    <th title="After charges">P&L</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -313,6 +315,7 @@ const TradeJournal: React.FC<{
                             {formatNumericDate(day.date)}
                             <span className="tj-group-count">{day.trades} trade{day.trades !== 1 ? 's' : ''}</span>
                           </td>
+                          <td className="tj-group-empty" />
                           <td className="tj-group-empty" />
                           <td className="tj-group-empty" />
                           <td className="tj-group-empty" />
@@ -342,13 +345,14 @@ const TradeJournal: React.FC<{
                             <td>{t.quantity}</td>
                             <td>{t.entryPrice.toFixed(2)}</td>
                             <td>{t.exitPrice.toFixed(2)}</td>
+                            <td title={chargesTitle(t.chargeBreakdown)}>{t.charges.toFixed(2)}</td>
                             <td className={pnlClass(t.pnl)}>{formatPnl(t.pnl)}</td>
                           </tr>
                         ))}
 
                         {isExpanded && loaded && (loaded.loading || loaded.error || shown < day.trades) && (
                           <tr className="tj-day-status-row">
-                            <td colSpan={7}>
+                            <td colSpan={8}>
                               {loaded.loading ? (
                                 <span className="tj-loading">Loading trades…</span>
                               ) : loaded.error ? (

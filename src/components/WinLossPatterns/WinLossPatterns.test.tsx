@@ -4,7 +4,7 @@ import { ResultsView } from './WinLossPatterns';
 import type { AutoTradeResults, ResultGroup } from '@/services/automation';
 
 const group = <K,>(key: K, pnl: number, extra: Partial<ResultGroup<K>> = {}): ResultGroup<K> => ({
-  key, trades: 2, wins: 1, losses: 1, pnl, grossProfit: 1500, grossLoss: 1500, best: 1500, worst: -1500, ...extra,
+  key, trades: 2, wins: 1, losses: 1, pnl, grossProfit: 1500, grossLoss: 1500, best: 1500, worst: -1500, charges: 0, ...extra,
 });
 
 const results: AutoTradeResults = {

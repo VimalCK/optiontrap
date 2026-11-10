@@ -928,15 +928,18 @@ const sendPaperTradeResult = (res, result) => {
     .json({ status: 'error', code: result.code, message: result.message });
 };
 
+// A market order: it fills at the bid / ask from a quote with the user's own Kite session (entryPrice
+// only when the quote has none), as on Zerodha.
 app.post('/api/positions', requireAuth, requireSubscription, async (req, res) => {
-  const userId = req.session.kiteSession.userId;
-  sendPaperTradeResult(res, await openPaperTrade(userId, req.body || {}));
+  const { userId } = req.session.kiteSession;
+  sendPaperTradeResult(res, await openPaperTrade(userId, req.body || {}, { fillFrom: req.session.kiteSession }));
 });
 
-// Exit an open position at exitPrice (the only change a position takes).
+// Exit an open position (the only change a position takes), as a market order: at the bid / ask,
+// or exitPrice when the quote has none. It records the position's charges.
 app.patch('/api/positions/:id', requireAuth, requireSubscription, async (req, res) => {
-  const userId = req.session.kiteSession.userId;
-  sendPaperTradeResult(res, await exitPaperTrade(userId, req.params.id, req.body?.exitPrice));
+  const { userId } = req.session.kiteSession;
+  sendPaperTradeResult(res, await exitPaperTrade(userId, req.params.id, req.body?.exitPrice, { fillFrom: req.session.kiteSession }));
   refreshAutoTradeMonitor(userId); // stop watching it if it was automated
 });
 

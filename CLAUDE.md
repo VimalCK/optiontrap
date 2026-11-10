@@ -102,8 +102,8 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   recorded with a checksum in `schema_migrations`. Line endings are normalised to LF (`.gitattributes`: `*.sql eol=lf`).
 - An applied migration whose content changes **blocks server startup**.
 - **If the latest migration hasn't reached prod yet, edit it instead of adding a new file.** Check with
-  `git log origin/master..HEAD`. Everything up to `022_snapshot_contracts_and_auto_limit_orders.sql` is in prod, so the next schema change is a new
-  `023_…` file (which can then be edited until it is pushed).
+  `git log origin/master..HEAD`. Everything up to `023_auto_trade_results.sql` is in prod, so the next schema change is a new
+  `024_…` file (which can then be edited until it is pushed).
   - After editing it, the local DB's row for it must be deleted so it re-applies. The user does this themselves; tell them the command:
     `docker exec optiontrap-postgres psql -U optiontrap -d optiontrap -c "DELETE FROM schema_migrations WHERE name = '<file>'"`.
 - Migrations must work on an existing DB with data: `IF NOT EXISTS`, backfill before `NOT NULL`, add constraints in a
@@ -249,6 +249,11 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   manual↔manual, never across).
 - Share count for holdings: `quantity + t1_quantity + collateral_quantity − used_quantity`.
 - Live position P&L (Kite's formula): `sell_value − buy_value + quantity × ltp × multiplier`.
+- Paper market orders fill like Zerodha's: a buy at the best ask, a sell at the best bid (`server/paperFills.js`, from a quote
+  with the user's Kite session, or the server feed's for the monitor; the sent price when the quote has none). Closing a position
+  records Zerodha's charges (`shared/paperCharges.js`: brokerage, STT, exchange, SEBI, stamp, GST, DP) in `positions.charges` /
+  `charge_breakdown` and each automated trade's own in `auto_trades.charges`. Positions shows P&L before charges, as Kite does;
+  the Journal, Dashboard, Algo Trading, Win/Loss Patterns and the daily loss limit use P&L after them.
 - Paper limit orders (`shared/paperOrders.js`, `server/paperOrderBook.js`, table `paper_orders`) work like Zerodha's: a buy fills
   at the limit or lower, a sell at the limit or higher. One that can fill when placed fills at once at the last price; otherwise
   it fills at its limit on the first live tick that reaches it, through `openPaperTrade` (source manual). Open orders are cancelled

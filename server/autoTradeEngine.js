@@ -43,6 +43,7 @@ import {
 } from './db.js';
 import { openPaperTrade } from './paperTrading.js';
 import { fetchQuotes } from './kiteQuotes.js';
+import { marketFillPrice } from './paperFills.js';
 import { openAutoTradePnl, refreshAutoTradeMonitor } from './autoTradeMonitor.js';
 import { onPaperOrderSettled, placeAutoLimitOrder } from './paperOrderBook.js';
 import { checkGeneralSettings, tradeKind } from '../shared/automation.js';
@@ -165,7 +166,7 @@ export function createAutoTradeEngine({
    * rejected after that only when it cannot be placed (no price, or paper
    * trading refuses it, e.g. outside market hours).
    */
-  async function take(userId, config, signal, { instrumentsByToken, indexNames, prices, now }) {
+  async function take(userId, config, signal, { instrumentsByToken, indexNames, prices, quotesByKey, now }) {
     const planned = planTrade(signal, instrumentsByToken, indexNames, config);
     if (planned.error !== undefined) {
       log(`${signal.strategyId} [${userId}] skipped a signal: ${planned.error}`);
@@ -201,12 +202,14 @@ export function createAutoTradeEngine({
       }
       return; // the order book tells settleOrder when it fills or is cancelled
     }
-    const opened = await openPosition(userId, { ...trade, entryPrice }, { now, source: 'auto' });
+    // A market entry fills at the bid / ask in the same quote, as on Zerodha (the LTP when it has none).
+    const fill = marketFillPrice(quotesByKey.get(`${trade.exchange}:${trade.tradingsymbol}`), trade.side) ?? entryPrice;
+    const opened = await openPosition(userId, { ...trade, entryPrice: fill }, { now, source: 'auto' });
     if (!opened.ok) return reject(opened.message);
 
-    await db.advanceAutoTrade(userId, id, 'validated', 'executed', { entryPrice, positionId: opened.position.id }, { entryPrice, positionId: opened.position.id });
+    await db.advanceAutoTrade(userId, id, 'validated', 'executed', { entryPrice: fill, positionId: opened.position.id }, { entryPrice: fill, positionId: opened.position.id });
     onExecuted(userId);
-    log(`${trade.side} ${trade.quantity} ${trade.tradingsymbol} at ${entryPrice} [${userId}] (${signal.strategyId})`);
+    log(`${trade.side} ${trade.quantity} ${trade.tradingsymbol} at ${fill} (last ${entryPrice}) [${userId}] (${signal.strategyId})`);
   }
 
   return {
@@ -263,12 +266,13 @@ export function createAutoTradeEngine({
         .filter(Boolean)
         .map((i) => `${i.exchange}:${i.tradingsymbol}`))];
       const quoted = keys.length > 0 ? await quotes(kite, keys) : {};
+      const quotesByKey = new Map(Object.entries(quoted));
       const prices = new Map(Object.entries(quoted).map(([key, q]) => [key, q?.last_price]));
 
       for (const { userId, config, signals } of work) {
         for (const signal of signals) {
           try {
-            await take(userId, config, signal, { instrumentsByToken, indexNames, prices, now });
+            await take(userId, config, signal, { instrumentsByToken, indexNames, prices, quotesByKey, now });
           } catch (err) {
             log(`${signal.strategyId} [${userId}] failed: ${/** @type {Error} */ (err).message}`);
           }

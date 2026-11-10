@@ -3,13 +3,13 @@ import { resultsParams, toResults } from './autoTradeResults.js';
 
 // Rows as the GROUPING SETS query returns them (numbers already parsed).
 const row = (dimension, key, trades, pnl, extra = {}) => ({
-  dimension, key, trades, wins: 0, losses: 0, pnl, gross_profit: 0, gross_loss: 0, best: pnl, worst: pnl, ...extra,
+  dimension, key, trades, wins: 0, losses: 0, pnl, gross_profit: 0, gross_loss: 0, best: pnl, worst: pnl, charges: 0, ...extra,
 });
 
 describe('toResults', () => {
   it('puts each grouping row in its breakdown: time and day in order, the rest best P&L first', () => {
     const results = toResults([
-      row('all', null, 3, 500, { wins: 2, losses: 1, gross_profit: 2000, gross_loss: 1500, best: 1500, worst: -1500 }),
+      row('all', null, 3, 500, { wins: 2, losses: 1, gross_profit: 2000, gross_loss: 1500, best: 1500, worst: -1500, charges: 170.55 }),
       row('setup', 'Bull put', 2, -1000),
       row('setup', 'Long call', 1, 1500),
       row('exitRule', null, 1, 500),
@@ -19,7 +19,7 @@ describe('toResults', () => {
       row('day', '2026-11-09', 2, 0),
     ], 1500);
 
-    expect(results.summary).toEqual({ key: null, trades: 3, wins: 2, losses: 1, pnl: 500, grossProfit: 2000, grossLoss: 1500, best: 1500, worst: -1500 });
+    expect(results.summary).toEqual({ key: null, trades: 3, wins: 2, losses: 1, pnl: 500, grossProfit: 2000, grossLoss: 1500, best: 1500, worst: -1500, charges: 170.55 });
     expect(results.maxDrawdown).toBe(1500);
     expect(results.bySetup.map((g) => g.key)).toEqual(['Long call', 'Bull put']);
     expect(results.byExitRule[0].key).toBeNull(); // exited manually

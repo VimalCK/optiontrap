@@ -47,6 +47,21 @@ describe('openPaperTrade', () => {
     expect(db.addPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ source: 'auto' }));
   });
 
+  it('fills a market order at the ask for a buy when given a Kite session, never the price sent', async () => {
+    db.addPosition.mockResolvedValue({ id: 'p1' });
+    const kite = { apiKey: 'k', accessToken: 't' };
+    const fillPrice = vi.fn().mockResolvedValue(102);
+    await openPaperTrade('U1', input, { now: OPEN, fillFrom: kite, fillPrice });
+    expect(fillPrice).toHaveBeenCalledWith(kite, expect.objectContaining({ tradingsymbol: 'NIFTY26N1024000CE', exchange: 'NFO' }), 'BUY');
+    expect(db.addPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ entryPrice: 102 }));
+
+    // A limit fill (no session) keeps its price, and so does a refused trade: no quote is taken for it.
+    await openPaperTrade('U1', input, { now: OPEN, fillPrice });
+    expect(db.addPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ entryPrice: 101.5 }));
+    await openPaperTrade('U1', input, { now: CLOSED, fillFrom: kite, fillPrice });
+    expect(fillPrice).toHaveBeenCalledTimes(1);
+  });
+
   it('never takes the source from the request itself', async () => {
     db.addPosition.mockResolvedValue({ id: 'p1' });
     await openPaperTrade('U1', { ...input, source: 'auto' }, { now: OPEN });
@@ -81,13 +96,14 @@ describe('openPaperTrade', () => {
 describe('exitPaperTrade', () => {
   const position = { id: 'p1', mode: 'paper', exited: false };
 
-  it('exits an open position at the given price', async () => {
+  it('exits an open position at the given price, and returns it as exited (with its charges)', async () => {
     db.getOpenPosition.mockResolvedValue(position);
-    db.exitPositionById.mockResolvedValue(true);
+    const exited = { ...position, exited: true, exitPrice: 95.5, charges: 48.2 };
+    db.exitPositionById.mockResolvedValue(exited);
 
     const result = await exitPaperTrade('U1', 'p1', '95.5', { now: OPEN });
 
-    expect(result).toEqual({ ok: true, position: { ...position, exited: true, exitPrice: 95.5 } });
+    expect(result).toEqual({ ok: true, position: exited });
     expect(db.getOpenPosition).toHaveBeenCalledWith('p1', 'U1');
     expect(db.exitPositionById).toHaveBeenCalledWith('p1', 'U1', 95.5);
   });
@@ -114,23 +130,43 @@ describe('exitPaperTrade', () => {
   });
 
   it('closes the automated trades behind an automated position, as exited manually unless told why', async () => {
-    db.getOpenPosition.mockResolvedValue({ ...position, source: 'auto' });
-    db.exitPositionById.mockResolvedValue(true);
+    const auto = { ...position, source: 'auto' };
+    db.getOpenPosition.mockResolvedValue(auto);
+    db.exitPositionById.mockResolvedValue({ ...auto, exited: true });
 
     expect((await exitPaperTrade('U1', 'p1', '95.5', { now: OPEN })).ok).toBe(true);
-    expect(db.closeAutoTradesOfPosition).toHaveBeenCalledWith('U1', 'p1', 95.5, { ruleId: null, reason: 'Exited manually' });
+    expect(db.closeAutoTradesOfPosition).toHaveBeenCalledWith('U1', auto, 95.5, { ruleId: null, reason: 'Exited manually' }, OPEN);
 
     await exitPaperTrade('U1', 'p1', 90, { now: OPEN, exitReason: { ruleId: 'stop-loss', reason: 'Stop-loss hit' } });
-    expect(db.closeAutoTradesOfPosition).toHaveBeenLastCalledWith('U1', 'p1', 90, { ruleId: 'stop-loss', reason: 'Stop-loss hit' });
+    expect(db.closeAutoTradesOfPosition).toHaveBeenLastCalledWith('U1', auto, 90, { ruleId: 'stop-loss', reason: 'Stop-loss hit' }, OPEN);
+  });
+
+  it('exits as a market order at the bid / ask when given a Kite session, else at the price sent', async () => {
+    const sold = { ...position, side: 'SELL', exchange: 'NFO', tradingsymbol: 'NIFTY26N1024000PE' };
+    db.getOpenPosition.mockResolvedValue(sold);
+    db.exitPositionById.mockResolvedValue({ ...sold, exited: true });
+    const kite = { apiKey: 'k', accessToken: 't' };
+    const fillPrice = vi.fn().mockResolvedValue(30.2);
+
+    await exitPaperTrade('U1', 'p1', 30, { now: OPEN, fillFrom: kite, fillPrice });
+    // A sold position exits by buying, so it pays the ask.
+    expect(fillPrice).toHaveBeenCalledWith(kite, sold, 'BUY');
+    expect(db.exitPositionById).toHaveBeenLastCalledWith('p1', 'U1', 30.2);
+
+    fillPrice.mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('quote failed'));
+    await exitPaperTrade('U1', 'p1', 30, { now: OPEN, fillFrom: kite, fillPrice }); // no bid / ask in the quote
+    expect(db.exitPositionById).toHaveBeenLastCalledWith('p1', 'U1', 30);
+    await exitPaperTrade('U1', 'p1', 30, { now: OPEN, fillFrom: kite, fillPrice }); // the quote call failed
+    expect(db.exitPositionById).toHaveBeenLastCalledWith('p1', 'U1', 30);
   });
 
   it('leaves automated trades alone for a manual position, or an exit that did not happen', async () => {
     db.getOpenPosition.mockResolvedValue({ ...position, source: 'manual' });
-    db.exitPositionById.mockResolvedValue(true);
+    db.exitPositionById.mockResolvedValue({ ...position, exited: true });
     await exitPaperTrade('U1', 'p1', 95, { now: OPEN });
 
     db.getOpenPosition.mockResolvedValue({ ...position, source: 'auto' });
-    db.exitPositionById.mockResolvedValue(false); // exited by another request meanwhile
+    db.exitPositionById.mockResolvedValue(null); // exited by another request meanwhile
     await exitPaperTrade('U1', 'p1', 95, { now: OPEN });
     await exitPaperTrade('U1', 'p1', 95, { now: CLOSED }); // refused
 

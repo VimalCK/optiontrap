@@ -20,6 +20,7 @@ import { MARKET_TIME_ZONE, addDays, marketDateTime, marketDayStartMs } from '../
 import { buildDailyPnlQuery, buildPositionsQuery, buildStatsQueries } from './positionsQuery.js';
 import { withDefaults } from '../shared/automation.js';
 import { MAX_DRAWDOWN_SQL, RESULTS_SQL, resultsParams, toResults } from './autoTradeResults.js';
+import { roundTripCharges } from '../shared/paperCharges.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
@@ -1024,14 +1025,15 @@ export async function advanceAutoTrade(userId, id, from, to, fields, detail) {
 }
 
 /**
- * The user's booked P&L today from automated paper positions exited since
- * `todayStart` (ISO). Served by positions_closed_idx (user_id, mode, exit_time).
+ * The user's booked P&L today, after charges, from automated paper positions
+ * exited since `todayStart` (ISO). Served by positions_closed_idx (user_id, mode, exit_time).
  * @param {string} userId
  * @param {string} todayStart
  */
 export async function getTodayAutoRealisedPnl(userId, todayStart) {
   const row = await firstRow(
-    `SELECT COALESCE(SUM(CASE WHEN side = 'BUY' THEN exit_price - entry_price ELSE entry_price - exit_price END * quantity), 0) AS pnl
+    `SELECT COALESCE(SUM(CASE WHEN side = 'BUY' THEN exit_price - entry_price ELSE entry_price - exit_price END * quantity
+       - COALESCE(charges, 0)), 0) AS pnl
      FROM positions
      WHERE user_id = $1 AND mode = 'paper' AND exited = 1 AND exit_time >= $2 AND source = 'auto'`,
     [userId, todayStart],
@@ -1076,23 +1078,41 @@ export async function getOpenAutoPositions(userId) {
 /**
  * Close the user's executed automated trades behind a position that was just
  * exited: each gets the exit price and stage 'closed', with an event saying
- * why (`detail`; its ruleId is kept as exit_rule_id). One transaction, so a trade is never closed without its
- * event. Served by auto_trades_position_idx. Returns the ids closed.
+ * why (`detail`; its ruleId is kept as exit_rule_id), and its own charges:
+ * its entry and exit at its own prices (shared/paperCharges.js), since merged
+ * trades share one position at the average price. One transaction, so a trade
+ * is never closed without its event. Served by auto_trades_position_idx.
+ * Returns the ids closed.
  * @param {string} userId
- * @param {string} positionId
+ * @param {{ id: string, instrumentType: string }} position  the position just exited
  * @param {number} exitPrice
  * @param {{ ruleId: string | null, reason: string }} detail  ruleId is null for a manual exit
+ * @param {Date} exitTime
  * @returns {Promise<string[]>}
  */
-export async function closeAutoTradesOfPosition(userId, positionId, exitPrice, detail) {
+export async function closeAutoTradesOfPosition(userId, position, exitPrice, detail, exitTime) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const closed = await client.query(
-      `UPDATE auto_trades SET stage = 'closed', exit_price = $3, reason = $4, exit_rule_id = $5, updated_at = now()
+    const open = await client.query(
+      `SELECT id, side, quantity, entry_price, created_at FROM auto_trades
        WHERE position_id = $1 AND user_id = $2 AND stage = 'executed'
-       RETURNING id`,
-      [positionId, userId, exitPrice, detail.reason, detail.ruleId],
+       FOR UPDATE`,
+      [position.id, userId],
+    );
+    const charges = open.rows.map((row) => roundTripCharges({
+      instrumentType: position.instrumentType,
+      side: row.side,
+      quantity: Number(row.quantity),
+      entryPrice: Number(row.entry_price ?? exitPrice),
+      entryTime: row.created_at,
+    }, exitPrice, exitTime).total);
+    const closed = await client.query(
+      `UPDATE auto_trades t SET stage = 'closed', exit_price = $3, reason = $4, exit_rule_id = $5, charges = c.charges, updated_at = now()
+       FROM unnest($6::text[], $7::numeric[]) AS c (id, charges)
+       WHERE t.id = c.id AND t.position_id = $1 AND t.user_id = $2 AND t.stage = 'executed'
+       RETURNING t.id`,
+      [position.id, userId, exitPrice, detail.reason, detail.ruleId, open.rows.map((row) => row.id), charges],
     );
     const ids = closed.rows.map((row) => row.id);
     if (ids.length > 0) {
@@ -1126,6 +1146,8 @@ function toAutoTrade(row) {
     reason: row.reason,
     entryPrice: row.entry_price,
     exitPrice: row.exit_price,
+    /** Its own charges once closed (entry and exit at its own prices). */
+    charges: row.charges == null ? null : Number(row.charges),
     positionId: row.position_id,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
@@ -1388,7 +1410,32 @@ function mapPositionRow(row) {
     stopLossPrice: row.stop_loss_price,
     strategyTag: row.strategy_tag || '',
     confidence: row.confidence === null || row.confidence === undefined ? null : Number(row.confidence),
+    // Set when it closes (shared/paperCharges.js); null while open or if closed before charges were recorded.
+    charges: row.charges == null ? null : Number(row.charges),
+    chargeBreakdown: row.charge_breakdown ?? null,
   };
+}
+
+/**
+ * Close an open position row at `exitPrice` with its charges (its entry and
+ * exit orders, shared/paperCharges.js). Only a row still open closes; returns
+ * the closed row, or null if it was closed meanwhile.
+ */
+async function closePositionRow(row, exitPrice, exitTime) {
+  const charges = roundTripCharges({
+    instrumentType: row.instrument_type,
+    side: row.side,
+    quantity: Number(row.quantity),
+    entryPrice: Number(row.entry_price),
+    entryTime: new Date(row.entry_time),
+  }, exitPrice, new Date(exitTime));
+  const res = await query(
+    `UPDATE positions SET exited = 1, exit_price = $1, exit_time = $2, charges = $3, charge_breakdown = $4
+     WHERE id = $5 AND exited = 0`,
+    [exitPrice, exitTime, charges.total, JSON.stringify(charges), row.id],
+  );
+  if (res.rowCount === 0) return null;
+  return { ...row, exited: 1, exit_price: exitPrice, exit_time: exitTime, charges: charges.total, charge_breakdown: charges };
 }
 
 function positionMetaValues(position) {
@@ -1484,11 +1531,8 @@ export async function addPosition(userId, position) {
   if (opposite) {
     const oppQty = Number(opposite.quantity);
     if (position.quantity === oppQty) {
-      await query(
-        'UPDATE positions SET exited = 1, exit_price = $1, exit_time = $2 WHERE id = $3',
-        [position.entryPrice, now, opposite.id],
-      );
-      return mapPositionRow({ ...opposite, exited: 1, exit_price: position.entryPrice, exit_time: now });
+      const closed = await closePositionRow(opposite, position.entryPrice, now);
+      return mapPositionRow(closed ?? opposite);
     }
 
     if (position.quantity < oppQty) {
@@ -1500,10 +1544,7 @@ export async function addPosition(userId, position) {
     }
 
     // Over-close — close existing, open remainder in new side
-    await query(
-      'UPDATE positions SET exited = 1, exit_price = $1, exit_time = $2 WHERE id = $3',
-      [position.entryPrice, now, opposite.id],
-    );
+    await closePositionRow(opposite, position.entryPrice, now);
     return insertPosition(userId, mode, position, position.quantity - oppQty, now);
   }
 
@@ -1517,13 +1558,15 @@ export async function getOpenPosition(id, userId) {
   return row ? mapPositionRow(row) : null;
 }
 
+/**
+ * Exit one of a user's open positions at `exitPrice`, with its charges.
+ * Returns the exited position, or null if it is not open (any more).
+ */
 export async function exitPositionById(id, userId, exitPrice) {
-  const now = new Date().toISOString();
-  const res = await query(
-    'UPDATE positions SET exited = 1, exit_price = $1, exit_time = $2 WHERE id = $3 AND user_id = $4 AND exited = 0',
-    [exitPrice, now, id, userId],
-  );
-  return res.rowCount > 0;
+  const row = await firstRow('SELECT * FROM positions WHERE id = $1 AND user_id = $2 AND exited = 0', [id, userId]);
+  if (!row) return null;
+  const closed = await closePositionRow(row, exitPrice, new Date().toISOString());
+  return closed ? mapPositionRow(closed) : null;
 }
 
 // ---------------------------------------------------------------------------

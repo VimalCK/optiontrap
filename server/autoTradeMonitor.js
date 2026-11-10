@@ -118,6 +118,8 @@ export function createAutoTradeMonitor({
   const exiting = new Set();
   /** @type {ReturnType<typeof openSharedTickerFeed> | null} */
   let feed = null;
+  /** The admin Kite session the feed runs on; exits take their bid / ask quote with it. */
+  let feedKite = null;
   /** The market day positions were loaded for, and the day "no admin login" was last logged. */
   let loadedDate = null;
   let waitingLoggedDate = null;
@@ -154,9 +156,10 @@ export function createAutoTradeMonitor({
     if (exiting.has(position.id)) return;
     exiting.add(position.id);
     try {
-      const result = await exitPosition(position.userId, position.id, exitPrice, { now: clock(), exitReason: { ruleId, reason } });
+      // A market exit: at the bid / ask from a quote with the feed's session (exitPrice when it has none).
+      const result = await exitPosition(position.userId, position.id, exitPrice, { now: clock(), exitReason: { ruleId, reason }, fillFrom: feedKite ?? undefined });
       if (result.ok) {
-        log(`${position.tradingsymbol} [${position.userId}] exited at ${exitPrice}: ${reason}`);
+        log(`${position.tradingsymbol} [${position.userId}] exited at ${result.position?.exitPrice ?? exitPrice} (last ${exitPrice}): ${reason}`);
       } else if (result.code !== NOT_FOUND) {
         log(`${position.tradingsymbol} [${position.userId}] could not exit: ${result.message}`);
         return; // still open: the next tick or clock check tries again
@@ -196,6 +199,7 @@ export function createAutoTradeMonitor({
   function stopFeed() {
     feed?.close();
     feed = null;
+    feedKite = null;
     lastPrices.clear();
   }
 
@@ -206,6 +210,7 @@ export function createAutoTradeMonitor({
       waitingLoggedDate = date;
       return;
     }
+    feedKite = kite;
     feed = createFeed({
       kite,
       onTicks: (ticks) => { onTicks(ticks); },

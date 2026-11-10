@@ -64,11 +64,13 @@ const formatCompactMoney = (value: number, signed = false) => {
 
 const getTone = (value: number) => value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral';
 
+/** A paper position's booked P&L, after charges once it has closed (open ones count 0). */
 const getPaperPositionPnl = (position: Position) => {
   const exitPrice = position.exitPrice ?? position.entryPrice;
-  return position.side === 'BUY'
+  const gross = position.side === 'BUY'
     ? (exitPrice - position.entryPrice) * position.quantity
     : (position.entryPrice - exitPrice) * position.quantity;
+  return gross - (position.charges ?? 0);
 };
 
 const MetricCard: React.FC<{

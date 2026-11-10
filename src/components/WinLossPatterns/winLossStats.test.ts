@@ -6,7 +6,7 @@ import {
 import type { ResultGroup } from '@/services/automation';
 
 const group = <K,>(key: K, extra: Partial<ResultGroup<K>> = {}): ResultGroup<K> => ({
-  key, trades: 4, wins: 3, losses: 1, pnl: 1500, grossProfit: 3000, grossLoss: 1500, best: 1500, worst: -1500, ...extra,
+  key, trades: 4, wins: 3, losses: 1, pnl: 1500, grossProfit: 3000, grossLoss: 1500, best: 1500, worst: -1500, charges: 0, ...extra,
 });
 
 describe('ratios', () => {

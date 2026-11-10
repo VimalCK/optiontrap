@@ -12,7 +12,7 @@ const todayStart = '2026-11-03T18:30:00.000Z'; // 4 Nov 2026, 00:00 IST
 // IST midnights, as UTC instants.
 const OCT_1_IST = '2026-09-30T18:30:00.000Z';
 const NOV_1_IST = '2026-10-31T18:30:00.000Z';
-const PNL = "CASE WHEN side = 'BUY' THEN (exit_price - entry_price) * quantity ELSE (entry_price - exit_price) * quantity END";
+const PNL = "(CASE WHEN side = 'BUY' THEN (exit_price - entry_price) * quantity ELSE (entry_price - exit_price) * quantity END - COALESCE(charges, 0))";
 
 describe('parsePositionsQuery', () => {
   it('without status takes only mode', () => {

@@ -40,10 +40,10 @@ export const sideTone = (side: AutoTrade['side']): BadgeTone => (side === 'BUY' 
 
 export const sideLabel = (side: AutoTrade['side']): string => (side === 'BUY' ? 'Buy' : 'Sell');
 
-/** The trade's own P&L once closed (its entry to its exit); null before that. */
+/** The trade's own P&L once closed (its entry to its exit), after its charges; null before that. */
 export function closedPnl(trade: AutoTrade): number | null {
   if (trade.stage !== 'closed' || trade.entryPrice == null || trade.exitPrice == null) return null;
-  return paperPnl({ side: trade.side, quantity: trade.quantity, entryPrice: trade.entryPrice }, trade.exitPrice);
+  return paperPnl({ side: trade.side, quantity: trade.quantity, entryPrice: trade.entryPrice }, trade.exitPrice) - (trade.charges ?? 0);
 }
 
 type Detail = Record<string, unknown>;

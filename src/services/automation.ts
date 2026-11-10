@@ -36,6 +36,8 @@ export interface AutoTrade {
   /** This trade's own fills; merged trades share one position at the average price. */
   entryPrice: number | null;
   exitPrice: number | null;
+  /** Its own charges once closed (null before, or if closed before charges were kept). */
+  charges: number | null;
   positionId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -67,6 +69,8 @@ export interface ResultGroup<K = string | null> {
   grossLoss: number;
   best: number | null;
   worst: number | null;
+  /** Charges paid by these trades; P&L is already after them. */
+  charges: number;
 }
 
 /** Closed automated trades entered in a range, measured and grouped on the server. */

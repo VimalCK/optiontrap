@@ -58,7 +58,7 @@ describe('AutoTradesTable', () => {
   const trade: AutoTrade = {
     id: 't1', horizon: 'intraday', kind: 'index-option', mode: 'paper', tradingsymbol: 'NIFTY26NOV24000PE',
     instrumentToken: 1, side: 'SELL', quantity: 75, stage: 'rejected', reason: 'Max open positions reached',
-    entryPrice: null, exitPrice: null, positionId: null, createdAt: '2026-11-05T05:00:00.000Z', updatedAt: '2026-11-05T05:00:00.000Z',
+    entryPrice: null, exitPrice: null, charges: null, positionId: null, createdAt: '2026-11-05T05:00:00.000Z', updatedAt: '2026-11-05T05:00:00.000Z',
     events: [],
   };
 
@@ -108,7 +108,7 @@ describe('TradeRow', () => {
   it('shows the lifecycle as a timeline of plain sentences when open, the IST time only on the row', () => {
     const trade: AutoTrade = {
       id: 't', horizon: 'intraday', kind: 'index-option', mode: 'paper', tradingsymbol: 'NIFTY26N0924550PE', instrumentToken: 1,
-      side: 'SELL', quantity: 65, stage: 'executed', reason: null, entryPrice: 98.8, exitPrice: null, positionId: 'p',
+      side: 'SELL', quantity: 65, stage: 'executed', reason: null, entryPrice: 98.8, exitPrice: null, charges: null, positionId: 'p',
       createdAt: '2026-11-06T07:00:29.000Z', updatedAt: '2026-11-06T07:00:29.000Z',
       events: [
         { stage: 'selected', at: '2026-11-06T07:00:29.000Z', detail: { strategyId: 'option-analyzer-setups', reason: 'Wall Defense · score 53' } },

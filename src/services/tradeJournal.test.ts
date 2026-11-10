@@ -5,7 +5,7 @@ const apiGet = vi.hoisted(() => vi.fn());
 vi.mock('./apiClient', () => ({ apiClient: { get: apiGet } }));
 
 import { getPositions, getClosedPositions, getDailyPnl, getPositionStats } from './positions';
-import { getPaperTrades, getPaperDailyPnl, getPaperTradeStats, positionToEntry, positionToSegment } from './tradeJournal';
+import { chargesTitle, getPaperTrades, getPaperDailyPnl, getPaperTradeStats, positionToEntry, positionToSegment } from './tradeJournal';
 
 function position(overrides: Partial<Position>): Position {
   return {
@@ -81,6 +81,12 @@ describe('positionToEntry', () => {
     expect(positionToEntry(position({ side: 'SELL', entryPrice: 100, exitPrice: 120, quantity: 75 })).pnl).toBe(-1500);
   });
 
+  it('takes its charges off the P&L, and counts none on trades closed before charges were kept', () => {
+    const charged = positionToEntry(position({ side: 'BUY', entryPrice: 100, exitPrice: 120, quantity: 75, charges: 48.36 }));
+    expect(charged).toMatchObject({ pnl: 1451.64, charges: 48.36 });
+    expect(positionToEntry(position({ side: 'BUY', entryPrice: 100, exitPrice: 120, quantity: 75, charges: null }))).toMatchObject({ pnl: 1500, charges: 0 });
+  });
+
   it('dates a trade by its IST exit day, not the UTC one', () => {
     // 20 Oct 23:00 UTC is 21 Oct 04:30 IST.
     expect(positionToEntry(position({ exitTime: '2026-10-20T23:00:00.000Z' })).date).toBe('2026-10-21');
@@ -137,5 +143,13 @@ describe('getPaperTradeStats', () => {
 
     expect(stats.bestTrade).toBeUndefined();
     expect(stats.worstTrade).toBeUndefined();
+  });
+});
+
+describe('chargesTitle', () => {
+  it('lists each charge paid, one per line, and says when none were recorded', () => {
+    const breakdown = { brokerage: 40, stt: 6.75, exchange: 2.4, sebi: 0, stamp: 0.07, gst: 7.63, dp: 0, total: 56.85 };
+    expect(chargesTitle(breakdown)).toBe('Brokerage ₹40.00\nSTT ₹6.75\nExchange ₹2.40\nStamp duty ₹0.07\nGST ₹7.63');
+    expect(chargesTitle(null)).toMatch(/No charges recorded/);
   });
 });

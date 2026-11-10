@@ -7,7 +7,7 @@ const selected = { stage: 'selected' as const, at, detail: { strategyId: 'option
 const trade: AutoTrade = {
   id: 't1', horizon: 'intraday', kind: 'index-option', mode: 'paper', tradingsymbol: 'BANKNIFTY26NOV58000PE',
   instrumentToken: 1, side: 'SELL', quantity: 30, stage: 'executed', reason: null,
-  entryPrice: 731.9, exitPrice: null, positionId: 'p1', createdAt: at, updatedAt: at,
+  entryPrice: 731.9, exitPrice: null, charges: null, positionId: 'p1', createdAt: at, updatedAt: at,
   events: [selected, { stage: 'validated', at, detail: {} }, { stage: 'executed', at, detail: { entryPrice: 731.9, positionId: 'p1' } }],
 };
 
@@ -15,6 +15,7 @@ describe('closedPnl', () => {
   it('is the trade\'s own P&L from entry to exit once closed', () => {
     expect(closedPnl({ ...trade, stage: 'closed', exitPrice: 700 })).toBeCloseTo(957); // sold 30 at 731.90, out at 700
     expect(closedPnl({ ...trade, stage: 'closed', side: 'BUY', exitPrice: 700 })).toBeCloseTo(-957);
+    expect(closedPnl({ ...trade, stage: 'closed', exitPrice: 700, charges: 57.25 })).toBeCloseTo(899.75); // after its charges
   });
 
   it('has none while the trade is open or never filled', () => {

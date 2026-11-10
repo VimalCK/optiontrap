@@ -7,7 +7,8 @@
  * rule, entry time (30-minute IST slots), side and entry day, and the max
  * drawdown. All grouping happens in SQL (one GROUPING SETS scan), so the
  * browser gets totals, never the trades. A trade's P&L is
- * (exit − entry) × quantity, sign flipped for a sell; no costs.
+ * (exit − entry) × quantity, sign flipped for a sell, minus its own charges
+ * (shared/paperCharges.js; none for trades closed before charges were kept).
  * Served by auto_trades_user_closed_idx (user_id, created_at) WHERE closed.
  */
 import { MARKET_TIME_ZONE, addDays, marketDateTime } from '../shared/marketTime.js';
@@ -19,7 +20,8 @@ const CLOSED_TRADES_SQL = `
     to_char(created_at AT TIME ZONE $4, 'YYYY-MM-DD') AS day,
     (EXTRACT(HOUR FROM created_at AT TIME ZONE $4) * 60
       + FLOOR(EXTRACT(MINUTE FROM created_at AT TIME ZONE $4) / ${SLOT}) * ${SLOT})::int AS slot,
-    CASE WHEN side = 'BUY' THEN exit_price - entry_price ELSE entry_price - exit_price END * quantity AS pnl
+    COALESCE(charges, 0) AS charges,
+    CASE WHEN side = 'BUY' THEN exit_price - entry_price ELSE entry_price - exit_price END * quantity - COALESCE(charges, 0) AS pnl
   FROM auto_trades
   WHERE user_id = $1 AND stage = 'closed' AND created_at >= $2 AND created_at < $3`;
 
@@ -39,7 +41,8 @@ export const RESULTS_SQL = `
     COALESCE(SUM(pnl) FILTER (WHERE pnl > 0), 0) AS gross_profit,
     COALESCE(-SUM(pnl) FILTER (WHERE pnl < 0), 0) AS gross_loss,
     MAX(pnl) AS best,
-    MIN(pnl) AS worst
+    MIN(pnl) AS worst,
+    COALESCE(SUM(charges), 0) AS charges
   FROM closed
   GROUP BY GROUPING SETS ((), (strategy_id), (setup), (exit_rule_id), (slot), (side), (day))`;
 
@@ -55,7 +58,8 @@ export const MAX_DRAWDOWN_SQL = `
  * One group's figures. `key` is the strategy id, setup, exit rule id (null:
  * exited manually), entry slot (minutes after IST midnight), side or day.
  * @typedef {{ key: string | number | null, trades: number, wins: number, losses: number, pnl: number,
- *             grossProfit: number, grossLoss: number, best: number | null, worst: number | null }} ResultGroup
+ *             grossProfit: number, grossLoss: number, best: number | null, worst: number | null,
+ *             charges: number }} ResultGroup
  */
 
 /** Each GROUPING SETS dimension and the reply field it fills. */
@@ -75,10 +79,11 @@ function toGroup(row) {
     grossLoss: Number(row.gross_loss),
     best: row.best == null ? null : Number(row.best),
     worst: row.worst == null ? null : Number(row.worst),
+    charges: Number(row.charges ?? 0),
   };
 }
 
-const EMPTY_SUMMARY = toGroup({ dimension: 'all', key: null, trades: 0, wins: 0, losses: 0, pnl: 0, gross_profit: 0, gross_loss: 0 });
+const EMPTY_SUMMARY = toGroup({ dimension: 'all', key: null, trades: 0, wins: 0, losses: 0, pnl: 0, gross_profit: 0, gross_loss: 0, charges: 0 });
 
 /**
  * The reply from the two queries' rows: the summary, max drawdown, and each

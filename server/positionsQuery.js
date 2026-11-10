@@ -20,8 +20,9 @@ export const SEGMENTS = ['options', 'futures', 'stocks'];
 export const DEFAULT_TRADE_LIMIT = 100;
 export const MAX_TRADE_LIMIT = 500;
 
-// P&L of an exited position; the same formula the browser used before.
-const PNL_SQL = "CASE WHEN side = 'BUY' THEN (exit_price - entry_price) * quantity ELSE (entry_price - exit_price) * quantity END";
+// P&L of an exited position after its charges (shared/paperCharges.js; none on positions closed
+// before charges were recorded); the same formula as the browser's positionToEntry.
+const PNL_SQL = "(CASE WHEN side = 'BUY' THEN (exit_price - entry_price) * quantity ELSE (entry_price - exit_price) * quantity END - COALESCE(charges, 0))";
 // By instrument_type, which every position has (option_type is NULL for stocks
 // and futures, and NOT IN never matches NULL).
 const SEGMENT_SQL = {
