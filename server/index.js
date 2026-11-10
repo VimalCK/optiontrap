@@ -115,6 +115,7 @@ import { parseDailyPnlQuery, parsePositionsQuery, parseRange, parseStatsQuery } 
 import { exitPaperTrade, openPaperTrade } from './paperTrading.js';
 import { catchAsyncErrors, sendFailure, sendServerError } from './asyncRoutes.js';
 import { securityHeaders } from './securityHeaders.js';
+import { startLoggedInSession } from './loginSession.js';
 import { resolveSessionSecret } from './sessionSecret.js';
 import { createConcurrencyLimit } from './concurrencyLimit.js';
 import { allowOnlyKnownKiteCalls } from './kiteProxyAllowlist.js';
@@ -358,8 +359,8 @@ app.post('/auth/token', async (req, res) => {
     // 2. Resolve role (admins bypass subscription and unlock the admin inbox)
     const isAdmin = await isUserAdmin(data.user_id);
 
-    // 3. Set active session
-    req.session.kiteSession = {
+    // 3. Start the logged-in session under a new session ID (see loginSession.js)
+    const kiteSession = {
       apiKey,
       accessToken: data.access_token,
       userId: data.user_id,
@@ -372,13 +373,8 @@ app.post('/auth/token', async (req, res) => {
       isAdmin,
     };
 
-    const safe = await getSafeSession(req.session.kiteSession);
-    await new Promise((resolve, reject) => {
-      req.session.save((err) => {
-        if (err) reject(err);
-        else resolve();
-      });
-    });
+    const safe = await getSafeSession(kiteSession);
+    await startLoggedInSession(req, kiteSession);
     console.log(`${ts()} ${GREEN}AUTH${RESET} logged in: ${data.user_id} (${data.user_name})`);
     res.json({ status: 'ok', data: safe });
   } catch (err) {
