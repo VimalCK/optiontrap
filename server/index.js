@@ -118,6 +118,7 @@ import { securityHeaders } from './securityHeaders.js';
 import { startLoggedInSession } from './loginSession.js';
 import { kiteLoginUrl } from './kiteLogin.js';
 import { signedSessionId } from './wsSessionCookie.js';
+import { isSameSiteWsOrigin } from './wsOrigin.js';
 import { kiteTickerUrl } from './kiteTickerFeed.js';
 import { resolveSessionSecret } from './sessionSecret.js';
 import { createConcurrencyLimit } from './concurrencyLimit.js';
@@ -1459,6 +1460,13 @@ const WS_SESSION_EXPIRED = 4001;
 
 server.on('upgrade', (request, socket, head) => {
   if (!request.url?.startsWith('/ws')) {
+    socket.destroy();
+    return;
+  }
+
+  if (!isSameSiteWsOrigin(request.headers)) {
+    console.log(`${ts()} ${RED}WS${RESET} refused origin ${request.headers.origin} for host ${request.headers.host}`);
+    socket.write('HTTP/1.1 403 Forbidden\r\n\r\n');
     socket.destroy();
     return;
   }

@@ -1,6 +1,8 @@
 /**
- * The key that signs session cookies. Anyone who knows it can forge a cookie
- * for any user, admins included, so production must set its own SESSION_SECRET.
+ * The key that signs session cookies. The cookie holds only a session ID (the
+ * session itself is in Postgres), so a known key doesn't create logins, but it
+ * turns any session ID that leaks (a log, a database dump) into a working
+ * cookie, admins included. Production must set its own SESSION_SECRET.
  * Local dev falls back to a fixed value so `npm run dev` works with no setup.
  */
 
