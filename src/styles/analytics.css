@@ -45,6 +45,17 @@
   background: var(--sidebar-active);
 }
 
+/* Small tabs, for a tab bar inside a card (e.g. the paper positions card). */
+.analytics-tabs--small {
+  padding: 3px;
+  box-shadow: none;
+}
+
+.analytics-tabs--small .analytics-tab {
+  padding: 5px 12px;
+  font-size: 12px;
+}
+
 .analytics-content .card {
   border-radius: 16px;
   background:

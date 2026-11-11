@@ -9,7 +9,8 @@ import { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe } from '@/services/tickerSingleton';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import PositionInstrument from '@/components/PositionInstrument/PositionInstrument';
-import PaperOrders from '@/components/PaperOrders/PaperOrders';
+import PaperOrders, { pendingCount, usePaperOrders } from '@/components/PaperOrders/PaperOrders';
+import TabBar, { type TabBarItem } from '@/components/TabBar/TabBar';
 import { formatCalendarDate, isMarketLive } from '@/utils/marketStatus';
 import {
   computeRiskGroups,
@@ -20,7 +21,17 @@ import {
   OiBar,
 } from '@/services/positionRisk';
 import { loadUnderlyings, type Underlying } from '@/services/underlyings';
+import '@/styles/analytics.css'; // reuse the shared tab-bar CSS
 import '@/styles/positions.css';
+
+type PaperTab = 'positions' | 'orders' | 'risk';
+
+/** The paper tabs, each with how many it holds: Open positions, Pending orders still waiting to fill, Position Risk strategies. */
+export const paperTabs = (openPositions: number, pendingOrders: number, riskGroups: number): TabBarItem<PaperTab>[] => [
+  { id: 'positions', label: `Open (${openPositions})` },
+  { id: 'orders', label: `Pending (${pendingOrders})` },
+  { id: 'risk', label: `Position Risk (${riskGroups})` },
+];
 
 const fmtInr = (n: number) =>
   `${n >= 0 ? '+' : ''}${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -480,101 +491,75 @@ const PayoffModal: React.FC<{ group: RiskGroup; spotPrice?: number | null; onClo
   );
 };
 
+/** A group's worst case at expiry: "Unlimited" when unbounded, "—" when it can't lose. */
+export const maxLossLabel = (g: RiskGroup) => (g.maxLoss == null ? 'Unlimited' : g.maxLoss >= 0 ? '—' : fmtInr(g.maxLoss));
+
+/** A group's best case at expiry: "Unlimited" when unbounded, "—" when it can't gain. */
+export const maxProfitLabel = (g: RiskGroup) => (g.maxProfit == null ? 'Unlimited' : g.maxProfit <= 0 ? '—' : fmtInr(g.maxProfit));
+
+/** The prices where the expiry payoff crosses zero, or "—". */
+export const breakevenLabel = (g: RiskGroup) => (g.breakevens.length === 0 ? '—' : g.breakevens.map((b) => b.toLocaleString('en-IN')).join(' / '));
+
+const pnlTone = (value: number | null) => (value == null ? '' : value > 0 ? 'positive' : value < 0 ? 'negative' : '');
+
 /**
- * Position Risk Panel — per-strategy live P&L, max loss, breakeven(s),
- * and an invalidation-hit flag against journal stop-loss levels.
- * Clicking a card opens the payoff curve in a modal popup.
+ * The Position Risk tab — one row per strategy (underlying and expiry): live
+ * P&L, max loss and profit at expiry, breakeven(s), and whether a leg has hit
+ * its journal stop-loss (invalidation) level. Clicking a row opens its payoff
+ * curve in the popup.
  */
-const RiskPanel: React.FC<{ groups: RiskGroup[]; spotPrices: Map<string, number> }> = ({ groups, spotPrices }) => {
+export const RiskTable: React.FC<{ groups: RiskGroup[]; spotPrices: Map<string, number> }> = ({ groups, spotPrices }) => {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
-
-  if (groups.length === 0) return null;
-
   const selected = groups.find((g) => g.key === selectedKey) || null;
 
+  if (groups.length === 0) {
+    return <p className="card__description">No open option positions to assess.</p>;
+  }
+
   return (
-    <div className="card risk-panel" style={{ marginBottom: 'var(--card-gap)' }}>
-      <h3 className="card__title">Position Risk</h3>
-      <div className="risk-panel__grid">
-        {groups.map((g) => (
-          <div
-            key={g.key}
-            className={`risk-card ${g.invalidationHit ? 'risk-card--invalidated' : ''}`}
-            onClick={() => setSelectedKey(g.key)}
-            role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedKey(g.key); }
-            }}
-            title="Click to view payoff curve"
-          >
-            <div className="risk-card__header">
-              <span className="risk-card__title">
-                {g.underlying} <span className="risk-card__expiry">{expiryLabel(g.expiry)}</span>
-                <span className="risk-card__legs">{g.legs.length} leg{g.legs.length > 1 ? 's' : ''}</span>
-              </span>
-              {g.invalidationHit && (
-                <span className="risk-card__flag" title="A leg's stop-loss (invalidation) level has been hit">
-                  ⚠ Invalidation hit
-                </span>
-              )}
-            </div>
-
-            <div className="risk-card__metrics">
-              <div className="risk-metric">
-                <span className="risk-metric__label">Live P&L</span>
-                <span
-                  className={`risk-metric__value ${
-                    g.livePnL == null ? '' : g.livePnL > 0 ? 'positive' : g.livePnL < 0 ? 'negative' : ''
-                  }`}
-                >
-                  {g.livePnL == null ? '—' : fmtInr(g.livePnL)}
-                </span>
-              </div>
-
-              <div className="risk-metric">
-                <span className="risk-metric__label">Max Loss</span>
-                <span className="risk-metric__value negative">
-                  {g.maxLoss == null
-                    ? 'Unlimited'
-                    : g.maxLoss >= 0
-                      ? '—'
-                      : fmtInr(g.maxLoss)}
-                </span>
-              </div>
-
-              <div className="risk-metric">
-                <span className="risk-metric__label">Max Profit</span>
-                <span className="risk-metric__value positive">
-                  {g.maxProfit == null
-                    ? 'Unlimited'
-                    : g.maxProfit <= 0
-                      ? '—'
-                      : fmtInr(g.maxProfit)}
-                </span>
-              </div>
-
-              <div className="risk-metric">
-                <span className="risk-metric__label">Breakeven</span>
-                <span className="risk-metric__value">
-                  {g.breakevens.length === 0
-                    ? '—'
-                    : g.breakevens.map((b) => b.toLocaleString('en-IN')).join(' / ')}
-                </span>
-              </div>
-            </div>
-
-            {g.invalidationHit && (
-              <div className="risk-card__breached">
-                Breached:{' '}
-                {g.legs
-                  .filter((l) => l.invalidationHit)
-                  .map((l) => `${l.position.strike}${l.position.optionType}`)
-                  .join(', ')}
-              </div>
-            )}
-          </div>
-        ))}
+    <>
+      <div className="positions-table-scroll">
+        <table className="positions-table">
+          <thead>
+            <tr>
+              <th>Strategy</th>
+              <th>Live P&L</th>
+              <th>Max Loss</th>
+              <th>Max Profit</th>
+              <th>Breakeven</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((g) => (
+              <tr
+                key={g.key}
+                className={`risk-table__row${g.invalidationHit ? ' risk-table__row--invalidated' : ''}`}
+                onClick={() => setSelectedKey(g.key)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedKey(g.key); }
+                }}
+                role="button"
+                tabIndex={0}
+                title="Click to view payoff curve"
+              >
+                <td>
+                  {g.underlying} <span className="risk-card__expiry">{expiryLabel(g.expiry)}</span>
+                  {' '}<span className="risk-card__legs">{g.legs.length} leg{g.legs.length > 1 ? 's' : ''}</span>
+                  {g.invalidationHit && (
+                    <div className="risk-table__breached" title="A leg's stop-loss (invalidation) level has been hit">
+                      ⚠ Invalidation hit:{' '}
+                      {g.legs.filter((l) => l.invalidationHit).map((l) => `${l.position.strike}${l.position.optionType}`).join(', ')}
+                    </div>
+                  )}
+                </td>
+                <td className={pnlTone(g.livePnL)}>{g.livePnL == null ? '—' : fmtInr(g.livePnL)}</td>
+                <td className="negative">{maxLossLabel(g)}</td>
+                <td className="positive">{maxProfitLabel(g)}</td>
+                <td>{breakevenLabel(g)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
 
       {selected && (
@@ -584,7 +569,7 @@ const RiskPanel: React.FC<{ groups: RiskGroup[]; spotPrices: Map<string, number>
           onClose={() => setSelectedKey(null)}
         />
       )}
-    </div>
+    </>
   );
 };
 
@@ -603,6 +588,10 @@ const PaperPositions: React.FC = () => {
   }, []);
 
   useEffect(() => { loadPositions(); }, [loadPositions]);
+
+  const [tab, setTab] = useState<PaperTab>('positions');
+  // Loaded whichever tab shows, so a fill reloads the positions either way.
+  const orderBook = usePaperOrders(loadPositions);
 
   useEffect(() => {
     if (positions.length === 0) return;
@@ -719,24 +708,40 @@ const PaperPositions: React.FC = () => {
 
   const totalPnL = positions.reduce((sum, pos) => sum + getPnL(pos).value, 0);
 
+  const openPositions = positions.filter((pos) => !pos.exited).length;
+
+  /** The last card: the Open / Pending / Position Risk tabs, over the positions grid, today's pending orders or the risk grid. */
+  const positionsCard = (positionsView: React.ReactNode) => (
+    <section className="card" aria-label="Paper positions and orders">
+      <div className="positions-paper-tabs">
+        <TabBar
+          items={paperTabs(openPositions, pendingCount(orderBook.orders), riskGroups.length)}
+          activeId={tab}
+          onChange={setTab}
+          className="analytics-tabs analytics-tabs--small"
+          tabClassName="analytics-tab"
+          ariaLabel="Paper positions and orders"
+        />
+      </div>
+      {tab === 'orders' && <PaperOrders orders={orderBook.orders} error={orderBook.error} onCancel={orderBook.cancel} />}
+      {tab === 'risk' && <RiskTable groups={riskGroups} spotPrices={spotPrices} />}
+      {tab === 'positions' && positionsView}
+    </section>
+  );
+
   if (loading) return <div className="card"><p className="card__description">Loading positions...</p></div>;
 
   if (positions.length === 0) {
-    return (
+    return positionsCard(
       <>
-        <PaperOrders onFilled={loadPositions} />
-        <div className="card">
-          <h3 className="card__title">No Open Positions</h3>
-          <p className="card__description">Click on any LTP cell in the Option Chain to add a position.</p>
-        </div>
-      </>
+        <h3 className="card__title">No Open Positions</h3>
+        <p className="card__description">Click on any LTP cell in the Option Chain to add a position.</p>
+      </>,
     );
   }
 
   return (
     <>
-      <PaperOrders onFilled={loadPositions} />
-
       {exitError && (
         <div className="card holdings-error" style={{ marginBottom: 'var(--card-gap)' }}>
           <p>{exitError}</p>
@@ -755,11 +760,8 @@ const PaperPositions: React.FC = () => {
         </div>
       </div>
 
-      {/* Position Risk Panel */}
-      <RiskPanel groups={riskGroups} spotPrices={spotPrices} />
-
-      {/* Positions Table */}
-      <div className="card">
+      {/* Positions Table, with the orders as a second tab */}
+      {positionsCard(
         <div className="positions-table-scroll">
         <table className="positions-table">
           <thead>
@@ -814,8 +816,8 @@ const PaperPositions: React.FC = () => {
             })}
           </tbody>
         </table>
-        </div>
-      </div>
+        </div>,
+      )}
     </>
   );
 };

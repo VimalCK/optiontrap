@@ -1,14 +1,18 @@
 /**
- * PaperOrders — today's paper limit orders, shown above the paper positions:
- * the open ones with a Cancel button, then those filled or cancelled today.
- * Hidden on a day with no orders.
+ * PaperOrders — the Pending tab of the paper positions: today's paper limit
+ * orders still waiting to fill, each with a Cancel button. Filled ones show
+ * as positions; cancelled ones (by hand or at the close) leave the list.
  *
  * Orders fill on the server (server/paperOrderBook.js), so while any is open
- * in market hours the list is reloaded every few seconds; when one fills,
- * `onFilled` lets the positions reload too. The rules are in shared/paperOrders.js.
+ * in market hours usePaperOrders reloads the list every few seconds; when one
+ * fills, `onFilled` lets the positions reload too. The page runs the hook
+ * whichever tab is showing, so fills reach the positions either way. The rules
+ * are in shared/paperOrders.js.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Badge, { type BadgeTone } from '@/components/Badge/Badge';
+import EmptyState from '@/components/EmptyState/EmptyState';
+import { PaperTradingIcon } from '@/components/icons/Icons';
 import PositionInstrument from '@/components/PositionInstrument/PositionInstrument';
 import { cancelPaperOrder, fetchPaperOrders, type PaperOrder } from '@/services/paperOrders';
 import { tradeErrorMessage } from '@/services/positions';
@@ -73,7 +77,23 @@ export const PaperOrdersTable: React.FC<{ orders: PaperOrder[]; onCancel: (id: s
   </div>
 );
 
-const PaperOrders: React.FC<{ onFilled: () => void }> = ({ onFilled }) => {
+/** The orders still waiting to fill. */
+export const pendingOrders = (orders: PaperOrder[]) => orders.filter((o) => o.status === 'open');
+
+/** How many orders are still waiting to fill (the Pending tab's count). */
+export const pendingCount = (orders: PaperOrder[]) => pendingOrders(orders).length;
+
+export interface PaperOrderBook {
+  orders: PaperOrder[];
+  error: string | null;
+  cancel: (id: string) => Promise<void>;
+}
+
+/**
+ * Today's paper orders, reloaded every few seconds while any is open in market
+ * hours; `onFilled` runs when one that was open has filled.
+ */
+export function usePaperOrders(onFilled: () => void): PaperOrderBook {
   const [orders, setOrders] = useState<PaperOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
   const openBeforeRef = useRef<Set<string>>(new Set());
@@ -109,7 +129,7 @@ const PaperOrders: React.FC<{ onFilled: () => void }> = ({ onFilled }) => {
     };
   }, [hasOpen, load]);
 
-  const handleCancel = async (id: string) => {
+  const cancel = async (id: string) => {
     try {
       await cancelPaperOrder(id);
       await load();
@@ -118,14 +138,28 @@ const PaperOrders: React.FC<{ onFilled: () => void }> = ({ onFilled }) => {
     }
   };
 
-  if (orders.length === 0 && !error) return null;
+  return { orders, error, cancel };
+}
 
+/**
+ * The Pending tab, inside the positions card: today's orders still waiting to
+ * fill (given all of today's orders), or an empty state when none are.
+ */
+const PaperOrders: React.FC<{ orders: PaperOrder[]; error: string | null; onCancel: (id: string) => void }> = ({ orders, error, onCancel }) => {
+  const pending = pendingOrders(orders);
   return (
-    <section className="card paper-orders" aria-labelledby="paper-orders-title">
-      <h3 className="card__title" id="paper-orders-title">Orders</h3>
+    <div className="paper-orders" role="region" aria-label="Pending orders">
       {error && <p className="paper-orders__error">{error}</p>}
-      {orders.length > 0 && <PaperOrdersTable orders={orders} onCancel={handleCancel} />}
-    </section>
+      {pending.length > 0 ? (
+        <PaperOrdersTable orders={pending} onCancel={onCancel} />
+      ) : (
+        <EmptyState
+          icon={<PaperTradingIcon size={64} />}
+          title="No pending orders"
+          description="Limit orders placed from the Option Chain wait here until they fill or are cancelled."
+        />
+      )}
+    </div>
   );
 };
 

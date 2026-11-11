@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { PaperOrdersTable, filledSince, orderStatus } from './PaperOrders';
+import PaperOrders, { PaperOrdersTable, filledSince, orderStatus, pendingCount } from './PaperOrders';
 import type { PaperOrder } from '@/services/paperOrders';
 
 const order = (id: string, extra: Partial<PaperOrder> = {}): PaperOrder => ({
@@ -51,5 +51,30 @@ describe('PaperOrdersTable', () => {
     expect(html.match(/title="Cancel order"/g)).toHaveLength(1);
     const button = html.match(/<button[^>]*title="Cancel order"[^>]*>/)?.[0] ?? '';
     expect(button).toContain('type="button"');
+  });
+});
+
+describe('pendingCount', () => {
+  it('counts only the orders still waiting to fill', () => {
+    expect(pendingCount([order('a'), order('b', { status: 'filled' }), order('c', { status: 'cancelled' }), order('d')])).toBe(2);
+    expect(pendingCount([])).toBe(0);
+  });
+});
+
+describe('PaperOrders', () => {
+  const closed = [order('f', { status: 'filled', fillPrice: 50 }), order('c', { status: 'cancelled', statusReason: 'Cancelled at market close' })];
+
+  it('lists only the orders still waiting to fill, not those filled or cancelled today', () => {
+    const html = renderToStaticMarkup(<PaperOrders orders={[order('a'), ...closed]} error={null} onCancel={() => {}} />);
+    expect(html.match(/title="Cancel order"/g)).toHaveLength(1);
+    expect(html).not.toContain('Filled @');
+    expect(html).not.toContain('Cancelled at market close');
+  });
+
+  it('shows the empty state when nothing is pending, and the error when loading failed', () => {
+    const html = renderToStaticMarkup(<PaperOrders orders={closed} error="Failed to load orders" onCancel={() => {}} />);
+    expect(html).toContain('No pending orders');
+    expect(html).toContain('Failed to load orders');
+    expect(html).not.toContain('positions-table');
   });
 });

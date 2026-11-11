@@ -362,43 +362,28 @@
   letter-spacing: 0.3px;
 }
 
-/* ── Position Risk Panel ─────────────────────────────────────────────── */
-.risk-panel__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 12px;
-  margin-top: 12px;
+/* ── Position Risk tab: one row per underlying and expiry; a row opens its payoff chart ── */
+.risk-table__row {
+  cursor: pointer;
 }
 
-.risk-card {
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.08));
-  border-radius: 8px;
-  padding: 14px;
-  background: rgba(255, 255, 255, 0.02);
+.risk-table__row:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
 }
 
-.risk-card--invalidated {
-  border-color: rgba(239, 68, 68, 0.55);
+.risk-table__row--invalidated {
   background: rgba(239, 68, 68, 0.06);
 }
 
-.risk-card__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 12px;
+.risk-table__breached {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #ef4444;
 }
 
-.risk-card__title {
-  font-size: 14px;
-  font-weight: 700;
-  color: var(--text-primary);
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
+/* The payoff popup's title: the expiry and leg count after the underlying. */
 .risk-card__expiry {
   font-size: 11px;
   font-weight: 500;
@@ -412,61 +397,6 @@
   border-radius: 3px;
   background: rgba(99, 102, 241, 0.12);
   color: #818cf8;
-}
-
-.risk-card__flag {
-  font-size: 11px;
-  font-weight: 700;
-  color: #ef4444;
-  white-space: nowrap;
-}
-
-.risk-card__metrics {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10px 16px;
-}
-
-.risk-metric {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.risk-metric__label {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.risk-metric__value {
-  font-size: 15px;
-  font-weight: 700;
-  color: var(--text-primary);
-  font-variant-numeric: tabular-nums;
-}
-
-.risk-card__breached {
-  margin-top: 10px;
-  font-size: 11px;
-  color: #ef4444;
-  font-weight: 600;
-}
-
-/* Clickable card + expand affordance */
-.risk-card {
-  cursor: pointer;
-  transition: border-color 0.15s ease, background 0.15s ease;
-}
-
-.risk-card:hover {
-  border-color: rgba(129, 140, 248, 0.5);
-}
-
-.risk-card--open {
-  border-color: rgba(129, 140, 248, 0.6);
 }
 
 /* Payoff modal */
@@ -735,8 +665,9 @@
 
 /* ── Paper limit orders (components/PaperOrders): a card above the positions, in the positions table style ── */
 
-.paper-orders {
-  margin-bottom: var(--card-gap);
+/* The Open Positions / Pending Orders tabs at the top of the paper positions card. */
+.positions-paper-tabs {
+  margin-bottom: 12px;
 }
 
 .paper-orders__error {
