@@ -364,13 +364,14 @@
   table-layout: fixed;
 }
 
-.tj-table th:nth-child(1) { width: 28%; } /* Symbol */
-.tj-table th:nth-child(2) { width: 12%; } /* Segment */
-.tj-table th:nth-child(3) { width: 8%;  } /* Side */
-.tj-table th:nth-child(4) { width: 8%;  } /* Qty */
-.tj-table th:nth-child(5) { width: 12%; } /* Entry */
-.tj-table th:nth-child(6) { width: 12%; } /* Exit */
-.tj-table th:nth-child(7) { width: 20%; } /* P&L */
+.tj-table th:nth-child(1) { width: 25%; } /* Symbol */
+.tj-table th:nth-child(2) { width: 10%; } /* Segment */
+.tj-table th:nth-child(3) { width: 7%;  } /* Side */
+.tj-table th:nth-child(4) { width: 7%;  } /* Qty */
+.tj-table th:nth-child(5) { width: 11%; } /* Entry */
+.tj-table th:nth-child(6) { width: 11%; } /* Exit */
+.tj-table th:nth-child(7) { width: 11%; } /* Charges */
+.tj-table th:nth-child(8) { width: 18%; } /* P&L */
 
 .tj-table th {
   text-align: left;
