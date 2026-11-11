@@ -220,4 +220,31 @@ describe('the monitor', () => {
     await noLogin.checkMarket();
     expect(noLogin.watchedPositionIds()).toEqual(['p1', 'p2']);
   });
+
+  it('reports its state for the health page: checks, feed, what it watches and the last tick', async () => {
+    expect(monitor.status()).toMatchObject({ lastCheckAt: null, feedConnected: false, lastTickAt: null });
+    await monitor.checkMarket();
+    expect(monitor.status()).toEqual({
+      lastCheckAt: NOON.getTime(), marketOpen: true, feedConnected: true, waitingForLogin: false,
+      watchedPositions: 2, watchedInstruments: 2, lastTickAt: null, lastError: null,
+    });
+    await monitor.onTicks([{ instrumentToken: 202, lastPrice: 201 }]);
+    expect(monitor.status().lastTickAt).toBe(NOON.getTime());
+
+    now = AFTER_CLOSE;
+    await monitor.checkMarket();
+    expect(monitor.status()).toMatchObject({ lastCheckAt: AFTER_CLOSE.getTime(), marketOpen: false, feedConnected: false });
+  });
+
+  it('reports waiting for an admin login, and a market check that failed until one works', async () => {
+    const noLogin = createAutoTradeMonitor({ db, exitPosition, findKiteSession: async () => null, createFeed: () => { throw new Error('no feed expected'); }, clock: () => NOON, log: () => {} });
+    await noLogin.checkMarket();
+    expect(noLogin.status()).toMatchObject({ waitingForLogin: true, feedConnected: false, watchedPositions: 2 });
+
+    db.getAllOpenAutoPositions.mockRejectedValueOnce(new Error('db down'));
+    await expect(monitor.checkMarket()).rejects.toThrow('db down');
+    expect(monitor.status().lastError).toBe('db down');
+    await monitor.checkMarket();
+    expect(monitor.status().lastError).toBeNull();
+  });
 });

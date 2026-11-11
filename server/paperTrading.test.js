@@ -8,7 +8,7 @@ vi.mock('./db.js', () => ({
 }));
 
 const db = await import('./db.js');
-const { openPaperTrade, exitPaperTrade, NOT_FOUND } = await import('./paperTrading.js');
+const { openPaperTrade, exitPaperTrade, bookedDetails, NOT_FOUND } = await import('./paperTrading.js');
 const { MARKET_CLOSED_MESSAGE } = await import('../shared/paperTradeRules.js');
 
 const OPEN = new Date('2026-11-05T06:30:00Z'); // Thu 12:00 IST
@@ -184,5 +184,21 @@ describe('exitPaperTrade', () => {
     db.exitPositionById.mockResolvedValue(false);
     const result = await exitPaperTrade('U1', 'p1', 95, { now: OPEN });
     expect(result).toMatchObject({ ok: false, code: NOT_FOUND });
+  });
+});
+
+describe('bookedDetails', () => {
+  const sold = { side: 'SELL', quantity: 75, entryPrice: 100, tradingsymbol: 'NIFTY26NOV24000PE' };
+
+  it('gives the P&L before and after charges, and why it was exited', () => {
+    expect(bookedDetails('U1', sold, { charges: 48.2 }, 90, { reason: 'Target hit' })).toEqual({
+      trade: 'SELL 75 NIFTY26NOV24000PE', entry: 100, exit: 90,
+      'P&L': '₹750.00', charges: '₹48.20', net: '₹701.80', user: 'U1', reason: 'Target hit',
+    });
+  });
+
+  it('counts no charges when none were recorded', () => {
+    expect(bookedDetails('U1', { ...sold, side: 'BUY' }, { charges: null }, 90, { reason: 'Exited manually' }))
+      .toMatchObject({ 'P&L': '₹-750.00', charges: '₹0.00', net: '₹-750.00' });
   });
 });

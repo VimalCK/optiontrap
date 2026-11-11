@@ -51,8 +51,8 @@ import { checkEntryRules, entryLimitPrice, tradeLots } from '../shared/entryRule
 import { STRATEGIES } from '../shared/strategies/index.js';
 import { OPTION_TYPES } from '../shared/paperTradeRules.js';
 import { marketDayStartMs } from '../shared/marketTime.js';
+import { algoLogger } from './algoLog.js';
 
-const LOG_PREFIX = '[Trade Engine]';
 /** Intraday strategies follow the OI snapshots; positional ones (OI history) come later. */
 const HORIZON = 'intraday';
 
@@ -65,10 +65,18 @@ const HORIZON = 'intraday';
  * @typedef {{ horizon: 'intraday', kind: import('../shared/automation.js').TradeKindId, mode: string, side: 'BUY' | 'SELL',
  *             tradingsymbol: string, instrumentToken: number, exchange: string, instrumentType: string,
  *             optionType: string | null, strike: number | null, expiry: string | null, lotSize: number, quantity: number }} PlannedTrade
+ * @typedef {{ now: Date, kite: { apiKey: string, accessToken: string }, instruments: Instrument[] }} RunEvent
+ * @typedef {{ users: number, signals: number, failed: number }} RunCounts
+ *   users with a strategy active, signals their strategies gave, signals that failed with an error
+ * @typedef {RunCounts & { at: number, error: string | null }} LastRun  a run's snapshot time (ms) and outcome
  */
 
 /** A stock trades in shares: its lot is 1. */
 const STOCK_LOT = 1;
+/** "SELL 75 NIFTY26NOV24000PE", for the algo log. */
+const tradeLabel = (/** @type {{ side: string, quantity: number, tradingsymbol: string }} */ t) => `${t.side} ${t.quantity} ${t.tradingsymbol}`;
+/** A run that had nothing to do. */
+const NO_WORK = Object.freeze({ users: 0, signals: 0, failed: 0 });
 
 /**
  * The trade a signal means for a user, sized by tradeLots; or the
@@ -132,7 +140,7 @@ export function refusal(trade, config, ctx) {
  *   quotes?: typeof fetchQuotes,
  *   openPnl?: typeof openAutoTradePnl,
  *   onExecuted?: typeof refreshAutoTradeMonitor,
- *   log?: (message: string) => void,
+ *   log?: (event: string, details?: import('./algoLog.js').AlgoDetails) => void,
  * }} [deps]
  */
 export function createAutoTradeEngine({
@@ -143,7 +151,7 @@ export function createAutoTradeEngine({
   quotes = fetchQuotes,
   openPnl = openAutoTradePnl,
   onExecuted = refreshAutoTradeMonitor,
-  log = (message) => console.log(`${LOG_PREFIX} ${message}`),
+  log = algoLogger('Engine'),
 } = {}) {
   const activeFor = (/** @type {AutomationConfig} */ config) => strategies.filter((s) => config.strategies[s.id]?.active);
 
@@ -169,7 +177,7 @@ export function createAutoTradeEngine({
   async function take(userId, config, signal, { instrumentsByToken, indexNames, prices, quotesByKey, now }) {
     const planned = planTrade(signal, instrumentsByToken, indexNames, config);
     if (planned.error !== undefined) {
-      log(`${signal.strategyId} [${userId}] skipped a signal: ${planned.error}`);
+      log('skipped signal', { user: userId, strategy: signal.strategyId, reason: planned.error });
       return;
     }
     const { trade } = planned;
@@ -183,13 +191,17 @@ export function createAutoTradeEngine({
     };
     const refused = refusal(trade, config, ctx);
     if (refused) {
-      log(`${signal.strategyId} [${userId}] did not enter ${trade.tradingsymbol}: ${refused.reason}`);
+      log('not entered', { trade: tradeLabel(trade), user: userId, strategy: signal.strategyId, reason: refused.reason });
       return;
     }
 
     const id = await db.createAutoTrade(userId, trade, { strategyId: signal.strategyId, setup: signal.setup ?? null, reason: signal.reason });
     await db.advanceAutoTrade(userId, id, 'selected', 'validated', {}, {});
-    const reject = (/** @type {string} */ reason) => db.advanceAutoTrade(userId, id, 'validated', 'rejected', { reason }, { ruleId: null, reason });
+    log('validated', { trade: tradeLabel(trade), user: userId, strategy: signal.strategyId, signal: signal.reason });
+    const reject = (/** @type {string} */ reason) => {
+      log('rejected', { trade: tradeLabel(trade), user: userId, strategy: signal.strategyId, reason });
+      return db.advanceAutoTrade(userId, id, 'validated', 'rejected', { reason }, { ruleId: null, reason });
+    };
 
     const entryPrice = prices.get(`${trade.exchange}:${trade.tradingsymbol}`);
     if (!entryPrice) return reject(`No last price for ${trade.tradingsymbol}`);
@@ -198,7 +210,7 @@ export function createAutoTradeEngine({
       const placed = await placeOrder(userId, { ...trade, limitPrice }, { lastPrice: entryPrice, autoTradeId: id });
       if (!placed.ok) return reject(placed.message);
       if (placed.order.status === 'open') {
-        log(`${trade.side} ${trade.quantity} ${trade.tradingsymbol} limit at ${limitPrice} (last ${entryPrice}) placed [${userId}] (${signal.strategyId})`);
+        log('limit order placed', { trade: tradeLabel(trade), limit: limitPrice, last: entryPrice, user: userId, strategy: signal.strategyId });
       }
       return; // the order book tells settleOrder when it fills or is cancelled
     }
@@ -209,8 +221,59 @@ export function createAutoTradeEngine({
 
     await db.advanceAutoTrade(userId, id, 'validated', 'executed', { entryPrice: fill, positionId: opened.position.id }, { entryPrice: fill, positionId: opened.position.id });
     onExecuted(userId);
-    log(`${trade.side} ${trade.quantity} ${trade.tradingsymbol} at ${fill} (last ${entryPrice}) [${userId}] (${signal.strategyId})`);
+    log('executed', { trade: tradeLabel(trade), price: fill, last: entryPrice, user: userId, strategy: signal.strategyId });
   }
+
+  /**
+   * Every active strategy for every user with automation on, each signal
+   * taken through the lifecycle; a signal that fails is logged and counted.
+   * @param {RunEvent} event
+   * @returns {Promise<RunCounts>}
+   */
+  async function runStrategies({ now, kite, instruments }) {
+    if (strategies.length === 0) return NO_WORK;
+    const users = (await db.getAutomatedUsers()).filter(({ config }) => activeFor(config).length > 0);
+    if (users.length === 0) return NO_WORK;
+
+    const [snapshots, underlyings] = await Promise.all([db.getTodayOiSnapshots(), db.getUnderlyings()]);
+    const prepared = prepareStrategies(users, { now, snapshots, instruments, underlyings });
+    const instrumentsByToken = new Map(instruments.map((i) => [i.instrumentToken, i]));
+    const indexNames = new Set(underlyings.filter((u) => u.isIndex).map((u) => u.name));
+    /** Whether the user's General settings allow the trade a signal means. */
+    const allowsFor = (/** @type {AutomationConfig} */ config) => (/** @type {Signal} */ signal) => {
+      const planned = planTrade(signal, instrumentsByToken, indexNames, config);
+      return planned.error === undefined && checkGeneralSettings(planned.trade, config) === null;
+    };
+
+    const work = users
+      .map(({ userId, config }) => ({ userId, config, signals: userSignals(config, prepared, allowsFor(config)) }))
+      .filter((u) => u.signals.length > 0);
+    if (work.length === 0) return { ...NO_WORK, users: users.length };
+
+    const keys = [...new Set(work.flatMap((u) => u.signals)
+      .map((s) => instrumentsByToken.get(s.instrumentToken))
+      .filter(Boolean)
+      .map((i) => `${i.exchange}:${i.tradingsymbol}`))];
+    const quoted = keys.length > 0 ? await quotes(kite, keys) : {};
+    const quotesByKey = new Map(Object.entries(quoted));
+    const prices = new Map(Object.entries(quoted).map(([key, q]) => [key, q?.last_price]));
+
+    let failed = 0;
+    for (const { userId, config, signals } of work) {
+      for (const signal of signals) {
+        try {
+          await take(userId, config, signal, { instrumentsByToken, indexNames, prices, quotesByKey, now });
+        } catch (err) {
+          failed += 1;
+          log('signal failed', { user: userId, strategy: signal.strategyId, error: /** @type {Error} */ (err).message });
+        }
+      }
+    }
+    return { users: users.length, signals: work.reduce((total, u) => total + u.signals.length, 0), failed };
+  }
+
+  /** @type {LastRun | null} */
+  let lastRun = null;
 
   return {
     /**
@@ -227,11 +290,12 @@ export function createAutoTradeEngine({
         const entryPrice = order.fillPrice;
         await db.advanceAutoTrade(userId, id, 'validated', 'executed', { entryPrice, positionId: order.positionId }, { entryPrice, positionId: order.positionId });
         onExecuted(userId);
-        log(`${order.side} ${order.quantity} ${order.tradingsymbol} limit filled at ${entryPrice} [${userId}]`);
+        log('executed', { trade: tradeLabel(order), price: entryPrice, entry: 'limit order filled', user: userId });
         return;
       }
       if (order.status === 'cancelled') {
         const reason = order.statusReason ?? 'Limit order cancelled';
+        log('rejected', { trade: tradeLabel(order), user: userId, reason });
         await db.advanceAutoTrade(userId, id, 'validated', 'rejected', { reason }, { ruleId: null, reason });
       }
     },
@@ -239,46 +303,23 @@ export function createAutoTradeEngine({
     /**
      * One run after a scheduled snapshot: every active strategy for every
      * user with automation on, each signal taken through the lifecycle.
-     * @param {{ now: Date, kite: { apiKey: string, accessToken: string }, instruments: Instrument[] }} event
+     * Its outcome is kept for status(); a run that fails is recorded, then thrown.
+     * @param {RunEvent} event
      */
-    async run({ now, kite, instruments }) {
-      if (strategies.length === 0) return;
-      const users = (await db.getAutomatedUsers()).filter(({ config }) => activeFor(config).length > 0);
-      if (users.length === 0) return;
-
-      const [snapshots, underlyings] = await Promise.all([db.getTodayOiSnapshots(), db.getUnderlyings()]);
-      const prepared = prepareStrategies(users, { now, snapshots, instruments, underlyings });
-      const instrumentsByToken = new Map(instruments.map((i) => [i.instrumentToken, i]));
-      const indexNames = new Set(underlyings.filter((u) => u.isIndex).map((u) => u.name));
-      /** Whether the user's General settings allow the trade a signal means. */
-      const allowsFor = (/** @type {AutomationConfig} */ config) => (/** @type {Signal} */ signal) => {
-        const planned = planTrade(signal, instrumentsByToken, indexNames, config);
-        return planned.error === undefined && checkGeneralSettings(planned.trade, config) === null;
-      };
-
-      const work = users
-        .map(({ userId, config }) => ({ userId, config, signals: userSignals(config, prepared, allowsFor(config)) }))
-        .filter((u) => u.signals.length > 0);
-      if (work.length === 0) return;
-
-      const keys = [...new Set(work.flatMap((u) => u.signals)
-        .map((s) => instrumentsByToken.get(s.instrumentToken))
-        .filter(Boolean)
-        .map((i) => `${i.exchange}:${i.tradingsymbol}`))];
-      const quoted = keys.length > 0 ? await quotes(kite, keys) : {};
-      const quotesByKey = new Map(Object.entries(quoted));
-      const prices = new Map(Object.entries(quoted).map(([key, q]) => [key, q?.last_price]));
-
-      for (const { userId, config, signals } of work) {
-        for (const signal of signals) {
-          try {
-            await take(userId, config, signal, { instrumentsByToken, indexNames, prices, quotesByKey, now });
-          } catch (err) {
-            log(`${signal.strategyId} [${userId}] failed: ${/** @type {Error} */ (err).message}`);
-          }
-        }
+    async run(event) {
+      const at = event.now.getTime();
+      try {
+        lastRun = { at, ...(await runStrategies(event)), error: null };
+        log('run done', { users: lastRun.users, signals: lastRun.signals, failed: lastRun.failed });
+      } catch (err) {
+        lastRun = { at, ...NO_WORK, error: /** @type {Error} */ (err).message };
+        log('run failed', { error: lastRun.error });
+        throw err;
       }
     },
+
+    /** The last run's outcome (null before the first run), for the admin health page. */
+    status: () => ({ lastRun }),
   };
 }
 
@@ -290,7 +331,12 @@ const engine = createAutoTradeEngine();
  */
 export function startAutoTradeEngine(/** @type {typeof import('./oiSnapshotScheduler.js').onScheduledSnapshot} */ onScheduledSnapshot) {
   onScheduledSnapshot((event) => {
-    engine.run(event).catch((err) => console.warn(`${LOG_PREFIX} run failed:`, err.message));
+    engine.run(event).catch(() => {}); // logged and kept for status() by run
   });
   onPaperOrderSettled(engine.settleOrder);
+}
+
+/** The engine's last run, for the admin health page. */
+export function autoTradeEngineStatus() {
+  return engine.status();
 }

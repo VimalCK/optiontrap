@@ -2379,6 +2379,15 @@ export async function runSqlScript(sql, timeoutMs) {
   }
 }
 
+/**
+ * These jobs' runs for one date ({ job, status, detail }), for the admin
+ * health page; one primary-key (job, run_date) lookup per job.
+ */
+export async function getScheduledJobRunsOn(jobs, runDate) {
+  const found = await rows('SELECT job, status, detail FROM scheduled_job_runs WHERE job = ANY($1) AND run_date = $2', [jobs, runDate]);
+  return found.map((row) => ({ job: row.job, status: row.status, detail: row.detail }));
+}
+
 /** Runs of every job whose name starts with `prefix`, newest first. */
 export async function getScheduledJobRunsByPrefix(prefix, limit = 50) {
   return rows(

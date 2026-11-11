@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { getHealth, HealthStatus } from '@/services/admin';
+import { getHealth, HealthCheck, HealthStatus } from '@/services/admin';
 import {
-  ConnectionIcon, SettingsIcon, LinkIcon, UserIcon, AnalyticsIcon,
+  ConnectionIcon, SettingsIcon, LinkIcon, UserIcon, AnalyticsIcon, AutomationIcon, ShieldIcon, CalendarIcon,
 } from '@/components/icons/Icons';
+import { formatCalendarDate, istDateString, istTimeLabel } from '@/utils/marketStatus';
 import '@/styles/admin.css';
 
 const formatWhen = (ts: number | null) => {
@@ -27,6 +28,36 @@ const formatUptime = (seconds: number) => {
   if (d > 0) return `${d}d ${h}h ${m}m`;
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
+};
+
+/** The badge look and word for each health check status. */
+const CHECK_BADGES: Record<HealthCheck['status'], { tone: string; label: string }> = {
+  pass: { tone: 'up', label: 'OK' },
+  warn: { tone: 'warn', label: 'Warning' },
+  fail: { tone: 'down', label: 'Failing' },
+};
+
+/** When a check was observed, in IST: the time today, with the date on other days. */
+export const checkTimeLabel = (time: string, now: Date = new Date()): string => {
+  const at = new Date(time);
+  const day = istDateString(at);
+  const date = day === istDateString(now) ? '' : `${formatCalendarDate(day, { day: '2-digit', month: 'short' })} `;
+  return `${date}${istTimeLabel(at)} IST`;
+};
+
+/** One service row for a server health check: its name, why (and when), and a pass / warn / fail badge. */
+export const HealthCheckRow: React.FC<{ icon: React.ReactNode; name: string; check: HealthCheck }> = ({ icon, name, check }) => {
+  const badge = CHECK_BADGES[check.status];
+  return (
+    <div className="hx-service">
+      <span className="hx-service__icon">{icon}</span>
+      <div className="hx-service__body">
+        <strong>{name}</strong>
+        <small>{check.time ? `${check.output} · ${checkTimeLabel(check.time)}` : check.output}</small>
+      </div>
+      <span className={`hx-badge hx-badge--${badge.tone}`}><i />{badge.label}</span>
+    </div>
+  );
 };
 
 const secondsAgo = (ts: number) => Math.max(0, Math.round((Date.now() - ts) / 1000));
@@ -134,6 +165,10 @@ const Health: React.FC = () => {
               <i />{health.lastOiUpdate ? 'Fresh' : 'Idle'}
             </span>
           </div>
+
+          <HealthCheckRow icon={<AutomationIcon size={18} />} name="Algo Trading Engine" check={health.checks.tradeEngine} />
+          <HealthCheckRow icon={<ShieldIcon size={18} />} name="Trade Monitor" check={health.checks.tradeMonitor} />
+          <HealthCheckRow icon={<CalendarIcon size={18} />} name="Nightly Jobs" check={health.checks.nightlyJobs} />
         </div>
 
         {/* Metrics */}

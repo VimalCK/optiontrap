@@ -157,7 +157,7 @@ describe('createAutoTradeEngine run', () => {
     expect(engine.db.createAutoTrade).not.toHaveBeenCalled();
     expect(engine.db.advanceAutoTrade).not.toHaveBeenCalled();
     expect(engine.openPosition).not.toHaveBeenCalled();
-    expect(engine.log).toHaveBeenCalledWith(expect.stringContaining("did not enter NIFTY26NOV24000PE: Today's automated loss ₹1100.00"));
+    expect(engine.log).toHaveBeenCalledWith('not entered', expect.objectContaining({ trade: 'SELL 150 NIFTY26NOV24000PE', user: 'U1', strategy: 'test', reason: expect.stringContaining("Today's automated loss ₹1100.00") }));
   });
 
   it("doesn't re-enter an instrument within the Wait after exit minutes of its last exit today", async () => {
@@ -168,7 +168,7 @@ describe('createAutoTradeEngine run', () => {
     await engine.run();
     expect(engine.db.getTodayAutoExits).toHaveBeenCalledWith('U1', '2026-11-04T18:30:00.000Z'); // the IST day's start
     expect(engine.db.createAutoTrade).not.toHaveBeenCalled();
-    expect(engine.log).toHaveBeenCalledWith(expect.stringContaining('was exited at 11:50 IST; waiting until 12:05 IST'));
+    expect(engine.log).toHaveBeenCalledWith('not entered', expect.objectContaining({ reason: expect.stringContaining('was exited at 11:50 IST; waiting until 12:05 IST') }));
   });
 
   it('rejects after validation when there is no last price', async () => {
@@ -227,8 +227,27 @@ describe('createAutoTradeEngine run', () => {
     const engine = setup({ signals: [sellOption, sellOption] });
     engine.db.createAutoTrade.mockRejectedValueOnce(new Error('db down')).mockResolvedValueOnce('T2');
     await engine.run();
-    expect(engine.log).toHaveBeenCalledWith(expect.stringContaining('db down'));
+    expect(engine.log).toHaveBeenCalledWith('signal failed', expect.objectContaining({ error: 'db down' }));
     expect(engine.onExecuted).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps the last run for status: users, signals and the signals that failed', async () => {
+    const engine = setup({ signals: [sellOption, sellOption] });
+    expect(engine.engine.status()).toEqual({ lastRun: null });
+    engine.db.createAutoTrade.mockRejectedValueOnce(new Error('db down')).mockResolvedValueOnce('T2');
+    await engine.run();
+    expect(engine.engine.status()).toEqual({ lastRun: { at: NOON.getTime(), users: 1, signals: 2, failed: 1, error: null } });
+  });
+
+  it('records a run with nothing to do, and a run that fails, which it still throws', async () => {
+    const quiet = setup({ signals: [] });
+    await quiet.run();
+    expect(quiet.engine.status().lastRun).toEqual({ at: NOON.getTime(), users: 1, signals: 0, failed: 0, error: null });
+
+    const broken = setup();
+    broken.db.getTodayOiSnapshots.mockRejectedValueOnce(new Error('db down'));
+    await expect(broken.run()).rejects.toThrow('db down');
+    expect(broken.engine.status().lastRun).toEqual({ at: NOON.getTime(), users: 0, signals: 0, failed: 0, error: 'db down' });
   });
 });
 
@@ -264,7 +283,7 @@ describe('entering through a limit order (Entry limit offset on)', () => {
     engine.db.getWaitingAutoOrders.mockResolvedValue([{ instrumentToken: 101 }]);
     await engine.run();
     expect(engine.placeOrder).not.toHaveBeenCalled();
-    expect(engine.log).toHaveBeenCalledWith(expect.stringContaining('An automated limit order in NIFTY26NOV24000PE is already waiting'));
+    expect(engine.log).toHaveBeenCalledWith('not entered', expect.objectContaining({ reason: expect.stringContaining('An automated limit order in NIFTY26NOV24000PE is already waiting') }));
   });
 });
 

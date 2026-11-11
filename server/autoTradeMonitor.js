@@ -35,12 +35,12 @@ import { isMarketOpen } from './marketClock.js';
 import { marketDate, marketDayStartMs } from '../shared/marketTime.js';
 import { checkExitRules } from '../shared/exitRules/index.js';
 import { paperPnl, paperPnlPercent } from '../shared/paperPnl.js';
+import { algoLog, algoLogger } from './algoLog.js';
 
 /** How often the market-open state is checked (connect at the open, disconnect after the close). */
 const MARKET_CHECK_MS = 60 * 1000;
 /** How often every position is checked on its last price, for time-based rules. */
 const CLOCK_CHECK_MS = 1000;
-const LOG_PREFIX = '[Trade Monitor]';
 
 /**
  * @typedef {{ id: string, userId: string, instrumentToken: number, tradingsymbol: string, side: string, quantity: number, entryPrice: number }} WatchedPosition
@@ -95,7 +95,7 @@ export function dueExits(positions, { lastPrices, exitRulesByUser, todayPnlByUse
  *   findKiteSession?: typeof findWorkingAdminSession,
  *   createFeed?: typeof openSharedTickerFeed,
  *   clock?: () => Date,
- *   log?: (message: string) => void,
+ *   log?: (event: string, details?: import('./algoLog.js').AlgoDetails) => void,
  * }} [deps]
  */
 export function createAutoTradeMonitor({
@@ -104,7 +104,7 @@ export function createAutoTradeMonitor({
   findKiteSession = findWorkingAdminSession,
   createFeed = openSharedTickerFeed,
   clock = () => new Date(),
-  log = (message) => console.log(`${LOG_PREFIX} ${message}`),
+  log = algoLogger('Monitor'),
 } = {}) {
   /** @type {Map<string, WatchedPosition>} position id → position */
   const watched = new Map();
@@ -123,6 +123,13 @@ export function createAutoTradeMonitor({
   /** The market day positions were loaded for, and the day "no admin login" was last logged. */
   let loadedDate = null;
   let waitingLoggedDate = null;
+  /** For status(): the last market check (ms) and what it found, the last tick (ms), and why the last check failed. */
+  let lastCheckAt = null;
+  let marketOpen = false;
+  let waitingForLogin = false;
+  let lastTickAt = null;
+  /** @type {string | null} */
+  let lastError = null;
 
   const watchedTokens = () => [...new Set([...watched.values()].map((p) => p.instrumentToken))];
 
@@ -148,7 +155,7 @@ export function createAutoTradeMonitor({
     exitRulesByUser.clear();
     bookedPnlByUser.clear();
     await track([...new Set(positions.map((p) => p.userId))], positions);
-    log(`watching ${watched.size} open automated position(s)`);
+    log('loaded positions', { watching: watched.size });
   }
 
   /** Exit one position at its due price; the exit closes the automated trades behind it with the rule's reason. */
@@ -159,18 +166,18 @@ export function createAutoTradeMonitor({
       // A market exit: at the bid / ask from a quote with the feed's session (exitPrice when it has none).
       const result = await exitPosition(position.userId, position.id, exitPrice, { now: clock(), exitReason: { ruleId, reason }, fillFrom: feedKite ?? undefined });
       if (result.ok) {
-        log(`${position.tradingsymbol} [${position.userId}] exited at ${result.position?.exitPrice ?? exitPrice} (last ${exitPrice}): ${reason}`);
+        log('exit fired', { position: `${position.side} ${position.quantity} ${position.tradingsymbol}`, price: result.position?.exitPrice ?? exitPrice, last: exitPrice, user: position.userId, reason });
       } else if (result.code !== NOT_FOUND) {
-        log(`${position.tradingsymbol} [${position.userId}] could not exit: ${result.message}`);
+        log('could not exit', { position: position.tradingsymbol, user: position.userId, reason: result.message, next: 'tries again on the next tick' });
         return; // still open: the next tick or clock check tries again
       }
       watched.delete(position.id); // exited now, or already exited elsewhere
       feed?.watch(watchedTokens());
       // After the delete, so the exit is never counted as both open and booked.
       await loadBookedPnl(position.userId)
-        .catch((err) => log(`[${position.userId}] could not reload today's booked P&L: ${err.message}`));
+        .catch((err) => log("could not reload today's booked P&L", { user: position.userId, error: err.message }));
     } catch (err) {
-      log(`${position.tradingsymbol} [${position.userId}] exit failed: ${/** @type {Error} */ (err).message}`);
+      log('exit failed', { position: position.tradingsymbol, user: position.userId, error: /** @type {Error} */ (err).message });
     } finally {
       exiting.delete(position.id);
     }
@@ -191,6 +198,7 @@ export function createAutoTradeMonitor({
 
   /** @param {import('../shared/kiteTicks.js').Tick[]} ticks */
   function onTicks(ticks) {
+    if (ticks.length > 0) lastTickAt = clock().getTime();
     for (const tick of ticks) lastPrices.set(tick.instrumentToken, tick.lastPrice);
     const tokens = new Set(ticks.map((t) => t.instrumentToken));
     return check([...watched.values()].filter((p) => tokens.has(p.instrumentToken)));
@@ -200,13 +208,15 @@ export function createAutoTradeMonitor({
     feed?.close();
     feed = null;
     feedKite = null;
+    waitingForLogin = false;
     lastPrices.clear();
   }
 
   async function startFeed(date) {
     const kite = await findKiteSession();
+    waitingForLogin = !kite;
     if (!kite) {
-      if (waitingLoggedDate !== date) log('waiting for an admin Kite login today to watch automated positions');
+      if (waitingLoggedDate !== date) log('waiting for an admin Kite login', { why: 'to watch automated positions today' });
       waitingLoggedDate = date;
       return;
     }
@@ -214,16 +224,16 @@ export function createAutoTradeMonitor({
     feed = createFeed({
       kite,
       onTicks: (ticks) => { onTicks(ticks); },
-      onAuthError: () => { log('the admin Kite session expired; trying again at the next check'); stopFeed(); },
+      onAuthError: () => { log('admin Kite session expired', { next: 'trying again at the next check' }); stopFeed(); },
     });
     feed.watch(watchedTokens());
   }
 
   /** Open at the market open (loading positions once a day), close after it. */
-  async function checkMarket() {
-    const now = clock();
-    if (!isMarketOpen(now)) {
-      if (feed) log('market closed; stopped watching');
+  async function followMarket(/** @type {Date} */ now) {
+    marketOpen = isMarketOpen(now);
+    if (!marketOpen) {
+      if (feed) log('market closed', { feed: 'stopped watching' });
       stopFeed();
       return;
     }
@@ -233,6 +243,19 @@ export function createAutoTradeMonitor({
       loadedDate = date;
     }
     if (!feed && watched.size > 0) await startFeed(date);
+  }
+
+  /** followMarket, keeping when it ran and why it failed for status(); a failure is still thrown. */
+  async function checkMarket() {
+    const now = clock();
+    lastCheckAt = now.getTime();
+    try {
+      await followMarket(now);
+      lastError = null;
+    } catch (err) {
+      lastError = /** @type {Error} */ (err).message;
+      throw err;
+    }
   }
 
   return {
@@ -250,6 +273,17 @@ export function createAutoTradeMonitor({
     openPnl: (/** @type {string} */ userId) => openPnlByUser(watched.values(), lastPrices).get(userId) ?? 0,
     /** What is being watched, for tests and logs. */
     watchedPositionIds: () => [...watched.keys()],
+    /** How the monitor is doing, for the admin health page. */
+    status: () => ({
+      lastCheckAt,
+      marketOpen,
+      feedConnected: feed !== null,
+      waitingForLogin,
+      watchedPositions: watched.size,
+      watchedInstruments: watchedTokens().length,
+      lastTickAt,
+      lastError,
+    }),
   };
 }
 
@@ -257,7 +291,7 @@ const monitor = createAutoTradeMonitor();
 
 /** Reload a user's automated positions and exit rules after they changed; never throws. */
 export function refreshAutoTradeMonitor(/** @type {string} */ userId) {
-  monitor.refreshUser(userId).catch((err) => console.warn(`${LOG_PREFIX} refresh failed:`, err.message));
+  monitor.refreshUser(userId).catch((err) => algoLog('Monitor', 'refresh failed', { user: userId, error: err.message }));
 }
 
 /** A user's open automated P&L now, from the monitor's live prices (for the daily loss entry rule). */
@@ -265,10 +299,15 @@ export function openAutoTradePnl(/** @type {string} */ userId) {
   return monitor.openPnl(userId);
 }
 
+/** How the trade monitor is doing, for the admin health page. */
+export function autoTradeMonitorStatus() {
+  return monitor.status();
+}
+
 /** Start watching: the market check every minute, the clock check every second. */
 export function startAutoTradeMonitor() {
   const run = (/** @type {() => Promise<unknown>} */ fn, /** @type {string} */ what) => () =>
-    fn().catch((err) => console.warn(`${LOG_PREFIX} ${what} failed:`, err.message));
+    fn().catch((err) => algoLog('Monitor', `${what} failed`, { error: err.message }));
   const checkMarket = run(monitor.checkMarket, 'market check');
   checkMarket();
   setInterval(checkMarket, MARKET_CHECK_MS).unref();

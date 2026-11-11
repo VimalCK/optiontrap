@@ -1,12 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { selectJobFiles } from './nightlyJobs.js';
+import { latestNightlyDate, nightlyJobsStatus, selectJobFiles } from './nightlyJobs.js';
 import { isNightlyJobTime } from './marketClock.js';
 
-// Fake scheduled_job_runs: job -> date -> status. Hoisted so the db.js mock can use it.
+// Fake scheduled_job_runs: job -> date -> status (a failed run's error saved as 'boom'). Hoisted so the db.js mock can use it.
 const runs = vi.hoisted(() => new Map());
 
 vi.mock('./db.js', () => ({
   getScheduledJobStatus: async (job, date) => runs.get(job)?.get(date) ?? null,
+  getScheduledJobRunsOn: async (jobs, date) => jobs
+    .filter((job) => runs.get(job)?.has(date))
+    .map((job) => ({ job, status: runs.get(job).get(date), detail: runs.get(job).get(date) === 'failed' ? { error: 'boom' } : {} })),
   claimScheduledJobRun: async (job, date) => {
     if (!runs.has(job)) runs.set(job, new Map());
     runs.get(job).set(date, 'running');
@@ -87,5 +90,34 @@ describe('selectJobFiles', () => {
 
   it('skips paused, hidden, test and other files', () => {
     expect(selectJobFiles(['_010_paused.sql', '.hidden.js', '020_x.test.js', 'README.md', '030_ok.sql'])).toEqual(['030_ok.sql']);
+  });
+});
+
+describe('latestNightlyDate', () => {
+  it("is today from 08:30 IST, and yesterday's date before it", () => {
+    expect(latestNightlyDate(ist('08:30', '2026-11-04'))).toBe('2026-11-04');
+    expect(latestNightlyDate(ist('08:29', '2026-11-04'))).toBe('2026-11-03');
+    expect(latestNightlyDate(ist('00:10', '2026-11-01'))).toBe('2026-10-31');
+  });
+});
+
+describe('nightlyJobsStatus', () => {
+  beforeEach(() => runs.clear());
+
+  it("gives every job file's run for the latest due date, null when it hasn't run, with a failed run's error", async () => {
+    const { jobs: [first, second, ...rest] } = await nightlyJobsStatus(ist('10:00', '2026-11-04'));
+    runs.set(`nightly:${first.file}`, new Map([['2026-11-04', 'done'], ['2026-11-03', 'failed']]));
+    runs.set(`nightly:${second.file}`, new Map([['2026-11-04', 'failed']]));
+
+    const today = await nightlyJobsStatus(ist('10:00', '2026-11-04'));
+    expect(today.date).toBe('2026-11-04');
+    expect(today.jobs).toEqual([
+      { file: first.file, status: 'done', error: null },
+      { file: second.file, status: 'failed', error: 'boom' },
+      ...rest.map((job) => ({ file: job.file, status: null, error: null })),
+    ]);
+
+    const early = await nightlyJobsStatus(ist('07:00', '2026-11-04')); // before 08:30: yesterday's run
+    expect(early.jobs[0]).toEqual({ file: first.file, status: 'failed', error: 'boom' });
   });
 });

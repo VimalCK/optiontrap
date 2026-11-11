@@ -108,9 +108,10 @@ import { startInstrumentSync } from './instrumentSyncScheduler.js';
 import { checkSubscriptionAccess, inactiveSubscription } from './subscriptionAccess.js';
 import { backfillStockSetups, candleSyncWarning, scanStock, syncStockCandles } from './stockCandles.js';
 import { startStockSetupScheduler } from './stockSetupScheduler.js';
-import { NIGHTLY_JOB_PREFIX, startNightlyJobs } from './nightlyJobs.js';
-import { refreshAutoTradeMonitor, startAutoTradeMonitor } from './autoTradeMonitor.js';
-import { startAutoTradeEngine } from './autoTradeEngine.js';
+import { NIGHTLY_JOB_PREFIX, nightlyJobsStatus, startNightlyJobs } from './nightlyJobs.js';
+import { autoTradeMonitorStatus, refreshAutoTradeMonitor, startAutoTradeMonitor } from './autoTradeMonitor.js';
+import { autoTradeEngineStatus, startAutoTradeEngine } from './autoTradeEngine.js';
+import { nightlyJobsHealth, tradeEngineHealth, tradeMonitorHealth, unreadableHealth } from './serviceHealth.js';
 import { parseDailyPnlQuery, parsePositionsQuery, parseRange, parseStatsQuery } from './positionsQuery.js';
 import { exitPaperTrade, openPaperTrade } from './paperTrading.js';
 import { catchAsyncErrors, sendFailure, sendServerError } from './asyncRoutes.js';
@@ -631,10 +632,11 @@ app.get('/api/admin/health', requireAuth, requireAdmin, async (req, res) => {
   const dbConnected = await pingDb();
 
   // Gather metrics independently so a single failure doesn't blank the page.
-  const [usage, feedback, lastOi] = await Promise.allSettled([
+  const [usage, feedback, lastOi, nightly] = await Promise.allSettled([
     getUsageStats(),
     getFeedbackCounts(),
     getLatestOiSnapshotTimestamp(),
+    nightlyJobsStatus(),
   ]);
 
   const val = (r, fallback) => (r.status === 'fulfilled' ? r.value : fallback);
@@ -653,6 +655,11 @@ app.get('/api/admin/health', requireAuth, requireAdmin, async (req, res) => {
       lastOiUpdate: val(lastOi, null),
       usage: val(usage, { activeSessions: 0, totalUsers: 0 }),
       feedback: val(feedback, { total: 0, open: 0 }),
+      checks: {
+        tradeEngine: tradeEngineHealth(autoTradeEngineStatus()),
+        tradeMonitor: tradeMonitorHealth(autoTradeMonitorStatus()),
+        nightlyJobs: nightly.status === 'fulfilled' ? nightlyJobsHealth(nightly.value) : unreadableHealth('job runs', nightly.reason),
+      },
       server: {
         uptimeSeconds: Math.round(process.uptime()),
         mode: IS_PROD ? 'production' : 'development',

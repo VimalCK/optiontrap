@@ -27,11 +27,13 @@ import { fileURLToPath, pathToFileURL } from 'url';
 import {
   claimScheduledJobRun,
   finishScheduledJobRun,
+  getScheduledJobRunsOn,
   getScheduledJobStatus,
   query,
   runSqlScript,
 } from './db.js';
 import { istClock, isNightlyJobTime } from './marketClock.js';
+import { addDays } from '../shared/marketTime.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const NIGHTLY_JOBS_DIR = path.join(__dirname, 'jobs', 'nightly');
@@ -96,6 +98,32 @@ export async function runNightlyJobs(date) {
         .catch(() => {});
     }
   }
+}
+
+/** The date of the latest nightly run that is due: today from 08:30 IST, yesterday before that. */
+export function latestNightlyDate(now = new Date()) {
+  const { date } = istClock(now);
+  return isNightlyJobTime(now) ? date : addDays(date, -1);
+}
+
+/**
+ * Each current job file's run for the latest due date (status null when it
+ * hasn't run, and the error a failed run saved), for the admin health page.
+ * @returns {Promise<{ date: string, jobs: { file: string, status: string | null, error: string | null }[] }>}
+ */
+export async function nightlyJobsStatus(now = new Date()) {
+  const date = latestNightlyDate(now);
+  const files = listJobFiles();
+  if (files.length === 0) return { date, jobs: [] };
+  const runs = await getScheduledJobRunsOn(files.map((file) => NIGHTLY_JOB_PREFIX + file), date);
+  const byJob = new Map(runs.map((run) => [run.job, run]));
+  return {
+    date,
+    jobs: files.map((file) => {
+      const run = byJob.get(NIGHTLY_JOB_PREFIX + file);
+      return { file, status: run?.status ?? null, error: run?.detail?.error ?? null };
+    }),
+  };
 }
 
 /** Check now and every hour. Safe to call on every server instance. */

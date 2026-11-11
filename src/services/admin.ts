@@ -61,12 +61,20 @@ export async function updateUserSubscription(
   await apiClient.post(`/api/admin/users/${encodeURIComponent(userId)}/subscription`, { action, planId });
 }
 
+/** One service's health check (IETF health check format): pass / warn / fail, why, and when it was observed (ISO, null when not yet). */
+export interface HealthCheck {
+  status: 'pass' | 'warn' | 'fail';
+  output: string;
+  time: string | null;
+}
+
 export interface HealthStatus {
   db: { connected: boolean };
   kite: { connected: boolean; userId: string | null; userName: string | null; loginTime: string | null };
   lastOiUpdate: number | null;
   usage: { activeSessions: number; totalUsers: number };
   feedback: { total: number; open: number };
+  checks: { tradeEngine: HealthCheck; tradeMonitor: HealthCheck; nightlyJobs: HealthCheck };
   server: { uptimeSeconds: number; mode: string };
   timestamp: number;
 }

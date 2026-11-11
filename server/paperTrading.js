@@ -26,6 +26,8 @@
 import { addPosition, closeAutoTradesOfPosition, exitPositionById, getOpenPosition } from './db.js';
 import { checkPaperTrade, normalizeTradeInput } from '../shared/paperTradeRules.js';
 import { quotedFillPrice } from './paperFills.js';
+import { algoLog } from './algoLog.js';
+import { paperPnl } from '../shared/paperPnl.js';
 
 export const NOT_FOUND = 'NOT_FOUND';
 const NOT_FOUND_MESSAGE = 'Position not found or already exited';
@@ -76,6 +78,30 @@ export async function openPaperTrade(userId, input, { now = new Date(), source =
 }
 
 /**
+ * The algo log details of a booked automated position: entry, exit, P&L
+ * before and after charges, and why it was exited.
+ * @param {string} userId
+ * @param {{ side: string, quantity: number, entryPrice: number, tradingsymbol: string }} position  as it was open
+ * @param {{ charges: number | null }} exited
+ * @param {number} fill  the exit price
+ * @param {{ reason: string }} exitReason
+ */
+export function bookedDetails(userId, position, exited, fill, exitReason) {
+  const pnl = paperPnl({ side: position.side, quantity: Number(position.quantity), entryPrice: Number(position.entryPrice) }, fill);
+  const charges = exited.charges ?? 0;
+  return {
+    trade: `${position.side} ${position.quantity} ${position.tradingsymbol}`,
+    entry: position.entryPrice,
+    exit: fill,
+    'P&L': `₹${pnl.toFixed(2)}`,
+    charges: `₹${charges.toFixed(2)}`,
+    net: `₹${(pnl - charges).toFixed(2)}`,
+    user: userId,
+    reason: exitReason.reason,
+  };
+}
+
+/**
  * Exit one of `userId`'s open positions at `exitPrice`; for an automated
  * position, close the automated trades behind it too.
  * @param {string} userId
@@ -98,6 +124,9 @@ export async function exitPaperTrade(userId, positionId, exitPrice, { now = new 
   // Another request may have exited it since the lookup.
   const exited = await exitPositionById(positionId, userId, fill);
   if (!exited) return { ok: false, code: NOT_FOUND, message: NOT_FOUND_MESSAGE };
-  if (position.source === 'auto') await closeAutoTradesOfPosition(userId, position, fill, exitReason, now);
+  if (position.source === 'auto') {
+    await closeAutoTradesOfPosition(userId, position, fill, exitReason, now);
+    algoLog('Exit', 'booked', bookedDetails(userId, position, exited, fill, exitReason));
+  }
   return { ok: true, position: exited };
 }
