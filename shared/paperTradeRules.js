@@ -73,7 +73,6 @@ export function normalizeTradeInput(input = /** @type {Record<string, any>} */ (
     note: input.note,
     targetPrice: input.targetPrice,
     stopLossPrice: input.stopLossPrice,
-    strategyTag: input.strategyTag,
     confidence: input.confidence,
   };
 }

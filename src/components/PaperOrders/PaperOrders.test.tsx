@@ -41,10 +41,12 @@ describe('PaperOrdersTable', () => {
     expect(html).toContain('Filled @ 50.00');
   });
 
-  it('tags an order the trade automation placed as Auto, like its position', () => {
+  it('says who placed each order, Auto or Manual, like its position', () => {
     const auto = renderToStaticMarkup(<PaperOrdersTable orders={[order('c', { source: 'auto', autoTradeId: 't1' })]} onCancel={() => {}} />);
-    expect(auto).toContain('<span class="positions-table__source" title="Placed by the trade automation">Auto</span>');
-    expect(html).not.toContain('positions-table__source');
+    expect(auto).toContain('>Auto</span>');
+    expect(auto).not.toContain('>Manual</span>');
+    expect(html.match(/>Manual<\/span>/g)).toHaveLength(2);
+    expect(html).not.toContain('>Auto</span>');
   });
 
   it('offers Cancel only on open orders', () => {

@@ -38,7 +38,8 @@ export interface TradeEntry {
   note?: string;
   targetPrice?: number | null;
   stopLossPrice?: number | null;
-  strategyTag?: string;
+  /** Who placed it: the trade automation or by hand. */
+  source: Position['source'];
   confidence?: number | null;
 }
 
@@ -96,7 +97,7 @@ export function positionToEntry(pos: Position): TradeEntry {
     note: pos.note,
     targetPrice: pos.targetPrice,
     stopLossPrice: pos.stopLossPrice,
-    strategyTag: pos.strategyTag,
+    source: pos.source,
     confidence: pos.confidence,
   };
 }

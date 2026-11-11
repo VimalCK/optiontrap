@@ -1,0 +1,18 @@
+/* TradeSource: Auto (the trade automation) in the accent colour, Manual in grey. */
+.trade-source {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 5px;
+  border-radius: 3px;
+  border: 1px solid currentColor;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.trade-source--auto {
+  color: var(--accent);
+}
+
+.trade-source--manual {
+  color: var(--text-secondary);
+}

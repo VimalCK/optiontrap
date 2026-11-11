@@ -488,11 +488,6 @@
   background: rgba(255, 255, 255, 0.05);
 }
 
-.tj-trade-meta__tag {
-  color: var(--accent);
-  background: var(--sidebar-active) !important;
-}
-
 .tj-trade-meta__note {
   max-width: 260px;
   overflow: hidden;

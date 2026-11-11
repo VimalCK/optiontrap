@@ -122,11 +122,6 @@
   background: rgba(255, 255, 255, 0.05);
 }
 
-.positions-table__meta .positions-table__tag {
-  color: var(--accent);
-  background: var(--sidebar-active);
-}
-
 .positions-table__note {
   max-width: 260px;
   overflow: hidden;
@@ -162,16 +157,6 @@
 .positions-table__type--eq {
   background: rgba(148, 163, 184, 0.15);
   color: var(--text-secondary);
-}
-
-/* Marks a position placed by the trade automation. */
-.positions-table__source {
-  font-size: 10px;
-  font-weight: 600;
-  padding: 2px 5px;
-  border-radius: 3px;
-  border: 1px solid var(--accent);
-  color: var(--accent);
 }
 
 .positions-table__expiry {

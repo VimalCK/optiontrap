@@ -60,7 +60,7 @@ async function marketFill(kite, instrument, side, price, fillPrice) {
  * @param {string} userId
  * @param {Record<string, unknown>} input tradingsymbol, instrumentToken, instrumentType (CE, PE, FUT
  *   or EQ), side, quantity, entryPrice; strike and expiry for options, expiry for futures; and
- *   optionally exchange, mode, note, targetPrice, stopLossPrice, strategyTag, confidence
+ *   optionally exchange, mode, note, targetPrice, stopLossPrice, confidence
  * @param {{ now?: Date, source?: 'manual' | 'auto', fillFrom?: { apiKey: string, accessToken: string },
  *   fillPrice?: typeof quotedFillPrice }} [options] now: when the trade happens (defaults to the current
  *   time). source: who placed it, set by the caller and never taken from the request; a trade merges

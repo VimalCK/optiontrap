@@ -153,7 +153,6 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
 
     const side = mode === 'sell' ? 'SELL' : 'BUY';
     const verb = mode === 'sell' ? 'SELL' : 'BUY';
-    const strategyTag = `${mode === 'sell' ? sellBadgeLabel((rec as SellRecommendation).type) : buyBadgeLabel((rec as BuyRecommendation).type)} Strategy`;
     const note = rec.reasons.slice(0, 3).join(' | ');
     const confidence = Math.max(0, Math.min(100, Math.round(rec.score)));
 
@@ -174,7 +173,6 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           quantity: instrument.lotSize,
           entryPrice: ltp,
           expiry,
-          strategyTag,
           note,
           confidence,
         });
@@ -193,7 +191,6 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           quantity: row.ce.lotSize,
           entryPrice: ceLtp,
           expiry,
-          strategyTag,
           note,
           confidence,
         });
@@ -206,7 +203,6 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           quantity: row.pe.lotSize,
           entryPrice: peLtp,
           expiry,
-          strategyTag,
           note,
           confidence,
         });
@@ -226,7 +222,6 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           quantity: ceRow.ce.lotSize,
           entryPrice: ceLtp,
           expiry,
-          strategyTag,
           note,
           confidence,
         });
@@ -239,7 +234,6 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           quantity: peRow.pe.lotSize,
           entryPrice: peLtp,
           expiry,
-          strategyTag,
           note,
           confidence,
         });

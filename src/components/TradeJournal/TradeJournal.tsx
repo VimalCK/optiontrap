@@ -16,6 +16,7 @@ import PnLHeatmap from './PnLHeatmap';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import DateInput from '@/components/DateInput/DateInput';
+import TradeSource from '@/components/TradeSource/TradeSource';
 import { formatNumericDate } from '@/utils/marketStatus';
 import { marketDate } from '../../../shared/marketTime.js';
 import { isDateValue, presetRange, rangeProblem, subtractMonths } from './journalRange';
@@ -330,9 +331,9 @@ const TradeJournal: React.FC<{
                             <td className="tj-symbol">
                               {t.symbol}
                               <TradingViewLink symbol={t.symbol} />
-                              {(t.strategyTag || t.confidence != null || t.targetPrice != null || t.stopLossPrice != null || t.note) && (
+                              {(
                                 <div className="tj-trade-meta">
-                                  {t.strategyTag && <span className="tj-trade-meta__tag">{t.strategyTag}</span>}
+                                  <TradeSource source={t.source} />
                                   {t.confidence != null && <span>Conf {t.confidence}%</span>}
                                   {t.targetPrice != null && <span>Tgt {t.targetPrice.toFixed(2)}</span>}
                                   {t.stopLossPrice != null && <span>SL {t.stopLossPrice.toFixed(2)}</span>}

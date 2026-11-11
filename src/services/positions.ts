@@ -39,7 +39,6 @@ export interface Position {
   note?: string;
   targetPrice?: number | null;
   stopLossPrice?: number | null;
-  strategyTag?: string;
   confidence?: number | null;
   /** What Zerodha would charge for its entry and exit (shared/paperCharges.js); set when it closes. */
   charges?: number | null;

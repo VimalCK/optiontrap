@@ -785,9 +785,8 @@ const PaperPositions: React.FC = () => {
                     <PositionInstrument instrument={pos}>
                       <TradingViewLink symbol={pos.tradingsymbol} exchange={pos.exchange} />
                     </PositionInstrument>
-                    {(pos.strategyTag || pos.confidence != null || pos.targetPrice != null || pos.stopLossPrice != null || pos.note) && (
+                    {(pos.confidence != null || pos.targetPrice != null || pos.stopLossPrice != null || pos.note) && (
                       <div className="positions-table__meta">
-                        {pos.strategyTag && <span className="positions-table__tag">{pos.strategyTag}</span>}
                         {pos.confidence != null && <span>Conf {pos.confidence}%</span>}
                         {pos.targetPrice != null && <span>Tgt {pos.targetPrice.toFixed(2)}</span>}
                         {pos.stopLossPrice != null && <span>SL {pos.stopLossPrice.toFixed(2)}</span>}

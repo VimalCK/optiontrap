@@ -1412,7 +1412,6 @@ function mapPositionRow(row) {
     note: row.note || '',
     targetPrice: row.target_price,
     stopLossPrice: row.stop_loss_price,
-    strategyTag: row.strategy_tag || '',
     confidence: row.confidence === null || row.confidence === undefined ? null : Number(row.confidence),
     // Set when it closes (shared/paperCharges.js); null while open or if closed before charges were recorded.
     charges: row.charges == null ? null : Number(row.charges),
@@ -1447,7 +1446,6 @@ function positionMetaValues(position) {
     position.note?.trim() || null,
     position.targetPrice === undefined || position.targetPrice === null || position.targetPrice === '' ? null : Number(position.targetPrice),
     position.stopLossPrice === undefined || position.stopLossPrice === null || position.stopLossPrice === '' ? null : Number(position.stopLossPrice),
-    position.strategyTag?.trim() || null,
     position.confidence === undefined || position.confidence === null || position.confidence === '' ? null : Number(position.confidence),
   ];
 }
@@ -1471,8 +1469,8 @@ async function insertPosition(userId, mode, position, quantity, now) {
   const { strike, optionType, expiry } = instrumentColumns(position);
   const row = await firstRow(
     `INSERT INTO positions (id, user_id, mode, source, tradingsymbol, instrument_token, instrument_type, exchange, strike, option_type,
-       side, quantity, entry_price, entry_time, expiry, note, target_price, stop_loss_price, strategy_tag, confidence)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+       side, quantity, entry_price, entry_time, expiry, note, target_price, stop_loss_price, confidence)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
      RETURNING *`,
     [crypto.randomUUID(), userId, mode, position.source || 'manual', position.tradingsymbol, position.instrumentToken,
      position.instrumentType, position.exchange, strike, optionType, position.side, quantity, position.entryPrice, now, expiry,
@@ -1511,12 +1509,12 @@ export async function addPosition(userId, position) {
     await query(
       `UPDATE positions SET
          quantity = $1, entry_price = $2, note = COALESCE($3, note), target_price = COALESCE($4, target_price),
-         stop_loss_price = COALESCE($5, stop_loss_price), strategy_tag = COALESCE($6, strategy_tag), confidence = COALESCE($7, confidence)
-       WHERE id = $8`,
+         stop_loss_price = COALESCE($5, stop_loss_price), confidence = COALESCE($6, confidence)
+       WHERE id = $7`,
       [totalQty, Number(avgPrice.toFixed(2)), ...meta, sameSide.id],
     );
 
-    const [note, targetPrice, stopLossPrice, strategyTag, confidence] = meta;
+    const [note, targetPrice, stopLossPrice, confidence] = meta;
     return mapPositionRow({
       ...sameSide,
       quantity: totalQty,
@@ -1524,7 +1522,6 @@ export async function addPosition(userId, position) {
       note: note ?? sameSide.note,
       target_price: targetPrice ?? sameSide.target_price,
       stop_loss_price: stopLossPrice ?? sameSide.stop_loss_price,
-      strategy_tag: strategyTag ?? sameSide.strategy_tag,
       confidence: confidence ?? sameSide.confidence,
     });
   }
@@ -1595,7 +1592,6 @@ function toPaperOrder(row) {
     note: row.note || '',
     targetPrice: row.target_price,
     stopLossPrice: row.stop_loss_price,
-    strategyTag: row.strategy_tag || '',
     confidence: row.confidence === null || row.confidence === undefined ? null : Number(row.confidence),
     status: row.status,
     statusReason: row.status_reason,
@@ -1620,8 +1616,8 @@ export async function createPaperOrder(userId, order, { source = 'manual', autoT
   const { strike, optionType, expiry } = instrumentColumns(order);
   const row = await firstRow(
     `INSERT INTO paper_orders (id, user_id, tradingsymbol, instrument_token, instrument_type, exchange, strike, option_type, expiry,
-       side, quantity, limit_price, note, target_price, stop_loss_price, strategy_tag, confidence, source, auto_trade_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+       side, quantity, limit_price, note, target_price, stop_loss_price, confidence, source, auto_trade_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
      RETURNING *`,
     [crypto.randomUUID(), userId, order.tradingsymbol, order.instrumentToken, order.instrumentType, order.exchange, strike, optionType, expiry,
      order.side, order.quantity, order.limitPrice, ...positionMetaValues(order), source, autoTradeId],
