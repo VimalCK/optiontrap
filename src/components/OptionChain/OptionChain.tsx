@@ -106,6 +106,9 @@ const OptionChain: React.FC = () => {
   const chainCardRef = useRef<HTMLDivElement>(null);
   const [oiChartWidth, setOiChartWidth] = useState(0);
   const oiChartObserverRef = useRef<ResizeObserver | null>(null);
+  // Focus the order modal once when it opens (so Escape closes it). A stable callback ref:
+  // an inline one is called on every render and would pull focus out of the inputs on each tick.
+  const focusOrderModal = useCallback((el: HTMLDivElement | null) => el?.focus(), []);
   // Callback ref: the OI chart mounts/unmounts with loading state, so observe whenever it appears.
   const oiChartBarsRef = useCallback((el: HTMLDivElement | null) => {
     oiChartObserverRef.current?.disconnect();
@@ -834,7 +837,7 @@ const OptionChain: React.FC = () => {
           setOrderForm(null);
         };
         return (
-          <div className="oc-order-modal-overlay" onClick={() => setOrderForm(null)} onKeyDown={(e) => { if (e.key === 'Escape') setOrderForm(null); }} tabIndex={-1} ref={(el) => el?.focus()}>
+          <div className="oc-order-modal-overlay" onClick={() => setOrderForm(null)} onKeyDown={(e) => { if (e.key === 'Escape') setOrderForm(null); }} tabIndex={-1} ref={focusOrderModal}>
             <div className="oc-order-modal" onClick={(e) => e.stopPropagation()}>
               <div className="oc-order-modal__header">
                 <span className="oc-order-modal__title">{orderForm.strike} {orderForm.optionType}</span>
