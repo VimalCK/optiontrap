@@ -1,12 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import PaperOrders, { PaperOrdersTable, filledSince, orderStatus, pendingCount } from './PaperOrders';
-import type { PaperOrder } from '@/services/paperOrders';
+import PaperOrders, { PaperOrdersTable, orderStatus, settledSince, pendingCount } from './PaperOrders';
+import type { PaperOrder } from '@/services/orders';
+import { Horizon } from '../../../shared/horizons.js';
 
 const order = (id: string, extra: Partial<PaperOrder> = {}): PaperOrder => ({
   id, tradingsymbol: 'NIFTY26N1024000CE', instrumentToken: 101, instrumentType: 'CE', exchange: 'NFO', strike: 24000,
-  optionType: 'CE', expiry: '2026-11-10', side: 'BUY', quantity: 75, limitPrice: 50, status: 'open', statusReason: null,
-  fillPrice: null, positionId: null, source: 'manual', autoTradeId: null, createdAt: '2026-11-05T06:30:00.000Z', updatedAt: '2026-11-05T06:30:00.000Z', ...extra, // Thu 12:00 IST
+  optionType: 'CE', expiry: '2026-11-10', side: 'BUY', quantity: 75, orderType: 'limit', limitPrice: 50, status: 'open', statusReason: null,
+  fillPrice: null, positionId: null, closesPosition: false, source: 'manual', horizon: Horizon.Intraday, autoTradeId: null, createdAt: '2026-11-05T06:30:00.000Z', updatedAt: '2026-11-05T06:30:00.000Z', ...extra, // Thu 12:00 IST
 });
 
 describe('orderStatus', () => {
@@ -18,13 +19,14 @@ describe('orderStatus', () => {
   });
 });
 
-describe('filledSince', () => {
-  it('is true only when an order that was open is filled now', () => {
+describe('settledSince', () => {
+  it('is true only when an order that was open has left the open list', () => {
     const before = new Set(['a']);
-    expect(filledSince(before, [order('a', { status: 'filled' })])).toBe(true);
-    expect(filledSince(before, [order('a')])).toBe(false);
-    expect(filledSince(before, [order('a', { status: 'cancelled' })])).toBe(false);
-    expect(filledSince(before, [order('b', { status: 'filled' })])).toBe(false); // filled before it was seen open
+    expect(settledSince(before, [])).toBe(true); // filled or cancelled
+    expect(settledSince(before, [order('b')])).toBe(true);
+    expect(settledSince(before, [order('a')])).toBe(false);
+    expect(settledSince(before, [order('a'), order('b')])).toBe(false); // a new one is not a fill
+    expect(settledSince(new Set(), [])).toBe(false);
   });
 });
 
@@ -47,6 +49,11 @@ describe('PaperOrdersTable', () => {
     expect(auto).not.toContain('>Manual</span>');
     expect(html.match(/>Manual<\/span>/g)).toHaveLength(2);
     expect(html).not.toContain('>Auto</span>');
+  });
+
+  it('shows Market in the Limit column for a market order', () => {
+    const market = renderToStaticMarkup(<PaperOrdersTable orders={[order('m', { orderType: 'market', limitPrice: null, horizon: Horizon.Positional })]} onCancel={() => {}} />);
+    expect(market).toContain('<td>Market</td>');
   });
 
   it('offers Cancel only on open orders', () => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { marketFillPrice, quotedFillPrice } from './paperFills.js';
+import { marketFillPrice, quotedFillPrice } from './fillPrice.js';
 
 const quote = { last_price: 60, depth: { buy: [{ price: 59.8, quantity: 750 }], sell: [{ price: 60.25, quantity: 300 }] } };
 

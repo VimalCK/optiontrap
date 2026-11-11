@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { getPositions, exitPosition, tradeErrorMessage, Position, positionQuoteKey } from '@/services/positions';
+import { getPositions, tradeErrorMessage, Position, positionQuoteKey } from '@/services/positions';
+import { exitPosition } from '@/services/orders';
 
 import { fetchQuotes, KitePosition } from '@/services/kiteApi';
 import { positionsPnl } from '@/services/livePositions';

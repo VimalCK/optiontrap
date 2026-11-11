@@ -5,7 +5,8 @@ const apiGet = vi.hoisted(() => vi.fn());
 vi.mock('./apiClient', () => ({ apiClient: { get: apiGet } }));
 
 import { getPositions, getClosedPositions, getDailyPnl, getPositionStats } from './positions';
-import { chargesTitle, getPaperTrades, getPaperDailyPnl, getPaperTradeStats, positionToEntry, positionToSegment } from './tradeJournal';
+import { chargesTitle, getPaperTrades, getPaperDailyPnl, getPaperTradeStats, hasTradeMeta, journalTotals, positionToEntry, positionToSegment } from './tradeJournal';
+import { Horizon } from '../../shared/horizons.js';
 
 function position(overrides: Partial<Position>): Position {
   return {
@@ -16,6 +17,7 @@ function position(overrides: Partial<Position>): Position {
     instrumentType: 'CE',
     exchange: 'NFO',
     source: 'manual',
+    horizon: Horizon.Intraday,
     strike: 24000,
     optionType: 'CE',
     side: 'BUY',
@@ -63,6 +65,31 @@ describe('positions API URLs', () => {
     apiGet.mockResolvedValue({});
     await getPositionStats('paper');
     expect(apiGet).toHaveBeenCalledWith('/api/positions/stats?mode=paper');
+  });
+});
+
+describe('journalTotals', () => {
+  it('adds the charges back for the P&L before them, and realised P&L is that minus the charges', () => {
+    const days = [{ pnl: 950, charges: 50 }, { pnl: -230, charges: 30 }];
+    expect(journalTotals(days)).toEqual({ pnl: 800, charges: 80, realised: 720 });
+  });
+
+  it('is all zero with no days', () => {
+    expect(journalTotals([])).toEqual({ pnl: 0, charges: 0, realised: 0 });
+  });
+});
+
+describe('hasTradeMeta', () => {
+  it('is true when any of confidence, target, stop-loss or note is set, including 0', () => {
+    expect(hasTradeMeta({ confidence: 0 })).toBe(true);
+    expect(hasTradeMeta({ targetPrice: 120 })).toBe(true);
+    expect(hasTradeMeta({ stopLossPrice: 80 })).toBe(true);
+    expect(hasTradeMeta({ note: 'Wall Defense' })).toBe(true);
+  });
+
+  it('is false when none is set, so no empty line shows under the symbol', () => {
+    expect(hasTradeMeta({})).toBe(false);
+    expect(hasTradeMeta({ confidence: null, targetPrice: null, stopLossPrice: null, note: '' })).toBe(false);
   });
 });
 

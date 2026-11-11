@@ -20,8 +20,8 @@ import maxDailyLoss from './maxDailyLoss.js';
 
 /**
  * @typedef {import('../rules/ruleSettings.js').RuleSettings} RuleSettings
- * @typedef {{ instrumentToken: number, tradingsymbol: string, pnl: number, pnlPercent: number }} OpenAutoPosition
- *   pnl is the position's live P&L in ₹; pnlPercent the same as a percentage of its entry price
+ * @typedef {{ instrumentToken: number, tradingsymbol: string, horizon: import('../horizons.js').HorizonId, pnl: number, pnlPercent: number }} OpenAutoPosition
+ *   horizon is intraday or positional; pnl is the position's live P&L in ₹; pnlPercent the same as a percentage of its entry price
  * @typedef {{ now: Date, todayAutoPnl: number }} ExitRuleContext
  *   todayAutoPnl is the owner's automated P&L today in ₹: booked plus open positions at their last price
  * @typedef {import('../rules/ruleSettings.js').Rule<OpenAutoPosition, ExitRuleContext>} ExitRule
@@ -29,6 +29,12 @@ import maxDailyLoss from './maxDailyLoss.js';
 
 /** Every exit rule, in the order they're checked. @type {ExitRule[]} */
 export const EXIT_RULES = [stopLoss, target, squareOff, maxDailyLoss];
+
+/** The id of the trade engine's square-off after the market close (server/tradeEngine/services/sessionSquareOff.js). */
+export const SESSION_SQUARE_OFF_ID = 'session-square-off';
+
+/** Exits the trade engine makes itself, not a user's rule, with their names for the results. */
+export const ENGINE_EXITS = [{ id: SESSION_SQUARE_OFF_ID, label: 'Session square-off' }];
 
 /**
  * Run the user's active exit rules on an open position: the first that fires

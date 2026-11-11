@@ -9,6 +9,7 @@ import {
   daysUntil,
   isMarketOpen,
   isTradingDay,
+  lastSessionEnd,
   marketClock,
   marketCloseTime,
   marketDate,
@@ -85,6 +86,19 @@ describe('trading days and session', () => {
     expect(marketStatus(utc('2026-11-03T10:31:00'))).toBe('closed');     // 16:01
     expect(marketStatus(utc('2026-11-10T05:00:00'))).toBe('closed');     // holiday
     expect(isMarketOpen(utc('2026-11-03T07:35:00'))).toBe(true);
+  });
+});
+
+describe('lastSessionEnd', () => {
+  it("is today's session end (15:31 IST) once it has passed, else the previous trading day's", () => {
+    expect(lastSessionEnd(new Date('2026-11-05T10:01:00Z')).toISOString()).toBe('2026-11-05T10:01:00.000Z'); // Thu 15:31 IST: today's
+    expect(lastSessionEnd(new Date('2026-11-05T10:00:59Z')).toISOString()).toBe('2026-11-04T10:01:00.000Z'); // Thu 15:30:59 IST, still open: Wed's
+    expect(lastSessionEnd(new Date('2026-11-05T02:00:00Z')).toISOString()).toBe('2026-11-04T10:01:00.000Z'); // Thu 07:30 IST: Wed's
+  });
+
+  it('skips weekends back to Friday', () => {
+    expect(lastSessionEnd(new Date('2026-11-09T04:00:00Z')).toISOString()).toBe('2026-11-06T10:01:00.000Z'); // Mon 09:30 IST: Fri's
+    expect(lastSessionEnd(new Date('2026-11-08T06:30:00Z')).toISOString()).toBe('2026-11-06T10:01:00.000Z'); // Sun 12:00 IST: Fri's
   });
 });
 

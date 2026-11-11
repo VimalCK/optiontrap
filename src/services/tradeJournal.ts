@@ -40,7 +40,29 @@ export interface TradeEntry {
   stopLossPrice?: number | null;
   /** Who placed it: the trade automation or by hand. */
   source: Position['source'];
+  /** Intraday or positional. */
+  horizon: Position['horizon'];
   confidence?: number | null;
+}
+
+/** Whether a trade has details for the line under its symbol: confidence, target, stop-loss or a note. */
+export const hasTradeMeta = (trade: Pick<TradeEntry, 'confidence' | 'targetPrice' | 'stopLossPrice' | 'note'>): boolean =>
+  trade.confidence != null || trade.targetPrice != null || trade.stopLossPrice != null || Boolean(trade.note);
+
+/** A range's totals for the journal's summary strip. */
+export interface JournalTotals {
+  /** Before charges. */
+  pnl: number;
+  charges: number;
+  /** What was actually made: pnl − charges. */
+  realised: number;
+}
+
+/** Total P&L before charges, the charges, and the realised P&L over the days shown (each day's P&L is after its charges). */
+export function journalTotals(days: Pick<DailyPnl, 'pnl' | 'charges'>[]): JournalTotals {
+  const realised = days.reduce((sum, day) => sum + day.pnl, 0);
+  const charges = days.reduce((sum, day) => sum + day.charges, 0);
+  return { pnl: realised + charges, charges, realised };
 }
 
 export interface TradeStats {
@@ -98,6 +120,7 @@ export function positionToEntry(pos: Position): TradeEntry {
     targetPrice: pos.targetPrice,
     stopLossPrice: pos.stopLossPrice,
     source: pos.source,
+    horizon: pos.horizon,
     confidence: pos.confidence,
   };
 }

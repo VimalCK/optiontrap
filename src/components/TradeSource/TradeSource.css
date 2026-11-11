@@ -1,4 +1,5 @@
-/* TradeSource: Auto (the trade automation) in the accent colour, Manual in grey. */
+/* TradeSource: Auto (the trade automation) in the accent colour, Manual in grey.
+   TradeHorizon (Intraday / Positional) uses the same pill, dashed. */
 .trade-source {
   font-size: 10px;
   font-weight: 600;
@@ -15,4 +16,9 @@
 
 .trade-source--manual {
   color: var(--text-secondary);
+}
+
+.trade-source--horizon {
+  color: var(--text-secondary);
+  border-style: dashed;
 }

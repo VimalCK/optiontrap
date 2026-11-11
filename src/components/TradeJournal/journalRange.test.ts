@@ -1,7 +1,20 @@
 import { describe, it, expect } from 'vitest';
-import { presetRange, rangeProblem, subtractMonths } from './journalRange';
+import { presetRange, rangeProblem, reportToFetch, subtractMonths } from './journalRange';
 
 const TODAY = '2026-11-05';
+
+describe('reportToFetch', () => {
+  it('fetches the default range shown on opening, with nothing picked first', () => {
+    // The page opened with a year up to today and fetched nothing until a date was changed.
+    expect(reportToFetch('paper', subtractMonths(TODAY, 12), TODAY, 'all')).toEqual({ from: '2025-11-05', to: TODAY, segment: 'all' });
+  });
+
+  it('fetches nothing in live mode, or for a range that cannot be fetched', () => {
+    expect(reportToFetch('live', '2025-11-05', TODAY, 'all')).toBeNull();
+    expect(reportToFetch('paper', '0202-11-05', TODAY, 'all')).toBeNull();
+    expect(reportToFetch('paper', TODAY, '2025-11-05', 'all')).toBeNull();
+  });
+});
 
 describe('rangeProblem', () => {
   it('accepts a complete range in order, of any length', () => {

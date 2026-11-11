@@ -1,11 +1,12 @@
 /**
- * PaperOrders — the Pending tab of the paper positions: today's paper limit
- * orders still waiting to fill, each with a Cancel button. Filled ones show
- * as positions; cancelled ones (by hand or at the close) leave the list.
+ * PaperOrders — the Pending tab of the paper positions: the paper orders
+ * still waiting to fill (limit orders, and positional market orders placed
+ * while the market is closed), each with a Cancel button. Filled ones show as
+ * positions; cancelled ones (by hand or at the close) leave the list.
  *
- * Orders fill on the server (server/paperOrderBook.js), so while any is open
+ * Orders fill on the server (the trade engine's order service), so while any is open
  * in market hours usePaperOrders reloads the list every few seconds; when one
- * fills, `onFilled` lets the positions reload too. The page runs the hook
+ * leaves it, `onFilled` lets the positions reload too. The page runs the hook
  * whichever tab is showing, so fills reach the positions either way. The rules
  * are in shared/paperOrders.js.
  */
@@ -14,10 +15,10 @@ import Badge, { type BadgeTone } from '@/components/Badge/Badge';
 import EmptyState from '@/components/EmptyState/EmptyState';
 import { PaperTradingIcon } from '@/components/icons/Icons';
 import PositionInstrument from '@/components/PositionInstrument/PositionInstrument';
-import { cancelPaperOrder, fetchPaperOrders, type PaperOrder } from '@/services/paperOrders';
+import { cancelOrder, fetchOpenOrders, type PaperOrder } from '@/services/orders';
 import { tradeErrorMessage } from '@/services/positions';
 import { isAbortError } from '@/services/apiClient';
-import { istDateString, istTimeLabel, isMarketLive } from '@/utils/marketStatus';
+import { istTimeLabel, isMarketLive } from '@/utils/marketStatus';
 import '@/styles/positions.css';
 
 /** How often open orders are reloaded in market hours, to show fills. */
@@ -26,13 +27,17 @@ const ORDER_REFRESH_MS = 5000;
 /** An order's status as a badge: open (waiting), filled at its price, or why it was cancelled. */
 export function orderStatus(order: PaperOrder): { tone: BadgeTone; text: string } {
   if (order.status === 'open') return { tone: 'accent', text: 'Open' };
-  if (order.status === 'filled') return { tone: 'positive', text: `Filled @ ${(order.fillPrice ?? order.limitPrice).toFixed(2)}` };
+  if (order.status === 'filled') return { tone: 'positive', text: `Filled @ ${(order.fillPrice ?? order.limitPrice ?? 0).toFixed(2)}` };
   return { tone: 'neutral', text: order.statusReason ?? 'Cancelled' };
 }
 
-/** Whether any order that was open before is filled now. */
-export function filledSince(openBefore: ReadonlySet<string>, orders: PaperOrder[]): boolean {
-  return orders.some((o) => o.status === 'filled' && openBefore.has(o.id));
+/**
+ * Whether any order that was open before has left the open list (filled, or
+ * cancelled after a refused fill), so the positions should reload.
+ */
+export function settledSince(openBefore: ReadonlySet<string>, openNow: PaperOrder[]): boolean {
+  const stillOpen = openIds(openNow);
+  return [...openBefore].some((id) => !stillOpen.has(id));
 }
 
 const openIds = (orders: PaperOrder[]) => new Set(orders.filter((o) => o.status === 'open').map((o) => o.id));
@@ -60,7 +65,7 @@ export const PaperOrdersTable: React.FC<{ orders: PaperOrder[]; onCancel: (id: s
               <td>{istTimeLabel(new Date(order.createdAt))}</td>
               <td><span className={`positions-table__side positions-table__side--${order.side.toLowerCase()}`}>{order.side}</span></td>
               <td>{order.quantity}</td>
-              <td>{order.limitPrice.toFixed(2)}</td>
+              <td>{order.limitPrice === null ? 'Market' : order.limitPrice.toFixed(2)}</td>
               <td><Badge tone={status.tone} dot={order.status === 'open'}>{status.text}</Badge></td>
               <td>
                 {order.status === 'open' && (
@@ -90,8 +95,8 @@ export interface PaperOrderBook {
 }
 
 /**
- * Today's paper orders, reloaded every few seconds while any is open in market
- * hours; `onFilled` runs when one that was open has filled.
+ * The open paper orders, whenever placed, reloaded every few seconds while any
+ * is open in market hours; `onFilled` runs when one that was open has left.
  */
 export function usePaperOrders(onFilled: () => void): PaperOrderBook {
   const [orders, setOrders] = useState<PaperOrder[]>([]);
@@ -99,14 +104,13 @@ export function usePaperOrders(onFilled: () => void): PaperOrderBook {
   const openBeforeRef = useRef<Set<string>>(new Set());
 
   const load = useCallback(async (signal?: AbortSignal) => {
-    const today = istDateString();
     try {
-      const next = await fetchPaperOrders({ from: today, to: today }, signal);
-      const filled = filledSince(openBeforeRef.current, next);
+      const next = await fetchOpenOrders(signal);
+      const settled = settledSince(openBeforeRef.current, next);
       openBeforeRef.current = openIds(next);
       setOrders(next);
       setError(null);
-      if (filled) onFilled();
+      if (settled) onFilled();
     } catch (err) {
       if (!isAbortError(err)) setError(tradeErrorMessage(err, 'Failed to load orders'));
     }
@@ -131,7 +135,7 @@ export function usePaperOrders(onFilled: () => void): PaperOrderBook {
 
   const cancel = async (id: string) => {
     try {
-      await cancelPaperOrder(id);
+      await cancelOrder(id);
       await load();
     } catch (err) {
       setError(tradeErrorMessage(err, 'Failed to cancel order'));
@@ -142,8 +146,8 @@ export function usePaperOrders(onFilled: () => void): PaperOrderBook {
 }
 
 /**
- * The Pending tab, inside the positions card: today's orders still waiting to
- * fill (given all of today's orders), or an empty state when none are.
+ * The Pending tab, inside the positions card: the orders still waiting to
+ * fill, or an empty state when none are.
  */
 const PaperOrders: React.FC<{ orders: PaperOrder[]; error: string | null; onCancel: (id: string) => void }> = ({ orders, error, onCancel }) => {
   const pending = pendingOrders(orders);
@@ -156,7 +160,7 @@ const PaperOrders: React.FC<{ orders: PaperOrder[]; error: string | null; onCanc
         <EmptyState
           icon={<PaperTradingIcon size={64} />}
           title="No pending orders"
-          description="Limit orders placed from the Option Chain wait here until they fill or are cancelled."
+          description="Limit orders, and positional orders placed while the market is closed, wait here until they fill or are cancelled."
         />
       )}
     </div>

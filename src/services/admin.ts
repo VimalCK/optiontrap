@@ -74,7 +74,7 @@ export interface HealthStatus {
   lastOiUpdate: number | null;
   usage: { activeSessions: number; totalUsers: number };
   feedback: { total: number; open: number };
-  checks: { tradeEngine: HealthCheck; tradeMonitor: HealthCheck; nightlyJobs: HealthCheck };
+  checks: { tradeEngine: HealthCheck; nightlyJobs: HealthCheck };
   server: { uptimeSeconds: number; mode: string };
   timestamp: number;
 }

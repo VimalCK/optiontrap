@@ -13,8 +13,9 @@
  *       trade     SELL 75 NIFTY26NOV24000PE
  *       price     119.85
  *
- * Used by autoTradeEngine.js, autoTradeMonitor.js and paperTrading.js (the
- * booking of an automated position, whoever exits it).
+ * Used by the trade engine (server/tradeEngine/: the host, each plug-in under
+ * its own name, and positions.js for the booking of an automated position,
+ * whoever exits it).
  */
 import { MARKET_TIME_ZONE } from '../shared/marketTime.js';
 

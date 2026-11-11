@@ -6,8 +6,8 @@
  * PCR, OI walls, and velocity patterns to produce scored recommendations.
  *
  * Shared, so the card (browser) and the Option Analyzer setups strategy
- * (shared/strategies/optionAnalyzerSetups.js, run by the server's trade
- * engine) score a chain the same way.
+ * (server/tradeEngine/strategies/optionAnalyzerSetups.js, run by the server's
+ * trade engine) score a chain the same way.
  */
 
 import { analyzeVelocityPattern } from './velocityPattern.js';

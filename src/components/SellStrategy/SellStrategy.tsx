@@ -11,10 +11,12 @@ import {
 } from '@/services/sellStrategy';
 import { calculateMaxPain, calculatePCR } from '@/services/trapAnalysis';
 import { calculateExpectedMove } from '@/services/edgeScore';
-import { addPosition, tradeErrorMessage } from '@/services/positions';
+import { tradeErrorMessage } from '@/services/positions';
+import { placeMarketTrade, placedOrderMessage, placedOrderRefused, type PaperOrder } from '@/services/orders';
 import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
 import type { FlowReading } from '@/services/oiFlow';
 import '@/styles/sellstrategy.css';
+import type { HorizonId } from '../../../shared/horizons.js';
 
 export type StrategyMode = 'sell' | 'buy' | 'analyzer';
 
@@ -29,6 +31,8 @@ interface SellStrategyProps {
   daysToExpiry?: number;
   atmStrike?: number;
   orderMode: 'paper' | 'live';
+  /** Intraday or positional: the trade type the Option Chain has chosen (useTradeHorizon). */
+  horizon: HorizonId;
   expiry: string;
   onToast: (text: string, color: 'green' | 'red') => void;
   mode: StrategyMode;
@@ -104,6 +108,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
   daysToExpiry,
   atmStrike,
   orderMode,
+  horizon,
   expiry,
   onToast,
   mode,
@@ -148,6 +153,17 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
     [chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, daysToExpiry, atmStrike, volumeData, avgVolume],
   );
 
+  /**
+   * The toast for a two-leg trade: `filledTitle` when both legs filled at once,
+   * otherwise what happened to each leg (e.g. orders waiting for the open).
+   */
+  const showLegs = useCallback((filledTitle: string, legs: [PaperOrder, string][]) => {
+    const refused = legs.some(([placed]) => placedOrderRefused(placed));
+    const allFilled = legs.every(([placed]) => placed.status === 'filled');
+    const text = allFilled ? filledTitle : legs.map(([placed, label]) => placedOrderMessage(placed, label)).join(' · ');
+    onToast(text, refused ? 'red' : 'green');
+  }, [onToast]);
+
   const handleTrade = useCallback(async (rec: SellRecommendation | BuyRecommendation) => {
     if (orderMode !== 'paper' || !expiry) return;
 
@@ -163,86 +179,91 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
         const row = chain.find((r) => r.strike === rec.strikes[0]);
         const instrument = type.includes('ce') ? row?.ce : row?.pe;
         if (!instrument) return;
-        const ltp = effectivePrices.get(instrument.instrumentToken) ?? 0;
-        await addPosition({
+        const placed = await placeMarketTrade({
           tradingsymbol: instrument.tradingsymbol,
           instrumentToken: instrument.instrumentToken,
           strike: rec.strikes[0],
           optionType,
           side,
           quantity: instrument.lotSize,
-          entryPrice: ltp,
           expiry,
+          horizon,
           note,
           confidence,
         });
-        onToast(`${verb} ${rec.strikes[0]}${optionType} @ ${ltp.toFixed(2)}`, 'green');
+        onToast(placedOrderMessage(placed, `${verb} ${rec.strikes[0]}${optionType}`), placedOrderRefused(placed) ? 'red' : 'green');
       } else if (type === 'sell-straddle' || type === 'buy-straddle') {
         const row = chain.find((r) => r.strike === rec.strikes[0]);
         if (!row?.ce || !row?.pe) return;
         const ceLtp = effectivePrices.get(row.ce.instrumentToken) ?? 0;
         const peLtp = effectivePrices.get(row.pe.instrumentToken) ?? 0;
-        await addPosition({
+        const ceLeg = await placeMarketTrade({
           tradingsymbol: row.ce.tradingsymbol,
           instrumentToken: row.ce.instrumentToken,
           strike: rec.strikes[0],
           optionType: 'CE',
           side,
           quantity: row.ce.lotSize,
-          entryPrice: ceLtp,
           expiry,
+          horizon,
           note,
           confidence,
         });
-        await addPosition({
+        const peLeg = await placeMarketTrade({
           tradingsymbol: row.pe.tradingsymbol,
           instrumentToken: row.pe.instrumentToken,
           strike: rec.strikes[0],
           optionType: 'PE',
           side,
           quantity: row.pe.lotSize,
-          entryPrice: peLtp,
           expiry,
+          horizon,
           note,
           confidence,
         });
-        onToast(`${verb} Straddle ${rec.strikes[0]} CE@${ceLtp.toFixed(0)} PE@${peLtp.toFixed(0)}`, 'green');
+        showLegs(`${verb} Straddle ${rec.strikes[0]} CE@${ceLtp.toFixed(0)} PE@${peLtp.toFixed(0)}`, [
+          [ceLeg, `${verb} ${rec.strikes[0]}CE`],
+          [peLeg, `${verb} ${rec.strikes[0]}PE`],
+        ]);
       } else if (type === 'sell-strangle' || type === 'buy-strangle') {
         const ceRow = chain.find((r) => r.strike === rec.strikes[0]);
         const peRow = chain.find((r) => r.strike === rec.strikes[1]);
         if (!ceRow?.ce || !peRow?.pe) return;
         const ceLtp = effectivePrices.get(ceRow.ce.instrumentToken) ?? 0;
         const peLtp = effectivePrices.get(peRow.pe.instrumentToken) ?? 0;
-        await addPosition({
+        const ceLeg = await placeMarketTrade({
           tradingsymbol: ceRow.ce.tradingsymbol,
           instrumentToken: ceRow.ce.instrumentToken,
           strike: rec.strikes[0],
           optionType: 'CE',
           side,
           quantity: ceRow.ce.lotSize,
-          entryPrice: ceLtp,
           expiry,
+          horizon,
           note,
           confidence,
         });
-        await addPosition({
+        const peLeg = await placeMarketTrade({
           tradingsymbol: peRow.pe.tradingsymbol,
           instrumentToken: peRow.pe.instrumentToken,
           strike: rec.strikes[1],
           optionType: 'PE',
           side,
           quantity: peRow.pe.lotSize,
-          entryPrice: peLtp,
           expiry,
+          horizon,
           note,
           confidence,
         });
-        onToast(`${verb} Strangle ${rec.strikes[0]}CE@${ceLtp.toFixed(0)} ${rec.strikes[1]}PE@${peLtp.toFixed(0)}`, 'green');
+        showLegs(`${verb} Strangle ${rec.strikes[0]}CE@${ceLtp.toFixed(0)} ${rec.strikes[1]}PE@${peLtp.toFixed(0)}`, [
+          [ceLeg, `${verb} ${rec.strikes[0]}CE`],
+          [peLeg, `${verb} ${rec.strikes[1]}PE`],
+        ]);
       }
     } catch (err) {
       onToast(tradeErrorMessage(err), 'red');
     }
-  }, [chain, effectivePrices, orderMode, expiry, onToast, mode]);
+  }, [chain, effectivePrices, orderMode, expiry, onToast, mode, horizon, showLegs]);
 
   // Reset expanded row when switching modes
   const handleModeChange = useCallback((newMode: StrategyMode) => {

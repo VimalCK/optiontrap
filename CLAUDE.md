@@ -12,6 +12,20 @@ It never places real orders. The user is the sole developer; prod (optiontrap.co
 - **Backend** `server/`: Node 22 + Express (port 3001), plain ESM JavaScript. `index.js` holds the routes, auth
   middleware, Kite REST proxy (`/api/*` → api.kite.trade) and WebSocket ticker proxy (`/ws`). `db.js` is all
   Postgres access plus the migrations runner. Schedulers (`*Scheduler.js`, `nightlyJobs.js`) run inside the server.
+- **Trade engine** `server/tradeEngine/`: the one runtime for trading, started with the server and alive as long as it.
+  - `host.js` is only a host: it starts and stops plug-ins of the shape `{ id, start(ctx), stop?(), status?() }` and gives
+    each a context: `ctx.market` (`market.js`: `onOpen`, `onClose`, `every`, `isOpen` on the IST clock), `ctx.services`
+    (the services by id, the only way plug-ins reach each other) and `ctx.log`. It holds a Postgres advisory lock so one
+    engine runs; a plug-in that fails is logged and shown on Admin Services while the others keep running.
+  - **Services** (`services/`): `orders` (every order, manual or automated, entry or exit), `signals` (a strategy's signals →
+    each user's settings and entry rules → orders), `tradeMonitor` (exit rules on open automated positions),
+    `sessionSquareOff` (no intraday position outlives its session).
+  - **Strategies** (`strategies/`, server-only, one file each): metadata + `prepare`/`select` + `start(ctx)`; each decides its own
+    schedule. The browser gets their descriptions from `GET /api/strategies` (`useStrategies`).
+  - `index.js` builds the engine with the real plug-ins (`tradeEngine.services.orders` etc. for routes); `positions.js` opens and
+    closes paper positions; `fillPrice.js` prices market fills; `automationConfigs.js` completes stored configurations with defaults.
+  - **Engines don't know their plug-ins**, and the host holds no trading logic: add a strategy or service by adding it to its
+    list, never with an `if` in the host. If a design forces coupling, flag it before building on it.
 - **Shared** `shared/`: plain JS used by **both** server and browser (market time, paper trade rules, automation, stock setups).
   Type-checked through JSDoc (`checkJs`), so give it `@typedef`/`@param` annotations and casts until `tsc` is clean.
 - **Database**: Postgres 16 in docker (`optiontrap-postgres`, port 5433, user/db/password `optiontrap`).
@@ -147,7 +161,7 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   `{ value }`/`{ error }`-style results that routes map to HTTP status codes. Never trust server-owned fields from the body
   (e.g. a paper trade's `source` is set by the caller, never read from input).
 - Business rules live as **data** in one place: paper trade rules in `shared/paperTradeRules.js`
-  (`{ id, appliesTo, code, check }`), run by `server/paperTrading.js`. Change the list, don't add checks in callers.
+  (`{ id, appliesTo, code, check }`), run by `server/tradeEngine/positions.js` and the order service. Change the list, don't add checks in callers.
 - Kite quirks: holdings/positions replies can carry a stale `last_price`, so price from the quote API (`EXCHANGE:SYMBOL` keys)
   and live ticks. Kite 403 `PermissionException` is an ordinary error, not a logout (`isLoginEnded` in apiClient).
 - Credentials (Kite API key/secret) live only in the browser; the server never stores them.
@@ -221,7 +235,7 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   Long single-line expressions are accepted; match the surrounding file.
 - Every module starts with a `/** … */` header explaining **what it is for and why**, and where related rules live.
   Exported functions get a one-line JSDoc. Comments explain intent and non-obvious reasons; don't narrate the code.
-- Names are plain and domain-specific (`heldQuantity`, `positionPnl`, `openPaperTrade`).
+- Names are plain and domain-specific (`heldQuantity`, `positionPnl`, `openPosition`).
 - User-facing copy is short, plain English; middle dot `·` separates status fragments ("Off · engine not built yet").
   Unavailable options are shown disabled with a reason, not hidden.
 - **Line endings:** files are mixed CRLF/LF (`core.autocrlf=true`; e.g. `Dashboard.tsx` is CRLF). When editing by script,
@@ -249,19 +263,25 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   manual↔manual, never across).
 - Share count for holdings: `quantity + t1_quantity + collateral_quantity − used_quantity`.
 - Live position P&L (Kite's formula): `sell_value − buy_value + quantity × ltp × multiplier`.
-- Paper market orders fill like Zerodha's: a buy at the best ask, a sell at the best bid (`server/paperFills.js`, from a quote
-  with the user's Kite session, or the server feed's for the monitor; the sent price when the quote has none). Closing a position
+- **Every paper trade is an order** through the engine's order service (`server/tradeEngine/services/orders.js`, table `orders`):
+  `POST /api/orders` places one (201), or exits a position with `{ positionId, exitPrice }`; `PATCH /api/orders/:id`
+  `{ status: 'cancelled' }` cancels; `GET /api/orders?status=open` or `?from=…&to=…` lists. An exit is a filled market
+  order with `closes_position`. `GET /api/positions*` only read. Settled orders placed before today are deleted nightly
+  (`server/jobs/nightly/050_purge_settled_orders.sql`); a fill lives on in its position and an automated trade's in `algo_trades`.
+- Paper market orders fill like Zerodha's: a buy at the best ask, a sell at the best bid (`server/tradeEngine/fillPrice.js`, from a
+  quote with the user's Kite session, or the server feed's for the engine; the last price when the quote has no bid / ask). Closing a position
   records Zerodha's charges (`shared/paperCharges.js`: brokerage, STT, exchange, SEBI, stamp, GST, DP) in `positions.charges` /
-  `charge_breakdown` and each automated trade's own in `auto_trades.charges`. Positions shows P&L before charges, as Kite does;
+  `charge_breakdown` and each automated trade's own in `algo_trades.charges`. Positions shows P&L before charges, as Kite does;
   the Journal, Dashboard, Algo Trading, Win/Loss Patterns and the daily loss limit use P&L after them.
-- Paper limit orders (`shared/paperOrders.js`, `server/paperOrderBook.js`, table `paper_orders`) work like Zerodha's: a buy fills
-  at the limit or lower, a sell at the limit or higher. One that can fill when placed fills at once at the last price; otherwise
-  it fills at its limit on the first live tick that reaches it, through `openPaperTrade` (source manual). Open orders are cancelled
-  at the close. The order book and the trade monitor share one Kite feed (`server/sharedTickerFeed.js`; Kite allows 3 connections).
-  Only the Option Chain order panel has Limit; the B/S buttons and other screens place market orders (`POST /api/positions`).
-  The trade engine also enters through a limit order (source auto, linked by `auto_trade_id`) when the Entry limit offset entry
-  rule is on: a buy that % below the LTP, a sell that % above. The trade stays validated while it waits; the order book tells the
-  engine (`onSettled` → `settleOrder`) when it fills (executed) or is cancelled (rejected). Waiting auto orders count in the
+- Paper limit orders (`shared/paperOrders.js`) work like Zerodha's: a buy fills at the limit or lower, a sell at the limit or
+  higher. One that can fill when placed fills at once at the last price; otherwise it fills at its limit on the first live tick
+  that reaches it, through `openPosition` with the order's source. Orders fill only in market hours; intraday ones are placed
+  only then, positional ones any time. Open orders placed in a session are cancelled at its close. The order service and the
+  trade monitor share one Kite feed (`server/sharedTickerFeed.js`; Kite allows 3 connections).
+  Only the Option Chain order panel has Limit; the B/S buttons and other screens place market orders (`placeMarketTrade`).
+  The signals service enters through a limit order (source auto, linked by `algo_trade_id`) when the Entry limit offset entry
+  rule is on: a buy that % below the LTP, a sell that % above. The trade stays validated while it waits; the order service tells
+  listeners (`onSettled`) when it fills (executed) or is cancelled (rejected). Waiting auto orders count in the
   Max open positions and One position per instrument rules.
 - OI snapshots are taken every 10 minutes in market hours by `oiSnapshotScheduler.js`. OI history is fetched after close.
   Nightly jobs and the instrument sync run at 08:30 IST.
@@ -270,15 +290,21 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   validation; rejected only after validation, when a trade can't be placed). Automated trades go to paper trading only.
   - Entry and exit rules are plug-ins: one file per rule in `shared/entryRules/` / `shared/exitRules/`, sharing the rule
     shape and settings logic in `shared/rules/`. Add a rule by adding its file to the list; never add `if`s in callers.
-  - The trade monitor (`server/autoTradeMonitor.js`) closes open automated positions when an exit rule fires, on live
-    ticks from the server's own Kite ticker feed (`server/kiteTickerFeed.js`, admin session, LTP mode, one feed for all
-    users). Rules compare P&L at the last traded price and exit at that price, through `exitPaperTrade`.
-  - `exitPaperTrade` closes the automated trades behind an automated position on every exit: with the exit rule's
-    reason from the monitor, or "Exited manually" (`MANUAL_EXIT`) from the Exit button. Positions are never deleted.
-  - The trade engine (`server/autoTradeEngine.js`) runs after each scheduled OI snapshot (`onScheduledSnapshot`): every
-    active strategy (`shared/strategies/`, plug-ins whose `select` returns `{ instrumentToken, side, reason }`) for every
-    user with automation on. Each signal is sized at the Max lots entry rule's value (1 lot while it's off) × lot size, checked against the General settings
+  - The trade monitor service closes open automated positions when an exit rule fires, on live ticks from the server's
+    own Kite ticker feed (`server/kiteTickerFeed.js`, admin session, LTP mode, one feed for all users). Rules compare P&L
+    at the last traded price; the exit is an order (`orders.exit`) filled at the bid / ask. It reloads a user's positions
+    when they exit one by hand (a manual closing order) or change their settings.
+  - Every exit (`closePosition` in `server/tradeEngine/positions.js`) closes the automated trades behind an automated position:
+    with the exit rule's reason from the monitor, or "Exited manually" (`MANUAL_EXIT`) from the Exit button. Positions are never deleted.
+  - The session square-off service closes every open intraday paper position (manual and automated) its session left:
+    after each close (and at startup while closed) at its last price after the close, dated at the session's end
+    (`orders.squareOff`, the rules' `square-off` action, which the market-open rule doesn't cover); and every minute in
+    market hours, any left from an earlier session as an ordinary exit at the bid / ask. Exit reason `session-square-off`.
+  - Strategies (`server/tradeEngine/strategies/`) run on their own schedule and hand what they `prepare` to the signals
+    service (`ctx.services.signals.submit`), which runs `select` (returning `{ instrumentToken, side, reason }` signals) for every
+    user with automation on and the strategy active. Each signal is sized at the Max lots entry rule's value (1 lot while it's off) × lot size, checked against the General settings
     (`GENERAL_CHECKS`) then the entry rules *before anything is saved* (a refused signal is only logged: entry rules decide
-    whether to enter, they don't make trade records), opened via `openPaperTrade` (source auto) at the quote's LTP, and handed to the
-    monitor. The first strategy, Option Analyzer setups, trades the Strategy card's suggestions, scored by the same
-    code (`shared/optionAnalysis/`, which the card re-exports).
+    whether to enter, they don't make trade records), then placed as an auto order (`orders.placeAuto`): a market order filled at
+    the bid / ask, or a limit order. The first strategy, Option Analyzer setups, checks for a new OI snapshot every 30 s
+    (the latest one at the open is marked seen, so a restart doesn't trade it again) and trades the Strategy card's
+    suggestions, scored by the same code (`shared/optionAnalysis/`, which the card re-exports).

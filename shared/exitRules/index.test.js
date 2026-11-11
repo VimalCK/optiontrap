@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { EXIT_RULES, checkExitRules } from './index.js';
 import { defaultRuleSettings } from '../rules/ruleSettings.js';
+import { Horizon } from '../horizons.js';
 
 /** A position at a P&L percentage; its ₹ P&L as for 75 units sold at 100, i.e. 75 × the percentage. */
-const position = (pnlPercent) => ({ instrumentToken: 101, tradingsymbol: 'NIFTY26NOV24000PE', pnlPercent, pnl: pnlPercent * 75 });
+const position = (pnlPercent, horizon = Horizon.Intraday) => ({ instrumentToken: 101, tradingsymbol: 'NIFTY26NOV24000PE', horizon, pnlPercent, pnl: pnlPercent * 75 });
 const at = (iso, todayAutoPnl = 0) => ({ now: new Date(iso), todayAutoPnl });
 const noon = at('2026-11-05T06:30:00Z'); // Thu 12:00 IST
 
@@ -68,6 +69,10 @@ describe('square-off', () => {
     expect(check('square-off', { time: '15:00' }, position(0), at('2026-11-05T09:29:00Z'))).toBeNull(); // 14:59 IST
     expect(check('square-off', { time: '15:00' }, position(0), at('2026-11-05T09:30:00Z'))).toBe('Squared off at 15:00 IST'); // 15:00 IST
     expect(check('square-off', { time: '15:00' }, position(0), at('2026-11-05T09:45:00Z'))).toBe('Squared off at 15:00 IST'); // 15:15 IST
+  });
+
+  it('leaves a positional position open, since it is held over days', () => {
+    expect(check('square-off', { time: '15:00' }, position(0, Horizon.Positional), at('2026-11-05T09:45:00Z'))).toBeNull(); // 15:15 IST
   });
 });
 

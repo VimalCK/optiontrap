@@ -20,6 +20,16 @@ export function rangeProblem(from: string, to: string): string | null {
   return null;
 }
 
+/**
+ * The report to fetch for what the page shows: the paper journal's range (the
+ * default one on opening, or whatever was picked since) with its segment, or
+ * null when there's nothing to fetch (live mode, or a range that can't be).
+ */
+export function reportToFetch<S>(mode: string, from: string, to: string, segment: S): { from: string; to: string; segment: S } | null {
+  if (mode !== 'paper' || rangeProblem(from, to)) return null;
+  return { from, to, segment };
+}
+
 /** The 1M / 3M / 6M / 1Y buttons: `months` back from today, up to today. */
 export function presetRange(today: string, months: number): { from: string; to: string } {
   return { from: subtractMonths(today, months), to: today };

@@ -1,14 +1,13 @@
 /**
- * Market fills for paper trades: the price a real market order would get, not
- * the last traded price. A buy pays the best ask (the lowest seller), a sell
- * gets the best bid (the highest buyer), from a Kite quote taken when the
- * order is placed, as on Zerodha.
+ * Market fill prices: the price a real market order would get, not the last
+ * traded price. A buy pays the best ask (the lowest seller), a sell gets the
+ * best bid (the highest buyer), from a Kite quote, as on Zerodha.
  *
- * Used by server/paperTrading.js for market entries and exits. Limit orders
- * (server/paperOrderBook.js) still fill at their limit. When a quote has no
- * bid or ask (no depth, or the quote call failed), the caller's price is kept.
+ * Used by the order service (services/orders.js) for market orders, entries
+ * and exits. Limit orders fill at their limit. When a quote has no bid or ask
+ * (no depth, or the quote call failed), the caller's price is kept.
  */
-import { fetchQuotes } from './kiteQuotes.js';
+import { fetchQuotes } from '../kiteQuotes.js';
 
 /**
  * The best opposite-side price in a Kite quote: the ask for a buy, the bid

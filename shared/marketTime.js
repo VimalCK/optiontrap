@@ -98,6 +98,20 @@ export function marketCloseTime(date) {
   return marketDateTime(date, MARKET_CLOSE_MINUTES);
 }
 
+/**
+ * When the latest session before `now` ended: the first instant after its
+ * closing minute (15:31 IST, since the session runs to the end of 15:30), today's
+ * once it has passed on a trading day, else the previous trading day's.
+ * @param {Date} [now]
+ */
+export function lastSessionEnd(now = new Date()) {
+  let date = marketDate(now);
+  const end = (/** @type {string} */ day) => marketDateTime(day, MARKET_CLOSE_MINUTES + 1);
+  if (isTradingDay(date) && end(date) <= now) return end(date);
+  do date = addDays(date, -1); while (!isTradingDay(date));
+  return end(date);
+}
+
 /** Epoch ms of market-zone midnight starting the day that contains `timestamp`. */
 export function marketDayStartMs(timestamp = Date.now()) {
   return marketDateTime(marketDate(new Date(timestamp))).getTime();

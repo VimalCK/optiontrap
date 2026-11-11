@@ -1,9 +1,11 @@
 /**
  * Positions Service
- * Manages paper trading positions via server-side REST API.
- * Netting logic (average-in, partial close, over-close) runs on the server.
+ * Reads paper trading positions from the server's REST API. Positions are
+ * opened and exited by orders (src/services/orders.ts); netting (average-in,
+ * merging) runs on the server.
  */
 import { apiClient, ApiError } from './apiClient';
+import type { HorizonId } from '../../shared/horizons.js';
 
 /**
  * What to tell the user when placing or exiting a trade failed: the server's
@@ -23,6 +25,8 @@ export interface Position {
   exchange: string;
   /** manual: placed by the user; auto: by the trade automation. */
   source: 'manual' | 'auto';
+  /** Intraday or positional (shared/horizons.js): only intraday positions are squared off, and trades merge only within one. */
+  horizon: HorizonId;
   /** Options only. */
   strike: number | null;
   /** Options only: the same as instrumentType. */
@@ -76,7 +80,10 @@ export interface ClosedPositionsFilter {
 
 export interface DailyPnl {
   date: string; // market-zone exit day, 'YYYY-MM-DD'
+  /** After charges. */
   pnl: number;
+  /** The day's charges: what Zerodha would charge for its trades' entries and exits. */
+  charges: number;
   trades: number;
 }
 
@@ -145,17 +152,6 @@ export type NewPosition = Omit<Position, 'id' | 'entryTime' | 'mode' | 'instrume
   instrumentType?: Position['instrumentType'];
   exchange?: string;
 };
-
-export async function addPosition(position: NewPosition): Promise<Position> {
-  return apiClient.post<Position>('/api/positions', { ...position, mode: position.mode || 'paper' });
-}
-
-/**
- * Exit a position — marks it as exited with exit price and time.
- */
-export async function exitPosition(id: string, exitPrice: number): Promise<void> {
-  await apiClient.patch(`/api/positions/${id}`, { exitPrice });
-}
 
 /** Key for the quote API: the position's own exchange (NSE for stocks, NFO for F&O). */
 export function positionQuoteKey(pos: Pick<Position, 'exchange' | 'tradingsymbol'>): string {

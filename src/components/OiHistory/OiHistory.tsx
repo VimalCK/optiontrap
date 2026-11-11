@@ -5,9 +5,11 @@ import { apiClient, isAbortError, responseErrorMessage } from '@/services/apiCli
 import { useAbortSignal } from '@/hooks/useAbortSignal';
 import { useKiteSession } from '@/hooks/useKiteSession';
 import AppSelect from '@/components/AppSelect/AppSelect';
-import { addPosition, tradeErrorMessage } from '@/services/positions';
+import { tradeErrorMessage } from '@/services/positions';
+import { placeMarketTrade, placedOrderMessage, placedOrderRefused } from '@/services/orders';
+import { useTradeHorizon } from '@/hooks/useTradeHorizon';
+import TradeHorizonSelect from '@/components/TradeHorizonSelect/TradeHorizonSelect';
 import { getLotSize } from '@/services/optionChain';
-import { fetchQuotes } from '@/services/kiteApi';
 import { loadInstruments, getLotSizeByToken } from '@/services/instruments';
 import '@/styles/oihistory.css';
 import type { OiHistoryRow, FuturesHistoryRow, FetchProgress, SignalPerformanceSummary, TradeSetupStatus, StrikeHistoryEntry, OiCellData, OiTableRow, TradeSignalRow } from './types';
@@ -422,6 +424,8 @@ const OiHistory: React.FC = () => {
     }
   }, [scrip]);
 
+  const [tradeHorizon, setTradeHorizon] = useTradeHorizon();
+
   // Toast notifications for trade feedback
   const [toasts, setToasts] = useState<{ id: number; text: string; color: 'green' | 'red' }[]>([]);
   const toastIdRef = useRef(0);
@@ -446,33 +450,22 @@ const OiHistory: React.FC = () => {
     if (!token || !tradingsymbol || !historicalClose) return;
 
     try {
-      // Enter at the current live/last-traded price so the position opens near
-      // break-even, rather than the historical close from the OI-history grid
-      // (which can differ materially from the current market price).
-      let entryPrice = historicalClose;
-      try {
-        const quotes = await fetchQuotes([`NFO:${tradingsymbol}`]);
-        const ltp = quotes.get(`NFO:${tradingsymbol}`)?.last_price;
-        if (ltp && ltp > 0) entryPrice = ltp;
-      } catch {
-        // Quote unavailable — fall back to the historical close.
-      }
-
-      await addPosition({
+      // A market order: the server fills it at the live bid / ask, not the grid's historical close.
+      const placed = await placeMarketTrade({
         tradingsymbol,
         instrumentToken: token,
         strike,
         optionType,
         side,
         quantity: getLotSizeByToken(token) ?? getLotSize(token),
-        entryPrice,
         expiry,
+        horizon: tradeHorizon,
       });
-      showToast(`${side} ${strike}${optionType} @ ₹${entryPrice.toFixed(2)}`, 'green');
+      showToast(placedOrderMessage(placed, `${side} ${strike}${optionType}`), placedOrderRefused(placed) ? 'red' : 'green');
     } catch (err) {
       showToast(tradeErrorMessage(err), 'red');
     }
-  }, [showToast]);
+  }, [showToast, tradeHorizon]);
 
   /** Unique dates in the loaded data */
   const availableDates = useMemo(() => {
@@ -1221,6 +1214,11 @@ const OiHistory: React.FC = () => {
               ]}
               onChange={(v) => { const val = Number(v); setStrikeRange(val); localStorage.setItem('optiontrap_strike_range', String(val)); }}
             />
+          </label>
+
+          <label className="oi-history__label">
+            <span>Trade</span>
+            <TradeHorizonSelect value={tradeHorizon} onChange={setTradeHorizon} />
           </label>
 
           {strikeRange === -1 && (

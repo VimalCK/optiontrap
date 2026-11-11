@@ -1,10 +1,10 @@
 /**
  * OrderModalSwitch — the order panel's two-way choices (Paper / Live,
- * Market / Limit): one row of buttons, the chosen one highlighted.
+ * Market / Limit, Intraday / Positional): one row of buttons, the chosen one highlighted.
  */
 import React from 'react';
 
-export interface OrderModalSwitchProps<T extends string> {
+export interface OrderModalSwitchProps<T extends string | number> {
   /** Names the group for screen readers (e.g. "Order type"). */
   label: string;
   options: { value: T; label: string }[];
@@ -12,7 +12,7 @@ export interface OrderModalSwitchProps<T extends string> {
   onChange: (value: T) => void;
 }
 
-const OrderModalSwitch = <T extends string>({ label, options, value, onChange }: OrderModalSwitchProps<T>): React.ReactElement => (
+const OrderModalSwitch = <T extends string | number>({ label, options, value, onChange }: OrderModalSwitchProps<T>): React.ReactElement => (
   <div className="oc-order-modal__mode" role="group" aria-label={label}>
     {options.map((option) => (
       <button

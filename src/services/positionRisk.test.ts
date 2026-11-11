@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Position } from './positions';
 import { computeRiskGroups, samplePayoffCurve, underlyingFromSymbol } from './positionRisk';
+import { Horizon } from '../../shared/horizons.js';
 
 let nextToken = 1;
 const leg = (overrides: Partial<Position>): Position => ({
@@ -11,6 +12,7 @@ const leg = (overrides: Partial<Position>): Position => ({
   instrumentType: 'PE',
   exchange: 'NFO',
   source: 'manual',
+  horizon: Horizon.Intraday,
   strike: 22500,
   optionType: 'PE',
   side: 'BUY',

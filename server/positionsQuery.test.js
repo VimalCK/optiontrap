@@ -141,10 +141,10 @@ describe('buildPositionsQuery', () => {
 });
 
 describe('buildDailyPnlQuery', () => {
-  it('totals P&L and counts trades per IST exit day, newest first', () => {
+  it('totals P&L and charges and counts trades per IST exit day, newest first', () => {
     expect(buildDailyPnlQuery('U1', { mode: 'paper', from: '2026-10-01', to: '2026-10-31' })).toEqual({
       sql: "SELECT to_char((exit_time::timestamptz) AT TIME ZONE $5, 'YYYY-MM-DD') AS date, "
-        + `ROUND(SUM(${PNL})::numeric, 2) AS pnl, COUNT(*) AS trades `
+        + `ROUND(SUM(${PNL})::numeric, 2) AS pnl, ROUND(SUM(COALESCE(charges, 0))::numeric, 2) AS charges, COUNT(*) AS trades `
         + 'FROM positions WHERE user_id = $1 AND mode = $2 AND exited = 1 AND exit_price IS NOT NULL '
         + 'AND exit_time >= $3 AND exit_time < $4 GROUP BY 1 ORDER BY 1 DESC',
       params: ['U1', 'paper', OCT_1_IST, NOV_1_IST, 'Asia/Kolkata'],

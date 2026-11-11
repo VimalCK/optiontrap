@@ -1,10 +1,10 @@
 /**
  * Paper trade rules: the single list of checks a paper trade must pass before
- * it is opened or exited.
+ * it is opened or exited, or an order for one is placed.
  *
- * Everything that places or exits a paper trade goes through these: the
- * /api/positions routes (via server/paperTrading.js) today, and the trade
- * automation later. The browser can use them too, to check before asking.
+ * Everything that places or exits a paper trade goes through these: every
+ * order, manual or automated, through the trade engine's order service and
+ * server/tradeEngine/positions.js. The browser can use them too, to check before asking.
  * To change what's allowed, change this list; don't add checks in callers.
  *
  * A rule is { id, appliesTo, code, check }:
@@ -14,16 +14,24 @@
  *   check(ctx) returns null when the trade passes, or a message saying why not
  *
  * ctx for 'open': { trade, now }            trade from normalizeTradeInput
+ * ctx for 'place': { trade, now }           an order's trade (shared/paperOrders.js)
  * ctx for 'exit': { position, exitPrice, now }  position is the open position
+ * ctx for 'square-off': { position, exitPrice, now }  the engine closing an intraday position after its
+ *   session ended, at its last price after the close (server/tradeEngine/services/sessionSquareOff.js)
  */
 import { isMarketOpen } from './marketTime.js';
+import { Horizon, HORIZONS, isHorizon } from './horizons.js';
 
 /**
  * @typedef {{ trade?: any, position?: any, exitPrice?: unknown, now?: Date }} RuleContext
  * @typedef {{ id: string, appliesTo: string[], code: string, check: (ctx: RuleContext) => string | null }} PaperTradeRule
  */
 
-export const PAPER_TRADE_ACTIONS = ['open', 'exit'];
+/**
+ * open: a trade fills now; exit: a position closes now; place: an order is placed, to fill later or now;
+ * square-off: the engine closes a position its session left open, after the close, at the closing price.
+ */
+export const PAPER_TRADE_ACTIONS = ['open', 'exit', 'place', 'square-off'];
 
 /** Error codes a rule can report. */
 export const RULE_CODES = {
@@ -33,6 +41,8 @@ export const RULE_CODES = {
 
 export const MARKET_CLOSED_MESSAGE =
   'The market is closed. Paper trades can be placed and exited 9:15–15:30 IST on trading days.';
+export const INTRADAY_CLOSED_MESSAGE =
+  'The market is closed. Intraday orders can be placed 9:15–15:30 IST on trading days; positional orders at any time.';
 
 /**
  * What a position is in: CE / PE (options), FUT (futures), EQ (stocks).
@@ -70,6 +80,7 @@ export function normalizeTradeInput(input = /** @type {Record<string, any>} */ (
     entryPrice: num(input.entryPrice),
     expiry: input.expiry,
     mode: input.mode || 'paper',
+    horizon: input.horizon,
     note: input.note,
     targetPrice: input.targetPrice,
     stopLossPrice: input.stopLossPrice,
@@ -81,7 +92,7 @@ export function normalizeTradeInput(input = /** @type {Record<string, any>} */ (
 export const PAPER_TRADE_RULES = [
   {
     id: 'required-fields',
-    appliesTo: ['open'],
+    appliesTo: ['open', 'place'],
     code: RULE_CODES.INVALID_TRADE,
     check: ({ trade }) => {
       const { tradingsymbol, instrumentToken, side, quantity, entryPrice } = trade;
@@ -92,7 +103,7 @@ export const PAPER_TRADE_RULES = [
   {
     // Each instrument type carries exactly the fields it has.
     id: 'instrument-fields',
-    appliesTo: ['open'],
+    appliesTo: ['open', 'place'],
     code: RULE_CODES.INVALID_TRADE,
     check: ({ trade }) => {
       const { instrumentType, strike, optionType, expiry } = trade;
@@ -106,15 +117,24 @@ export const PAPER_TRADE_RULES = [
     },
   },
   {
+    // Intraday or positional: the trade monitor squares off only intraday
+    // positions, and trades merge only within the same horizon.
+    id: 'horizon-given',
+    appliesTo: ['open', 'place'],
+    code: RULE_CODES.INVALID_TRADE,
+    check: ({ trade }) => (isHorizon(trade.horizon) ? null : `Choose ${HORIZONS.map((h) => h.label).join(' or ')}`),
+  },
+  {
     id: 'exit-price-given',
-    appliesTo: ['exit'],
+    appliesTo: ['exit', 'square-off'],
     code: RULE_CODES.INVALID_TRADE,
     check: ({ exitPrice }) => (exitPrice == null ? 'exitPrice is required' : null),
   },
   {
     // Paper trades fill at the last traded price, which is stale while the
     // market is closed (that's how trades ended up dated on a Saturday).
-    // Live trades go through Kite and aren't limited here.
+    // Live trades go through Kite and aren't limited here. A square-off isn't
+    // covered: it is priced at the closing price on purpose, after the close.
     id: 'market-open',
     appliesTo: ['open', 'exit'],
     code: RULE_CODES.MARKET_CLOSED,
@@ -124,11 +144,23 @@ export const PAPER_TRADE_RULES = [
       return isMarketOpen(now) ? null : MARKET_CLOSED_MESSAGE;
     },
   },
+  {
+    // An intraday order is placed only while the market is open. A positional
+    // one can be placed at any time: it waits, and the order book fills it in
+    // market hours (a fill is an 'open', checked by market-open above).
+    id: 'intraday-market-hours',
+    appliesTo: ['place'],
+    code: RULE_CODES.MARKET_CLOSED,
+    check: ({ trade, now = new Date() }) => {
+      if (!isPaper(trade?.mode) || trade?.horizon !== Horizon.Intraday) return null;
+      return isMarketOpen(now) ? null : INTRADAY_CLOSED_MESSAGE;
+    },
+  },
 ];
 
 /**
  * Run every rule for `action`, in list order.
- * @param {'open' | 'exit'} action
+ * @param {'open' | 'exit' | 'place' | 'square-off'} action
  * @param {RuleContext} ctx see the file header
  * @param {PaperTradeRule[]} [rules] defaults to PAPER_TRADE_RULES
  * @returns {{ ok: true } | { ok: false, violations: { rule: string, code: string, message: string }[] }}

@@ -392,6 +392,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+/* Number columns (Qty, Entry, Exit, Charges, P&L) line up on the right. */
+.tj-table th.tj-num,
+.tj-table td.tj-num {
+  text-align: right;
+}
+
 .tj-table tbody tr:last-child td {
   border-bottom: none;
 }
@@ -440,7 +446,8 @@
   letter-spacing: 0;
 }
 
-.tj-group-pnl {
+.tj-group-pnl,
+.tj-group-charges {
   font-size: 12px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
@@ -469,6 +476,14 @@
 .tj-symbol {
   font-weight: 600;
   font-size: 11px;
+}
+
+/* The symbol with its Auto / Manual and Intraday / Positional labels, on one line. */
+.tj-symbol__line {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .tj-trade-meta {

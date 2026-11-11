@@ -17,6 +17,7 @@ import FormFooter from '@/components/FormFooter/FormFooter';
 import TabBar from '@/components/TabBar/TabBar';
 import { AutomationConfig, fetchAutomationConfig, saveAutomationConfig } from '@/services/automation';
 import { isAbortError } from '@/services/apiClient';
+import { useStrategies } from '@/hooks/useStrategies';
 import '@/styles/analytics.css'; // reuse the shared tab-bar CSS
 import '@/styles/automation.css';
 
@@ -35,6 +36,8 @@ const AutomationSettings: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const { strategies, error: strategiesError } = useStrategies();
+  const error = loadError ?? strategiesError;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -73,11 +76,12 @@ const AutomationSettings: React.FC = () => {
 
       <section className="card automation-settings__card">
         <div className="automation-settings__body">
-          {loadError && <p className="automation-message automation-message--error">{loadError}</p>}
-          {!config && !loadError && <p className="card__description">Loading…</p>}
-          {config && (
+          {error && <p className="automation-message automation-message--error">{error}</p>}
+          {(!config || !strategies) && !error && <p className="card__description">Loading…</p>}
+          {config && strategies && (
             <AutomationConfigForm
               config={config}
+              strategies={strategies}
               section={section}
               onChange={(next) => { setConfig(next); setSaveError(null); setSaved(false); }}
             />

@@ -62,16 +62,16 @@ import {
   triggerPriceAlert,
   resetPriceAlert,
   deletePriceAlert,
-  getAutomationConfig,
-  saveAutomationConfig,
   getAutoTrades,
   getAutoTradeResults,
-  getPaperOrders,
+  getOrders,
+  getUserOpenOrders,
   getPositions,
   getDailyPnl,
   getPositionStats,
   getTodayOiSnapshots,
   getLatestOiSnapshotTimestamp,
+  getNewestOiSnapshotTimestamp,
   getOiHistoryDataByExpiryMonth,
   getOiHistoryFuturesData,
   saveTradeSetupSignal,
@@ -103,17 +103,17 @@ import { cached } from './cache.js';
 import { getOrFetchInstruments } from './instruments.js';
 import { fetchOiHistoryMonth, OiHistoryFetchError, todayIST } from './oiHistoryFetch.js';
 import { OI_HISTORY_JOB, startOiHistoryScheduler } from './oiHistoryScheduler.js';
-import { onScheduledSnapshot, startOiSnapshotScheduler, watchOiSnapshotSymbol } from './oiSnapshotScheduler.js';
+import { startOiSnapshotScheduler, watchOiSnapshotSymbol } from './oiSnapshotScheduler.js';
 import { startInstrumentSync } from './instrumentSyncScheduler.js';
 import { checkSubscriptionAccess, inactiveSubscription } from './subscriptionAccess.js';
 import { backfillStockSetups, candleSyncWarning, scanStock, syncStockCandles } from './stockCandles.js';
 import { startStockSetupScheduler } from './stockSetupScheduler.js';
 import { NIGHTLY_JOB_PREFIX, nightlyJobsStatus, startNightlyJobs } from './nightlyJobs.js';
-import { autoTradeMonitorStatus, refreshAutoTradeMonitor, startAutoTradeMonitor } from './autoTradeMonitor.js';
-import { autoTradeEngineStatus, startAutoTradeEngine } from './autoTradeEngine.js';
-import { nightlyJobsHealth, tradeEngineHealth, tradeMonitorHealth, unreadableHealth } from './serviceHealth.js';
+import { tradeEngine } from './tradeEngine/index.js';
+import { getAutomationConfig, saveAutomationConfig } from './tradeEngine/automationConfigs.js';
+import { strategyInfos } from './tradeEngine/strategies/index.js';
+import { nightlyJobsHealth, tradeEngineHealth, unreadableHealth } from './serviceHealth.js';
 import { parseDailyPnlQuery, parsePositionsQuery, parseRange, parseStatsQuery } from './positionsQuery.js';
-import { exitPaperTrade, openPaperTrade } from './paperTrading.js';
 import { catchAsyncErrors, sendFailure, sendServerError } from './asyncRoutes.js';
 import { securityHeaders } from './securityHeaders.js';
 import { startLoggedInSession } from './loginSession.js';
@@ -125,7 +125,6 @@ import { resolveSessionSecret } from './sessionSecret.js';
 import { createConcurrencyLimit } from './concurrencyLimit.js';
 import { allowOnlyKnownKiteCalls } from './kiteProxyAllowlist.js';
 import { MAX_CLIENT_MESSAGE_BYTES, MAX_CONNECTIONS_PER_USER } from './wsLimits.js';
-import { cancelLimitOrder, placeLimitOrder, startPaperOrderBook } from './paperOrderBook.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -635,7 +634,7 @@ app.get('/api/admin/health', requireAuth, requireAdmin, async (req, res) => {
   const [usage, feedback, lastOi, nightly] = await Promise.allSettled([
     getUsageStats(),
     getFeedbackCounts(),
-    getLatestOiSnapshotTimestamp(),
+    getNewestOiSnapshotTimestamp(),
     nightlyJobsStatus(),
   ]);
 
@@ -656,8 +655,7 @@ app.get('/api/admin/health', requireAuth, requireAdmin, async (req, res) => {
       usage: val(usage, { activeSessions: 0, totalUsers: 0 }),
       feedback: val(feedback, { total: 0, open: 0 }),
       checks: {
-        tradeEngine: tradeEngineHealth(autoTradeEngineStatus()),
-        tradeMonitor: tradeMonitorHealth(autoTradeMonitorStatus()),
+        tradeEngine: tradeEngineHealth(tradeEngine.status()),
         nightlyJobs: nightly.status === 'fulfilled' ? nightlyJobsHealth(nightly.value) : unreadableHealth('job runs', nightly.reason),
       },
       server: {
@@ -828,11 +826,16 @@ app.get('/api/automation/config', requireAuth, requireSubscription, async (req, 
 
 app.put('/api/automation/config', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
-  const { config, error } = parseAutomationConfig(req.body);
+  const { config, error } = parseAutomationConfig(req.body, strategyInfos());
   if (error) return res.status(400).json({ status: 'error', message: error });
   const saved = await saveAutomationConfig(userId, config);
-  refreshAutoTradeMonitor(userId); // new exit rules apply from the next tick
+  await tradeEngine.services.tradeMonitor.refreshUser(userId); // new exit rules apply from the next tick
   res.json({ status: 'ok', data: saved });
+});
+
+// The trade engine's strategies, as the Automation page shows and configures them.
+app.get('/api/strategies', requireAuth, requireSubscription, (req, res) => {
+  res.json({ status: 'ok', data: strategyInfos() });
 });
 
 // The automated trades created in ?from=…&to=… (market days, both required), each with its lifecycle.
@@ -923,63 +926,57 @@ app.get('/api/positions/stats', requireAuth, requireSubscription, async (req, re
   res.json({ status: 'ok', data: await getPositionStats(userId, filter) });
 });
 
-// Paper trades are opened and exited only through server/paperTrading.js,
-// which applies shared/paperTradeRules.js; the automation uses the same calls.
-// NO_PRICE: Kite gave no last price to decide a limit order against.
-const PAPER_TRADE_HTTP_STATUS = { INVALID_TRADE: 400, MARKET_CLOSED: 409, NOT_FOUND: 404, NO_PRICE: 502 };
+// ---------- Orders (the trade engine's order service, server/tradeEngine/services/orders.js) ----------
 
-const sendPaperTradeResult = (res, result) => {
-  if (result.ok) return res.json({ status: 'ok', data: result.position });
-  return res.status(PAPER_TRADE_HTTP_STATUS[result.code] ?? 400)
-    .json({ status: 'error', code: result.code, message: result.message });
-};
-
-// A market order: it fills at the bid / ask from a quote with the user's own Kite session (entryPrice
-// only when the quote has none), as on Zerodha.
-app.post('/api/positions', requireAuth, requireSubscription, async (req, res) => {
-  const { userId } = req.session.kiteSession;
-  sendPaperTradeResult(res, await openPaperTrade(userId, req.body || {}, { fillFrom: req.session.kiteSession }));
-});
-
-// Exit an open position (the only change a position takes), as a market order: at the bid / ask,
-// or exitPrice when the quote has none. It records the position's charges.
-app.patch('/api/positions/:id', requireAuth, requireSubscription, async (req, res) => {
-  const { userId } = req.session.kiteSession;
-  sendPaperTradeResult(res, await exitPaperTrade(userId, req.params.id, req.body?.exitPrice, { fillFrom: req.session.kiteSession }));
-  refreshAutoTradeMonitor(userId); // stop watching it if it was automated
-});
-
-// ---------- Paper limit orders (see server/paperOrderBook.js) ----------
+// Every paper trade, manual or automated, entry or exit, is an order through the order
+// service, which applies shared/paperOrders.js and shared/paperTradeRules.js.
+// NO_PRICE: Kite gave no last price to price the order with.
+const ORDER_HTTP_STATUS = { INVALID_TRADE: 400, MARKET_CLOSED: 409, NOT_FOUND: 404, NO_PRICE: 502 };
 
 /** Reply with an order result: the order, or the refusal with its status. */
 const sendOrderResult = (res, result, okStatus = 200) => {
   if (result.ok) return res.status(okStatus).json({ status: 'ok', data: result.order });
-  return res.status(PAPER_TRADE_HTTP_STATUS[result.code] ?? 400)
+  return res.status(ORDER_HTTP_STATUS[result.code] ?? 400)
     .json({ status: 'error', code: result.code, message: result.message });
 };
 
-// The user's limit orders placed in ?from=…&to=… (market days, both required), newest first.
-app.get('/api/paper-orders', requireAuth, requireSubscription, async (req, res) => {
+// The user's orders, newest first: ?status=open for every open one (whenever it
+// was placed), else those placed in ?from=…&to=… (market days, both required).
+app.get('/api/orders', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
+  if (req.query.status !== undefined) {
+    if (req.query.status !== 'open') return res.status(400).json({ status: 'error', message: "status must be 'open'" });
+    return res.json({ status: 'ok', data: await getUserOpenOrders(userId) });
+  }
   const range = parseRange(req.query.from, req.query.to, { required: true });
   if (range.error) return res.status(400).json({ status: 'error', message: range.error });
-  res.json({ status: 'ok', data: await getPaperOrders(userId, range) });
+  res.json({ status: 'ok', data: await getOrders(userId, range) });
 });
 
-// Place a limit order: 201 with the order, filled at once when the last price allows, else open.
-app.post('/api/paper-orders', requireAuth, requireSubscription, async (req, res) => {
+// Place an order: 201 with the order. A body with positionId exits that open position: a
+// market order for its whole quantity, filled at once at the bid / ask (exitPrice when the
+// quote has none), recording the position's charges. Otherwise a limit or market order,
+// filled at once when it can fill now (market hours only), else open; positional orders can
+// be placed while the market is closed. Quotes use the user's own Kite session.
+app.post('/api/orders', requireAuth, requireSubscription, async (req, res) => {
   const { userId, apiKey, accessToken } = req.session.kiteSession;
+  const body = req.body || {};
+  const kite = { apiKey, accessToken };
+  const { orders } = tradeEngine.services;
   try {
-    sendOrderResult(res, await placeLimitOrder(userId, req.body || {}, { apiKey, accessToken }), 201);
+    const result = body.positionId !== undefined
+      ? await orders.exit(userId, String(body.positionId), { exitPrice: body.exitPrice, kite })
+      : await orders.place(userId, body, kite);
+    sendOrderResult(res, result, 201);
   } catch (err) {
-    sendFailure(res, err, { log: '[Paper Orders] POST error', message: 'Failed to place the order' });
+    sendFailure(res, err, { log: '[Orders] POST error', message: 'Failed to place the order' });
   }
 });
 
 // Cancel an open order: the only change an order takes, { status: 'cancelled' }.
-app.patch('/api/paper-orders/:id', requireAuth, requireSubscription, async (req, res) => {
+app.patch('/api/orders/:id', requireAuth, requireSubscription, async (req, res) => {
   if (req.body?.status !== 'cancelled') return res.status(400).json({ status: 'error', message: "status must be 'cancelled'" });
-  sendOrderResult(res, await cancelLimitOrder(req.session.kiteSession.userId, req.params.id));
+  sendOrderResult(res, await tradeEngine.services.orders.cancel(req.session.kiteSession.userId, req.params.id));
 });
 
 // ---------- OI Snapshots (shared) ----------
@@ -1654,12 +1651,9 @@ async function start() {
   startStockSetupScheduler();
   // Run every file in server/jobs/nightly/ from 08:30 IST (at startup if that time has passed).
   startNightlyJobs();
-  // Close open automated positions when their exit rules fire, on live ticks in market hours.
-  startAutoTradeMonitor();
-  // Turn active strategies' signals into automated paper trades after each scheduled snapshot.
-  startAutoTradeEngine(onScheduledSnapshot);
-  // Fill paper limit orders on live ticks in market hours; cancel the open ones at the close.
-  startPaperOrderBook();
+  // The trade engine: fills and cancels orders, runs the strategies and turns their signals
+  // into automated paper trades, and exits automated positions when their exit rules fire.
+  tradeEngine.start();
 
   server.listen(PORT, () => {
     console.log(`${ts()} ${GREEN}Server${RESET} OptionTrap running on port ${PORT}`);

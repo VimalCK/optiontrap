@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest';
-import { optionAnalyzerSetups, underlyingSetups } from './optionAnalyzerSetups.js';
+import { describe, it, expect, vi } from 'vitest';
+
+// Keep the real database, Kite session lookup and instrument list out of the default dependencies.
+vi.mock('../../db.js', () => ({ getLatestOiSnapshotTimestamp: vi.fn(), getTodayOiSnapshots: vi.fn(), getUnderlyings: vi.fn() }));
+vi.mock('../../oiHistoryScheduler.js', () => ({ findWorkingAdminSession: vi.fn() }));
+vi.mock('../../instruments.js', () => ({ getOrFetchInstruments: vi.fn() }));
+
+const { createOptionAnalyzerSetups, optionAnalyzerSetups, underlyingSetups } = await import('./optionAnalyzerSetups.js');
 
 const NOON = new Date('2026-11-05T06:30:00Z'); // Thu 12:00 IST
 const SPOT_TOKEN = 900;
@@ -101,5 +107,74 @@ describe('optionAnalyzerSetups', () => {
       underlyings: [...input.underlyings, { name: 'NO-OPTIONS', instrumentToken: 77, isIndex: false }, { name: 'X2', instrumentToken: null, isIndex: false }],
     });
     expect(setups).toEqual(underlyingSetups({ name: 'X', instrumentToken: SPOT_TOKEN }, nearest, input));
+  });
+});
+
+describe('optionAnalyzerSetups running on the market clock', () => {
+  const ADMIN_KITE = { apiKey: 'key', accessToken: 'token' };
+
+  /** A strategy on a fake market clock and signals service, with the latest snapshot time to change. */
+  function setup({ kite = ADMIN_KITE } = {}) {
+    const state = { latest: 1000 };
+    const db = {
+      getLatestOiSnapshotTimestamp: vi.fn(async () => state.latest),
+      getTodayOiSnapshots: vi.fn(async () => snapshots),
+      getUnderlyings: vi.fn(async () => input.underlyings),
+    };
+    const loadInstruments = vi.fn(async () => options);
+    const strategy = createOptionAnalyzerSetups({ db, findKiteSession: async () => kite, loadInstruments, clock: () => NOON });
+    const handlers = { open: [], every: [] };
+    const submit = vi.fn(async () => {});
+    const logs = [];
+    strategy.start({
+      market: { isOpen: () => true, onOpen: (fn) => handlers.open.push(fn), onClose: () => () => {}, every: (ms, fn) => handlers.every.push({ ms, fn }) },
+      services: { signals: { submit } },
+      log: (event, details) => logs.push([event, details]),
+    });
+    return {
+      state, submit, logs, loadInstruments,
+      open: () => Promise.all(handlers.open.map((fn) => fn())),
+      check: () => Promise.all(handlers.every.map(({ fn }) => fn())),
+      interval: handlers.every[0].ms,
+    };
+  }
+
+  it('looks for a new snapshot every 30 seconds', () => {
+    expect(setup().interval).toBe(30_000);
+  });
+
+  it('marks the latest snapshot seen at the open, so a restart never trades it again', async () => {
+    const run = setup();
+    await run.open();
+    await run.check();
+    expect(run.submit).not.toHaveBeenCalled();
+  });
+
+  it('scores each new snapshot once and hands it to the signals service, with its id', async () => {
+    const run = setup();
+    await run.open();
+    run.state.latest = 2000;
+    await run.check();
+    await run.check();
+    expect(run.submit).toHaveBeenCalledTimes(1);
+    expect(run.submit).toHaveBeenCalledWith('option-analyzer-setups', optionAnalyzerSetups.prepare(input));
+    expect(run.loadInstruments).toHaveBeenCalledWith('key', 'token');
+  });
+
+  it('does nothing before the first snapshot of the day', async () => {
+    const run = setup();
+    run.state.latest = null;
+    await run.open();
+    await run.check();
+    expect(run.submit).not.toHaveBeenCalled();
+  });
+
+  it('skips a new snapshot, logging why, when no admin is logged in to Kite for the instrument list', async () => {
+    const run = setup({ kite: null });
+    await run.open();
+    run.state.latest = 2000;
+    await run.check();
+    expect(run.submit).not.toHaveBeenCalled();
+    expect(run.logs).toEqual([['skipped snapshot', { reason: 'no admin Kite login for the instrument list' }]]);
   });
 });

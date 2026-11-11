@@ -18,9 +18,9 @@ import { fileURLToPath } from 'url';
 import pg from 'pg';
 import { MARKET_TIME_ZONE, addDays, marketDateTime, marketDayStartMs } from '../shared/marketTime.js';
 import { buildDailyPnlQuery, buildPositionsQuery, buildStatsQueries } from './positionsQuery.js';
-import { withDefaults } from '../shared/automation.js';
 import { MAX_DRAWDOWN_SQL, RESULTS_SQL, resultsParams, toResults } from './autoTradeResults.js';
 import { roundTripCharges } from '../shared/paperCharges.js';
+import { Horizon } from '../shared/horizons.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
@@ -211,6 +211,49 @@ export function advisoryLockKey(value) {
  */
 export async function withNamedAdvisoryLock(name, fn) {
   return withAdvisoryLock(advisoryLockKey(name), fn);
+}
+
+/**
+ * Take a named advisory lock for as long as this process wants it (the trade
+ * engine: one running engine across servers), on a connection of its own.
+ * Returns null when another process holds it. `onLost` is called if the
+ * connection drops, which frees the lock for another process.
+ * @param {string} name
+ * @param {() => void} onLost
+ * @returns {Promise<{ release: () => Promise<void> } | null>}
+ */
+export async function tryHoldNamedAdvisoryLock(name, onLost) {
+  if (!pool) throw new Error('Database not initialised');
+  const key = advisoryLockKey(name);
+  const client = await pool.connect();
+  try {
+    const { rows: [{ held }] } = await client.query('SELECT pg_try_advisory_lock($1) AS held', [key]);
+    if (!held) {
+      client.release();
+      return null;
+    }
+  } catch (err) {
+    client.release();
+    throw err;
+  }
+  let released = false;
+  client.on('error', () => {
+    if (released) return;
+    released = true;
+    client.release(true);
+    onLost();
+  });
+  return {
+    async release() {
+      if (released) return;
+      released = true;
+      try {
+        await client.query('SELECT pg_advisory_unlock($1)', [key]);
+      } finally {
+        client.release();
+      }
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -919,53 +962,54 @@ export async function deletePriceAlert(id, userId) {
 }
 
 // ---------------------------------------------------------------------------
-// Trade automation (per user; see shared/automation.js)
+// Trade automation (per user; see shared/automation.js). These return the
+// configuration as stored; server/tradeEngine/automationConfigs.js completes it
+// with the defaults.
 // ---------------------------------------------------------------------------
 
-/** The user's automation configuration, or the defaults if none is saved. */
-export async function getAutomationConfig(userId) {
-  const row = await firstRow('SELECT config FROM automation_configs WHERE user_id = $1', [userId]);
-  return withDefaults(row?.config);
+/** The user's stored automation configuration, or undefined if none is saved. */
+export async function getStoredAutomationConfig(userId) {
+  const row = await firstRow('SELECT config FROM algo_configuration WHERE user_id = $1', [userId]);
+  return row?.config;
 }
 
-/** Store a configuration already checked by parseAutomationConfig. */
-export async function saveAutomationConfig(userId, config) {
+/** Store a configuration already checked by parseAutomationConfig, returning it as stored. */
+export async function storeAutomationConfig(userId, config) {
   const row = await firstRow(
-    `INSERT INTO automation_configs (user_id, config, updated_at) VALUES ($1, $2, now())
+    `INSERT INTO algo_configuration (user_id, config, updated_at) VALUES ($1, $2, now())
      ON CONFLICT (user_id) DO UPDATE SET config = EXCLUDED.config, updated_at = now()
      RETURNING config`,
     [userId, JSON.stringify(config)],
   );
-  return withDefaults(row.config);
+  return row.config;
 }
 
 /**
- * The automation configurations of these users (defaults for those who saved
- * none), by user id. Served by the automation_configs primary key.
+ * The stored automation configurations of these users who saved one, by user
+ * id. Served by the algo_configuration primary key.
  * @param {string[]} userIds
- * @returns {Promise<Map<string, import('../shared/automation.js').AutomationConfig>>}
+ * @returns {Promise<Map<string, any>>}
  */
-export async function getAutomationConfigs(userIds) {
-  const result = await rows('SELECT user_id, config FROM automation_configs WHERE user_id = ANY($1)', [userIds]);
-  const stored = new Map(result.map((row) => [row.user_id, row.config]));
-  return new Map(userIds.map((userId) => [userId, withDefaults(stored.get(userId))]));
+export async function getStoredAutomationConfigs(userIds) {
+  const result = await rows('SELECT user_id, config FROM algo_configuration WHERE user_id = ANY($1)', [userIds]);
+  return new Map(result.map((row) => [row.user_id, row.config]));
 }
 
 /**
- * Users with automation switched on, each with their configuration, for the
- * trade engine. Served by automation_configs_enabled_idx.
- * @returns {Promise<{ userId: string, config: import('../shared/automation.js').AutomationConfig }[]>}
+ * Users with automation switched on, each with their stored configuration, for
+ * the trade engine. Served by algo_configuration_enabled_idx.
+ * @returns {Promise<{ userId: string, config: any }[]>}
  */
-export async function getAutomatedUsers() {
-  const result = await rows("SELECT user_id, config FROM automation_configs WHERE (config->>'enabled') = 'true'");
-  return result.map((row) => ({ userId: row.user_id, config: withDefaults(row.config) }));
+export async function getStoredAutomatedUsers() {
+  const result = await rows("SELECT user_id, config FROM algo_configuration WHERE (config->>'enabled') = 'true'");
+  return result.map((row) => ({ userId: row.user_id, config: row.config }));
 }
 
 /**
  * Record a newly selected automated trade (stage 'selected') with its first
  * event, in one transaction. Returns the new trade's id.
  * @param {string} userId
- * @param {{ horizon: string, kind: string, mode: string, tradingsymbol: string, instrumentToken: number, side: string, quantity: number }} trade
+ * @param {{ horizon: import('../shared/horizons.js').HorizonId, kind: string, mode: string, tradingsymbol: string, instrumentToken: number, side: string, quantity: number }} trade
  * @param {{ strategyId: string, setup?: string | null, reason: string }} detail  why it was selected; the
  *   strategy and setup are also kept as columns, for Win/Loss Patterns
  * @returns {Promise<string>}
@@ -976,12 +1020,12 @@ export async function createAutoTrade(userId, trade, detail) {
   try {
     await client.query('BEGIN');
     await client.query(
-      `INSERT INTO auto_trades (id, user_id, horizon, kind, mode, tradingsymbol, instrument_token, side, quantity, stage, strategy_id, setup)
+      `INSERT INTO algo_trades (id, user_id, horizon, kind, mode, tradingsymbol, instrument_token, side, quantity, stage, strategy_id, setup)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'selected', $10, $11)`,
       [id, userId, trade.horizon, trade.kind, trade.mode, trade.tradingsymbol, trade.instrumentToken, trade.side, trade.quantity,
         detail.strategyId, detail.setup ?? null],
     );
-    await client.query("INSERT INTO auto_trade_events (auto_trade_id, stage, detail) VALUES ($1, 'selected', $2)", [id, JSON.stringify(detail)]);
+    await client.query("INSERT INTO algo_trade_events (algo_trade_id, stage, detail) VALUES ($1, 'selected', $2)", [id, JSON.stringify(detail)]);
     await client.query('COMMIT');
     return id;
   } catch (err) {
@@ -997,7 +1041,7 @@ export async function createAutoTrade(userId, trade, detail) {
  * event, in one transaction. Only a trade still at `from` moves, so a stage
  * is never skipped or applied twice (the allowed moves are canMoveTo in
  * shared/automation.js). Optionally sets the reason, entry price and position.
- * Returns whether it moved. Served by the auto_trades primary key.
+ * Returns whether it moved. Served by the algo_trades primary key.
  * @param {string} userId
  * @param {string} id
  * @param {string} from
@@ -1010,13 +1054,13 @@ export async function advanceAutoTrade(userId, id, from, to, fields, detail) {
   try {
     await client.query('BEGIN');
     const moved = await client.query(
-      `UPDATE auto_trades SET stage = $4, reason = COALESCE($5, reason), entry_price = COALESCE($6, entry_price),
+      `UPDATE algo_trades SET stage = $4, reason = COALESCE($5, reason), entry_price = COALESCE($6, entry_price),
          position_id = COALESCE($7, position_id), updated_at = now()
        WHERE id = $1 AND user_id = $2 AND stage = $3`,
       [id, userId, from, to, fields.reason ?? null, fields.entryPrice ?? null, fields.positionId ?? null],
     );
     if (moved.rowCount > 0) {
-      await client.query('INSERT INTO auto_trade_events (auto_trade_id, stage, detail) VALUES ($1, $2, $3)', [id, to, JSON.stringify(detail)]);
+      await client.query('INSERT INTO algo_trade_events (algo_trade_id, stage, detail) VALUES ($1, $2, $3)', [id, to, JSON.stringify(detail)]);
     }
     await client.query('COMMIT');
     return moved.rowCount > 0;
@@ -1064,6 +1108,20 @@ export async function getTodayAutoExits(userId, todayStart) {
   return result.map((row) => ({ instrumentToken: Number(row.instrument_token), exitTime: new Date(row.exit_time) }));
 }
 
+/**
+ * Every user's open intraday paper positions opened before `before` (sessions
+ * that have ended), oldest first, for the session square-off. Served by
+ * positions_open_intraday_idx.
+ * @param {string} before  ISO timestamp
+ */
+export async function getOpenIntradayPositionsBefore(before) {
+  const result = await rows(
+    'SELECT * FROM positions WHERE exited = 0 AND mode = $1 AND horizon = $2 AND entry_time < $3 ORDER BY entry_time',
+    ['paper', Horizon.Intraday, before],
+  );
+  return result.map(mapPositionRow);
+}
+
 /** Every user's open automated paper positions, for the trade monitor. Served by positions_open_auto_idx. */
 export async function getAllOpenAutoPositions() {
   const result = await rows("SELECT * FROM positions WHERE source = 'auto' AND exited = 0 AND mode = 'paper'");
@@ -1085,7 +1143,7 @@ export async function getOpenAutoPositions(userId) {
  * why (`detail`; its ruleId is kept as exit_rule_id), and its own charges:
  * its entry and exit at its own prices (shared/paperCharges.js), since merged
  * trades share one position at the average price. One transaction, so a trade
- * is never closed without its event. Served by auto_trades_position_idx.
+ * is never closed without its event. Served by algo_trades_position_idx.
  * Returns the ids closed.
  * @param {string} userId
  * @param {{ id: string, instrumentType: string }} position  the position just exited
@@ -1099,7 +1157,7 @@ export async function closeAutoTradesOfPosition(userId, position, exitPrice, det
   try {
     await client.query('BEGIN');
     const open = await client.query(
-      `SELECT id, side, quantity, entry_price, created_at FROM auto_trades
+      `SELECT id, side, quantity, entry_price, created_at FROM algo_trades
        WHERE position_id = $1 AND user_id = $2 AND stage = 'executed'
        FOR UPDATE`,
       [position.id, userId],
@@ -1112,7 +1170,7 @@ export async function closeAutoTradesOfPosition(userId, position, exitPrice, det
       entryTime: row.created_at,
     }, exitPrice, exitTime).total);
     const closed = await client.query(
-      `UPDATE auto_trades t SET stage = 'closed', exit_price = $3, reason = $4, exit_rule_id = $5, charges = c.charges, updated_at = now()
+      `UPDATE algo_trades t SET stage = 'closed', exit_price = $3, reason = $4, exit_rule_id = $5, charges = c.charges, updated_at = now()
        FROM unnest($6::text[], $7::numeric[]) AS c (id, charges)
        WHERE t.id = c.id AND t.position_id = $1 AND t.user_id = $2 AND t.stage = 'executed'
        RETURNING t.id`,
@@ -1121,7 +1179,7 @@ export async function closeAutoTradesOfPosition(userId, position, exitPrice, det
     const ids = closed.rows.map((row) => row.id);
     if (ids.length > 0) {
       await client.query(
-        `INSERT INTO auto_trade_events (auto_trade_id, stage, detail)
+        `INSERT INTO algo_trade_events (algo_trade_id, stage, detail)
          SELECT id, 'closed', $2 FROM unnest($1::text[]) AS id`,
         [ids, JSON.stringify({ ...detail, exitPrice })],
       );
@@ -1162,14 +1220,14 @@ function toAutoTrade(row) {
 /**
  * The user's automated trades created from `from` to `to` (market days,
  * inclusive), newest first, each with its lifecycle events in order. Served by
- * auto_trades_user_created_idx (user_id, created_at DESC).
+ * algo_trades_user_created_idx (user_id, created_at DESC).
  */
 export async function getAutoTrades(userId, { from, to }) {
   const result = await rows(
     `SELECT t.*,
        COALESCE((SELECT json_agg(json_build_object('stage', e.stage, 'at', e.at, 'detail', e.detail) ORDER BY e.at, e.id)
-                 FROM auto_trade_events e WHERE e.auto_trade_id = t.id), '[]'::json) AS events
-     FROM auto_trades t
+                 FROM algo_trade_events e WHERE e.algo_trade_id = t.id), '[]'::json) AS events
+     FROM algo_trades t
      WHERE t.user_id = $1 AND t.created_at >= $2 AND t.created_at < $3
      ORDER BY t.created_at DESC`,
     [userId, marketDateTime(from).toISOString(), marketDateTime(addDays(to, 1)).toISOString()],
@@ -1180,7 +1238,7 @@ export async function getAutoTrades(userId, { from, to }) {
 /**
  * Win/Loss Patterns: the user's closed automated trades entered from `from`
  * to `to` (market days, inclusive), measured and grouped in SQL
- * (server/autoTradeResults.js). Served by auto_trades_user_closed_idx.
+ * (server/autoTradeResults.js). Served by algo_trades_user_closed_idx.
  */
 export async function getAutoTradeResults(userId, range) {
   const params = resultsParams(userId, range);
@@ -1365,7 +1423,7 @@ export async function getPositions(userId, filter = {}) {
 export async function getDailyPnl(userId, filter) {
   const { sql, params } = buildDailyPnlQuery(userId, filter);
   const result = await rows(sql, params);
-  return result.map((row) => ({ date: row.date, pnl: Number(row.pnl), trades: Number(row.trades) }));
+  return result.map((row) => ({ date: row.date, pnl: Number(row.pnl), charges: Number(row.charges), trades: Number(row.trades) }));
 }
 
 /** All-time win/loss figures over a user's exited positions. */
@@ -1399,6 +1457,7 @@ function mapPositionRow(row) {
     instrumentType: row.instrument_type,
     exchange: row.exchange,
     source: row.source,
+    horizon: row.horizon,
     strike: row.strike,
     optionType: row.option_type,
     side: row.side,
@@ -1469,19 +1528,20 @@ async function insertPosition(userId, mode, position, quantity, now) {
   const { strike, optionType, expiry } = instrumentColumns(position);
   const row = await firstRow(
     `INSERT INTO positions (id, user_id, mode, source, tradingsymbol, instrument_token, instrument_type, exchange, strike, option_type,
-       side, quantity, entry_price, entry_time, expiry, note, target_price, stop_loss_price, confidence)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+       side, quantity, entry_price, entry_time, expiry, note, target_price, stop_loss_price, confidence, horizon)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
      RETURNING *`,
     [crypto.randomUUID(), userId, mode, position.source || 'manual', position.tradingsymbol, position.instrumentToken,
      position.instrumentType, position.exchange, strike, optionType, position.side, quantity, position.entryPrice, now, expiry,
-     ...positionMetaValues(position)],
+     ...positionMetaValues(position), position.horizon],
   );
   return mapPositionRow(row);
 }
 
 /**
  * Open a position. A trade merges with the user's open position in the same
- * instrument from the same source: the same side averages in, the opposite
+ * instrument from the same source and of the same horizon (intraday or
+ * positional, shared/horizons.js): the same side averages in, the opposite
  * side nets out. Manual trades merge with manual positions and automated
  * trades (source 'auto') with automated ones, so 100 bought by the automation
  * then 500 more shows as one automated position of 600, and the automation
@@ -1494,8 +1554,8 @@ export async function addPosition(userId, position) {
 
   const openSameSource = (side) => firstRow(
     `SELECT * FROM positions
-     WHERE user_id = $1 AND mode = $2 AND instrument_token = $3 AND side = $4 AND exited = 0 AND source = $5`,
-    [userId, mode, position.instrumentToken, side, source],
+     WHERE user_id = $1 AND mode = $2 AND instrument_token = $3 AND side = $4 AND exited = 0 AND source = $5 AND horizon = $6`,
+    [userId, mode, position.instrumentToken, side, source, position.horizon],
   );
 
   // Same-side existing → average in
@@ -1563,19 +1623,19 @@ export async function getOpenPosition(id, userId) {
  * Exit one of a user's open positions at `exitPrice`, with its charges.
  * Returns the exited position, or null if it is not open (any more).
  */
-export async function exitPositionById(id, userId, exitPrice) {
+export async function exitPositionById(id, userId, exitPrice, exitTime = new Date()) {
   const row = await firstRow('SELECT * FROM positions WHERE id = $1 AND user_id = $2 AND exited = 0', [id, userId]);
   if (!row) return null;
-  const closed = await closePositionRow(row, exitPrice, new Date().toISOString());
+  const closed = await closePositionRow(row, exitPrice, exitTime.toISOString());
   return closed ? mapPositionRow(closed) : null;
 }
 
 // ---------------------------------------------------------------------------
-// Paper limit orders (see shared/paperOrders.js and server/paperOrderBook.js)
+// Orders (see shared/paperOrders.js and server/tradeEngine/services/orders.js)
 // ---------------------------------------------------------------------------
 
-/** A paper_orders row as the app's order object. */
-function toPaperOrder(row) {
+/** An orders row as the app's order object. */
+function toOrder(row) {
   return {
     id: row.id,
     userId: row.user_id,
@@ -1588,6 +1648,8 @@ function toPaperOrder(row) {
     expiry: row.expiry,
     side: row.side,
     quantity: Number(row.quantity),
+    orderType: row.order_type,
+    /** null for a market order. */
     limitPrice: row.limit_price,
     note: row.note || '',
     targetPrice: row.target_price,
@@ -1596,68 +1658,106 @@ function toPaperOrder(row) {
     status: row.status,
     statusReason: row.status_reason,
     fillPrice: row.fill_price,
+    /** The position it opened or added to; for a closing order, the position it closed. */
     positionId: row.position_id,
+    /** Whether it closes a position (an exit) rather than opening or adding to one. */
+    closesPosition: row.closes_position,
     source: row.source,
-    autoTradeId: row.auto_trade_id,
+    horizon: row.horizon,
+    autoTradeId: row.algo_trade_id,
     createdAt: row.created_at.toISOString(),
     updatedAt: row.updated_at.toISOString(),
   };
 }
 
 /**
- * Record a new open limit order for the user and return it. Who placed it is
- * set by the caller, never read from the order: by hand ('manual'), or by the
- * trade engine for an automated trade ('auto', with that trade's id).
+ * Record a new open order (limit or market) for the user and return it. Who
+ * placed it is set by the caller, never read from the order: by hand
+ * ('manual'), or by the trade engine for an automated trade ('auto', with that
+ * trade's id).
  * @param {string} userId
- * @param {import('../shared/paperOrders.js').LimitOrder} order
+ * @param {import('../shared/paperOrders.js').Order} order
  * @param {{ source?: 'manual' | 'auto', autoTradeId?: string | null }} [placedBy]
  */
-export async function createPaperOrder(userId, order, { source = 'manual', autoTradeId = null } = {}) {
+export async function createOrder(userId, order, { source = 'manual', autoTradeId = null } = {}) {
   const { strike, optionType, expiry } = instrumentColumns(order);
   const row = await firstRow(
-    `INSERT INTO paper_orders (id, user_id, tradingsymbol, instrument_token, instrument_type, exchange, strike, option_type, expiry,
-       side, quantity, limit_price, note, target_price, stop_loss_price, confidence, source, auto_trade_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+    `INSERT INTO orders (id, user_id, tradingsymbol, instrument_token, instrument_type, exchange, strike, option_type, expiry,
+       side, quantity, order_type, limit_price, note, target_price, stop_loss_price, confidence, source, algo_trade_id, horizon)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
      RETURNING *`,
     [crypto.randomUUID(), userId, order.tradingsymbol, order.instrumentToken, order.instrumentType, order.exchange, strike, optionType, expiry,
-     order.side, order.quantity, order.limitPrice, ...positionMetaValues(order), source, autoTradeId],
+     order.side, order.quantity, order.orderType, order.limitPrice, ...positionMetaValues(order), source, autoTradeId, order.horizon],
   );
-  return toPaperOrder(row);
+  return toOrder(row);
+}
+
+/**
+ * Record the filled order that closed one of the user's positions (an exit):
+ * the opposite side for the whole quantity, at `fillPrice`. Who placed it is
+ * set by the caller: by hand ('manual') or an exit rule ('auto').
+ * @param {string} userId
+ * @param {{ id: string, tradingsymbol: string, instrumentToken: number, instrumentType: string, exchange: string,
+ *           strike: number | null, optionType: string | null, expiry: string | null, side: string, quantity: number,
+ *           horizon: number }} position  the position it closed
+ * @param {number} fillPrice
+ * @param {'manual' | 'auto'} source
+ */
+export async function recordClosingOrder(userId, position, fillPrice, source) {
+  const row = await firstRow(
+    `INSERT INTO orders (id, user_id, tradingsymbol, instrument_token, instrument_type, exchange, strike, option_type, expiry,
+       side, quantity, order_type, limit_price, status, fill_price, position_id, closes_position, source, horizon)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'market', NULL, 'filled', $12, $13, true, $14, $15)
+     RETURNING *`,
+    [crypto.randomUUID(), userId, position.tradingsymbol, position.instrumentToken, position.instrumentType, position.exchange,
+     position.strike, position.optionType, position.expiry, position.side === 'BUY' ? 'SELL' : 'BUY', position.quantity,
+     fillPrice, position.id, source, position.horizon],
+  );
+  return toOrder(row);
 }
 
 /**
  * The user's automated limit orders still waiting to fill, for the entry
  * rules (each counts as the position it will open). Served by
- * paper_orders_open_auto_idx.
+ * orders_open_auto_idx.
  * @param {string} userId
  * @returns {Promise<{ instrumentToken: number }[]>}
  */
 export async function getWaitingAutoOrders(userId) {
-  const result = await rows("SELECT instrument_token FROM paper_orders WHERE user_id = $1 AND status = 'open' AND source = 'auto'", [userId]);
+  const result = await rows("SELECT instrument_token FROM orders WHERE user_id = $1 AND status = 'open' AND source = 'auto'", [userId]);
   return result.map((row) => ({ instrumentToken: Number(row.instrument_token) }));
 }
 
 /**
  * The user's orders placed from `from` to `to` (market days, inclusive),
- * newest first. Served by paper_orders_user_created_idx (user_id, created_at DESC).
+ * newest first. Served by orders_user_created_idx (user_id, created_at DESC).
  */
-export async function getPaperOrders(userId, { from, to }) {
+export async function getOrders(userId, { from, to }) {
   const result = await rows(
-    `SELECT * FROM paper_orders
+    `SELECT * FROM orders
      WHERE user_id = $1 AND created_at >= $2 AND created_at < $3
      ORDER BY created_at DESC`,
     [userId, marketDateTime(from).toISOString(), marketDateTime(addDays(to, 1)).toISOString()],
   );
-  return result.map(toPaperOrder);
+  return result.map(toOrder);
+}
+
+/**
+ * The user's open orders, whenever they were placed, newest first (the
+ * Pending tab). Served by orders_user_open_idx.
+ */
+export async function getUserOpenOrders(userId) {
+  const result = await rows("SELECT * FROM orders WHERE user_id = $1 AND status = 'open' ORDER BY created_at DESC", [userId]);
+  return result.map(toOrder);
 }
 
 /**
  * Every user's open orders placed at or after `since` (an ISO time), oldest
- * first, for the order book. Served by paper_orders_open_idx.
+ * first, for the order book. Served by orders_open_idx.
  */
-export async function getOpenPaperOrders(since) {
-  const result = await rows("SELECT * FROM paper_orders WHERE status = 'open' AND created_at >= $1 ORDER BY created_at", [since]);
-  return result.map(toPaperOrder);
+export async function getOpenOrders(since) {
+  const result = await rows("SELECT * FROM orders WHERE status = 'open' AND created_at >= $1 ORDER BY created_at", [since]);
+  return result.map(toOrder);
 }
 
 /**
@@ -1665,19 +1765,19 @@ export async function getOpenPaperOrders(since) {
  * order fills once even when a cancel or another tick races it. Returns the
  * filled order, or null when it was no longer open. Served by the primary key.
  */
-export async function claimPaperOrderFill(id, fillPrice) {
+export async function claimOrderFill(id, fillPrice) {
   const row = await firstRow(
-    `UPDATE paper_orders SET status = 'filled', fill_price = $2, updated_at = now()
+    `UPDATE orders SET status = 'filled', fill_price = $2, updated_at = now()
      WHERE id = $1 AND status = 'open'
      RETURNING *`,
     [id, fillPrice],
   );
-  return row ? toPaperOrder(row) : null;
+  return row ? toOrder(row) : null;
 }
 
 /** Link a filled order to the position it opened. Served by the primary key. */
-export async function setPaperOrderPosition(id, positionId) {
-  await query('UPDATE paper_orders SET position_id = $2, updated_at = now() WHERE id = $1', [id, positionId]);
+export async function setOrderPosition(id, positionId) {
+  await query('UPDATE orders SET position_id = $2, updated_at = now() WHERE id = $1', [id, positionId]);
 }
 
 /**
@@ -1686,43 +1786,43 @@ export async function setPaperOrderPosition(id, positionId) {
  * Returns the cancelled order, or null when it wasn't such an order.
  * Served by the primary key.
  */
-export async function cancelUnfilledPaperOrder(id, reason) {
+export async function cancelUnfilledOrder(id, reason) {
   const row = await firstRow(
-    `UPDATE paper_orders SET status = 'cancelled', status_reason = $2, fill_price = NULL, updated_at = now()
+    `UPDATE orders SET status = 'cancelled', status_reason = $2, fill_price = NULL, updated_at = now()
      WHERE id = $1 AND status = 'filled' AND position_id IS NULL
      RETURNING *`,
     [id, reason],
   );
-  return row ? toPaperOrder(row) : null;
+  return row ? toOrder(row) : null;
 }
 
 /**
  * Cancel one of the user's orders if it is still open. Returns the cancelled
  * order, or null when there is no such open order. Served by the primary key.
  */
-export async function cancelPaperOrder(userId, id, reason) {
+export async function cancelOrder(userId, id, reason) {
   const row = await firstRow(
-    `UPDATE paper_orders SET status = 'cancelled', status_reason = $3, updated_at = now()
+    `UPDATE orders SET status = 'cancelled', status_reason = $3, updated_at = now()
      WHERE id = $1 AND user_id = $2 AND status = 'open'
      RETURNING *`,
     [id, userId, reason],
   );
-  return row ? toPaperOrder(row) : null;
+  return row ? toOrder(row) : null;
 }
 
 /**
  * Cancel every user's open orders placed before `before` (an ISO time), with
  * `reason`: at the market close, and any left open from an earlier day.
- * Returns the cancelled orders. Served by paper_orders_open_idx.
+ * Returns the cancelled orders. Served by orders_open_idx.
  */
-export async function cancelOpenPaperOrdersPlacedBefore(before, reason) {
+export async function cancelOpenOrdersPlacedBefore(before, reason) {
   const result = await rows(
-    `UPDATE paper_orders SET status = 'cancelled', status_reason = $2, updated_at = now()
+    `UPDATE orders SET status = 'cancelled', status_reason = $2, updated_at = now()
      WHERE status = 'open' AND created_at < $1
      RETURNING *`,
     [before, reason],
   );
-  return result.map(toPaperOrder);
+  return result.map(toOrder);
 }
 
 // ---------------------------------------------------------------------------
@@ -1823,6 +1923,15 @@ export async function getLatestOiSnapshotTimestamp() {
   return row && row.ts !== null ? Number(row.ts) : null;
 }
 
+/**
+ * The time (ms) of the newest OI snapshot whatever its day, or null with none,
+ * for Admin Services. Served by the unique index on timestamp (one entry read).
+ */
+export async function getNewestOiSnapshotTimestamp() {
+  const row = await firstRow('SELECT MAX(timestamp) AS ts FROM oi_snapshots');
+  return row && row.ts !== null ? Number(row.ts) : null;
+}
+
 /** Instrument tokens (as strings) with OI in any of today's snapshots. */
 export async function getTodayOiSnapshotTokens() {
   const result = await rows(
@@ -1838,7 +1947,7 @@ export async function getTodayOiSnapshotTokens() {
 
 export async function createOiHistoryTable() {
   await query(`
-    CREATE TABLE IF NOT EXISTS oi_history (
+    CREATE TABLE IF NOT EXISTS oi_history_options (
       id               BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
       scrip            TEXT NOT NULL,
       date             TEXT NOT NULL,
@@ -1857,7 +1966,7 @@ export async function createOiHistoryTable() {
       UNIQUE(scrip, date, instrument_token)
     )
   `);
-  await query('CREATE INDEX IF NOT EXISTS idx_oi_history_scrip_date ON oi_history(scrip, date)');
+  await query('CREATE INDEX IF NOT EXISTS idx_oi_history_options_scrip_date ON oi_history_options(scrip, date)');
   await query(`
     CREATE TABLE IF NOT EXISTS oi_history_futures (
       id BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
@@ -1934,7 +2043,7 @@ export async function insertOiHistoryRows(scrip, rowsToInsert) {
 
     await insertInBatches(
       client,
-      `INSERT INTO oi_history
+      `INSERT INTO oi_history_options
         (scrip, date, instrument_token, tradingsymbol, strike, option_type, expiry, open, high, low, close, volume, oi, spot_close)`,
       conflictClause,
       lastPerKey(rowsToInsert, (r) => `${r.date}|${r.instrumentToken}`).map((r) => [
@@ -1974,7 +2083,7 @@ function mapOiHistoryRow(obj) {
 export async function getOiHistoryDataByExpiryMonth(scrip, expiryMonth, fromDate = null) {
   let sql = `SELECT date, instrument_token, tradingsymbol, strike, option_type, expiry,
              open, high, low, close, volume, oi, spot_close
-             FROM oi_history WHERE scrip = $1 AND expiry LIKE $2 || '%'`;
+             FROM oi_history_options WHERE scrip = $1 AND expiry LIKE $2 || '%'`;
   const params = [scrip, expiryMonth];
 
   if (fromDate) {
@@ -2071,7 +2180,7 @@ export async function evaluateTradeSetupSignalOutcomes(scrip = null) {
   const latestByScrip = new Map();
   const latestDateFor = async (name) => {
     if (!latestByScrip.has(name)) {
-      const row = await firstRow('SELECT MAX(date) AS date FROM oi_history WHERE scrip = $1', [name]);
+      const row = await firstRow('SELECT MAX(date) AS date FROM oi_history_options WHERE scrip = $1', [name]);
       latestByScrip.set(name, row?.date || null);
     }
     return latestByScrip.get(name);
@@ -2083,7 +2192,7 @@ export async function evaluateTradeSetupSignalOutcomes(scrip = null) {
     if (!latestDate || latestDate < signal.signal_date) continue;
 
     const path = (await rows(
-      `SELECT date, close FROM oi_history
+      `SELECT date, close FROM oi_history_options
        WHERE scrip = $1 AND expiry = $2 AND strike = $3 AND option_type = $4
          AND date >= $5 AND date <= $2 AND close > 0
        ORDER BY date`,
@@ -2094,7 +2203,7 @@ export async function evaluateTradeSetupSignalOutcomes(scrip = null) {
     let settled = path.some((point) => point.date === signal.expiry);
     if (expired && !settled) {
       const spotRow = await firstRow(
-        'SELECT MAX(spot_close) AS spot FROM oi_history WHERE scrip = $1 AND date = $2 AND spot_close > 0',
+        'SELECT MAX(spot_close) AS spot FROM oi_history_options WHERE scrip = $1 AND date = $2 AND spot_close > 0',
         [signal.scrip, signal.expiry],
       );
       const spot = Number(spotRow?.spot);
@@ -2197,7 +2306,7 @@ export async function getOptionsForStrikes(scripName, strikes, { targetMonth = '
 export async function getStoredOiHistoryStrikes(scrip, expiryMonth) {
   const result = await rows(
     `SELECT DISTINCT strike
-     FROM oi_history
+     FROM oi_history_options
      WHERE scrip = $1
        AND expiry LIKE $2 || '%'
        AND strike IS NOT NULL
@@ -2224,13 +2333,13 @@ export async function getOiHistoryDates(scrip, fromDate, toDate, minExpiries = 0
   }
 
   if (minExpiries > 0) {
-    const sql = `SELECT date, COUNT(DISTINCT expiry) AS ec FROM oi_history${where} GROUP BY date HAVING COUNT(DISTINCT expiry) >= $${n}`;
+    const sql = `SELECT date, COUNT(DISTINCT expiry) AS ec FROM oi_history_options${where} GROUP BY date HAVING COUNT(DISTINCT expiry) >= $${n}`;
     params.push(minExpiries);
     const result = await rows(sql, params);
     return new Set(result.map((r) => r.date));
   }
 
-  const sql = `SELECT DISTINCT date FROM oi_history${where}`;
+  const sql = `SELECT DISTINCT date FROM oi_history_options${where}`;
   const result = await rows(sql, params);
   return new Set(result.map((r) => r.date));
 }
@@ -2252,20 +2361,20 @@ export async function getOiHistoryDatesForExpiryMonth(scrip, expiryMonth, fromDa
   }
 
   if (minExpiries > 0) {
-    const sql = `SELECT date, COUNT(DISTINCT expiry) AS ec FROM oi_history${where} GROUP BY date HAVING COUNT(DISTINCT expiry) >= $${n}`;
+    const sql = `SELECT date, COUNT(DISTINCT expiry) AS ec FROM oi_history_options${where} GROUP BY date HAVING COUNT(DISTINCT expiry) >= $${n}`;
     params.push(minExpiries);
     const result = await rows(sql, params);
     return new Set(result.map((r) => r.date));
   }
 
-  const sql = `SELECT DISTINCT date FROM oi_history${where}`;
+  const sql = `SELECT DISTINCT date FROM oi_history_options${where}`;
   const result = await rows(sql, params);
   return new Set(result.map((r) => r.date));
 }
 
 export async function getOiHistoryMonths(scrip) {
   const result = await rows(
-    "SELECT DISTINCT substr(date, 1, 7) AS month FROM oi_history WHERE scrip = $1 ORDER BY month DESC",
+    "SELECT DISTINCT substr(date, 1, 7) AS month FROM oi_history_options WHERE scrip = $1 ORDER BY month DESC",
     [scrip],
   );
   return result.map((r) => r.month);
@@ -2274,7 +2383,7 @@ export async function getOiHistoryMonths(scrip) {
 export async function getStoredOiHistoryExpiryMonths(scrip) {
   const result = await rows(
     `SELECT DISTINCT substr(expiry, 1, 7) AS month
-     FROM oi_history
+     FROM oi_history_options
      WHERE scrip = $1 AND expiry IS NOT NULL AND expiry != ''
      ORDER BY month`,
     [scrip],
@@ -2285,7 +2394,7 @@ export async function getStoredOiHistoryExpiryMonths(scrip) {
 /** Scrips with OI history stored on or after `sinceDate` (YYYY-MM-DD) — the ones being tracked. */
 export async function getRecentOiHistoryScrips(sinceDate) {
   const result = await rows(
-    'SELECT DISTINCT scrip FROM oi_history WHERE date >= $1 ORDER BY scrip',
+    'SELECT DISTINCT scrip FROM oi_history_options WHERE date >= $1 ORDER BY scrip',
     [sinceDate],
   );
   return result.map((r) => r.scrip);
@@ -2417,19 +2526,19 @@ export async function getOiHistoryExpiryMonths(scrip, minExpiryDate, limit = 3) 
 }
 
 export async function deleteOiHistoryByMonth(month) {
-  const res = await query("DELETE FROM oi_history WHERE date LIKE $1 || '%'", [month]);
+  const res = await query("DELETE FROM oi_history_options WHERE date LIKE $1 || '%'", [month]);
   await query("DELETE FROM oi_history_futures WHERE date LIKE $1 || '%'", [month]);
   return res.rowCount;
 }
 
 export async function deleteOiHistoryByScrip(scrip) {
-  const res = await query('DELETE FROM oi_history WHERE scrip = $1', [scrip]);
+  const res = await query('DELETE FROM oi_history_options WHERE scrip = $1', [scrip]);
   await query('DELETE FROM oi_history_futures WHERE scrip = $1', [scrip]);
   return res.rowCount;
 }
 
 export async function deleteOiHistoryByExpiryMonth(scrip, expiryMonth) {
-  const res = await query("DELETE FROM oi_history WHERE scrip = $1 AND expiry LIKE $2 || '%'", [scrip, expiryMonth]);
+  const res = await query("DELETE FROM oi_history_options WHERE scrip = $1 AND expiry LIKE $2 || '%'", [scrip, expiryMonth]);
   await query("DELETE FROM oi_history_futures WHERE scrip = $1 AND expiry LIKE $2 || '%'", [scrip, expiryMonth]);
   return res.rowCount;
 }
@@ -2437,7 +2546,7 @@ export async function deleteOiHistoryByExpiryMonth(scrip, expiryMonth) {
 export async function deleteOiHistoryByDates(scrip, dates) {
   if (!dates.length) return 0;
   const placeholders = dates.map((_, i) => `$${i + 2}`).join(', ');
-  const res = await query(`DELETE FROM oi_history WHERE scrip = $1 AND date IN (${placeholders})`, [scrip, ...dates]);
+  const res = await query(`DELETE FROM oi_history_options WHERE scrip = $1 AND date IN (${placeholders})`, [scrip, ...dates]);
   return res.rowCount;
 }
 
@@ -2445,7 +2554,7 @@ export async function deleteOiHistoryByDatesForExpiryMonth(scrip, expiryMonth, d
   if (!dates.length) return 0;
   const placeholders = dates.map((_, i) => `$${i + 3}`).join(', ');
   const res = await query(
-    `DELETE FROM oi_history WHERE scrip = $1 AND expiry LIKE $2 || '%' AND date IN (${placeholders})`,
+    `DELETE FROM oi_history_options WHERE scrip = $1 AND expiry LIKE $2 || '%' AND date IN (${placeholders})`,
     [scrip, expiryMonth, ...dates],
   );
   return res.rowCount;

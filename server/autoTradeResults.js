@@ -9,7 +9,7 @@
  * browser gets totals, never the trades. A trade's P&L is
  * (exit − entry) × quantity, sign flipped for a sell, minus its own charges
  * (shared/paperCharges.js; none for trades closed before charges were kept).
- * Served by auto_trades_user_closed_idx (user_id, created_at) WHERE closed.
+ * Served by algo_trades_user_closed_idx (user_id, created_at) WHERE closed.
  */
 import { MARKET_TIME_ZONE, addDays, marketDateTime } from '../shared/marketTime.js';
 import { RESULTS_ENTRY_SLOT_MINUTES as SLOT } from '../shared/automation.js';
@@ -22,7 +22,7 @@ const CLOSED_TRADES_SQL = `
       + FLOOR(EXTRACT(MINUTE FROM created_at AT TIME ZONE $4) / ${SLOT}) * ${SLOT})::int AS slot,
     COALESCE(charges, 0) AS charges,
     CASE WHEN side = 'BUY' THEN exit_price - entry_price ELSE entry_price - exit_price END * quantity - COALESCE(charges, 0) AS pnl
-  FROM auto_trades
+  FROM algo_trades
   WHERE user_id = $1 AND stage = 'closed' AND created_at >= $2 AND created_at < $3`;
 
 // Which column each GROUPING SETS row is grouped by ('all' is the summary).

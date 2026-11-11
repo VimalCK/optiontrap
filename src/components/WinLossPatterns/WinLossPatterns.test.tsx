@@ -1,7 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { ResultsView } from './WinLossPatterns';
 import type { AutoTradeResults, ResultGroup } from '@/services/automation';
+
+// The strategies as if GET /api/strategies had already loaded them.
+vi.mock('@/services/strategies', async (original) => {
+  const { TEST_STRATEGIES } = await import('@/services/strategies.fixture');
+  return { ...(await original<typeof import('@/services/strategies')>()), loadedStrategies: () => TEST_STRATEGIES };
+});
 
 const group = <K,>(key: K, pnl: number, extra: Partial<ResultGroup<K>> = {}): ResultGroup<K> => ({
   key, trades: 2, wins: 1, losses: 1, pnl, grossProfit: 1500, grossLoss: 1500, best: 1500, worst: -1500, charges: 0, ...extra,

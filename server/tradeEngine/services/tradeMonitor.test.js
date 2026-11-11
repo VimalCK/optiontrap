@@ -1,13 +1,15 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Horizon } from '../../../shared/horizons.js';
 
-// The module creates a default monitor on import; keep its real dependencies out.
-vi.mock('./db.js', () => ({ getAllOpenAutoPositions: vi.fn(), getOpenAutoPositions: vi.fn(), getAutomationConfigs: vi.fn(), getTodayAutoRealisedPnl: vi.fn() }));
-vi.mock('./paperTrading.js', () => ({ exitPaperTrade: vi.fn(), NOT_FOUND: 'NOT_FOUND' }));
-vi.mock('./oiHistoryScheduler.js', () => ({ findWorkingAdminSession: vi.fn() }));
+// Keep the real database and Kite session lookup out of the default dependencies.
+vi.mock('../../db.js', () => ({}));
+vi.mock('../automationConfigs.js', () => ({}));
+vi.mock('../positions.js', () => ({ NOT_FOUND: 'NOT_FOUND' }));
+vi.mock('../../oiHistoryScheduler.js', () => ({ findWorkingAdminSession: vi.fn() }));
 
-const { createAutoTradeMonitor, dueExits, openPnlByUser } = await import('./autoTradeMonitor.js');
-const { defaultRuleSettings } = await import('../shared/rules/ruleSettings.js');
-const { EXIT_RULES } = await import('../shared/exitRules/index.js');
+const { createTradeMonitor, dueExits, openPnlByUser } = await import('./tradeMonitor.js');
+const { defaultRuleSettings } = await import('../../../shared/rules/ruleSettings.js');
+const { EXIT_RULES } = await import('../../../shared/exitRules/index.js');
 
 const NOON = new Date('2026-11-05T06:30:00Z'); // Thu 12:00 IST, market open
 const AFTER_CLOSE = new Date('2026-11-05T10:30:00Z'); // Thu 16:00 IST
@@ -21,9 +23,9 @@ const exitRules = (active = {}) => {
 const config = (active) => ({ exitRules: exitRules(active) });
 
 // Sold 75 at 100: loses as the price rises.
-const sold = { id: 'p1', userId: 'U1', instrumentToken: 101, tradingsymbol: 'NIFTY26NOV24000PE', side: 'SELL', quantity: 75, entryPrice: 100 };
+const sold = { id: 'p1', userId: 'U1', instrumentToken: 101, tradingsymbol: 'NIFTY26NOV24000PE', horizon: Horizon.Intraday, side: 'SELL', quantity: 75, entryPrice: 100 };
 // Bought 50 at 200, another user, another instrument.
-const bought = { id: 'p2', userId: 'U2', instrumentToken: 202, tradingsymbol: 'NIFTY26NOV24000CE', side: 'BUY', quantity: 50, entryPrice: 200 };
+const bought = { id: 'p2', userId: 'U2', instrumentToken: 202, tradingsymbol: 'NIFTY26NOV24000CE', horizon: Horizon.Intraday, side: 'BUY', quantity: 50, entryPrice: 200 };
 
 describe('openPnlByUser', () => {
   it("totals each user's open P&L at the last prices, counting positions with no price yet as 0", () => {
@@ -58,12 +60,50 @@ describe('dueExits', () => {
   });
 });
 
-describe('the monitor', () => {
+
+describe('the monitor service', () => {
+  const ADMIN_KITE = { apiKey: 'key', accessToken: 'token' };
   let db;
-  let exitPosition;
+  let orders;
   let feeds;
   let now;
   let monitor;
+  let market;
+
+  /** Start a monitor on a fake market clock, and give its open / close / repeat handlers to call. */
+  function start(target) {
+    const handlers = { open: [], close: [], every: [] };
+    target.start({
+      market: {
+        isOpen: () => now === NOON,
+        onOpen: (fn) => handlers.open.push(fn),
+        onClose: (fn) => handlers.close.push(fn),
+        every: (ms, fn) => handlers.every.push({ ms, fn }),
+      },
+      services: { orders },
+      log: () => {},
+    });
+    const repeat = (ms) => Promise.all(handlers.every.filter((h) => h.ms === ms).map((h) => h.fn()));
+    return {
+      open: () => Promise.all(handlers.open.map((fn) => fn())),
+      close: () => Promise.all(handlers.close.map((fn) => fn())),
+      clockCheck: () => repeat(1000),
+      feedCheck: () => repeat(60_000),
+    };
+  }
+
+  const create = (deps = {}) => createTradeMonitor({
+    db,
+    findKiteSession: async () => ADMIN_KITE,
+    createFeed: (options) => {
+      const feed = { options, watching: [], watch: vi.fn((tokens) => { feed.watching = tokens; }), close: vi.fn() };
+      feeds.push(feed);
+      return feed;
+    },
+    clock: () => now,
+    log: () => {},
+    ...deps,
+  });
 
   beforeEach(() => {
     now = NOON;
@@ -73,84 +113,80 @@ describe('the monitor', () => {
       getAutomationConfigs: vi.fn(async (ids) => new Map(ids.map((id) => [id, config(id === 'U1' ? { 'stop-loss': { percent: 20 } } : {})]))),
       getTodayAutoRealisedPnl: vi.fn(async () => 0),
     };
-    exitPosition = vi.fn(async () => ({ ok: true }));
+    orders = {
+      exit: vi.fn(async (userId, positionId, { exitPrice }) => ({ ok: true, order: { fillPrice: exitPrice } })),
+      onSettled: vi.fn((listener) => { orders.settledListener = listener; return () => { orders.settledListener = null; }; }),
+    };
     feeds = [];
-    monitor = createAutoTradeMonitor({
-      db,
-      exitPosition,
-      findKiteSession: async () => ({ apiKey: 'key', accessToken: 'token' }),
-      createFeed: (options) => {
-        const feed = { options, watching: [], watch: vi.fn((tokens) => { feed.watching = tokens; }), close: vi.fn() };
-        feeds.push(feed);
-        return feed;
-      },
-      clock: () => now,
-      log: () => {},
-    });
+    monitor = create();
+    market = start(monitor);
   });
 
+  const exitedIds = () => orders.exit.mock.calls.map((c) => c[1]);
+
   it('at the market open loads every open automated position and watches exactly their instruments', async () => {
-    await monitor.checkMarket();
+    await market.open();
     expect(monitor.watchedPositionIds()).toEqual(['p1', 'p2']);
     expect(feeds).toHaveLength(1);
-    expect(feeds[0].options.kite).toEqual({ apiKey: 'key', accessToken: 'token' });
+    expect(feeds[0].options.kite).toEqual(ADMIN_KITE);
     expect(feeds[0].watching.sort()).toEqual([101, 202]);
   });
 
-  it('exits on the tick that hits the stop-loss, at that last price, with the rule’s reason for the trades behind it', async () => {
-    await monitor.checkMarket();
+  it("exits through the order service on the tick that hits the stop-loss, with the rule's reason for the trades behind it", async () => {
+    await market.open();
     await monitor.onTicks([{ instrumentToken: 101, lastPrice: 119.95 }]);
-    expect(exitPosition).not.toHaveBeenCalled();
+    expect(orders.exit).not.toHaveBeenCalled();
 
     await monitor.onTicks([{ instrumentToken: 101, lastPrice: 120 }]);
-    expect(exitPosition).toHaveBeenCalledWith('U1', 'p1', 120, {
-      now: NOON,
+    expect(orders.exit).toHaveBeenCalledWith('U1', 'p1', {
+      exitPrice: 120,
+      kite: ADMIN_KITE, // a market exit at the bid / ask, quoted with the feed's session
+      source: 'auto',
       exitReason: { ruleId: 'stop-loss', reason: 'Stop-loss hit: P&L -20.00% (₹-1500.00), stop-loss 20%' },
-      fillFrom: { apiKey: 'key', accessToken: 'token' }, // a market exit at the bid / ask, quoted with the feed's session
     });
     expect(monitor.watchedPositionIds()).toEqual(['p2']);
     expect(feeds[0].watching).toEqual([202]);
   });
 
   it('exits a position once, however many ticks arrive while it is exiting', async () => {
-    await monitor.checkMarket();
+    await market.open();
     let finish;
-    exitPosition.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
+    orders.exit.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve; }));
     const first = monitor.onTicks([{ instrumentToken: 101, lastPrice: 121 }]);
     await monitor.onTicks([{ instrumentToken: 101, lastPrice: 122 }]);
-    finish({ ok: true });
+    finish({ ok: true, order: { fillPrice: 121 } });
     await first;
-    expect(exitPosition).toHaveBeenCalledTimes(1);
+    expect(orders.exit).toHaveBeenCalledTimes(1);
     await monitor.onTicks([{ instrumentToken: 101, lastPrice: 125 }]);
-    expect(exitPosition).toHaveBeenCalledTimes(1);
+    expect(orders.exit).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps watching a position the paper rules refused to exit, and tries again on the next tick', async () => {
-    await monitor.checkMarket();
-    exitPosition.mockResolvedValueOnce({ ok: false, code: 'MARKET_CLOSED', message: 'The market is closed.' });
+  it('keeps watching a position the rules refused to exit, and tries again on the next tick', async () => {
+    await market.open();
+    orders.exit.mockResolvedValueOnce({ ok: false, code: 'MARKET_CLOSED', message: 'The market is closed.' });
     await monitor.onTicks([{ instrumentToken: 101, lastPrice: 121 }]);
     expect(monitor.watchedPositionIds()).toContain('p1');
     await monitor.onTicks([{ instrumentToken: 101, lastPrice: 121 }]);
-    expect(exitPosition).toHaveBeenCalledTimes(2);
+    expect(orders.exit).toHaveBeenCalledTimes(2);
     expect(monitor.watchedPositionIds()).toEqual(['p2']);
   });
 
   it('stops watching a position already exited elsewhere (e.g. by hand)', async () => {
-    await monitor.checkMarket();
-    exitPosition.mockResolvedValueOnce({ ok: false, code: 'NOT_FOUND', message: 'Position not found or already exited' });
+    await market.open();
+    orders.exit.mockResolvedValueOnce({ ok: false, code: 'NOT_FOUND', message: 'Position not found or already exited' });
     await monitor.onTicks([{ instrumentToken: 101, lastPrice: 121 }]);
     expect(monitor.watchedPositionIds()).toEqual(['p2']);
   });
 
-  it('squares off on the clock at the time set, on the last price, even with no new tick', async () => {
+  it('squares off on the clock check at the time set, on the last price, even with no new tick', async () => {
     db.getAutomationConfigs.mockImplementation(async (ids) => new Map(ids.map((id) => [id, config({ 'square-off': { time: '15:00' } })])));
-    await monitor.checkMarket();
+    await market.open();
     await monitor.onTicks([{ instrumentToken: 101, lastPrice: 101 }, { instrumentToken: 202, lastPrice: 199 }]);
-    expect(exitPosition).not.toHaveBeenCalled();
+    expect(orders.exit).not.toHaveBeenCalled();
 
     now = new Date('2026-11-05T09:30:00Z'); // 15:00 IST
-    await monitor.checkClock();
-    expect(exitPosition.mock.calls.map((c) => [c[1], c[2]])).toEqual([['p1', 101], ['p2', 199]]);
+    await market.clockCheck();
+    expect(orders.exit.mock.calls.map((c) => [c[1], c[2].exitPrice])).toEqual([['p1', 101], ['p2', 199]]);
   });
 
   it("squares off all of a user's positions, winners too, once their day's loss (booked + open) reaches the limit", async () => {
@@ -160,91 +196,107 @@ describe('the monitor', () => {
     db.getAllOpenAutoPositions.mockResolvedValue([sold, boughtU1, winner, bought]);
     db.getAutomationConfigs.mockImplementation(async (ids) => new Map(ids.map((id) => [id, config({ 'max-daily-loss': { amount: 5000 } })])));
     db.getTodayAutoRealisedPnl.mockImplementation(async (userId) => (userId === 'U1' ? -1000 : 0));
-    await monitor.checkMarket();
+    await market.open();
     expect(db.getTodayAutoRealisedPnl).toHaveBeenCalledWith('U1', '2026-11-04T18:30:00.000Z'); // midnight IST
 
     // Open: p1 −2,250, p4 −2,000, p5 +750 → day −4,500: under the limit.
     await monitor.onTicks([{ instrumentToken: 101, lastPrice: 130 }, { instrumentToken: 404, lastPrice: 160 }, { instrumentToken: 505, lastPrice: 90 }, { instrumentToken: 202, lastPrice: 200 }]);
-    expect(exitPosition).not.toHaveBeenCalled();
+    expect(orders.exit).not.toHaveBeenCalled();
 
     // p1 to 137 (−2,775) → day −5,025: p1 exits on its tick, booking its loss.
     db.getTodayAutoRealisedPnl.mockImplementation(async (userId) => (userId === 'U1' ? -3775 : 0));
     await monitor.onTicks([{ instrumentToken: 101, lastPrice: 137 }]);
-    expect(exitPosition).toHaveBeenCalledWith('U1', 'p1', 137, expect.objectContaining({
+    expect(orders.exit).toHaveBeenCalledWith('U1', 'p1', expect.objectContaining({
+      exitPrice: 137,
       exitReason: { ruleId: 'max-daily-loss', reason: "Max loss per day hit: today's automated P&L ₹-5025.00, limit ₹5000" },
     }));
 
     // The day is still −5,025 (now mostly booked), so the rest go on the next check, the winner too; U2's stays.
-    await monitor.checkClock();
-    expect(exitPosition.mock.calls.map((c) => c[1])).toEqual(['p1', 'p4', 'p5']);
+    await market.clockCheck();
+    expect(exitedIds()).toEqual(['p1', 'p4', 'p5']);
     expect(monitor.watchedPositionIds()).toEqual(['p2']);
   });
 
   it('applies changed exit rules from the next tick after a refresh', async () => {
-    await monitor.checkMarket();
+    await market.open();
     db.getOpenAutoPositions.mockResolvedValueOnce([bought]);
     db.getAutomationConfigs.mockResolvedValueOnce(new Map([['U2', config({ 'stop-loss': { percent: 1 } })]]));
     await monitor.refreshUser('U2');
     expect(db.getOpenAutoPositions).toHaveBeenCalledWith('U2');
     await monitor.onTicks([{ instrumentToken: 202, lastPrice: 198 }]);
-    expect(exitPosition).toHaveBeenCalledWith('U2', 'p2', 198, expect.objectContaining({ now: NOON }));
+    expect(orders.exit).toHaveBeenCalledWith('U2', 'p2', expect.objectContaining({ exitPrice: 198 }));
   });
 
   it("drops a user's positions they no longer hold on refresh, leaving other users' alone", async () => {
-    await monitor.checkMarket();
+    await market.open();
     await monitor.refreshUser('U1'); // U1 now holds nothing
     expect(monitor.watchedPositionIds()).toEqual(['p2']);
     expect(feeds[0].watching).toEqual([202]);
   });
 
-  it('does nothing outside market hours, and closes the feed after the close', async () => {
-    now = AFTER_CLOSE;
-    await monitor.checkMarket();
-    expect(db.getAllOpenAutoPositions).not.toHaveBeenCalled();
-    expect(feeds).toHaveLength(0);
+  it('reloads the owner when they exit a position by hand, not on its own exits or other orders, and stops listening when stopped', async () => {
+    await market.open();
+    await orders.settledListener({ userId: 'U1', source: 'auto', closesPosition: true });
+    await orders.settledListener({ userId: 'U1', source: 'manual', closesPosition: false });
+    expect(db.getOpenAutoPositions).not.toHaveBeenCalled();
+    await orders.settledListener({ userId: 'U1', source: 'manual', closesPosition: true });
+    expect(db.getOpenAutoPositions).toHaveBeenCalledWith('U1');
+    expect(monitor.watchedPositionIds()).toEqual(['p2']);
+    monitor.stop();
+    expect(orders.settledListener).toBeNull();
+  });
 
-    now = NOON;
-    await monitor.checkMarket();
+  it('ignores a refresh before the open, and stops watching after the close', async () => {
+    await monitor.refreshUser('U1');
+    expect(db.getOpenAutoPositions).not.toHaveBeenCalled();
+
+    await market.open();
     now = AFTER_CLOSE;
-    await monitor.checkMarket();
+    await market.close();
     expect(feeds[0].close).toHaveBeenCalled();
-    expect(await monitor.checkClock()).toEqual([]);
+    await market.clockCheck();
+    expect(orders.exit).not.toHaveBeenCalled();
+    await monitor.refreshUser('U1');
+    expect(db.getOpenAutoPositions).not.toHaveBeenCalled();
   });
 
-  it('opens no feed when there is nothing to watch, and waits for an admin login without failing', async () => {
+  it('opens no feed when there is nothing to watch, and waits for an admin login, watching once a check finds one', async () => {
     db.getAllOpenAutoPositions.mockResolvedValueOnce([]);
-    await monitor.checkMarket();
+    await market.open();
     expect(feeds).toHaveLength(0);
 
-    const noLogin = createAutoTradeMonitor({ db, exitPosition, findKiteSession: async () => null, createFeed: () => { throw new Error('no feed expected'); }, clock: () => NOON, log: () => {} });
-    await noLogin.checkMarket();
+    let kite = null;
+    const noLogin = create({ findKiteSession: async () => kite });
+    const noLoginMarket = start(noLogin);
+    await noLoginMarket.open();
     expect(noLogin.watchedPositionIds()).toEqual(['p1', 'p2']);
+    expect(noLogin.status()).toMatchObject({ waitingForLogin: true, feedConnected: false, watchedPositions: 2 });
+    kite = ADMIN_KITE;
+    await noLoginMarket.feedCheck();
+    expect(noLogin.status()).toMatchObject({ waitingForLogin: false, feedConnected: true });
   });
 
-  it('reports its state for the health page: checks, feed, what it watches and the last tick', async () => {
-    expect(monitor.status()).toMatchObject({ lastCheckAt: null, feedConnected: false, lastTickAt: null });
-    await monitor.checkMarket();
+  it('reports its state for Admin Services: feed, what it watches, the last tick and a failed load', async () => {
+    expect(monitor.status()).toMatchObject({ feedConnected: false, lastTickAt: null });
+    await market.open();
     expect(monitor.status()).toEqual({
-      lastCheckAt: NOON.getTime(), marketOpen: true, feedConnected: true, waitingForLogin: false,
+      marketOpen: true, feedConnected: true, waitingForLogin: false,
       watchedPositions: 2, watchedInstruments: 2, lastTickAt: null, lastError: null,
     });
     await monitor.onTicks([{ instrumentToken: 202, lastPrice: 201 }]);
     expect(monitor.status().lastTickAt).toBe(NOON.getTime());
 
-    now = AFTER_CLOSE;
-    await monitor.checkMarket();
-    expect(monitor.status()).toMatchObject({ lastCheckAt: AFTER_CLOSE.getTime(), marketOpen: false, feedConnected: false });
+    db.getAllOpenAutoPositions.mockRejectedValueOnce(new Error('db down'));
+    await expect(market.open()).rejects.toThrow('db down');
+    expect(monitor.status().lastError).toBe('db down');
+    await market.open();
+    expect(monitor.status().lastError).toBeNull();
   });
 
-  it('reports waiting for an admin login, and a market check that failed until one works', async () => {
-    const noLogin = createAutoTradeMonitor({ db, exitPosition, findKiteSession: async () => null, createFeed: () => { throw new Error('no feed expected'); }, clock: () => NOON, log: () => {} });
-    await noLogin.checkMarket();
-    expect(noLogin.status()).toMatchObject({ waitingForLogin: true, feedConnected: false, watchedPositions: 2 });
-
-    db.getAllOpenAutoPositions.mockRejectedValueOnce(new Error('db down'));
-    await expect(monitor.checkMarket()).rejects.toThrow('db down');
-    expect(monitor.status().lastError).toBe('db down');
-    await monitor.checkMarket();
-    expect(monitor.status().lastError).toBeNull();
+  it('stops watching when the engine stops it', async () => {
+    await market.open();
+    monitor.stop();
+    expect(feeds[0].close).toHaveBeenCalled();
+    expect(monitor.watchedPositionIds()).toEqual([]);
   });
 });

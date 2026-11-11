@@ -1,8 +1,17 @@
 /**
- * Option Analyzer setups: trades what the Option Analyzer's Strategy card
- * suggests, scored by the same code (shared/optionAnalysis/setups.js).
+ * Option Analyzer setups: a trade engine strategy that trades what the Option
+ * Analyzer's Strategy card suggests, scored by the same code
+ * (shared/optionAnalysis/setups.js).
  *
- * After each scheduled OI snapshot, for every underlying in it, the chain of
+ * It runs itself on the market clock: every SNAPSHOT_CHECK_MS in market hours
+ * it looks for an OI snapshot newer than the last one it acted on (the
+ * scheduler takes one every 10 minutes). At the open, and when the server
+ * starts mid-session, it marks the latest one as seen, so a restart never
+ * trades the same snapshot twice. A new snapshot is scored once for all users
+ * (prepare) and handed to the signals service, which picks each user's trades
+ * with their settings (select).
+ *
+ * For a new snapshot, for every underlying in it, the chain of
  * its nearest expiry is scored like the card scores it: the ±15 strikes
  * around ATM, with today's snapshots, and OI, prices and volume from the
  * newest one. Only single options are taken (sell or buy a CE or PE);
@@ -13,10 +22,16 @@
  * score reaches their Min score and its premium their Min premium, so a
  * setup with a tiny premium isn't taken.
  */
-import { atmStrikeOf, averageVolume, buildOptionChain, strikeWindow, upcomingExpiries } from '../optionAnalysis/chain.js';
-import { computeBuyRecommendations, computeSellRecommendations } from '../optionAnalysis/setups.js';
-import { withSpot } from '../optionAnalysis/velocityPattern.js';
-import { daysUntil, marketDate } from '../marketTime.js';
+import { atmStrikeOf, averageVolume, buildOptionChain, strikeWindow, upcomingExpiries } from '../../../shared/optionAnalysis/chain.js';
+import { computeBuyRecommendations, computeSellRecommendations } from '../../../shared/optionAnalysis/setups.js';
+import { withSpot } from '../../../shared/optionAnalysis/velocityPattern.js';
+import { daysUntil, marketDate } from '../../../shared/marketTime.js';
+import { getLatestOiSnapshotTimestamp, getTodayOiSnapshots, getUnderlyings } from '../../db.js';
+import { findWorkingAdminSession } from '../../oiHistoryScheduler.js';
+import { getOrFetchInstruments } from '../../instruments.js';
+
+/** How often, in market hours, it looks for a new OI snapshot. */
+const SNAPSHOT_CHECK_MS = 30 * 1000;
 
 /**
  * @typedef {import('./index.js').StrategyInput} StrategyInput
@@ -84,11 +99,26 @@ export function underlyingSetups(underlying, options, { now, snapshots }) {
   return setups.sort((a, b) => b.score - a.score);
 }
 
-/** @type {import('./index.js').Strategy<Setup[]>} */
-export const optionAnalyzerSetups = {
+/**
+ * The strategy. Its data sources are injectable, for tests.
+ * @param {{
+ *   db?: { getLatestOiSnapshotTimestamp: typeof getLatestOiSnapshotTimestamp, getTodayOiSnapshots: typeof getTodayOiSnapshots,
+ *          getUnderlyings: typeof getUnderlyings },
+ *   findKiteSession?: typeof findWorkingAdminSession,
+ *   loadInstruments?: typeof getOrFetchInstruments,
+ *   clock?: () => Date,
+ * }} [deps]
+ * @returns {import('./index.js').Strategy<Setup[]>}
+ */
+export const createOptionAnalyzerSetups = ({
+  db = { getLatestOiSnapshotTimestamp, getTodayOiSnapshots, getUnderlyings },
+  findKiteSession = findWorkingAdminSession,
+  loadInstruments = getOrFetchInstruments,
+  clock = () => new Date(),
+} = {}) => ({
   id: 'option-analyzer-setups',
   label: 'Option Analyzer setups',
-  description: 'Takes the Strategy card\'s best single-option setup for each snapshotted underlying (nearest expiry), every 10 minutes: the highest score among the trades your General settings allow, if it reaches Min score and its premium reaches Min premium. Straddles and strangles are skipped.',
+  description: 'Takes the Strategy card\'s best single-option setup for each snapshotted underlying (nearest expiry), after every OI snapshot (every 10 minutes): the highest score among the trades your General settings allow, if it reaches Min score and its premium reaches Min premium. Straddles and strangles are skipped.',
   params: [
     { key: 'minScore', label: 'Min score (of 100)', type: 'count' },
     { key: 'minPremium', label: 'Min premium (₹)', type: 'amount' },
@@ -122,4 +152,28 @@ export const optionAnalyzerSetups = {
     }
     return [...best.values()].map(({ instrumentToken, side, reason, setup }) => ({ instrumentToken, side, reason, setup }));
   },
-};
+
+  /** Run on the market clock: score each new snapshot and hand it to the signals service. */
+  start(ctx) {
+    /** The newest snapshot acted on (or marked seen), as its timestamp in ms. @type {number | null} */
+    let seen = null;
+    ctx.market.onOpen(async () => { seen = await db.getLatestOiSnapshotTimestamp(); });
+    ctx.market.every(SNAPSHOT_CHECK_MS, async () => {
+      const latest = await db.getLatestOiSnapshotTimestamp();
+      if (latest === null || latest === seen) return;
+      seen = latest;
+      const kite = await findKiteSession();
+      if (!kite) {
+        ctx.log('skipped snapshot', { reason: 'no admin Kite login for the instrument list' });
+        return;
+      }
+      const [snapshots, underlyings, instruments] = await Promise.all([
+        db.getTodayOiSnapshots(), db.getUnderlyings(), loadInstruments(kite.apiKey, kite.accessToken),
+      ]);
+      await ctx.services.signals.submit(this.id, this.prepare({ now: clock(), snapshots, instruments, underlyings }));
+    });
+  },
+});
+
+/** The strategy the engine runs. */
+export const optionAnalyzerSetups = createOptionAnalyzerSetups();

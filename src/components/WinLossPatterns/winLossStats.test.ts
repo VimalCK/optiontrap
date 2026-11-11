@@ -4,6 +4,7 @@ import {
   winRate, withRunningTotal,
 } from './winLossStats';
 import type { ResultGroup } from '@/services/automation';
+import { TEST_STRATEGIES } from '@/services/strategies.fixture';
 
 const group = <K,>(key: K, extra: Partial<ResultGroup<K>> = {}): ResultGroup<K> => ({
   key, trades: 4, wins: 3, losses: 1, pnl: 1500, grossProfit: 3000, grossLoss: 1500, best: 1500, worst: -1500, charges: 0, ...extra,
@@ -31,11 +32,13 @@ describe('labels', () => {
     expect(exitRuleLabel('stop-loss')).toBe('Stop-loss');
     expect(exitRuleLabel('max-daily-loss')).toBe('Max loss per day');
     expect(exitRuleLabel(null)).toBe('Exited manually');
+    expect(exitRuleLabel('session-square-off')).toBe('Session square-off');
   });
 
   it('names strategies and setups, and the ones recorded without one', () => {
-    expect(strategyName('option-analyzer-setups')).toBe('Option Analyzer setups');
-    expect(strategyName(null)).toBe('Unknown');
+    expect(strategyName('option-analyzer-setups', TEST_STRATEGIES)).toBe('Option Analyzer setups');
+    expect(strategyName('retired-strategy', TEST_STRATEGIES)).toBe('retired-strategy');
+    expect(strategyName(null, TEST_STRATEGIES)).toBe('Unknown');
     expect(setupName('Bull put')).toBe('Bull put');
     expect(setupName(null)).toBe('Unknown');
   });

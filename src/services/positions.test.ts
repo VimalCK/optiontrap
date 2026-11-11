@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { addPosition, exitPosition, instrumentName, positionQuoteKey, tradeErrorMessage } from './positions';
+import { instrumentName, positionQuoteKey, tradeErrorMessage } from './positions';
+import { exitPosition, placeMarketTrade } from './orders';
 import { ApiError, isLoginEnded } from './apiClient';
+import { Horizon } from '../../shared/horizons.js';
 
 const MARKET_CLOSED = 'The market is closed. Paper trades can be placed and exited 9:15–15:30 IST on trading days.';
 
@@ -21,7 +23,7 @@ const trade = {
   optionType: 'CE' as const,
   side: 'BUY' as const,
   quantity: 75,
-  entryPrice: 100,
+  horizon: Horizon.Intraday,
   expiry: '2026-11-24',
 };
 
@@ -33,7 +35,7 @@ describe('placing a paper trade while the market is closed', () => {
   it('rejects with the server’s reason, which the toast then shows', async () => {
     serverReplies(409, { status: 'error', code: 'MARKET_CLOSED', message: MARKET_CLOSED });
 
-    const err = await addPosition(trade).catch((e: unknown) => e);
+    const err = await placeMarketTrade(trade).catch((e: unknown) => e);
 
     expect(err).toBeInstanceOf(ApiError);
     expect((err as ApiError).status).toBe(409);
@@ -45,18 +47,18 @@ describe('placing a paper trade while the market is closed', () => {
     expect(isLoginEnded(409, body)).toBe(false);
 
     serverReplies(409, body);
-    const err = await addPosition(trade).catch((e: unknown) => e);
+    const err = await placeMarketTrade(trade).catch((e: unknown) => e);
     expect((err as ApiError).message).toBe(MARKET_CLOSED); // not "Session expired. Please login again."
   });
 });
 
 describe('exiting a paper trade while the market is closed', () => {
-  it('sends PATCH /api/positions/:id and rejects with the server’s reason', async () => {
+  it('sends the exit order and rejects with the server’s reason', async () => {
     const fetchMock = serverReplies(409, { status: 'error', code: 'MARKET_CLOSED', message: MARKET_CLOSED });
 
     const err = await exitPosition('p1', 120).catch((e: unknown) => e);
 
-    expect(fetchMock).toHaveBeenCalledWith('/api/positions/p1', expect.objectContaining({ method: 'PATCH' }));
+    expect(fetchMock).toHaveBeenCalledWith('/api/orders', expect.objectContaining({ method: 'POST' }));
     expect(tradeErrorMessage(err, 'Failed to exit position')).toBe(MARKET_CLOSED);
   });
 });

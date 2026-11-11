@@ -9,13 +9,14 @@
  * (both lists shown by RuleSettingsForm)
  * Save and Cancel belong to the settings page, shared by every section.
  * Options that aren't built yet are shown but can't be chosen. Names and
- * rules: shared/automation.js.
+ * rules: shared/automation.js; strategies come from the server (GET /api/strategies).
  */
 import React from 'react';
 import { EXECUTION_MODES, HORIZONS, TRADE_KINDS, TRADE_SIDES } from '../../../shared/automation.js';
+import { Horizon } from '../../../shared/horizons.js';
 import type { AutomationConfig, TradeKindId, TradeSide } from '@/services/automation';
 import Toggle from '@/components/Toggle/Toggle';
-import { STRATEGIES } from '../../../shared/strategies/index.js';
+import type { StrategyInfo } from '@/services/strategies';
 import { ENTRY_RULES } from '../../../shared/entryRules/index.js';
 import { EXIT_RULES } from '../../../shared/exitRules/index.js';
 import RuleSettingsForm from './RuleSettingsForm';
@@ -32,12 +33,15 @@ export const AUTOMATION_SETTINGS_SECTIONS: { id: AutomationSettingsSection; labe
 
 export interface AutomationConfigFormProps {
   config: AutomationConfig;
+  /** The trade engine's strategies, for the Strategies section. */
+  strategies: StrategyInfo[];
   section: AutomationSettingsSection;
   onChange: (config: AutomationConfig) => void;
 }
 
 interface SectionProps {
   config: AutomationConfig;
+  strategies: StrategyInfo[];
   onChange: (config: AutomationConfig) => void;
 }
 
@@ -87,7 +91,7 @@ const GeneralSettings: React.FC<SectionProps> = ({ config, onChange }) => {
                 disabled={!h.available}
                 onChange={(on) => onChange({ ...config, horizons: { ...config.horizons, [h.id]: on } })}
               />
-              <small>{h.id === 'intraday' ? ' · from OI snapshots' : ' · later, from OI history'}</small>
+              <small>{h.id === Horizon.Intraday ? ' · from OI snapshots' : ' · later, from OI history'}</small>
             </span>
           ))}
         </div>
@@ -123,13 +127,13 @@ const GeneralSettings: React.FC<SectionProps> = ({ config, onChange }) => {
   );
 };
 
-const StrategySettings: React.FC<SectionProps> = ({ config, onChange }) => (
+const StrategySettings: React.FC<SectionProps> = ({ config, strategies, onChange }) => (
   <RuleSettingsForm
-    rules={STRATEGIES}
+    rules={strategies}
     settings={config.strategies}
-    onChange={(strategies) => onChange({ ...config, strategies })}
+    onChange={(settings) => onChange({ ...config, strategies: settings })}
     label="Strategies"
-    description="Active strategies run after each OI snapshot (every 10 minutes in market hours); each trade they pick goes through the entry rules."
+    description="Each active strategy runs on its own schedule (see its description); each trade it picks goes through the entry rules."
     emptyText="No strategies yet · they come after the full-day OI snapshot study"
   />
 );
@@ -163,11 +167,11 @@ const SECTION_VIEWS: Record<AutomationSettingsSection, React.FC<SectionProps>> =
 
 const sectionLabel = (id: AutomationSettingsSection) => AUTOMATION_SETTINGS_SECTIONS.find((s) => s.id === id)?.label ?? id;
 
-const AutomationConfigForm: React.FC<AutomationConfigFormProps> = ({ config, section, onChange }) => {
+const AutomationConfigForm: React.FC<AutomationConfigFormProps> = ({ config, strategies, section, onChange }) => {
   const Section = SECTION_VIEWS[section];
   return (
     <div className="automation-config" role="group" aria-label={`Algo Trading settings · ${sectionLabel(section)}`}>
-      <Section config={config} onChange={onChange} />
+      <Section config={config} strategies={strategies} onChange={onChange} />
     </div>
   );
 };

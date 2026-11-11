@@ -15,6 +15,7 @@ import DateRangePicker, { type DateRange } from '@/components/DateRangePicker/Da
 import { rangeProblem } from '@/components/TradeJournal/journalRange';
 import { type AutoTradeResults, type ResultGroup, fetchAutoTradeResults } from '@/services/automation';
 import { isAbortError } from '@/services/apiClient';
+import { useStrategies } from '@/hooks/useStrategies';
 import { formatAmount, formatSignedAmount } from '@/utils/formatAmount';
 import {
   averageLoss, averagePnl, averageWin, dailyBars, dayLabel, entrySlotLabel, shortDayLabel, exitRuleLabel, profitFactor, setupName,
@@ -163,7 +164,9 @@ export const DailyPnl: React.FC<{ days: AutoTradeResults['byDay'] }> = ({ days }
 };
 
 /** The figures for a range: the summary, the daily P&L, then every breakdown. */
-export const ResultsView: React.FC<{ results: AutoTradeResults }> = ({ results }) => (
+export const ResultsView: React.FC<{ results: AutoTradeResults }> = ({ results }) => {
+  const { strategies } = useStrategies();
+  return (
   <>
     <ResultsSummary results={results} />
     <div className="winloss-panels">
@@ -171,11 +174,12 @@ export const ResultsView: React.FC<{ results: AutoTradeResults }> = ({ results }
       <BreakdownTable title="By setup" column="Setup" groups={results.bySetup} label={setupName} />
       <BreakdownTable title="By exit" column="Closed by" groups={results.byExitRule} label={exitRuleLabel} />
       <BreakdownTable title="By entry time (IST)" column="Entered" groups={results.byEntrySlot} label={entrySlotLabel} />
-      <BreakdownTable title="By strategy" column="Strategy" groups={results.byStrategy} label={strategyName} />
+      <BreakdownTable title="By strategy" column="Strategy" groups={results.byStrategy} label={(id) => strategyName(id, strategies ?? [])} />
       <BreakdownTable title="By side" column="Side" groups={results.bySide} label={sideName} />
     </div>
   </>
-);
+  );
+};
 
 const WinLossPatterns: React.FC = () => {
   const [range, setRange] = useState<DateRange>(() => ({ from: addDays(marketDate(), 1 - DEFAULT_RANGE_DAYS), to: marketDate() }));

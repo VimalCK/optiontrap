@@ -1,11 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import {
+  INTRADAY_CLOSED_MESSAGE,
   MARKET_CLOSED_MESSAGE,
   PAPER_TRADE_RULES,
   RULE_CODES,
   checkPaperTrade,
   normalizeTradeInput,
 } from './paperTradeRules.js';
+import { Horizon } from './horizons.js';
 
 /** The instant at `hhmm` IST on `date` (IST is UTC+5:30). */
 const ist = (date, hhmm) => {
@@ -26,6 +28,7 @@ const validInput = {
   quantity: '75',
   entryPrice: '101.5',
   expiry: '2026-11-10',
+  horizon: Horizon.Intraday,
 };
 
 const open = (input, now = OPEN) => checkPaperTrade('open', { trade: normalizeTradeInput(input), now });
@@ -85,9 +88,22 @@ describe('required-fields rule', () => {
   });
 });
 
+describe('horizon-given rule', () => {
+  it('takes an intraday or a positional trade', () => {
+    expect(open(validInput)).toEqual({ ok: true });
+    expect(open({ ...validInput, horizon: Horizon.Positional })).toEqual({ ok: true });
+  });
+
+  it('refuses a trade without a horizon, or with an unknown one, asking for one', () => {
+    const refused = { ok: false, violations: [{ rule: 'horizon-given', code: 'INVALID_TRADE', message: 'Choose Intraday or Positional' }] };
+    expect(open({ ...validInput, horizon: undefined })).toEqual(refused);
+    expect(open({ ...validInput, horizon: 'long' })).toEqual(refused);
+  });
+});
+
 describe('instrument-fields rule', () => {
-  const stock = { tradingsymbol: 'RELIANCE', instrumentToken: '738561', instrumentType: 'EQ', side: 'BUY', quantity: '10', entryPrice: '1400' };
-  const future = { tradingsymbol: 'NIFTY26NOVFUT', instrumentToken: '13238786', instrumentType: 'FUT', side: 'SELL', quantity: '75', entryPrice: '24100', expiry: '2026-11-24' };
+  const stock = { tradingsymbol: 'RELIANCE', instrumentToken: '738561', instrumentType: 'EQ', side: 'BUY', quantity: '10', entryPrice: '1400', horizon: Horizon.Intraday };
+  const future = { tradingsymbol: 'NIFTY26NOVFUT', instrumentToken: '13238786', instrumentType: 'FUT', side: 'SELL', quantity: '75', entryPrice: '24100', expiry: '2026-11-24', horizon: Horizon.Positional };
   const hit = (input) => (open(input).ok ? null : open(input).violations.find((v) => v.rule === 'instrument-fields')?.message);
 
   it('takes a trade that sends only optionType CE/PE as an option, as the option chain does', () => {
@@ -137,6 +153,24 @@ describe('exit-price-given rule', () => {
       ok: false,
       violations: [{ rule: 'exit-price-given', code: RULE_CODES.INVALID_TRADE, message: 'exitPrice is required' }],
     });
+  });
+});
+
+describe('intraday-market-hours rule (placing an order)', () => {
+  const place = (input, now) => checkPaperTrade('place', { trade: normalizeTradeInput(input), now });
+
+  it('places an intraday order only while the market is open', () => {
+    expect(place(validInput, OPEN)).toEqual({ ok: true });
+    expect(place(validInput, CLOSED)).toEqual({ ok: false, violations: [{ rule: 'intraday-market-hours', code: 'MARKET_CLOSED', message: INTRADAY_CLOSED_MESSAGE }] });
+  });
+
+  it('places a positional order at any time, even on a weekend', () => {
+    expect(place({ ...validInput, horizon: Horizon.Positional }, CLOSED)).toEqual({ ok: true });
+    expect(place({ ...validInput, horizon: Horizon.Positional }, ist('2026-10-17', '11:00'))).toEqual({ ok: true }); // Saturday
+  });
+
+  it('still needs the order complete, with a horizon', () => {
+    expect(place({ ...validInput, horizon: undefined }, OPEN).violations.map((v) => v.rule)).toEqual(['horizon-given']);
   });
 });
 
@@ -192,7 +226,7 @@ describe('market-open rule', () => {
 
 describe('checkPaperTrade', () => {
   it('reports every failing rule, in list order', () => {
-    expect(rulesHit(open({}, CLOSED))).toEqual(['required-fields', 'instrument-fields', 'market-open']);
+    expect(rulesHit(open({}, CLOSED))).toEqual(['required-fields', 'instrument-fields', 'horizon-given', 'market-open']);
     expect(rulesHit(exit({ mode: 'paper' }, undefined, CLOSED))).toEqual(['exit-price-given', 'market-open']);
   });
 
@@ -200,6 +234,14 @@ describe('checkPaperTrade', () => {
     // An open is never refused for a missing exit price, nor an exit for missing trade fields.
     expect(rulesHit(open(validInput))).toEqual([]);
     expect(rulesHit(exit({ mode: 'paper' }, 95))).toEqual([]);
+  });
+
+  it("checks the engine's square-off after the close for an exit price only, not for the market being open", () => {
+    const squareOff = (exitPrice) => checkPaperTrade('square-off', { position: { id: 'p1', mode: 'paper' }, exitPrice, now: CLOSED });
+    expect(squareOff(95)).toEqual({ ok: true });
+    expect(rulesHit(squareOff(null))).toEqual(['exit-price-given']);
+    // An ordinary exit at the same moment is refused.
+    expect(rulesHit(exit({ mode: 'paper' }, 95, CLOSED))).toEqual(['market-open']);
   });
 
   it('rejects an unknown action', () => {

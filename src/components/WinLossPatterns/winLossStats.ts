@@ -6,8 +6,9 @@
  * (server/autoTradeResults.js).
  */
 import { RESULTS_ENTRY_SLOT_MINUTES } from '../../../shared/automation.js';
-import { EXIT_RULES } from '../../../shared/exitRules/index.js';
+import { ENGINE_EXITS, EXIT_RULES } from '../../../shared/exitRules/index.js';
 import { sideLabel, strategyLabel } from '@/components/Automation/autoTradeView';
+import type { StrategyInfo } from '@/services/strategies';
 import type { ResultGroup } from '@/services/automation';
 import { formatCalendarDate } from '@/utils/marketStatus';
 
@@ -26,14 +27,14 @@ export const averageLoss = (g: ResultGroup<unknown>): number | null => (g.losses
 /** Gross profit ÷ gross loss; null when nothing was lost (it has no value then). */
 export const profitFactor = (g: ResultGroup<unknown>): number | null => (g.grossLoss > 0 ? g.grossProfit / g.grossLoss : null);
 
-/** What closed the trades: an exit rule's name, or a manual exit (key null). */
+/** What closed the trades: an exit rule's name, the engine's own exit, or a manual exit (key null). */
 export function exitRuleLabel(id: string | null): string {
   if (id === null) return 'Exited manually';
-  return EXIT_RULES.find((rule) => rule.id === id)?.label ?? id;
+  return [...EXIT_RULES, ...ENGINE_EXITS].find((exit) => exit.id === id)?.label ?? id;
 }
 
-/** A strategy's name; trades recorded before strategies were stored have none. */
-export const strategyName = (id: string | null): string => (id === null ? 'Unknown' : strategyLabel(id) ?? id);
+/** A strategy's name from `strategies`; trades recorded before strategies were stored have none. */
+export const strategyName = (id: string | null, strategies: StrategyInfo[]): string => (id === null ? 'Unknown' : strategyLabel(id, strategies) ?? id);
 
 /** A setup (the strategy's pattern); trades recorded without one show "Unknown". */
 export const setupName = (setup: string | null): string => setup ?? 'Unknown';

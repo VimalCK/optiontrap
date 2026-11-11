@@ -1,11 +1,19 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { defaultAutomationConfig } from '../../shared/automation.js';
 import type { AutoTrade } from '@/services/automation';
 import { marketDate } from '../../shared/marketTime.js';
 import { formatNumericDate } from '@/utils/marketStatus';
-import Automation, { AutoTradesTable, TradeRow, automationStatus } from './Automation';
+import Automation, { AutoTradesTable, DayRow, TradeRow, automationStatus } from './Automation';
+import { Horizon } from '../../shared/horizons.js';
+import { TEST_STRATEGIES } from '@/services/strategies.fixture';
+
+// The strategies as if GET /api/strategies had already loaded them.
+vi.mock('@/services/strategies', async (original) => {
+  const { TEST_STRATEGIES } = await import('@/services/strategies.fixture');
+  return { ...(await original<typeof import('@/services/strategies')>()), loadedStrategies: () => TEST_STRATEGIES };
+});
 
 describe('Automation screen', () => {
   const html = renderToStaticMarkup(<MemoryRouter><Automation /></MemoryRouter>);
@@ -32,19 +40,20 @@ describe('Automation screen', () => {
 
 describe('automationStatus', () => {
   it('says on or off, and that nothing trades while there are no strategies', () => {
-    expect(automationStatus(null)).toBe('Loading…');
-    expect(automationStatus(defaultAutomationConfig(), [])).toBe('Off · no strategies yet, nothing trades');
-    expect(automationStatus({ ...defaultAutomationConfig(), enabled: true }, [])).toBe('On · no strategies yet, nothing trades');
+    expect(automationStatus(null, TEST_STRATEGIES)).toBe('Loading…');
+    expect(automationStatus(defaultAutomationConfig(TEST_STRATEGIES), null)).toBe('Loading…');
+    expect(automationStatus(defaultAutomationConfig([]), [])).toBe('Off · no strategies yet, nothing trades');
+    expect(automationStatus({ ...defaultAutomationConfig([]), enabled: true }, [])).toBe('On · no strategies yet, nothing trades');
   });
 
   it('says no strategy is active by default', () => {
-    expect(automationStatus(defaultAutomationConfig())).toBe('Off · no strategy active');
+    expect(automationStatus(defaultAutomationConfig(TEST_STRATEGIES), TEST_STRATEGIES)).toBe('Off · no strategy active');
   });
 
   it('counts the active strategies once there are some', () => {
     const strategies = [{ id: 'a' }, { id: 'b' }];
     const config = (active: string[]) => ({
-      ...defaultAutomationConfig(),
+      ...defaultAutomationConfig([]),
       enabled: true,
       strategies: Object.fromEntries(strategies.map((s) => [s.id, { active: active.includes(s.id), params: {} }])),
     });
@@ -56,7 +65,7 @@ describe('automationStatus', () => {
 
 describe('AutoTradesTable', () => {
   const trade: AutoTrade = {
-    id: 't1', horizon: 'intraday', kind: 'index-option', mode: 'paper', tradingsymbol: 'NIFTY26NOV24000PE',
+    id: 't1', horizon: Horizon.Intraday, kind: 'index-option', mode: 'paper', tradingsymbol: 'NIFTY26NOV24000PE',
     instrumentToken: 1, side: 'SELL', quantity: 75, stage: 'rejected', reason: 'Max open positions reached',
     entryPrice: null, exitPrice: null, charges: null, positionId: null, createdAt: '2026-11-05T05:00:00.000Z', updatedAt: '2026-11-05T05:00:00.000Z',
     events: [],
@@ -68,13 +77,33 @@ describe('AutoTradesTable', () => {
 
   it('shows each trade with its horizon, side and stage, timed in IST', () => {
     const table = renderToStaticMarkup(<AutoTradesTable trades={[trade]} />);
-    expect(table).toContain('<span class="automation-trades__symbol">NIFTY26NOV24000PE</span>');
-    expect(table).toContain('<span class="automation-trades__symbol">NIFTY26NOV24000PE</span><span class="automation-trades__sub">Intraday</span>');
+    expect(table).toContain('<span class="automation-trades__symbol">NIFTY26NOV24000PE<span class="trade-source trade-source--horizon" title="Trade type">Intraday</span></span>');
     expect(table).toContain('<span class="badge badge--negative">Sell</span>');
     expect(table).toContain('<span class="badge badge--negative">Rejected</span>');
     expect(table).not.toContain('Max open positions reached'); // the reason is in the expanded lifecycle only
     expect(table).not.toContain('>Reason<');
-    expect(table).toContain('<span class="automation-trades__time">10:30</span><span class="automation-trades__sub">5 Nov</span>'); // 05:00 UTC
+    expect(table).toContain('<span class="automation-trades__time">10:30</span>'); // 05:00 UTC
+  });
+
+  it('groups trades under their IST day, newest first, with the count and closed P&L', () => {
+    const lateWin = { ...trade, id: 'w', stage: 'closed' as const, entryPrice: 100, exitPrice: 90, createdAt: '2026-11-05T19:00:00.000Z' }; // Fri 6 Nov 00:30 IST
+    const morning = { ...trade, id: 'm' }; // Thu 5 Nov 10:30 IST
+    const table = renderToStaticMarkup(<AutoTradesTable trades={[lateWin, morning]} />);
+    const days = [...table.matchAll(/<tr class="automation-trades__day"><th[^>]*>([^<]+)<span[^>]*>([^<]+)<\/span><\/th><td class="([^"]*)">([^<]+)</g)]
+      .map(([, label, count, , pnl]) => [label, count, pnl]);
+    expect(days).toEqual([['Fri, 6 Nov, 2026', ' · 1 trade', '+750.00'], ['Thu, 5 Nov, 2026', ' · 1 trade', '–']]);
+    expect(table.match(/<tbody>/g)).toHaveLength(2);
+  });
+
+  it("has a chevron per day that hides or shows the day's trades, expanded at first", () => {
+    const table = renderToStaticMarkup(<AutoTradesTable trades={[trade]} />);
+    const chevron = [...table.matchAll(/<button[^>]*>/g)].map((m) => m[0]).find((tag) => tag.includes('aria-label="Hide this day&#x27;s trades"')) ?? '';
+    expect(chevron).toContain('aria-expanded="true"');
+    expect(table).toContain('NIFTY26NOV24000PE');
+    const group = { day: '2026-11-05', trades: [trade], pnl: null };
+    const folded = renderToStaticMarkup(<table><tbody><DayRow group={group} expanded={false} onToggle={() => {}} /></tbody></table>);
+    expect(folded).toContain('automation-trades__day--collapsed');
+    expect(folded).toContain('aria-label="Show this day&#x27;s trades"');
   });
 
   it('marks an open position live, and shows closed P&L in profit or loss colours', () => {
@@ -107,7 +136,7 @@ describe('AutoTradesTable', () => {
 describe('TradeRow', () => {
   it('shows the lifecycle as a timeline of plain sentences when open, the IST time only on the row', () => {
     const trade: AutoTrade = {
-      id: 't', horizon: 'intraday', kind: 'index-option', mode: 'paper', tradingsymbol: 'NIFTY26N0924550PE', instrumentToken: 1,
+      id: 't', horizon: Horizon.Intraday, kind: 'index-option', mode: 'paper', tradingsymbol: 'NIFTY26N0924550PE', instrumentToken: 1,
       side: 'SELL', quantity: 65, stage: 'executed', reason: null, entryPrice: 98.8, exitPrice: null, charges: null, positionId: 'p',
       createdAt: '2026-11-06T07:00:29.000Z', updatedAt: '2026-11-06T07:00:29.000Z',
       events: [

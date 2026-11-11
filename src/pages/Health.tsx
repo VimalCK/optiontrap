@@ -1,24 +1,18 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { getHealth, HealthCheck, HealthStatus } from '@/services/admin';
 import {
-  ConnectionIcon, SettingsIcon, LinkIcon, UserIcon, AnalyticsIcon, AutomationIcon, ShieldIcon, CalendarIcon,
+  ConnectionIcon, SettingsIcon, LinkIcon, UserIcon, AnalyticsIcon, AutomationIcon, CalendarIcon,
 } from '@/components/icons/Icons';
 import { formatCalendarDate, istDateString, istTimeLabel } from '@/utils/marketStatus';
 import '@/styles/admin.css';
 
-const formatWhen = (ts: number | null) => {
-  if (!ts) return 'No data yet';
-  const date = new Date(ts);
-  if (Number.isNaN(date.getTime())) return 'Unknown';
-
-  const mins = Math.floor((Date.now() - ts) / 60000);
-  let rel: string;
-  if (mins < 1) rel = 'just now';
-  else if (mins < 60) rel = `${mins}m ago`;
-  else if (mins < 1440) rel = `${Math.floor(mins / 60)}h ago`;
-  else rel = `${Math.floor(mins / 1440)}d ago`;
-
-  return `${date.toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })} · ${rel}`;
+/** How long ago, roughly: "just now", "12m ago", "3h ago", "2d ago". */
+const timeAgo = (ms: number) => {
+  const mins = Math.floor(ms / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  if (mins < 1440) return `${Math.floor(mins / 60)}h ago`;
+  return `${Math.floor(mins / 1440)}d ago`;
 };
 
 const formatUptime = (seconds: number) => {
@@ -44,6 +38,19 @@ export const checkTimeLabel = (time: string, now: Date = new Date()): string => 
   const date = day === istDateString(now) ? '' : `${formatCalendarDate(day, { day: '2-digit', month: 'short' })} `;
   return `${date}${istTimeLabel(at)} IST`;
 };
+
+/**
+ * The OI data feed row: when the newest snapshot was taken (IST, and how long
+ * ago), whatever its day, and whether it is from today (Fresh) or not (Idle).
+ */
+export function oiFeedStatus(newest: number | null, now: Date = new Date()): { text: string; fresh: boolean } {
+  if (newest === null) return { text: 'No snapshots yet', fresh: false };
+  const at = new Date(newest);
+  return {
+    text: `Last snapshot ${checkTimeLabel(at.toISOString(), now)} · ${timeAgo(now.getTime() - newest)}`,
+    fresh: istDateString(at) === istDateString(now),
+  };
+}
 
 /** One service row for a server health check: its name, why (and when), and a pass / warn / fail badge. */
 export const HealthCheckRow: React.FC<{ icon: React.ReactNode; name: string; check: HealthCheck }> = ({ icon, name, check }) => {
@@ -97,6 +104,7 @@ const Health: React.FC = () => {
   const feedbackTotal = health.feedback.total;
   const feedbackOpen = health.feedback.open;
   const openPct = feedbackTotal > 0 ? Math.round((feedbackOpen / feedbackTotal) * 100) : 0;
+  const oiFeed = oiFeedStatus(health.lastOiUpdate);
 
   return (
     <>
@@ -159,15 +167,14 @@ const Health: React.FC = () => {
             <span className="hx-service__icon"><AnalyticsIcon size={18} /></span>
             <div className="hx-service__body">
               <strong>OI Data Feed</strong>
-              <small>Last snapshot {formatWhen(health.lastOiUpdate)}</small>
+              <small>{oiFeed.text}</small>
             </div>
-            <span className={`hx-badge hx-badge--${health.lastOiUpdate ? 'up' : 'idle'}`}>
-              <i />{health.lastOiUpdate ? 'Fresh' : 'Idle'}
+            <span className={`hx-badge hx-badge--${oiFeed.fresh ? 'up' : 'idle'}`}>
+              <i />{oiFeed.fresh ? 'Fresh' : 'Idle'}
             </span>
           </div>
 
-          <HealthCheckRow icon={<AutomationIcon size={18} />} name="Algo Trading Engine" check={health.checks.tradeEngine} />
-          <HealthCheckRow icon={<ShieldIcon size={18} />} name="Trade Monitor" check={health.checks.tradeMonitor} />
+          <HealthCheckRow icon={<AutomationIcon size={18} />} name="Trade Engine" check={health.checks.tradeEngine} />
           <HealthCheckRow icon={<CalendarIcon size={18} />} name="Nightly Jobs" check={health.checks.nightlyJobs} />
         </div>
 

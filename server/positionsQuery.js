@@ -22,7 +22,9 @@ export const MAX_TRADE_LIMIT = 500;
 
 // P&L of an exited position after its charges (shared/paperCharges.js; none on positions closed
 // before charges were recorded); the same formula as the browser's positionToEntry.
-const PNL_SQL = "(CASE WHEN side = 'BUY' THEN (exit_price - entry_price) * quantity ELSE (entry_price - exit_price) * quantity END - COALESCE(charges, 0))";
+/** A position's charges; 0 for one closed before charges were kept. */
+const CHARGES_SQL = 'COALESCE(charges, 0)';
+const PNL_SQL = `(CASE WHEN side = 'BUY' THEN (exit_price - entry_price) * quantity ELSE (entry_price - exit_price) * quantity END - ${CHARGES_SQL})`;
 // By instrument_type, which every position has (option_type is NULL for stocks
 // and futures, and NOT IN never matches NULL).
 const SEGMENT_SQL = {
@@ -169,7 +171,7 @@ export function buildDailyPnlQuery(userId, { mode = null, from, to, segment }) {
   const where = whereBuilder(userId);
   closedConditions(where, { mode, from, to, segment });
   const day = `to_char((exit_time::timestamptz) AT TIME ZONE ${where.param(MARKET_TIME_ZONE)}, 'YYYY-MM-DD')`;
-  const sql = `SELECT ${day} AS date, ROUND(SUM(${PNL_SQL})::numeric, 2) AS pnl, COUNT(*) AS trades `
+  const sql = `SELECT ${day} AS date, ROUND(SUM(${PNL_SQL})::numeric, 2) AS pnl, ROUND(SUM(${CHARGES_SQL})::numeric, 2) AS charges, COUNT(*) AS trades `
     + `FROM positions WHERE ${where.conditions.join(' AND ')} GROUP BY 1 ORDER BY 1 DESC`;
   return { sql, params: where.params };
 }

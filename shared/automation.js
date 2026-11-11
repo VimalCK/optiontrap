@@ -17,16 +17,17 @@
  *              rule (shared/exitRules/); it ends here
  */
 import { defaultRuleSettings, parseRuleSettings, ruleSettingsWithDefaults } from './rules/ruleSettings.js';
+import { Horizon, HORIZONS, horizonLabel } from './horizons.js';
 import { ENTRY_RULES } from './entryRules/index.js';
 import { EXIT_RULES } from './exitRules/index.js';
-import { STRATEGIES } from './strategies/index.js';
 
 /**
  * @typedef {'stock' | 'stock-option' | 'stock-future' | 'index-option' | 'index-future'} TradeKindId
  * @typedef {'BUY' | 'SELL'} TradeSide
- * @typedef {'intraday' | 'positional'} HorizonId
+ * @typedef {import('./horizons.js').HorizonId} HorizonId
  * @typedef {'paper' | 'live'} ExecutionModeId
  * @typedef {'selected' | 'validated' | 'rejected' | 'executed' | 'closed'} LifecycleStageId
+ * @typedef {import('./rules/ruleSettings.js').RuleInfo} RuleInfo  a strategy as the configuration knows it (the trade engine's, GET /api/strategies)
  * @typedef {{
  *   enabled: boolean,
  *   mode: ExecutionModeId,
@@ -51,12 +52,10 @@ export const TRADE_SIDES = ['BUY', 'SELL'];
 
 /**
  * Where trades come from. Intraday trades follow the OI snapshots; positional
- * trades will follow OI history and are not built yet.
+ * trades will follow OI history and are not built yet. Defined in
+ * shared/horizons.js, which positions and orders share.
  */
-export const HORIZONS = [
-  { id: 'intraday', label: 'Intraday', available: true },
-  { id: 'positional', label: 'Positional', available: false },
-];
+export { HORIZONS };
 
 /** Where executed trades go. Live trading places real orders and is not built yet. */
 export const EXECUTION_MODES = [
@@ -106,15 +105,16 @@ function noKinds() {
 /**
  * The configuration of a user who hasn't saved one: off, paper, intraday,
  * nothing chosen, every strategy and entry and exit rule inactive.
+ * @param {RuleInfo[]} strategies  the trade engine's strategies (GET /api/strategies)
  * @returns {AutomationConfig}
  */
-export function defaultAutomationConfig() {
+export function defaultAutomationConfig(strategies) {
   return {
     enabled: false,
     mode: 'paper',
-    horizons: { intraday: true, positional: false },
+    horizons: { [Horizon.Intraday]: true, [Horizon.Positional]: false },
     kinds: noKinds(),
-    strategies: defaultRuleSettings(STRATEGIES),
+    strategies: defaultRuleSettings(strategies),
     entryRules: defaultRuleSettings(ENTRY_RULES),
     exitRules: defaultRuleSettings(EXIT_RULES),
   };
@@ -125,9 +125,10 @@ export function defaultAutomationConfig() {
  * or `{ error }` with a message for the user. Every field is required, so a
  * saved configuration is always complete.
  * @param {any} input
+ * @param {RuleInfo[]} strategyInfos  the trade engine's strategies
  * @returns {{ config: AutomationConfig, error?: undefined } | { error: string, config?: undefined }}
  */
-export function parseAutomationConfig(input) {
+export function parseAutomationConfig(input, strategyInfos) {
   if (!input || typeof input !== 'object') return { error: 'configuration is required' };
   const { enabled, mode, horizons, kinds, strategies, entryRules, exitRules } = input;
 
@@ -158,7 +159,7 @@ export function parseAutomationConfig(input) {
     parsedKinds[kind.id] = { BUY: sides.BUY, SELL: sides.SELL };
   }
 
-  const parsedStrategies = parseRuleSettings(STRATEGIES, strategies, 'strategies');
+  const parsedStrategies = parseRuleSettings(strategyInfos, strategies, 'strategies');
   if (parsedStrategies.error !== undefined) return { error: parsedStrategies.error };
   const parsedEntryRules = parseRuleSettings(ENTRY_RULES, entryRules, 'entryRules');
   if (parsedEntryRules.error !== undefined) return { error: parsedEntryRules.error };
@@ -183,10 +184,11 @@ export function parseAutomationConfig(input) {
  * since it was saved come in switched off, and any that no longer exist are
  * dropped. The same goes for strategies and entry and exit rules.
  * @param {any} stored
+ * @param {RuleInfo[]} strategies  the trade engine's strategies
  * @returns {AutomationConfig}
  */
-export function withDefaults(stored) {
-  const base = defaultAutomationConfig();
+export function withDefaults(stored, strategies) {
+  const base = defaultAutomationConfig(strategies);
   if (!stored || typeof stored !== 'object') return base;
   const kinds = /** @type {Record<string, Record<TradeSide, boolean>>} */ (noKinds());
   for (const kind of TRADE_KINDS) {
@@ -203,7 +205,7 @@ export function withDefaults(stored) {
     mode,
     horizons: /** @type {AutomationConfig['horizons']} */ (horizons),
     kinds: /** @type {AutomationConfig['kinds']} */ (kinds),
-    strategies: ruleSettingsWithDefaults(STRATEGIES, stored.strategies),
+    strategies: ruleSettingsWithDefaults(strategies, stored.strategies),
     entryRules: ruleSettingsWithDefaults(ENTRY_RULES, stored.entryRules),
     exitRules: ruleSettingsWithDefaults(EXIT_RULES, stored.exitRules),
   };
@@ -228,7 +230,6 @@ export function tradeKind(instrumentType, isIndex) {
  * @typedef {{ id: string, check: (trade: GeneralTrade, config: AutomationConfig) => string | null }} GeneralCheck
  */
 
-const horizonLabel = (/** @type {string} */ id) => HORIZONS.find((h) => h.id === id)?.label ?? id;
 const kindLabel = (/** @type {string} */ id) => TRADE_KINDS.find((k) => k.id === id)?.label ?? id;
 const sideLabel = (/** @type {string} */ side) => (side === 'BUY' ? 'Buy' : 'Sell');
 

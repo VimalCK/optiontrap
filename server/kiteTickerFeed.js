@@ -1,7 +1,7 @@
 /**
  * The server's own Kite ticker feed: live last prices for a set of
- * instruments, with no browser involved. Used by the trade monitor
- * (autoTradeMonitor.js) to run exit rules on every tick.
+ * instruments, with no browser involved. Used through sharedTickerFeed.js by
+ * the trade engine's order service and trade monitor (server/tradeEngine/services/).
  *
  * Opens WebSocket connections to wss://ws.kite.trade with one Kite session
  * (the admin's, as the OI snapshots use) and subscribes in LTP mode, the

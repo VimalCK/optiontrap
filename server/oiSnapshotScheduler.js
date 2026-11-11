@@ -13,10 +13,6 @@
  *
  * Uses the newest admin Kite session (see findWorkingAdminSession). With no
  * admin login today it waits and logs once.
- *
- * After each scheduled snapshot is saved, listeners (onScheduledSnapshot) are
- * told, with the session and instrument list used: the trade engine runs then,
- * on fresh data.
  */
 
 import { getAlwaysSnapshotSymbols, getTodayOiSnapshotTokens, getUnderlyings, saveOiSnapshot } from './db.js';
@@ -37,8 +33,6 @@ let lastWaitingLogDate = null;
 // Captures run one at a time so the scheduled run and an on-demand run don't
 // hit Kite's quote rate limit together.
 let queue = Promise.resolve();
-/** @type {((event: { now: Date, kite: { apiKey: string, accessToken: string }, instruments: any[] }) => void)[]} */
-const snapshotListeners = [];
 
 function enqueue(fn) {
   const run = queue.then(fn);
@@ -225,26 +219,14 @@ async function tick() {
   const slot = Math.floor(Date.now() / SLOT_MS);
   if (slot === lastSlot) return;
 
-  const now = new Date();
-  const { date } = istClock(now);
-  const { symbols, count, kite, instruments } = await capture(date, async (list) => (
+  const { date } = istClock();
+  const { symbols, count } = await capture(date, async (list) => (
     [...new Set([...(await getAlwaysSnapshotSymbols()), ...(await snapshottedToday(list))])]
   ));
   if (count > 0) {
     lastSlot = slot;
     console.log(`[OI Snapshots] Saved ${count} options for ${symbols.join(', ')}`);
-    for (const listener of snapshotListeners) listener({ now, kite, instruments });
   }
-}
-
-/**
- * Be told after each scheduled snapshot is saved (not after on-demand ones),
- * with the time, the admin session and the instrument list it used. A
- * listener handles its own errors.
- * @param {(event: { now: Date, kite: { apiKey: string, accessToken: string }, instruments: any[] }) => void} listener
- */
-export function onScheduledSnapshot(listener) {
-  snapshotListeners.push(listener);
 }
 
 /** Check every minute; snapshot once per 10-minute slot while the market is open. */

@@ -14,16 +14,18 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import PnLHeatmap from './PnLHeatmap';
 import AppSelect from '@/components/AppSelect/AppSelect';
-import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import DateInput from '@/components/DateInput/DateInput';
 import TradeSource from '@/components/TradeSource/TradeSource';
+import TradeHorizon from '@/components/TradeSource/TradeHorizon';
 import { formatNumericDate } from '@/utils/marketStatus';
 import { marketDate } from '../../../shared/marketTime.js';
-import { isDateValue, presetRange, rangeProblem, subtractMonths } from './journalRange';
+import { isDateValue, presetRange, rangeProblem, reportToFetch, subtractMonths } from './journalRange';
 import {
   chargesTitle,
   getPaperDailyPnl,
   getPaperTrades,
+  hasTradeMeta,
+  journalTotals,
   DailyPnl,
   TradeEntry,
   TradingMode,
@@ -77,9 +79,6 @@ const TradeJournal: React.FC<{
   const [segment, setSegment] = useState<SegmentFilter>('all');
   const [rangeStart, setRangeStart] = useState<string>(() => subtractMonths(marketDate(), 12));
   const [rangeEnd, setRangeEnd] = useState<string>(() => marketDate());
-
-  // Whether the user has picked a range yet; nothing is fetched until then.
-  const [rangePicked, setRangePicked] = useState(false);
 
   // The last report: its filters and one row per day. null until the first fetch.
   const [report, setReport] = useState<{ filters: ReportFilters; days: DailyPnl[] } | null>(null);
@@ -141,7 +140,7 @@ const TradeJournal: React.FC<{
   }, [loadDay]);
 
   // A link to a specific day (e.g. a trade on the Dashboard) opens that day's
-  // report straight away; plain navigation to the page fetches nothing.
+  // report, expanded; plain navigation opens the default range shown.
   useEffect(() => {
     const targetDate = isDateValue(initialDate)
       ? initialDate
@@ -155,7 +154,6 @@ const TradeJournal: React.FC<{
     setRangeStart(targetDate);
     setRangeEnd(targetDate);
     setExpandedDates(expand);
-    setRangePicked(true);
     // Only when the link itself changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDate, initialRange]);
@@ -169,17 +167,15 @@ const TradeJournal: React.FC<{
 
   const problem = rangeProblem(rangeStart, rangeEnd);
 
-  // Fetch exactly the range picked, shortly after the last change to it.
+  // Fetch exactly the range shown (the default on opening), shortly after the last change to it.
   useEffect(() => {
-    if (!rangePicked || mode !== 'paper' || rangeProblem(rangeStart, rangeEnd)) return;
-    const timer = setTimeout(() => runReport({ from: rangeStart, to: rangeEnd, segment }, expandedDates), FETCH_DELAY_MS);
+    const filters = reportToFetch(mode, rangeStart, rangeEnd, segment);
+    if (!filters) return;
+    const timer = setTimeout(() => runReport(filters, expandedDates), FETCH_DELAY_MS);
     return () => clearTimeout(timer);
     // Expanding a day loads that day only; it doesn't refetch the range.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rangePicked, mode, rangeStart, rangeEnd, segment, runReport]);
-
-  const pickStart = (value: string) => { setRangeStart(value); setRangePicked(true); };
-  const pickEnd = (value: string) => { setRangeEnd(value); setRangePicked(true); };
+  }, [mode, rangeStart, rangeEnd, segment, runReport]);
 
   const toggleDate = (date: string) => {
     const opening = !expandedDates.has(date);
@@ -228,9 +224,9 @@ const TradeJournal: React.FC<{
 
             <div className="tj-date-range">
               <span className="tj-date-label">From</span>
-              <DateInput label="From" value={rangeStart} max={rangeEnd || undefined} onChange={pickStart} />
+              <DateInput label="From" value={rangeStart} max={rangeEnd || undefined} onChange={setRangeStart} />
               <span className="tj-date-label">To</span>
-              <DateInput label="To" value={rangeEnd} min={rangeStart || undefined} onChange={pickEnd} />
+              <DateInput label="To" value={rangeEnd} min={rangeStart || undefined} onChange={setRangeEnd} />
             </div>
 
             <div className="tj-presets">
@@ -247,7 +243,6 @@ const TradeJournal: React.FC<{
                     const range = presetRange(marketDate(), months);
                     setRangeStart(range.from);
                     setRangeEnd(range.to);
-                    setRangePicked(true);
                   }}
                 >
                   {label}
@@ -281,6 +276,7 @@ const TradeJournal: React.FC<{
           <div className="card tj-heatmap-card">
             <PnLHeatmap
               dailyPnL={dailyPnL}
+              totals={journalTotals(report?.days ?? [])}
               endDate={new Date(report?.filters.to ?? rangeEnd)}
               months={12}
             />
@@ -295,11 +291,11 @@ const TradeJournal: React.FC<{
                     <th>Symbol</th>
                     <th>Segment</th>
                     <th>Side</th>
-                    <th>Qty</th>
-                    <th>Entry</th>
-                    <th>Exit</th>
-                    <th title="What Zerodha would charge for the entry and exit">Charges</th>
-                    <th title="After charges">P&L</th>
+                    <th className="tj-num">Qty</th>
+                    <th className="tj-num">Entry</th>
+                    <th className="tj-num">Exit</th>
+                    <th className="tj-num" title="What Zerodha would charge for the entry and exit">Charges</th>
+                    <th className="tj-num" title="After charges">P&L</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -321,19 +317,21 @@ const TradeJournal: React.FC<{
                           <td className="tj-group-empty" />
                           <td className="tj-group-empty" />
                           <td className="tj-group-empty" />
-                          <td className="tj-group-empty" />
-                          <td className={`tj-group-pnl ${pnlClass(day.pnl)}`}>{formatPnl(day.pnl)}</td>
+                          <td className="tj-group-charges tj-num" title="The day's charges">{day.charges.toFixed(2)}</td>
+                          <td className={`tj-group-pnl tj-num ${pnlClass(day.pnl)}`}>{formatPnl(day.pnl)}</td>
                         </tr>
 
                         {/* Individual trades — fetched when the day is expanded */}
                         {isExpanded && loaded?.trades.map((t) => (
                           <tr key={t.id} className={`tj-trade-row ${initialTradeId === t.id ? 'tj-trade-row--highlighted' : ''}`}>
                             <td className="tj-symbol">
-                              {t.symbol}
-                              <TradingViewLink symbol={t.symbol} />
-                              {(
+                              <span className="tj-symbol__line">
+                                {t.symbol}
+                                <TradeSource source={t.source} />
+                                <TradeHorizon horizon={t.horizon} />
+                              </span>
+                              {hasTradeMeta(t) && (
                                 <div className="tj-trade-meta">
-                                  <TradeSource source={t.source} />
                                   {t.confidence != null && <span>Conf {t.confidence}%</span>}
                                   {t.targetPrice != null && <span>Tgt {t.targetPrice.toFixed(2)}</span>}
                                   {t.stopLossPrice != null && <span>SL {t.stopLossPrice.toFixed(2)}</span>}
@@ -343,11 +341,11 @@ const TradeJournal: React.FC<{
                             </td>
                             <td><span className={`tj-badge tj-badge--${t.segment}`}>{t.segment}</span></td>
                             <td><span className={`tj-side tj-side--${t.side.toLowerCase()}`}>{t.side}</span></td>
-                            <td>{t.quantity}</td>
-                            <td>{t.entryPrice.toFixed(2)}</td>
-                            <td>{t.exitPrice.toFixed(2)}</td>
-                            <td title={chargesTitle(t.chargeBreakdown)}>{t.charges.toFixed(2)}</td>
-                            <td className={pnlClass(t.pnl)}>{formatPnl(t.pnl)}</td>
+                            <td className="tj-num">{t.quantity}</td>
+                            <td className="tj-num">{t.entryPrice.toFixed(2)}</td>
+                            <td className="tj-num">{t.exitPrice.toFixed(2)}</td>
+                            <td className="tj-num" title={chargesTitle(t.chargeBreakdown)}>{t.charges.toFixed(2)}</td>
+                            <td className={`tj-num ${pnlClass(t.pnl)}`}>{formatPnl(t.pnl)}</td>
                           </tr>
                         ))}
 

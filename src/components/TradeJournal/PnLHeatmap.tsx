@@ -7,10 +7,14 @@
 
 import React, { useMemo } from 'react';
 import { formatNumericDate } from '@/utils/marketStatus';
+import { formatAmount, formatSignedAmount } from '@/utils/formatAmount';
+import type { JournalTotals } from '@/services/tradeJournal';
 import { createPortal } from 'react-dom';
 
 interface PnLHeatmapProps {
   dailyPnL: Map<string, number>;
+  /** The range's P&L before charges, its charges, and the realised P&L, for the summary strip. */
+  totals: JournalTotals;
   endDate?: Date;
   months?: number;
 }
@@ -48,6 +52,9 @@ function addDays(d: Date, n: number): Date {
   return copy;
 }
 
+/** Profit green, loss red, zero plain. */
+const toneClass = (value: number) => (value > 0 ? 'heatmap-positive' : value < 0 ? 'heatmap-negative' : '');
+
 function intensityLevel(pnl: number, maxAbs: number): number {
   if (maxAbs === 0) return 1;
   const ratio = Math.abs(pnl) / maxAbs;
@@ -57,14 +64,14 @@ function intensityLevel(pnl: number, maxAbs: number): number {
   return 4;
 }
 
-const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, endDate, months = 12 }) => {
+const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, totals, endDate, months = 12 }) => {
   const today = useMemo(() => {
     const d = new Date(endDate ?? new Date());
     d.setHours(0, 0, 0, 0);
     return d;
   }, [endDate]);
 
-  const { monthGroups, totalPnL, winDays, lossDays, totalDays } = useMemo(() => {
+  const { monthGroups, winDays, lossDays, totalDays } = useMemo(() => {
     const todayStr = toDateStr(today);
 
     // Always start from January of the current year, show all 12 months
@@ -115,15 +122,14 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, endDate, months = 12 
     }
 
     // Stats — only over the filtered dailyPnL passed in
-    let total = 0, wins = 0, losses = 0, traded = 0;
+    let wins = 0, losses = 0, traded = 0;
     dailyPnL.forEach((pnl) => {
-      total += pnl;
       traded++;
       if (pnl > 0) wins++;
       else if (pnl < 0) losses++;
     });
 
-    return { monthGroups: groups, totalPnL: total, winDays: wins, lossDays: losses, totalDays: traded };
+    return { monthGroups: groups, winDays: wins, lossDays: losses, totalDays: traded };
   }, [dailyPnL, today, months]);
 
   const maxAbs = useMemo(() => {
@@ -176,11 +182,16 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, endDate, months = 12 
       {/* Stats */}
       <div className="heatmap-stats">
         <div className="heatmap-stat">
-          <span className="heatmap-stat__label">Total P&L</span>
-          <span className={`heatmap-stat__value ${totalPnL > 0 ? 'heatmap-positive' : totalPnL < 0 ? 'heatmap-negative' : ''}`}>
-            {totalPnL >= 0 ? '+' : ''}
-            {totalPnL.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-          </span>
+          <span className="heatmap-stat__label" title="Before charges">Total P&L</span>
+          <span className={`heatmap-stat__value ${toneClass(totals.pnl)}`}>{formatSignedAmount(totals.pnl)}</span>
+        </div>
+        <div className="heatmap-stat">
+          <span className="heatmap-stat__label" title="What Zerodha would charge for the entries and exits">Charges</span>
+          <span className="heatmap-stat__value">{formatAmount(totals.charges)}</span>
+        </div>
+        <div className="heatmap-stat">
+          <span className="heatmap-stat__label" title="Total P&L minus charges">Realised P&L</span>
+          <span className={`heatmap-stat__value ${toneClass(totals.realised)}`}>{formatSignedAmount(totals.realised)}</span>
         </div>
         <div className="heatmap-stat">
           <span className="heatmap-stat__label">Trading Days</span>

@@ -1,7 +1,7 @@
 /**
  * One Kite ticker feed shared by everything on the server that needs live
- * prices: the trade monitor (autoTradeMonitor.js) and the paper order book
- * (paperOrderBook.js).
+ * prices: the trade engine's trade monitor and order service
+ * (server/tradeEngine/services/tradeMonitor.js, orders.js).
  *
  * Kite allows only 3 ticker connections per API key, so each of them can't
  * open its own feed. Each opens a client here instead, with the same shape
