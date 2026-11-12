@@ -38,9 +38,36 @@ import { checkExitRules } from '../../../shared/exitRules/index.js';
 import { paperPnl, paperPnlPercent } from '../../../shared/paperPnl.js';
 import { algoLogger } from '../../algoLog.js';
 import { TradeSource } from '../../../shared/tradeEnums.js';
+import { HealthStatus } from '../../../shared/appEnums.js';
+import { countLabel, healthTime } from '../../serviceHealth.js';
 
 /** This trade engine service's id: its key in ctx.services and on Admin Services. */
 export const TRADE_MONITOR_SERVICE_ID = 'tradeMonitor';
+
+/**
+ * @typedef {{ marketOpen: boolean, feedConnected: boolean, waitingForLogin: boolean, watchedPositions: number,
+ *             watchedInstruments: number, lastTickAt: number | null, lastError: string | null }} MonitorStatus
+ */
+
+/** A failing check, named as the trade monitor's within the engine's check. */
+const monitorFailure = (/** @type {string} */ output) => ({ status: HealthStatus.Fail, output: `Trade monitor · ${output}`, time: null });
+
+/**
+ * The monitor's health from its status: fails when loading the open positions
+ * failed, or when open automated positions go unwatched for want of an admin
+ * Kite login; otherwise says what it is watching, timed at the last tick.
+ * @param {MonitorStatus} status
+ * @returns {import('../../serviceHealth.js').HealthCheck}
+ */
+export function monitorHealth(status) {
+  if (status.lastError !== null) return monitorFailure(`Loading positions failed · ${status.lastError}`);
+  if (!status.marketOpen) return { status: HealthStatus.Pass, output: 'Market closed · watches automated positions in market hours', time: null };
+  if (status.waitingForLogin) return monitorFailure(`${countLabel(status.watchedPositions, 'open position')} unwatched · no admin Kite login`);
+  if (!status.feedConnected) return { status: HealthStatus.Pass, output: 'No open automated positions', time: null };
+  const watching = `Watching ${countLabel(status.watchedPositions, 'position')} in ${countLabel(status.watchedInstruments, 'instrument')}`;
+  if (status.lastTickAt === null) return { status: HealthStatus.Pass, output: `${watching} · no tick yet`, time: null };
+  return { status: HealthStatus.Pass, output: `${watching} · last tick`, time: healthTime(status.lastTickAt) };
+}
 
 /** How often every position is checked on its last price, for time-based rules. */
 const CLOCK_CHECK_MS = 1000;
@@ -267,6 +294,19 @@ export function createTradeMonitor({
   }
 
   /** After the close: stop watching until the next open. */
+  /** @returns {MonitorStatus} */
+  function monitorStatus() {
+    return {
+      marketOpen: market?.isOpen() ?? false,
+      feedConnected: feed !== null,
+      waitingForLogin,
+      watchedPositions: watched.size,
+      watchedInstruments: watchedTokens().length,
+      lastTickAt,
+      lastError,
+    };
+  }
+
   function closeSession() {
     if (feed) log('market closed', { feed: 'stopped watching' });
     stopFeed();
@@ -301,14 +341,9 @@ export function createTradeMonitor({
     /** What is being watched, for tests and logs. */
     watchedPositionIds: () => [...watched.keys()],
     /** How the monitor is doing, for Admin Services. */
-    status: () => ({
-      marketOpen: market?.isOpen() ?? false,
-      feedConnected: feed !== null,
-      waitingForLogin,
-      watchedPositions: watched.size,
-      watchedInstruments: watchedTokens().length,
-      lastTickAt,
-      lastError,
-    }),
+    status: monitorStatus,
+
+    /** Its own check for Admin Services, from its status. */
+    health: () => monitorHealth(monitorStatus()),
   };
 }

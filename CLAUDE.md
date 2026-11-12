@@ -17,7 +17,7 @@ It never places real orders. The user is the sole developer; prod (optiontrap.co
   on their own host (the trade engine's `host.js`, its own advisory lock). A job never writes its own timer or time check:
   it asks `ctx.market` (`every`, `daily(at, ms, fn)`, `afterClose(ms, fn)`, `repeat`). Add a job by adding it to `JOBS`.
 - **Trade engine** `server/tradeEngine/`: the one runtime for trading, started with the server and alive as long as it.
-  - `host.js` is only a host: it starts and stops plug-ins of the shape `{ id, start(ctx), stop?(), status?() }` and gives
+  - `host.js` is only a host: it starts and stops plug-ins of the shape `{ id, start(ctx), stop?(), status?(), health?() }` and gives
     each a context: `ctx.market` (`market.js`: `onOpen`, `onClose`, `every`, `daily`, `afterClose`, `repeat`, `isOpen` on the
     IST clock), `ctx.services` (the services by id, the only way plug-ins reach each other) and `ctx.log`. `createPluginHost`
     is the generic host (also used by the scheduled jobs); `createTradeEngine` builds the engine's. It holds a Postgres

@@ -85,7 +85,7 @@ describe('the trade engine host', () => {
   it("shows each running plug-in's own status", async () => {
     const { engine } = setup();
     await engine.start();
-    expect(engine.status().plugins[0]).toEqual({ id: 'orders', kind: 'Service', state: 'Running', error: null, beats: 1 });
+    expect(engine.status().plugins[0]).toEqual({ id: 'orders', kind: 'Service', state: 'Running', error: null, beats: 1, health: null });
   });
 
   it('stands by when another server holds the lock, and starts once it can take it', async () => {
@@ -128,7 +128,7 @@ describe('a plug-in host of scheduled jobs', () => {
     await host.start();
     expect(holdLock).toHaveBeenCalledWith('scheduled-jobs', expect.any(Function));
     expect(job.start.mock.calls[0][0].services).toEqual({});
-    expect(host.status().plugins).toEqual([{ id: 'nightly', kind: 'Job', state: 'Running', error: null }]);
+    expect(host.status().plugins).toEqual([{ id: 'nightly', kind: 'Job', state: 'Running', error: null, health: null }]);
     expect(logs).toContainEqual(['Jobs', 'started', { Job: 1 }]);
   });
 });

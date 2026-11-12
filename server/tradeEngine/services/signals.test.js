@@ -9,7 +9,7 @@ vi.mock('../../oiHistoryScheduler.js', () => ({ findWorkingAdminSession: vi.fn()
 vi.mock('../../instruments.js', () => ({ getOrFetchInstruments: vi.fn() }));
 vi.mock('../strategies/index.js', () => ({ STRATEGIES: [] }));
 
-const { createSignalsService, planTrade, refusal } = await import('./signals.js');
+const { createSignalsService, planTrade, refusal, signalsHealth } = await import('./signals.js');
 const { defaultAutomationConfig } = await import('../../../shared/automation.js');
 const { checkPaperTrade, normalizeTradeInput } = await import('../../../shared/paperTradeRules.js');
 
@@ -334,5 +334,24 @@ describe('settleOrder', () => {
     expect(orders.onSettled).toHaveBeenCalledWith(service.settleOrder);
     service.stop();
     expect(service.status()).toEqual({ lastRun: null });
+  });
+});
+
+describe('signalsHealth', () => {
+  const NOON = new Date('2026-11-05T06:30:00Z'); // Thu 12:00 IST
+  const run = (changes = {}) => ({ strategyId: 's', at: NOON.getTime(), users: 2, signals: 3, failed: 0, error: null, ...changes });
+
+  it('passes before the first run, with no time', () => {
+    expect(signalsHealth(null)).toEqual({ status: 'Pass', output: 'No run yet · runs when a strategy has a new signal', time: null });
+  });
+
+  it('passes after a clean run, saying how many users and signals, at the run time', () => {
+    expect(signalsHealth(run())).toEqual({ status: 'Pass', output: 'Last run · 2 users · 3 signals', time: NOON.toISOString() });
+    expect(signalsHealth(run({ users: 1, signals: 1 })).output).toBe('Last run · 1 user · 1 signal');
+  });
+
+  it('warns when some signals failed, and fails when the run failed', () => {
+    expect(signalsHealth(run({ failed: 1 }))).toEqual({ status: 'Warn', output: 'Last run · 2 users · 3 signals · 1 failed', time: NOON.toISOString() });
+    expect(signalsHealth(run({ error: 'db down' }))).toEqual({ status: 'Fail', output: 'Last run failed · db down', time: NOON.toISOString() });
   });
 });

@@ -7,7 +7,7 @@ vi.mock('../automationConfigs.js', () => ({}));
 vi.mock('../positions.js', () => ({ NOT_FOUND: 'NOT_FOUND' }));
 vi.mock('../../oiHistoryScheduler.js', () => ({ findWorkingAdminSession: vi.fn() }));
 
-const { createTradeMonitor, dueExits, openPnlByUser } = await import('./tradeMonitor.js');
+const { createTradeMonitor, dueExits, monitorHealth, openPnlByUser } = await import('./tradeMonitor.js');
 const { defaultRuleSettings } = await import('../../../shared/rules/ruleSettings.js');
 const { EXIT_RULES } = await import('../../../shared/exitRules/index.js');
 
@@ -298,5 +298,29 @@ describe('the monitor service', () => {
     monitor.stop();
     expect(feeds[0].close).toHaveBeenCalled();
     expect(monitor.watchedPositionIds()).toEqual([]);
+  });
+});
+
+describe('monitorHealth', () => {
+  const TICK = new Date('2026-11-05T06:29:30Z'); // Thu 11:59:30 IST
+  const status = (changes = {}) => ({
+    marketOpen: true, feedConnected: true, waitingForLogin: false,
+    watchedPositions: 2, watchedInstruments: 1, lastTickAt: TICK.getTime(), lastError: null, ...changes,
+  });
+
+  it('passes while watching, timed at the last tick', () => {
+    expect(monitorHealth(status())).toEqual({ status: 'Pass', output: 'Watching 2 positions in 1 instrument · last tick', time: TICK.toISOString() });
+    expect(monitorHealth(status({ lastTickAt: null }))).toEqual({ status: 'Pass', output: 'Watching 2 positions in 1 instrument · no tick yet', time: null });
+  });
+
+  it('passes when there is nothing to watch: market closed, no open positions', () => {
+    expect(monitorHealth(status({ marketOpen: false, feedConnected: false }))).toEqual({ status: 'Pass', output: 'Market closed · watches automated positions in market hours', time: null });
+    expect(monitorHealth(status({ feedConnected: false, watchedPositions: 0 }))).toEqual({ status: 'Pass', output: 'No open automated positions', time: null });
+  });
+
+  it('fails, named as the trade monitor, when positions go unwatched for want of an admin login, or loading them failed', () => {
+    expect(monitorHealth(status({ feedConnected: false, waitingForLogin: true, watchedPositions: 1 })))
+      .toEqual({ status: 'Fail', output: 'Trade monitor · 1 open position unwatched · no admin Kite login', time: null });
+    expect(monitorHealth(status({ lastError: 'db down' }))).toEqual({ status: 'Fail', output: 'Trade monitor · Loading positions failed · db down', time: null });
   });
 });

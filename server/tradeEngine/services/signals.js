@@ -48,6 +48,8 @@ import { STRATEGIES } from '../strategies/index.js';
 import { marketDayStartMs } from '../../../shared/marketTime.js';
 import { algoLogger } from '../../algoLog.js';
 import { Horizon, LifecycleStage, OrderStatus, OrderType, TradeSource, isOptionType } from '../../../shared/tradeEnums.js';
+import { HealthStatus } from '../../../shared/appEnums.js';
+import { countLabel, healthTime } from '../../serviceHealth.js';
 
 /** This trade engine service's id: its key in ctx.services and on Admin Services. */
 export const SIGNALS_SERVICE_ID = 'signals';
@@ -76,6 +78,21 @@ const STOCK_LOT = 1;
 const tradeLabel = (/** @type {{ side: string, quantity: number, tradingsymbol: string }} */ t) => `${t.side} ${t.quantity} ${t.tradingsymbol}`;
 /** A submit that had nothing to do. */
 const NO_WORK = Object.freeze({ users: 0, signals: 0, failed: 0 });
+
+/**
+ * The service's health, from its last run: passes when it worked, warns when
+ * some signals failed, fails when the run itself failed.
+ * @param {LastRun | null} lastRun
+ * @returns {import('../../serviceHealth.js').HealthCheck}
+ */
+export function signalsHealth(lastRun) {
+  if (!lastRun) return { status: HealthStatus.Pass, output: 'No run yet · runs when a strategy has a new signal', time: null };
+  const time = healthTime(lastRun.at);
+  if (lastRun.error !== null) return { status: HealthStatus.Fail, output: `Last run failed · ${lastRun.error}`, time };
+  const summary = `Last run · ${countLabel(lastRun.users, 'user')} · ${countLabel(lastRun.signals, 'signal')}`;
+  if (lastRun.failed > 0) return { status: HealthStatus.Warn, output: `${summary} · ${lastRun.failed} failed`, time };
+  return { status: HealthStatus.Pass, output: summary, time };
+}
 
 /**
  * The trade a signal means for a user, sized by tradeLots; or the
@@ -322,5 +339,8 @@ export function createSignalsService({
 
     /** The last submit's outcome (null before the first), for Admin Services. */
     status: () => ({ lastRun }),
+
+    /** Its own check for Admin Services, from the last run. */
+    health: () => signalsHealth(lastRun),
   };
 }

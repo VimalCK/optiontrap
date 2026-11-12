@@ -1,6 +1,6 @@
 /**
  * The plug-in host: a runtime alive as long as the server that starts and
- * stops plug-ins of the shape { id, start(ctx), stop?(), status?() }. The
+ * stops plug-ins of the shape { id, start(ctx), stop?(), status?(), health?() }. The
  * server runs two:
  *   the trade engine (createTradeEngine; server/tradeEngine/index.js builds it
  *     with the real plug-ins):
@@ -39,7 +39,8 @@ const LOCK_RETRY_MS = 10_000;
 
 /**
  * @typedef {{ market: import('./market.js').PluginMarket, services: Record<string, any>, log: (event: string, details?: import('../algoLog.js').AlgoDetails) => void }} PluginContext
- * @typedef {{ id: string, start: (ctx: PluginContext) => unknown, stop?: () => unknown, status?: () => Record<string, unknown> }} Plugin
+ * @typedef {{ id: string, start: (ctx: PluginContext) => unknown, stop?: () => unknown, status?: () => Record<string, unknown>, health?: () => import('../serviceHealth.js').HealthCheck }} Plugin
+ *   health  the plug-in's own check (pass / warn / fail) for Admin Services, which folds them without knowing any plug-in
  * @typedef {{ kind: import('../../shared/appEnums.js').PluginKindId, plugins: Plugin[] }} PluginGroup
  * @typedef {{ plugin: Plugin, kind: import('../../shared/appEnums.js').PluginKindId, state: import('../../shared/appEnums.js').PluginStateId, error: string | null, dispose: (() => void) | null }} PluginRun
  * @typedef {{ release: () => Promise<void> }} HeldLock
@@ -188,7 +189,7 @@ export function createPluginHost({
         kind,
         state,
         error,
-        ...(state === PluginState.Running ? plugin.status?.() : {}),
+        ...(state === PluginState.Running ? { ...plugin.status?.(), health: plugin.health?.() ?? null } : { health: null }),
       })),
     }),
   };
