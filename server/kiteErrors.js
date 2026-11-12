@@ -1,15 +1,9 @@
 /**
- * Kite answers 403 for two different things: an expired or revoked login
- * (TokenException) and a call this Kite app isn't allowed to make
- * (PermissionException, e.g. quotes without market-data access). Only the
- * first ends the user's Kite login.
+ * Reading a proxied Kite error reply, so the proxy can tell whether it ended
+ * the login (shared/kiteAuth.js: a 403 TokenException does, a 403
+ * PermissionException doesn't).
  */
 import zlib from 'node:zlib';
-
-/** Whether a Kite 403 error body means the login itself is no longer valid. */
-export function isKiteLoginError(body) {
-  return body?.error_type !== 'PermissionException';
-}
 
 /**
  * The parsed JSON body of a Kite response stream, decompressed as its

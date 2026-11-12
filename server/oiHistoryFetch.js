@@ -23,6 +23,7 @@ import {
 } from './db.js';
 import { getOrFetchInstruments } from './instruments.js';
 import { createKeyedQueue, createSharedRuns } from './sharedRuns.js';
+import { KiteApiError, kiteClient } from './kiteClient.js';
 import { marketDate } from '../shared/marketTime.js';
 import { Exchange, InstrumentType } from '../shared/tradeEnums.js';
 import { FetchEvent, StrikeMode, isStrikeMode } from '../shared/appEnums.js';
@@ -32,13 +33,26 @@ export function todayIST() {
   return marketDate();
 }
 
-/** A fetch that failed for a known reason; the message is safe to show the user. */
+/**
+ * A fetch that failed for a known reason; the message is safe to show the user.
+ * `status` is Kite's HTTP status and `authFailure` whether Kite ended the login, when Kite refused it.
+ */
 export class OiHistoryFetchError extends Error {
-  constructor(message, status = null) {
+  constructor(message, status = null, authFailure = false) {
     super(message);
     this.name = 'OiHistoryFetchError';
     this.status = status;
+    this.authFailure = authFailure;
   }
+}
+
+/**
+ * One instrument's daily candles with OI, through the Kite client.
+ * @returns {Promise<unknown[][] | undefined>} Kite's candle rows: [time, open, high, low, close, volume, oi]
+ */
+async function fetchDailyCandles(kite, instrumentToken, from, to, signal) {
+  const data = await kiteClient(kite).get(`/instruments/historical/${instrumentToken}/day?from=${from}&to=${to}&oi=1`, { signal });
+  return data?.candles;
 }
 
 const sharedFetches = createSharedRuns();
@@ -123,7 +137,7 @@ async function fetchOiHistoryMonthNow({
   const expiryMonthEnd = `${expiryMonth}-${String(new Date(ey, em, 0).getDate()).padStart(2, '0')}`;
   const to = today < expiryMonthEnd ? today : expiryMonthEnd;
 
-  const authHeader = `token ${apiKey}:${accessToken}`;
+  const kite = { apiKey, accessToken };
 
   // scrip is the F&O name the contracts carry ("NIFTY", "RELIANCE"); its spot
   // is its price row (the index row, or the stock's NSE row).
@@ -143,18 +157,11 @@ async function fetchOiHistoryMonthNow({
   // gives the trading-day calendar, so cache skipping can avoid option calls.
   send(FetchEvent.Step, { step: 1, message: `Fetching ${scrip} spot data...` });
 
-  const spotUrl = `https://api.kite.trade/instruments/historical/${spotToken}/day?from=${from}&to=${to}&oi=1`;
-  const spotRes = await fetch(spotUrl, {
-    headers: { Authorization: authHeader, 'X-Kite-Version': '3' },
-    signal,
+  const spotCandles = await fetchDailyCandles(kite, spotToken, from, to, signal).catch((err) => {
+    if (!(err instanceof KiteApiError)) throw err;
+    console.warn(`[OI History] ${scrip} spot candles failed (${err.status}):`, err.message);
+    throw new OiHistoryFetchError(`Failed to fetch ${scrip} spot candles (Kite answered ${err.status})`, err.status, err.authFailure);
   });
-  if (!spotRes.ok) {
-    console.warn(`[OI History] ${scrip} spot candles failed (${spotRes.status}):`, await spotRes.text());
-    throw new OiHistoryFetchError(`Failed to fetch ${scrip} spot candles (Kite answered ${spotRes.status})`, spotRes.status);
-  }
-
-  const spotData = await spotRes.json();
-  const spotCandles = spotData?.data?.candles;
   if (!spotCandles?.length) {
     return { rowCount: 0, tradingDays: 0, skippedDays: 0, fetchedDays: 0, uniqueTokens: 0 };
   }
@@ -211,16 +218,12 @@ async function fetchOiHistoryMonthNow({
     if (futuresContract) {
       send(FetchEvent.Step, { step: 2, message: `Fetching futures OI and volume for ${futuresContract.tradingsymbol}...` });
       try {
-        const futuresUrl = `https://api.kite.trade/instruments/historical/${futuresContract.instrumentToken}/day?from=${futuresFetchFrom}&to=${futuresFetchTo}&oi=1`;
-        const futuresResponse = await fetch(futuresUrl, { headers: { Authorization: authHeader, 'X-Kite-Version': '3' }, signal });
-        if (futuresResponse.ok) {
-          const futuresCandles = (await futuresResponse.json())?.data?.candles || [];
-          await insertOiHistoryFuturesRows(scrip, futuresCandles.map((candle) => ({
-            expiry: futuresContract.expiry, date: candle[0].slice(0, 10),
-            instrumentToken: futuresContract.instrumentToken, tradingsymbol: futuresContract.tradingsymbol,
-            open: candle[1], high: candle[2], low: candle[3], close: candle[4], volume: candle[5], oi: candle[6] ?? 0,
-          })));
-        }
+        const futuresCandles = (await fetchDailyCandles(kite, futuresContract.instrumentToken, futuresFetchFrom, futuresFetchTo, signal)) || [];
+        await insertOiHistoryFuturesRows(scrip, futuresCandles.map((candle) => ({
+          expiry: futuresContract.expiry, date: candle[0].slice(0, 10),
+          instrumentToken: futuresContract.instrumentToken, tradingsymbol: futuresContract.tradingsymbol,
+          open: candle[1], high: candle[2], low: candle[3], close: candle[4], volume: candle[5], oi: candle[6] ?? 0,
+        })));
       } catch (err) {
         if (signal?.aborted) throw err;
         console.warn('[OI History] Futures fetch failed:', err.message);
@@ -274,15 +277,7 @@ async function fetchOiHistoryMonthNow({
       const batchNum = Math.floor(i / batchSize) + 1;
       const promises = batch.map(async (token) => {
         try {
-          const url = `https://api.kite.trade/instruments/historical/${token}/day?from=${fetchFrom}&to=${fetchTo}&oi=1`;
-          const response = await fetch(url, {
-            headers: { Authorization: authHeader, 'X-Kite-Version': '3' },
-            signal,
-          });
-          if (!response.ok) return;
-
-          const result = await response.json();
-          const candles = result?.data?.candles;
+          const candles = await fetchDailyCandles(kite, token, fetchFrom, fetchTo, signal);
           if (!candles?.length) return;
 
           const dateMap = new Map();

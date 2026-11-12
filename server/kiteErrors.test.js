@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { PassThrough } from 'node:stream';
 import zlib from 'node:zlib';
-import { isKiteLoginError, readKiteBody } from './kiteErrors.js';
+import { readKiteBody } from './kiteErrors.js';
 
 const PERMISSION = { status: 'error', message: 'Insufficient permission for that call.', error_type: 'PermissionException' };
 const TOKEN = { status: 'error', message: 'Incorrect `api_key` or `access_token`.', error_type: 'TokenException' };
@@ -15,16 +15,7 @@ function kiteResponse(body, encoding) {
   return stream;
 }
 
-describe('a Kite 403', () => {
-  it('ends the login for a TokenException, not for a PermissionException', () => {
-    expect(isKiteLoginError(TOKEN)).toBe(true);
-    expect(isKiteLoginError(PERMISSION)).toBe(false);
-  });
-
-  it('ends the login when the body cannot be read, as before', () => {
-    expect(isKiteLoginError(null)).toBe(true);
-  });
-
+describe('a Kite error reply', () => {
   it('reads the error body, plain or compressed', async () => {
     expect(await readKiteBody(kiteResponse(PERMISSION))).toEqual(PERMISSION);
     expect(await readKiteBody(kiteResponse(PERMISSION, 'gzip'))).toEqual(PERMISSION);

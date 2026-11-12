@@ -197,8 +197,10 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   (e.g. a paper trade's `source` is set by the caller, never read from input).
 - Business rules live as **data** in one place: paper trade rules in `shared/paperTradeRules.js`
   (`{ id, appliesTo, code, check }`), run by `server/tradeEngine/positions.js` and the order service. Change the list, don't add checks in callers.
+- The server calls Kite's REST API only through `server/kiteClient.js` (`kiteClient(login).get/getText/postForm/delete`): it owns the
+  base URL, headers and errors (`KiteApiError` with `status`, `errorType`, `authFailure`). Never write the URL or headers by hand.
 - Kite quirks: holdings/positions replies can carry a stale `last_price`, so price from the quote API (`EXCHANGE:SYMBOL` keys)
-  and live ticks. Kite 403 `PermissionException` is an ordinary error, not a logout (`isLoginEnded` in apiClient).
+  and live ticks. Kite 403 `PermissionException` is an ordinary error, not a logout: one rule, `isKiteAuthFailure` (`shared/kiteAuth.js`), for the server and the browser.
 - Credentials (Kite API key/secret) live only in the browser; the server never stores them.
 
 ## Frontend conventions

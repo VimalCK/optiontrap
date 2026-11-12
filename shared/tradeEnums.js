@@ -69,6 +69,15 @@ export const Exchange = Object.freeze({ NSE: 'NSE', BSE: 'BSE', NFO: 'NFO', BFO:
 
 /** @typedef {typeof Exchange[keyof typeof Exchange]} ExchangeId */
 
+/**
+ * Kite's `error_type` on an error reply (Kite's own codes): TokenException for
+ * an expired or revoked login, PermissionException for a call this Kite app
+ * isn't allowed to make (shared/kiteAuth.js tells them apart).
+ */
+export const KiteErrorType = Object.freeze({ TokenException: 'TokenException', PermissionException: 'PermissionException' });
+
+/** @typedef {typeof KiteErrorType[keyof typeof KiteErrorType]} KiteErrorTypeId */
+
 /** Where a paper trade of `instrumentType` trades: a stock on NSE, a derivative on NFO. */
 export const exchangeFor = (/** @type {unknown} */ instrumentType) => (instrumentType === InstrumentType.EQ ? Exchange.NSE : Exchange.NFO);
 

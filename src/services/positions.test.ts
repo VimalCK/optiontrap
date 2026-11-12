@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { instrumentName, positionQuoteKey, tradeErrorMessage } from './positions';
 import { exitPosition, placeMarketTrade } from './orders';
-import { ApiError, isLoginEnded } from './apiClient';
+import { ApiError } from './apiClient';
+import { isKiteAuthFailure } from '../../shared/kiteAuth.js';
 import { Horizon } from '../../shared/tradeEnums.js';
 
 const MARKET_CLOSED = 'The market is closed. Paper trades can be placed and exited 9:15–15:30 IST on trading days.';
@@ -44,7 +45,7 @@ describe('placing a paper trade while the market is closed', () => {
 
   it('does not treat the refusal as an expired login', async () => {
     const body = { status: 'error', code: 'MARKET_CLOSED', message: MARKET_CLOSED };
-    expect(isLoginEnded(409, body)).toBe(false);
+    expect(isKiteAuthFailure(409, body)).toBe(false);
 
     serverReplies(409, body);
     const err = await placeMarketTrade(trade).catch((e: unknown) => e);

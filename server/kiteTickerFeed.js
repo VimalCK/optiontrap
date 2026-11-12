@@ -16,6 +16,7 @@
  */
 import { WebSocket } from 'ws';
 import { parseTicks } from '../shared/kiteTicks.js';
+import { isKiteAuthFailure } from '../shared/kiteAuth.js';
 import { TickerMode } from '../shared/tradeEnums.js';
 
 /** Kite's limits per API key. */
@@ -88,7 +89,7 @@ function createConnection({ url, openSocket, onTicks, onAuthError, log }) {
     socket.on('unexpected-response', (/** @type {any} */ _req, /** @type {any} */ res) => {
       res.resume();
       log(`Kite ticker refused the connection: HTTP ${res.statusCode}`);
-      if (res.statusCode === 403) {
+      if (isKiteAuthFailure(res.statusCode)) {
         closed = true;
         onAuthError();
       }

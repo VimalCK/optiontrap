@@ -19,7 +19,8 @@ import {
 } from './db.js';
 import { daysBefore, istClock } from './marketClock.js';
 import { fetchOiHistoryMonth } from './oiHistoryFetch.js';
-import { createDailyKiteJob, isKiteLoginRefused } from './dailyKiteJob.js';
+import { createDailyKiteJob } from './dailyKiteJob.js';
+import { kiteClient } from './kiteClient.js';
 
 export const OI_HISTORY_JOB = 'oi-history-after-close';
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
@@ -30,12 +31,10 @@ export async function findWorkingAdminSession() {
   const sessions = await getAdminKiteSessions();
   for (const kite of sessions.slice(0, 3)) {
     try {
-      const res = await fetch('https://api.kite.trade/user/profile', {
-        headers: { Authorization: `token ${kite.apiKey}:${kite.accessToken}`, 'X-Kite-Version': '3' },
-      });
-      if (res.ok) return kite;
+      await kiteClient(kite).get('/user/profile');
+      return kite;
     } catch {
-      // Network error: try the next session.
+      // Refused or unreachable: try the next session.
     }
   }
   return null;
@@ -60,7 +59,7 @@ async function fetchScrip(scrip, date, kite, results) {
       results.push({ scrip, expiryMonth, rowCount: summary.rowCount, fetchedDays: summary.fetchedDays });
     } catch (err) {
       results.push({ scrip, expiryMonth, error: err.message });
-      if (isKiteLoginRefused(err)) return true;
+      if (err.authFailure) return true;
     }
   }
   return false;

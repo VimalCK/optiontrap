@@ -11,15 +11,13 @@
 
 import {
   getMarketReference,
-  getScheduledJobStatus,
   getStockCandles,
   getWatchlistStocks,
 } from './db.js';
 import { istClock } from './marketClock.js';
 import { OI_HISTORY_JOB, findWorkingAdminSession } from './oiHistoryScheduler.js';
 import { scanStock, syncStockCandles } from './stockCandles.js';
-import { createDailyKiteJob, isKiteLoginRefused } from './dailyKiteJob.js';
-import { JobRunStatus } from '../shared/appEnums.js';
+import { createDailyKiteJob } from './dailyKiteJob.js';
 
 export const STOCK_SETUPS_JOB = 'stock-setups-after-close';
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
@@ -27,12 +25,6 @@ const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const KITE_GAP_MS = 400;
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/** The scan waits for today's OI history run to finish (done or failed): both use Kite's historical-data limit. */
-async function oiHistoryFinished(date) {
-  const status = await getScheduledJobStatus(OI_HISTORY_JOB, date);
-  return status === JobRunStatus.Done || status === JobRunStatus.Failed;
-}
 
 /**
  * Sync the market reference index's candles, so setups can check the market.
@@ -45,7 +37,7 @@ async function syncMarketReference(kite, results) {
     await syncStockCandles(reference.instrumentToken, kite);
   } catch (err) {
     results.push({ tradingsymbol: reference.label, error: err.message });
-    if (isKiteLoginRefused(err)) return { candles: [], loginRefused: true };
+    if (err.authFailure) return { candles: [], loginRefused: true };
   }
   return { candles: await getStockCandles(reference.instrumentToken), loginRefused: false };
 }
@@ -65,7 +57,7 @@ async function scanWatchlist({ kite, results }) {
       if (!sync.skipped) await pause(KITE_GAP_MS);
     } catch (err) {
       results.push({ tradingsymbol: stock.tradingsymbol, error: err.message });
-      if (isKiteLoginRefused(err)) {
+      if (err.authFailure) {
         loginRefused = true;
         break;
       }
@@ -78,7 +70,7 @@ async function scanWatchlist({ kite, results }) {
 const runAfterCloseScan = createDailyKiteJob({
   job: STOCK_SETUPS_JOB,
   findSession: findWorkingAdminSession,
-  isReady: oiHistoryFinished,
+  dependsOn: OI_HISTORY_JOB,
   work: scanWatchlist,
 });
 

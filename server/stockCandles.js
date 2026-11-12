@@ -24,6 +24,7 @@ import {
   withNamedAdvisoryLock,
 } from './db.js';
 import { AFTER_CLOSE_MINUTES, daysBefore, istClock } from './marketClock.js';
+import { KiteApiError, kiteClient } from './kiteClient.js';
 import { SETUP_BACKFILL_DAYS, analyzeStock, evaluateSetup, parseKiteCandles, replaySetups, scanSummary } from '../shared/stockSetups.js';
 
 /** One day under Kite's 2000-day limit for daily candles. */
@@ -33,13 +34,16 @@ const OVERLAP_DAYS = 7;
 /** A re-fetched close further than this from the stored one means Kite rewrote history. */
 const REWRITE_TOLERANCE = 0.01;
 const RATE_LIMIT_RETRY_MS = 1000;
+/** Kite's "too many requests" status. */
+const RATE_LIMITED = 429;
 
-/** A Kite fetch that failed; `status` is Kite's HTTP status when there was one. */
+/** A Kite fetch that failed; `status` is Kite's HTTP status when there was one, `authFailure` whether it ended the login. */
 export class StockCandleError extends Error {
-  constructor(message, status = null) {
+  constructor(message, status = null, authFailure = false) {
     super(message);
     this.name = 'StockCandleError';
     this.status = status;
+    this.authFailure = authFailure;
   }
 }
 
@@ -83,23 +87,19 @@ export function historyRewritten(stored, fetched) {
   });
 }
 
+/** One stock's daily candles from Kite; a rate-limited (429) call is tried once more after a pause. */
 async function fetchKiteDaily(instrumentToken, from, to, kite, { signal, retried = false } = {}) {
-  const res = await fetch(`https://api.kite.trade/instruments/historical/${instrumentToken}/day?from=${from}&to=${to}`, {
-    headers: { Authorization: `token ${kite.apiKey}:${kite.accessToken}`, 'X-Kite-Version': '3' },
-    signal,
-  });
-  if (res.status === 429 && !retried) {
-    await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_RETRY_MS));
-    return fetchKiteDaily(instrumentToken, from, to, kite, { signal, retried: true });
+  try {
+    const data = await kiteClient(kite).get(`/instruments/historical/${instrumentToken}/day?from=${from}&to=${to}`, { signal });
+    return parseKiteCandles(data?.candles || []);
+  } catch (err) {
+    if (!(err instanceof KiteApiError)) throw err;
+    if (err.status === RATE_LIMITED && !retried) {
+      await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_RETRY_MS));
+      return fetchKiteDaily(instrumentToken, from, to, kite, { signal, retried: true });
+    }
+    throw new StockCandleError(`Kite historical data: ${err.message}`, err.status, err.authFailure);
   }
-  if (!res.ok) {
-    const body = await res.text();
-    let message = body;
-    try { message = JSON.parse(body).message || body; } catch { /* not JSON */ }
-    throw new StockCandleError(`Kite historical data: ${message}`, res.status);
-  }
-  const json = await res.json();
-  return parseKiteCandles(json?.data?.candles || []);
 }
 
 /**

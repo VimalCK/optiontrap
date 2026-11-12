@@ -23,7 +23,9 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import crypto from 'crypto';
 import { createProxyMiddleware } from 'http-proxy-middleware';
-import { isKiteLoginError, readKiteBody } from './kiteErrors.js';
+import { readKiteBody } from './kiteErrors.js';
+import { KITE_API_URL, KiteApiError, kiteClient, kiteHeaders } from './kiteClient.js';
+import { KITE_LOGIN_ENDED, isKiteAuthFailure } from '../shared/kiteAuth.js';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 import path from 'path';
@@ -318,28 +320,14 @@ app.post('/auth/token', async (req, res) => {
     const checksumInput = apiKey + request_token + apiSecret;
     const checksum = crypto.createHash('sha256').update(checksumInput).digest('hex');
 
-    const response = await fetch('https://api.kite.trade/session/token', {
-      method: 'POST',
-      headers: {
-        'X-Kite-Version': '3',
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({ api_key: apiKey, request_token, checksum }),
-    });
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      console.error(`${ts()} ${RED}AUTH${RESET} exchange failed: ${response.status} ${errorText}`);
-      let message = `Kite token exchange failed (${response.status})`;
-      try {
-        const parsed = JSON.parse(errorText);
-        if (parsed.message) message = parsed.message;
-      } catch { /* use default message */ }
-      return sendError(res, response.status, message);
+    let data;
+    try {
+      data = await kiteClient().postForm('/session/token', { api_key: apiKey, request_token, checksum });
+    } catch (err) {
+      if (!(err instanceof KiteApiError)) throw err;
+      console.error(`${ts()} ${RED}AUTH${RESET} exchange failed: ${err.status} ${err.message}`);
+      return sendError(res, err.status, err.kiteMessage ?? `Kite token exchange failed (${err.status})`);
     }
-
-    const result = await response.json();
-    const data = result.data;
 
     // 1. Record user identity (no credentials stored)
     await upsertUser(data.user_id, data.user_name);
@@ -376,13 +364,7 @@ app.post('/auth/logout', async (req, res) => {
 
   if (kiteSession?.apiKey && kiteSession?.accessToken) {
     try {
-      await fetch('https://api.kite.trade/session/token', {
-        method: 'DELETE',
-        headers: {
-          'X-Kite-Version': '3',
-          'Authorization': `token ${kiteSession.apiKey}:${kiteSession.accessToken}`,
-        },
-      });
+      await kiteClient(kiteSession).delete('/session/token');
     } catch {
       // Ignore Kite-side errors on logout
     }
@@ -405,13 +387,7 @@ app.delete('/auth/account', async (req, res) => {
 
   // Invalidate Kite token if we have one
   if (kiteSession?.accessToken) {
-    fetch('https://api.kite.trade/session/token', {
-      method: 'DELETE',
-      headers: {
-        'X-Kite-Version': '3',
-        'Authorization': `token ${kiteSession.apiKey}:${kiteSession.accessToken}`,
-      },
-    }).catch(() => {});
+    kiteClient(kiteSession).delete('/session/token').catch(() => {}); // Kite-side errors don't stop the deletion
   }
 
   // Delete user
@@ -1059,6 +1035,10 @@ async function streamOiHistoryFetch(req, res) {
       console.log(`[OI History] Fetch cancelled by client for ${req.body?.scrip} ${req.body?.expiryMonth}`);
       return;
     }
+    if (err.authFailure) {
+      send(FetchEvent.Error, { message: 'Your Kite login has ended · log in again', code: KITE_LOGIN_ENDED });
+      return res.end();
+    }
     if (err instanceof OiHistoryFetchError) {
       send(FetchEvent.Error, { message: err.message });
       return res.end();
@@ -1385,7 +1365,7 @@ app.get('/api/instruments', requireAuth, requireSubscription, async (req, res) =
 // ---------- API Proxy ----------
 
 app.use('/api', requireAuth, requireSubscription, apiLimiter, allowOnlyKnownKiteCalls, createProxyMiddleware({
-  target: 'https://api.kite.trade',
+  target: KITE_API_URL,
   changeOrigin: true,
   pathRewrite: { '^/api': '' },
   on: {
@@ -1407,18 +1387,17 @@ app.use('/api', requireAuth, requireSubscription, apiLimiter, allowOnlyKnownKite
         'x-real-ip',
       ].forEach((header) => proxyReq.removeHeader(header));
 
-      const { apiKey, accessToken } = req.session.kiteSession;
-      proxyReq.setHeader('Authorization', `token ${apiKey}:${accessToken}`);
-      proxyReq.setHeader('X-Kite-Version', '3');
+      for (const [name, value] of Object.entries(kiteHeaders(req.session.kiteSession))) proxyReq.setHeader(name, value);
       proxyReq.setHeader('Accept', 'application/json');
     },
     proxyRes: (proxyRes, req) => {
-      if (proxyRes.statusCode !== 403) return;
+      // Without the body yet, rule out replies that can't end the login.
+      if (!isKiteAuthFailure(proxyRes.statusCode)) return;
       // Clear an expired Kite login but keep the session itself intact so the
       // remember cookie + pending credentials still work. A 403 for a call this
       // Kite app isn't allowed (PermissionException) leaves the login alone.
       readKiteBody(proxyRes).then((body) => {
-        if (!isKiteLoginError(body)) return;
+        if (!isKiteAuthFailure(proxyRes.statusCode, body)) return;
         delete req.session.kiteSession;
         req.session.save(() => {});
       });
@@ -1527,7 +1506,7 @@ wss.on('connection', (clientWs) => {
   kiteWs.on('unexpected-response', (_req, res) => {
     res.resume();
     console.log(`${ts()} ${RED}WS${RESET} upstream rejected: HTTP ${res.statusCode} ${GREY}[${userId}]${RESET}`);
-    if (res.statusCode === 403) {
+    if (isKiteAuthFailure(res.statusCode)) {
       sessionStore.get(clientWs._sid, (err, sessionData) => {
         if (err || !sessionData?.kiteSession) return;
         delete sessionData.kiteSession;

@@ -14,6 +14,7 @@
 
 import { getInstrumentsDate, getInstruments, saveInstruments, withAdvisoryLock } from './db.js';
 import { currentInstrumentListStart } from './marketClock.js';
+import { kiteClient } from './kiteClient.js';
 import { Exchange, InstrumentType, OptionType } from '../shared/tradeEnums.js';
 
 // Arbitrary constant identifying the instruments-fetch advisory lock.
@@ -203,20 +204,13 @@ function nfoFilter(cols, idx) {
 // ---------------------------------------------------------------------------
 
 /**
- * Fetch and parse instruments from a Kite endpoint.
+ * Fetch and parse one exchange's instrument list (a CSV) from Kite.
  */
-async function fetchAndParse(url, filter, apiKey, accessToken) {
-  const res = await fetch(url, {
-    headers: { Authorization: `token ${apiKey}:${accessToken}` },
-  });
-
-  if (!res.ok) {
-    throw new Error(`Kite fetch failed (${url}): ${res.status} ${res.statusText}`);
-  }
-
-  const csv = await res.text();
+async function fetchAndParse(exchange, filter, apiKey, accessToken) {
+  const path = `/instruments/${exchange}`;
+  const csv = await kiteClient({ apiKey, accessToken }).getText(path);
   const lines = csv.trim().split('\n');
-  console.log(`[Instruments] ${url} — ${lines.length} rows, headers: ${lines[0]}`);
+  console.log(`[Instruments] ${path} — ${lines.length} rows, headers: ${lines[0]}`);
   return parseCSV(csv, filter);
 }
 
@@ -225,9 +219,9 @@ async function fetchAndParse(url, filter, apiKey, accessToken) {
  */
 async function fetchFromKite(apiKey, accessToken) {
   const [nse, nfo, bse] = await Promise.all([
-    fetchAndParse('https://api.kite.trade/instruments/NSE', nseFilter, apiKey, accessToken),
-    fetchAndParse('https://api.kite.trade/instruments/NFO', nfoFilter, apiKey, accessToken),
-    fetchAndParse('https://api.kite.trade/instruments/BSE', bseFilter, apiKey, accessToken),
+    fetchAndParse(Exchange.NSE, nseFilter, apiKey, accessToken),
+    fetchAndParse(Exchange.NFO, nfoFilter, apiKey, accessToken),
+    fetchAndParse(Exchange.BSE, bseFilter, apiKey, accessToken),
   ]);
   const bseOnly = bseOnlyStocks(nse, bse);
 

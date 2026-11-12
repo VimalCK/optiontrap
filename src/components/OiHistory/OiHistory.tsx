@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { handleKiteAuthFailure, isKiteAuthFailure } from '@/services/authSession';
-import { apiClient, isAbortError, responseErrorMessage } from '@/services/apiClient';
+import { handleKiteAuthFailure } from '@/services/authSession';
+import { ApiError, apiClient, isAbortError, responseErrorMessage } from '@/services/apiClient';
+import { isKiteLoginEndedReply } from '../../../shared/kiteAuth.js';
 import { useAbortSignal } from '@/hooks/useAbortSignal';
 import { useKiteSession } from '@/hooks/useKiteSession';
 import AppSelect from '@/components/AppSelect/AppSelect';
@@ -38,6 +39,8 @@ const SPECIFIC_STRIKE_KEY = 'optiontrap_specific_strike';
 /** What the fetch's server-sent events carry: Step and Error a message, Progress the counts. */
 interface FetchEventPayload {
   message: string;
+  /** On an error event: KITE_LOGIN_ENDED when the Kite login has ended (shared/kiteAuth.js). */
+  code?: string;
   pct: number;
   done: number;
   total: number;
@@ -310,7 +313,7 @@ const OiHistory: React.FC = () => {
           });
           break;
         case FetchEvent.Error:
-          throw new Error(payload.message);
+          throw new ApiError(payload.message, 0, payload);
       }
     };
 
@@ -369,7 +372,7 @@ const OiHistory: React.FC = () => {
     } catch (err) {
       if (isAbortError(err)) return;
       const message = err instanceof Error ? err.message : 'Network error';
-      if (isKiteAuthFailure(message)) {
+      if (err instanceof ApiError && isKiteLoginEndedReply(err.body)) {
         handleKiteAuthFailure();
         navigate('/login', { replace: true });
       } else {

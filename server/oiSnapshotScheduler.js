@@ -21,7 +21,8 @@ import { getOrFetchInstruments } from './instruments.js';
 import { istClock, isMarketOpen } from './marketClock.js';
 import { marketDateTime, marketTimeLabel } from '../shared/marketTime.js';
 import { findWorkingAdminSession } from './oiHistoryScheduler.js';
-import { fetchQuotes, KiteAuthError } from './kiteQuotes.js';
+import { fetchQuotes } from './kiteQuotes.js';
+import { KiteApiError } from './kiteClient.js';
 import { Exchange, isOptionType } from '../shared/tradeEnums.js';
 import { SnapshotContractType } from '../shared/analysisEnums.js';
 
@@ -197,7 +198,7 @@ function capture(date, pickSymbols) {
       const count = symbols.length > 0 ? await captureSymbols(symbols, kite, instruments) : 0;
       return { symbols, count, kite, instruments };
     } catch (err) {
-      if (err instanceof KiteAuthError) adminKite = null;
+      if (err instanceof KiteApiError && err.authFailure) adminKite = null;
       throw err;
     }
   });

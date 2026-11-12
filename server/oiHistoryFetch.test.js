@@ -79,6 +79,11 @@ describe('fetchOiHistoryMonth sharing', () => {
     await expect(fetchOiHistoryMonth(request('a'))).rejects.toMatchObject({ status: 403 });
   });
 
+  it('marks a spot fetch Kite refused for an ended login, so the route can send the user to login', async () => {
+    stubKite({ a: badToken });
+    await expect(fetchOiHistoryMonth(request('a'))).rejects.toMatchObject({ status: 403, authFailure: true });
+  });
+
   it('does not share between different strike choices', async () => {
     const { fetchMock, release } = stubKite({ a: noCandles, b: noCandles }, ['a']);
 
