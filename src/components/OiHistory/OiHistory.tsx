@@ -26,10 +26,24 @@ import { computeFlowReadings, marketCloseIST, type FlowInput, type FlowReading }
 import { computeFairValues, realizedVol, volVerdict, REALIZED_WINDOW, type FairInput, type FairValueResult } from '@/services/fairValue';
 import { OptionType, Side, isOptionType, type OptionTypeId, type SideId } from '../../../shared/tradeEnums.js';
 import { Bias, OiFlow, RolloverPattern, SellingSetup, TradeSetupStatus, VolVerdict, volVerdictLabel, type TradeSetupStatusId } from '../../../shared/analysisEnums.js';
-import { SignalOutcome } from '../../../shared/appEnums.js';
-import { ToastColor, type ToastColorId } from '@/utils/uiEnums';
-import { OiHistoryTab, type OiHistoryTabId } from '@/utils/uiEnums';
-import { FetchEvent, StrikeMode } from '../../../shared/appEnums.js';
+import { FetchEvent, SignalOutcome, StrikeMode } from '../../../shared/appEnums.js';
+import { OiHistoryTab, ToastColor, type OiHistoryTabId } from '@/utils/uiEnums';
+import ToastStack from '@/components/Toast/ToastStack';
+import { useToasts } from '@/hooks/useToasts';
+
+/** Browser storage keys for the fetch form's last strike choice. */
+const STRIKE_RANGE_KEY = 'optiontrap_strike_range';
+const SPECIFIC_STRIKE_KEY = 'optiontrap_specific_strike';
+
+/** What the fetch's server-sent events carry: Step and Error a message, Progress the counts. */
+interface FetchEventPayload {
+  message: string;
+  pct: number;
+  done: number;
+  total: number;
+  batch: number;
+  totalBatches: number;
+}
 
 /** When a day's prices were taken: the close, or now for today's rows, which are a live snapshot until the close. */
 function snapshotTime(date: string): Date {
@@ -130,11 +144,11 @@ const OiHistory: React.FC = () => {
       .map((value) => ({ value, label: labels.get(value) || value }));
   }, [recentScrips, scrip, scripOptions]);
   const [strikeRange, setStrikeRange] = useState<number>(() => {
-    const stored = localStorage.getItem('optiontrap_strike_range');
+    const stored = localStorage.getItem(STRIKE_RANGE_KEY);
     const val = stored ? parseInt(stored, 10) : 10;
     return [-1, 0, 5, 10, 20].includes(val) ? val : 10;
   });
-  const [specificStrike, setSpecificStrike] = useState<string>(() => localStorage.getItem('optiontrap_specific_strike') || '');
+  const [specificStrike, setSpecificStrike] = useState<string>(() => localStorage.getItem(SPECIFIC_STRIKE_KEY) || '');
   const specificStrikeValue = useMemo(() => {
     const value = Number(specificStrike);
     return Number.isFinite(value) && value > 0 ? value : null;
@@ -275,7 +289,7 @@ const OiHistory: React.FC = () => {
 
     const handleEvent = (eventType: string, dataStr: string) => {
       if (!eventType || !dataStr) return;
-      let payload: any;
+      let payload: FetchEventPayload;
       try {
         payload = JSON.parse(dataStr);
       } catch {
@@ -432,18 +446,11 @@ const OiHistory: React.FC = () => {
 
   const [tradeHorizon, setTradeHorizon] = useTradeHorizon();
 
-  // Toast notifications for trade feedback
-  const [toasts, setToasts] = useState<{ id: number; text: string; color: ToastColorId }[]>([]);
-  const toastIdRef = useRef(0);
-  const showToast = useCallback((text: string, color: ToastColorId) => {
-    const id = ++toastIdRef.current;
-    setToasts((prev) => [...prev, { id, text, color }]);
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 2000);
-  }, []);
+  const { toasts, showToast } = useToasts();
 
   // Handle buy/sell from OI history cells
   const handleTrade = useCallback(async (
-    cell: any,
+    cell: OiCellData,
     optionType: OptionTypeId,
     side: SideId,
     strike: number,
@@ -1168,13 +1175,7 @@ const OiHistory: React.FC = () => {
 
   return (
     <div className="oi-history">
-      {toasts.length > 0 && (
-        <div className="oi-history__toast-stack">
-          {toasts.map((t) => (
-            <div key={t.id} className={`oi-history__toast oi-history__toast--${t.color.toLowerCase()}`}>{t.text}</div>
-          ))}
-        </div>
-      )}
+      <ToastStack toasts={toasts} />
 
       {/* Controls */}
       <div className={`oi-history__controls card${isDataMenuOpen ? ' oi-history__controls--menu-open' : ''}`}>
@@ -1215,7 +1216,7 @@ const OiHistory: React.FC = () => {
                 { value: 0, label: 'All' },
                 { value: -1, label: 'Specific' },
               ]}
-              onChange={(v) => { const val = Number(v); setStrikeRange(val); localStorage.setItem('optiontrap_strike_range', String(val)); }}
+              onChange={(v) => { const val = Number(v); setStrikeRange(val); localStorage.setItem(STRIKE_RANGE_KEY, String(val)); }}
             />
           </label>
 
@@ -1235,7 +1236,7 @@ const OiHistory: React.FC = () => {
                 value={specificStrike}
                 onChange={(event) => {
                   setSpecificStrike(event.target.value);
-                  localStorage.setItem('optiontrap_specific_strike', event.target.value);
+                  localStorage.setItem(SPECIFIC_STRIKE_KEY, event.target.value);
                 }}
                 disabled={fetching}
               />

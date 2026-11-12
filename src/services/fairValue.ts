@@ -41,8 +41,8 @@ export const REALIZED_WINDOW = 20;
 const MIN_RETURNS = 5;
 export const TRADING_DAYS = 252;
 /** ATM IV ÷ realised vol above / below these reads as options expensive / cheap overall. */
-export const IV_RV_RICH = 1.25;
-export const IV_RV_CHEAP = 0.9;
+const IV_RV_RICH = 1.25;
+const IV_RV_CHEAP = 0.9;
 
 export interface FairInput {
   token: number;

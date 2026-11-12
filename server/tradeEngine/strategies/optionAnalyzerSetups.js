@@ -29,7 +29,7 @@ import { daysUntil, marketDate } from '../../../shared/marketTime.js';
 import { getLatestOiSnapshotTimestamp, getTodayOiSnapshots, getUnderlyings } from '../../db.js';
 import { findWorkingAdminSession } from '../../oiHistoryScheduler.js';
 import { getOrFetchInstruments } from '../../instruments.js';
-import { Exchange, InstrumentType, OptionType, ParamType, Side, isOptionType } from '../../../shared/tradeEnums.js';
+import { Exchange, OptionType, ParamType, Side, isOptionType } from '../../../shared/tradeEnums.js';
 import { OptionSetup, setupPatternLabel } from '../../../shared/analysisEnums.js';
 
 /** This strategy's id: stored in users' settings and trade records, so it never changes. */

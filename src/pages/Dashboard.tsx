@@ -12,6 +12,7 @@ import { fetchWatchlists } from '@/services/watchlist';
 import { Side, TradingMode, type TradingModeId } from '../../shared/tradeEnums.js';
 import { PriceAlertStatus } from '../../shared/appEnums.js';
 import { saveTradingMode } from '@/utils/tradingModeStorage';
+import { AnalyticsTab, JournalRange, PortfolioTab, Tone, type ToneId } from '@/utils/uiEnums';
 import '@/styles/dashboard.css';
 
 type DashboardTradeEntry = TradeEntry & { mode: TradingModeId };
@@ -363,5 +364,3 @@ const Dashboard: React.FC = () => {
 };
 
 export default Dashboard;
-
-import { AnalyticsTab, JournalRange, PortfolioTab, Tone, type ToneId } from '@/utils/uiEnums';

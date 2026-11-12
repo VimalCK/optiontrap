@@ -7,6 +7,7 @@ import {
   ShieldIcon, AnalyticsIcon, TradesIcon, WatchlistIcon,
   PaperTradingIcon, DashboardIcon, LogoIcon,
 } from '@/components/icons/Icons';
+import { DurationUnit } from '../../shared/appEnums.js';
 import '@/styles/login.css';
 
 // ─── Feature highlights ─────────────────────────────────────────────────────
@@ -474,5 +475,3 @@ const Login: React.FC = () => {
 };
 
 export default Login;
-
-import { DurationUnit } from '../../shared/appEnums.js';

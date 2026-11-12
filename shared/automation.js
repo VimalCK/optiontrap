@@ -234,7 +234,7 @@ const kindLabel = (/** @type {string} */ id) => TRADE_KINDS.find((k) => k.id ===
  * entry rules: a trade the user hasn't switched on is rejected with the reason.
  * @type {GeneralCheck[]}
  */
-export const GENERAL_CHECKS = [
+const GENERAL_CHECKS = [
   { id: 'automation-on', check: (_trade, config) => (config.enabled ? null : 'Automation is off') },
   { id: 'horizon-on', check: (trade, config) => (config.horizons[trade.horizon] ? null : `${horizonLabel(trade.horizon)} trades are off`) },
   {

@@ -10,7 +10,11 @@ import { heldQuantity, isPledged } from '@/services/holdings';
 import { useHoldings } from '@/hooks/useHoldings';
 import { formatAmount, formatSignedAmount } from '@/utils/formatAmount';
 import { MarketStatus } from '../../shared/tradeEnums.js';
+import { AllocationView, type AllocationViewId } from '@/utils/uiEnums';
 import '@/styles/holdings.css';
+
+/** Browser storage key for the privacy toggle (amounts hidden). */
+const PRIVACY_MODE_KEY = 'optiontrap_privacy_mode';
 
 
 interface AllocationItem {
@@ -29,7 +33,7 @@ const HoldingsView: React.FC = () => {
   const [allocationView, setAllocationView] = useState<AllocationViewId>(AllocationView.Bar);
   const [expandedStock, setExpandedStock] = useState<string | null>(null);
   const [privacyMode, setPrivacyMode] = useState(() =>
-    localStorage.getItem('optiontrap_privacy_mode') === 'true'
+    localStorage.getItem(PRIVACY_MODE_KEY) === 'true'
   );
 
   const {
@@ -71,7 +75,7 @@ const HoldingsView: React.FC = () => {
           className={`privacy-toggle ${privacyMode ? 'active' : ''}`}
           onClick={() => setPrivacyMode((p) => {
             const next = !p;
-            localStorage.setItem('optiontrap_privacy_mode', String(next));
+            localStorage.setItem(PRIVACY_MODE_KEY, String(next));
             return next;
           })}
           title="Privacy mode"
@@ -325,5 +329,3 @@ const Treemap: React.FC<{ data: AllocationItem[] }> = ({ data }) => {
 };
 
 export default HoldingsView;
-
-import { AllocationView, type AllocationViewId } from '@/utils/uiEnums';

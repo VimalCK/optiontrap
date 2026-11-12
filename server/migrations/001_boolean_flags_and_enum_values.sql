@@ -392,3 +392,7 @@ CREATE INDEX IF NOT EXISTS price_alerts_triggered_idx ON price_alerts (user_id) 
 
 -- Open stock setups by stock, checked against each new candle.
 CREATE INDEX IF NOT EXISTS idx_stock_setup_signals_open ON stock_setup_signals (instrument_token) WHERE status = 'Open';
+
+-- The plans list and the default plan (getActiveSubscriptionPlans,
+-- activateSubscription): active plans, cheapest first.
+CREATE INDEX IF NOT EXISTS subscription_plans_active_price_idx ON subscription_plans (price, id) WHERE is_active;

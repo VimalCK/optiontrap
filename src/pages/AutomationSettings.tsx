@@ -17,6 +17,7 @@ import TabBar from '@/components/TabBar/TabBar';
 import { AutomationConfig, fetchAutomationConfig, saveAutomationConfig } from '@/services/automation';
 import { isAbortError } from '@/services/apiClient';
 import { useStrategies } from '@/hooks/useStrategies';
+import { AutomationSettingsSection, enumFromParam, type AutomationSettingsSectionId } from '@/utils/uiEnums';
 import '@/styles/analytics.css'; // reuse the shared tab-bar CSS
 import '@/styles/automation.css';
 
@@ -93,5 +94,3 @@ const AutomationSettings: React.FC = () => {
 };
 
 export default AutomationSettings;
-
-import { AutomationSettingsSection, enumFromParam, type AutomationSettingsSectionId } from '@/utils/uiEnums';

@@ -29,6 +29,7 @@ import { useStrategies } from '@/hooks/useStrategies';
 import type { StrategyInfo } from '@/services/strategies';
 import { formatAmount, formatSignedAmount } from '@/utils/formatAmount';
 import { formatCalendarDate, istTimeLabel } from '@/utils/marketStatus';
+import { AnalyticsTab } from '@/utils/uiEnums';
 import '@/styles/automation.css';
 
 const errorText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
@@ -270,5 +271,3 @@ const Automation: React.FC = () => {
 };
 
 export default Automation;
-
-import { AnalyticsTab } from '@/utils/uiEnums';

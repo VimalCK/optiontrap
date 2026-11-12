@@ -24,6 +24,7 @@ import {
 import { loadUnderlyings, type Underlying } from '@/services/underlyings';
 import { Side, TRADING_MODES, TradingMode, type TradingModeId } from '../../shared/tradeEnums.js';
 import { saveTradingMode, storedTradingMode } from '@/utils/tradingModeStorage';
+import { LiveView, PaperTab, type LiveViewId, type PaperTabId } from '@/utils/uiEnums';
 import '@/styles/analytics.css'; // reuse the shared tab-bar CSS
 import '@/styles/positions.css';
 
@@ -825,6 +826,25 @@ const PaperPositions: React.FC = () => {
 /** Kite's live position lists, in the order their tabs show. */
 const LIVE_VIEWS: LiveViewId[] = [LiveView.Net, LiveView.Day];
 
+/** The Net / Day tabs and the Refresh button above Kite's live positions. */
+const LiveViewControls: React.FC<{ view: LiveViewId; onView: (view: LiveViewId) => void; onRefresh: () => void }> = ({ view, onView, onRefresh }) => (
+  <div className="live-positions__controls">
+    <div className="positions-mode-tabs">
+      {LIVE_VIEWS.map((v) => (
+        <button key={v} className={`positions-mode-tab ${view === v ? 'positions-mode-tab--active' : ''}`} onClick={() => onView(v)}>
+          {v === LiveView.Net ? 'Net Positions' : 'Day Positions'}
+        </button>
+      ))}
+    </div>
+    <button className="oc-refresh-btn" onClick={onRefresh}>
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+      </svg>
+      Refresh
+    </button>
+  </div>
+);
+
 const LivePositions: React.FC = () => {
   // Priced from quotes on load and from ticks while the market is open.
   const { positions, loading, error, reload: load } = useLivePositions();
@@ -941,21 +961,7 @@ const LivePositions: React.FC = () => {
   if (rows.length === 0) {
     return (
       <>
-        <div className="live-positions__controls">
-          <div className="positions-mode-tabs">
-            {LIVE_VIEWS.map((v) => (
-              <button key={v} className={`positions-mode-tab ${view === v ? 'positions-mode-tab--active' : ''}`} onClick={() => setView(v)}>
-                {v === LiveView.Net ? 'Net Positions' : 'Day Positions'}
-              </button>
-            ))}
-          </div>
-          <button className="oc-refresh-btn" onClick={load}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-            </svg>
-            Refresh
-          </button>
-        </div>
+        <LiveViewControls view={view} onView={setView} onRefresh={load} />
         <div className="card">
           <h3 className="card__title">No {view === LiveView.Net ? 'Net' : 'Day'} Positions</h3>
           <p className="card__description">No open positions for the selected view.</p>
@@ -966,22 +972,7 @@ const LivePositions: React.FC = () => {
 
   return (
     <>
-      {/* Controls */}
-      <div className="live-positions__controls">
-        <div className="positions-mode-tabs">
-          {LIVE_VIEWS.map((v) => (
-            <button key={v} className={`positions-mode-tab ${view === v ? 'positions-mode-tab--active' : ''}`} onClick={() => setView(v)}>
-              {v === LiveView.Net ? 'Net Positions' : 'Day Positions'}
-            </button>
-          ))}
-        </div>
-        <button className="oc-refresh-btn" onClick={load}>
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
-          </svg>
-          Refresh
-        </button>
-      </div>
+      <LiveViewControls view={view} onView={setView} onRefresh={load} />
 
       {/* Summary */}
       <div className="card" style={{ marginBottom: 'var(--card-gap)' }}>
@@ -1057,5 +1048,3 @@ const Positions: React.FC<{ hideHeader?: boolean; initialMode?: TradingModeId }>
 };
 
 export default Positions;
-
-import { LiveView, PaperTab, type LiveViewId, type PaperTabId } from '@/utils/uiEnums';

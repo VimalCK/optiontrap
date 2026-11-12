@@ -4,6 +4,7 @@ import AdminFeedback from './AdminFeedback';
 import AdminUsers from './AdminUsers';
 import Health from './Health';
 import TabBar from '@/components/TabBar/TabBar';
+import { AdminTab, enumFromParam, type AdminTabId } from '@/utils/uiEnums';
 import '@/styles/analytics.css'; // reuse the shared tab-bar CSS
 import '@/styles/admin.css';
 
@@ -48,5 +49,3 @@ const Admin: React.FC = () => {
 };
 
 export default Admin;
-
-import { AdminTab, enumFromParam, type AdminTabId } from '@/utils/uiEnums';

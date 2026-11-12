@@ -2,6 +2,7 @@ import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import TabBar from '@/components/TabBar/TabBar';
 import { isTradingMode } from '../../shared/tradeEnums.js';
+import { AnalyticsTab, JournalRange, enumFromParam, type AnalyticsTabId } from '@/utils/uiEnums';
 
 // Each tab is large; load it only when the tab is opened.
 const OptionChain = lazy(() => import('@/components/OptionChain/OptionChain'));
@@ -68,5 +69,3 @@ const Analytics: React.FC = () => {
 };
 
 export default Analytics;
-
-import { AnalyticsTab, JournalRange, enumFromParam, type AnalyticsTabId } from '@/utils/uiEnums';

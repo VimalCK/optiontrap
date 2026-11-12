@@ -373,45 +373,6 @@ export const LinkIcon: React.FC<IconProps> = ({ size = 20, className }) => (
   </svg>
 );
 
-export const ArrowRightIcon: React.FC<IconProps> = ({ size = 20, className }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    <path d="M5 12h14" />
-    <path d="m12 5 7 7-7 7" />
-  </svg>
-);
-
-export const IdCardIcon: React.FC<IconProps> = ({ size = 20, className }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.8"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    <rect x="2" y="5" width="20" height="14" rx="2" />
-    <path d="M12 12h5" />
-    <path d="M12 16h5" />
-    <circle cx="7" cy="12" r="2" />
-    <path d="M5 16a2 2 0 0 1 2-2h0a2 2 0 0 1 2 2" />
-  </svg>
-);
-
 export const AutomationIcon: React.FC<IconProps> = ({ size = 20, className }) => (
   <svg
     width={size}

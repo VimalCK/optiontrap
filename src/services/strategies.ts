@@ -9,7 +9,7 @@ import type { RuleInfo } from '../../shared/rules/ruleSettings.js';
 
 export type StrategyInfo = RuleInfo;
 
-export function fetchStrategies(signal?: AbortSignal): Promise<StrategyInfo[]> {
+function fetchStrategies(signal?: AbortSignal): Promise<StrategyInfo[]> {
   return apiClient.get<StrategyInfo[]>('/api/strategies', { signal });
 }
 

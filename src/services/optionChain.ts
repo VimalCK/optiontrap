@@ -7,7 +7,6 @@ export interface OptionInstrument {
   strike: number;
   instrumentType: OptionTypeId;
   lotSize: number;
-  lastPrice: number;
 }
 
 export interface OptionChainRow {
@@ -16,12 +15,13 @@ export interface OptionChainRow {
   pe: OptionInstrument | null;
 }
 import { apiClient } from './apiClient';
+import type { Instrument } from './instruments';
 import { istDateString } from '@/utils/marketStatus';
 import { buildOptionChain as buildChain, upcomingExpiries } from '../../shared/optionAnalysis/chain.js';
 import { Exchange, isOptionType, type OptionTypeId } from '../../shared/tradeEnums.js';
 
 /** In-memory cache of all instruments to avoid re-fetching */
-let instrumentsCache: any[] | null = null;
+let instrumentsCache: Instrument[] | null = null;
 
 /**
  * Fetch options for a given symbol from the server's shared instrument cache.
@@ -29,22 +29,21 @@ let instrumentsCache: any[] | null = null;
  */
 export async function fetchOptions(symbol: string, signal?: AbortSignal): Promise<OptionInstrument[]> {
   if (!instrumentsCache) {
-    instrumentsCache = await apiClient.get<any[]>('/api/instruments', { signal });
+    instrumentsCache = await apiClient.get<Instrument[]>('/api/instruments', { signal });
   }
 
   // Filter for the given symbol's CE/PE options
-  return instrumentsCache!
-    .filter((i: any) => i.exchange === Exchange.NFO && i.name === symbol && isOptionType(i.instrumentType))
-    .map((i: any) => ({
+  return instrumentsCache
+    .filter((i) => i.exchange === Exchange.NFO && i.name === symbol && isOptionType(i.instrumentType))
+    .map((i) => ({
       instrumentToken: i.instrumentToken,
       exchangeToken: i.exchangeToken,
       tradingsymbol: i.tradingsymbol,
       name: i.name,
-      expiry: i.expiry,
-      strike: i.strike,
+      expiry: i.expiry ?? '',
+      strike: i.strike ?? 0,
       instrumentType: i.instrumentType as OptionTypeId,
       lotSize: i.lotSize || 0,
-      lastPrice: i.lastPrice || 0,
     }));
 }
 
@@ -53,7 +52,7 @@ export async function fetchOptions(symbol: string, signal?: AbortSignal): Promis
  */
 export function getLotSize(instrumentToken: number): number {
   if (!instrumentsCache) return 1;
-  const inst = instrumentsCache.find((i: any) => i.instrumentToken === instrumentToken);
+  const inst = instrumentsCache.find((i) => i.instrumentToken === instrumentToken);
   return inst?.lotSize || 1;
 }
 

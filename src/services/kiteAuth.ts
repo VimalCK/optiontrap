@@ -117,7 +117,7 @@ export function getCredentials(): { apiKey: string; apiSecret: string } | null {
 /**
  * Clear credentials from localStorage
  */
-export function clearCredentials(): void {
+function clearCredentials(): void {
   localStorage.removeItem(CREDS_KEY);
 }
 
@@ -129,39 +129,10 @@ export function hasCredentials(): boolean {
 }
 
 /**
- * Check if we have a valid session (calls server)
- */
-export async function fetchSession(): Promise<KiteSession | null> {
-  try {
-    const res = await fetch('/auth/me', { credentials: 'include' });
-    if (!res.ok) {
-      cachedSession = null;
-      return null;
-    }
-    const { data } = await res.json();
-    cachedSession = data;
-    if (data.avatarUrl) {
-      localStorage.setItem(AVATAR_STORAGE_KEY, data.avatarUrl);
-    }
-    return data;
-  } catch {
-    cachedSession = null;
-    return null;
-  }
-}
-
-/**
  * Get cached session (synchronous — may be null if not yet fetched)
  */
 export function getSession(): KiteSession | null {
   return cachedSession;
-}
-
-/**
- * Set cached session locally (called after token exchange)
- */
-export function setCachedSession(session: KiteSession | null): void {
-  cachedSession = session;
 }
 
 /**
@@ -185,8 +156,8 @@ export async function getLoginUrl(): Promise<string> {
     const error = await res.json().catch(() => ({ message: 'Failed to get login URL' }));
     throw new Error(error.message);
   }
-  const { url } = await res.json();
-  return url;
+  const { data } = await res.json();
+  return data.url;
 }
 
 /**
@@ -279,9 +250,3 @@ export function getLastAvatarUrl(): string | null {
   return localStorage.getItem(AVATAR_STORAGE_KEY);
 }
 
-/**
- * Clear stored avatar URL
- */
-export function clearLastAvatarUrl(): void {
-  localStorage.removeItem(AVATAR_STORAGE_KEY);
-}

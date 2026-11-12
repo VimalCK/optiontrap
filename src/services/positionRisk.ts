@@ -21,7 +21,7 @@ import { Position } from './positions';
 /** An option position: always has a strike, CE/PE and an expiry. */
 export type OptionPosition = Position & { optionType: OptionTypeId; strike: number; expiry: string };
 
-export function isOptionPosition(pos: Position): pos is OptionPosition {
+function isOptionPosition(pos: Position): pos is OptionPosition {
   return isOptionType(pos.optionType) && pos.strike != null && pos.expiry != null;
 }
 import { apiClient } from './apiClient';

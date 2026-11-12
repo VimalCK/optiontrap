@@ -4,7 +4,7 @@
  * edge scores, the Strategy card) and the Option Analyzer setups strategy
  * (server), so both read a chain the same way.
  */
-import { Bias, LevelSide, OiSignal } from '../analysisEnums.js';
+import { Bias, LevelSide, OiSignal, oiSignalLabel } from '../analysisEnums.js';
 
 /** @typedef {import('./chain.js').ChainRow} ChainRow */
 
@@ -34,23 +34,23 @@ import { Bias, LevelSide, OiSignal } from '../analysisEnums.js';
  */
 export function classifyOiSignal(oiChange, priceChange) {
   if (oiChange === 0 && priceChange === 0) {
-    return { signal: OiSignal.Neutral, label: 'Neutral', description: 'No significant change', sentiment: Bias.Neutral };
+    return { signal: OiSignal.Neutral, label: oiSignalLabel(OiSignal.Neutral), description: 'No significant change', sentiment: Bias.Neutral };
   }
 
   if (oiChange > 0 && priceChange > 0) {
-    return { signal: OiSignal.LongBuildup, label: 'Long Buildup', description: 'New longs entering — bulls are aggressive', sentiment: Bias.Bullish };
+    return { signal: OiSignal.LongBuildup, label: oiSignalLabel(OiSignal.LongBuildup), description: 'New longs entering — bulls are aggressive', sentiment: Bias.Bullish };
   }
   if (oiChange > 0 && priceChange <= 0) {
-    return { signal: OiSignal.ShortBuildup, label: 'Short Buildup', description: 'New shorts entering — bears are aggressive', sentiment: Bias.Bearish };
+    return { signal: OiSignal.ShortBuildup, label: oiSignalLabel(OiSignal.ShortBuildup), description: 'New shorts entering — bears are aggressive', sentiment: Bias.Bearish };
   }
   if (oiChange < 0 && priceChange < 0) {
-    return { signal: OiSignal.LongUnwinding, label: 'Long Unwinding', description: 'Longs exiting — bulls giving up', sentiment: Bias.Bearish };
+    return { signal: OiSignal.LongUnwinding, label: oiSignalLabel(OiSignal.LongUnwinding), description: 'Longs exiting — bulls giving up', sentiment: Bias.Bearish };
   }
   if (oiChange < 0 && priceChange >= 0) {
-    return { signal: OiSignal.ShortCovering, label: 'Short Covering', description: 'Shorts exiting — bears giving up', sentiment: Bias.Bullish };
+    return { signal: OiSignal.ShortCovering, label: oiSignalLabel(OiSignal.ShortCovering), description: 'Shorts exiting — bears giving up', sentiment: Bias.Bullish };
   }
 
-  return { signal: OiSignal.Neutral, label: 'Neutral', description: 'Mixed signals', sentiment: Bias.Neutral };
+  return { signal: OiSignal.Neutral, label: oiSignalLabel(OiSignal.Neutral), description: 'Mixed signals', sentiment: Bias.Neutral };
 }
 
 /**

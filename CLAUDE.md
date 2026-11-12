@@ -227,6 +227,7 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
 - **UI building blocks:** reuse what exists, don't add libraries.
   - `AppSelect` instead of a native `<select>` (supports `searchable` and multi-select).
   - The shared `TabBar` for page tabs. `MarketStrip`.
+  - `ToastStack` + `useToasts` for short messages after an action (an order placed or refused).
   - `IconButton` for any icon-only button (`icon`, `label` = tooltip + accessible name, `expanded` for toggles).
   - SVG icons in `src/components/icons/Icons.tsx`: add new ones there in the same style (24 viewBox, `currentColor`
     stroke, `aria-hidden`).

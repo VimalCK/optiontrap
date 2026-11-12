@@ -14,6 +14,9 @@ import TradeHorizonSelect from '@/components/TradeHorizonSelect/TradeHorizonSele
 import OrderModalSwitch from './OrderModalSwitch';
 import { computeLiveFlow, describeFlow, flowColor } from '@/services/oiFlow';
 import { OiChartGuide, SellStrategyGuide, BuyStrategyGuide, PositionAnalyzerGuide } from './AnalyzerGuides';
+import { ToastColor } from '@/utils/uiEnums';
+import ToastStack from '@/components/Toast/ToastStack';
+import { useToasts } from '@/hooks/useToasts';
 
 const ORDER_MODE_OPTIONS: { value: TradingModeId; label: string }[] = [{ value: TradingMode.Paper, label: 'Paper' }, { value: TradingMode.Live, label: 'Live' }];
 /** Market fills at once at the bid / ask; limit waits for the price (shared/paperOrders.js). */
@@ -111,9 +114,8 @@ const OptionChain: React.FC = () => {
   const [oiVelocity, setOiVelocity] = useState<Map<number, OiVelocity>>(new Map());
   const [allSnapshots, setSnapshots] = useState<OiSnapshot[]>([]);
   const snapshots = useMemo(() => withSpot(allSnapshots, spotToken), [allSnapshots, spotToken]);
-  const [toasts, setToasts] = useState<{ id: number; text: string; color: ToastColorId }[]>([]);
+  const { toasts, showToast } = useToasts();
   const subscribedTokensRef = useRef<number[]>([]);
-  const toastIdRef = useRef(0);
   const chainCardRef = useRef<HTMLDivElement>(null);
   const [oiChartWidth, setOiChartWidth] = useState(0);
   const oiChartObserverRef = useRef<ResizeObserver | null>(null);
@@ -146,12 +148,6 @@ const OptionChain: React.FC = () => {
       .filter((value) => value !== selectedSymbol)
       .map((value) => ({ value, label: labels.get(value) || value }));
   }, [recentSymbols, selectedSymbol, symbolOptions]);
-
-  const showToast = useCallback((text: string, color: ToastColorId) => {
-    const id = ++toastIdRef.current;
-    setToasts((prev) => [...prev, { id, text, color }]);
-    setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 2000);
-  }, []);
 
   const resetOrderMeta = useCallback(() => {
     setOrderNote('');
@@ -381,7 +377,6 @@ const OptionChain: React.FC = () => {
     ).then((prevOi) => {
       if (!abortController.signal.aborted && prevOi.size > 0) {
         setPrevDayOi(prevOi);
-        console.log(`[OptionChain] Loaded previous day OI for ${prevOi.size} instruments`);
       }
     }).catch((err) => {
       if (!abortController.signal.aborted) {
@@ -496,8 +491,6 @@ const OptionChain: React.FC = () => {
       if (row.pe) instruments.push(`NFO:${row.pe.tradingsymbol}`);
     });
 
-    console.log(`[Trades] Fetching quotes for ${instruments.length} instruments (strikes ${strikes[0]?.strike}–${strikes[strikes.length - 1]?.strike})`);
-
     fetchQuotes(instruments, signal).then((quotes) => {
       const priceMap = new Map<number, number>();
       const oiMap = new Map<number, number>();
@@ -538,7 +531,6 @@ const OptionChain: React.FC = () => {
       });
       if (missing.length > 0) console.warn(`[Trades] Missing quotes for: ${missing.join(', ')}`);
 
-      console.log(`[Trades] Got quotes for ${priceMap.size} options, spot: ${spotQuote?.last_price}`);
     }).catch((err) => {
       if (isAbortError(err)) return;
       console.error('[Trades] Failed to fetch quotes:', err);
@@ -557,12 +549,11 @@ const OptionChain: React.FC = () => {
     });
   }, [chain, atmStrike, selectedExpiry, spotQuoteKey]);
 
-  // Helper to get live price or fallback to CSV price
+  // The live price, once a quote or tick has arrived.
   const getPrice = (instrument: OptionInstrument | null): number | null => {
     if (!instrument) return null;
     const live = livePrices.get(instrument.instrumentToken);
-    if (live !== undefined && live > 0) return live;
-    return instrument.lastPrice > 0 ? instrument.lastPrice : null;
+    return live !== undefined && live > 0 ? live : null;
   };
 
   // Helper to get % change from previous day's close price (same as Zerodha)
@@ -654,13 +645,7 @@ const OptionChain: React.FC = () => {
 
   return (
     <div>
-      {toasts.length > 0 && (
-        <div className="oc-toast-stack">
-          {toasts.map((t) => (
-            <div key={t.id} className={`oc-toast oc-toast--${t.color.toLowerCase()}`}>{t.text}</div>
-          ))}
-        </div>
-      )}
+      <ToastStack toasts={toasts} />
       {/* Global Expiry Selector */}
       {(expiries.length > 0 || !selectedSymbol) && (
         <div className="oc-expiry-panel">
@@ -1174,5 +1159,3 @@ const OptionChain: React.FC = () => {
 };
 
 export default OptionChain;
-
-import { ToastColor, type ToastColorId } from '@/utils/uiEnums';

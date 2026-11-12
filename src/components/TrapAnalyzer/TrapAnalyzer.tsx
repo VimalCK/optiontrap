@@ -5,6 +5,7 @@ import AppSelect from '@/components/AppSelect/AppSelect';
 import { describeFlow, flowColor, type FlowReading } from '@/services/oiFlow';
 import { OptionType, SIDES, Side, type OptionTypeId, type SideId } from '../../../shared/tradeEnums.js';
 import { OiFlow, TrapVerdict, oiFlowLabel } from '../../../shared/analysisEnums.js';
+import { AnalyzerView, type AnalyzerViewId } from '@/utils/uiEnums';
 import '@/styles/trapanalyzer.css';
 
 interface TrapAnalyzerProps {
@@ -337,5 +338,3 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
 };
 
 export default TrapAnalyzer;
-
-import { AnalyzerView, type AnalyzerViewId } from '@/utils/uiEnums';

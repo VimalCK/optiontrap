@@ -9,7 +9,7 @@ import { sendError } from './replies.js';
 const ROUTE_METHODS = ['get', 'post', 'put', 'patch', 'delete'];
 
 /** A handler whose thrown error or rejected promise goes to `next` instead of crashing the process. */
-export function passErrorsToNext(handler) {
+function passErrorsToNext(handler) {
   if (typeof handler !== 'function' || handler.length === 4) return handler;
   return (req, res, next) => {
     try {

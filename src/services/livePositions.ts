@@ -20,7 +20,7 @@ export function positionPnl(p: KitePosition, lastPrice: number): number {
 }
 
 /** The position at `lastPrice`, with its P&L worked out from it. */
-export function pricePosition(p: KitePosition, lastPrice: number): KitePosition {
+function pricePosition(p: KitePosition, lastPrice: number): KitePosition {
   return { ...p, last_price: lastPrice, pnl: positionPnl(p, lastPrice) };
 }
 

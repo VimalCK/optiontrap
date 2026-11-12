@@ -22,7 +22,7 @@ import { OI_HISTORY_JOB, findWorkingAdminSession } from './oiHistoryScheduler.js
 import { scanStock, syncStockCandles } from './stockCandles.js';
 import { JobRunStatus } from '../shared/appEnums.js';
 
-export const STOCK_SETUPS_JOB = 'stock-setups-after-close';
+const STOCK_SETUPS_JOB = 'stock-setups-after-close';
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 /** Gap between Kite calls: Kite allows three historical requests a second. */
 const KITE_GAP_MS = 400;

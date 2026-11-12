@@ -16,9 +16,9 @@ import { MARKET_TIME_ZONE, addDays, marketDateTime } from '../shared/marketTime.
 import { InstrumentType, OptionType, PositionStatus, SEGMENTS, Segment, Side, TRADING_MODES, isTradingMode } from '../shared/tradeEnums.js';
 import { sqlEnum, sqlEnumList } from './sql.js';
 
-export const POSITION_STATUSES = [PositionStatus.Closed];
-export const DEFAULT_TRADE_LIMIT = 100;
-export const MAX_TRADE_LIMIT = 500;
+const POSITION_STATUSES = [PositionStatus.Closed];
+const DEFAULT_TRADE_LIMIT = 100;
+const MAX_TRADE_LIMIT = 500;
 
 // P&L of an exited position after its charges (shared/paperCharges.js; none on positions closed
 // before charges were recorded); the same formula as the browser's positionToEntry.

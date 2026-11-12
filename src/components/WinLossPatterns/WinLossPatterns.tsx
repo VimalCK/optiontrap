@@ -37,7 +37,7 @@ const ratio = (value: number | null) => (value === null ? dash : value.toFixed(2
 const toneClass = (value: number | null) => (value === null || value === 0 ? '' : value > 0 ? 'winloss--profit' : 'winloss--loss');
 
 /** Wins against losses as one thin bar: the green share, then the red share (breakeven trades are the rest). */
-export const WinLossBar: React.FC<{ group: ResultGroup<unknown> }> = ({ group }) => {
+const WinLossBar: React.FC<{ group: ResultGroup<unknown> }> = ({ group }) => {
   const share = (n: number) => (group.trades > 0 ? (n / group.trades) * 100 : 0);
   return (
     <span className="winloss-bar" aria-hidden="true">
@@ -63,7 +63,7 @@ const Stat: React.FC<{ label: string; value: string; tone?: number | null }> = (
 );
 
 /** The headline figures, then the supporting ones in a quieter row. */
-export const ResultsSummary: React.FC<{ results: AutoTradeResults }> = ({ results: { summary, maxDrawdown } }) => (
+const ResultsSummary: React.FC<{ results: AutoTradeResults }> = ({ results: { summary, maxDrawdown } }) => (
   <div className="winloss-summary">
     <div className="winloss-kpis">
       <Kpi label="Total P&L" value={amount(summary.pnl)} tone={summary.pnl} note={`${summary.trades} closed trades`} />
@@ -83,7 +83,7 @@ export const ResultsSummary: React.FC<{ results: AutoTradeResults }> = ({ result
 );
 
 /** One breakdown panel: a row per group with its trades, win rate (and bar), P&L and average P&L. */
-export function BreakdownTable<K>({ title, column, groups, label }: {
+function BreakdownTable<K>({ title, column, groups, label }: {
   title: string; column: string; groups: ResultGroup<K>[]; label: (key: K) => string;
 }) {
   return (

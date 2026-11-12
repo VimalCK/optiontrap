@@ -31,6 +31,7 @@ import {
 } from '@/services/tradeJournal';
 import { Segment, TRADING_MODES, TradingMode, type SegmentId, type TradingModeId } from '../../../shared/tradeEnums.js';
 import { saveTradingMode, storedTradingMode } from '@/utils/tradingModeStorage';
+import { AnySegment, JournalRange, type AnySegmentId, type JournalRangeId } from '@/utils/uiEnums';
 import '@/styles/tradejournal.css';
 
 type SegmentFilter = AnySegmentId | SegmentId;
@@ -381,5 +382,3 @@ const TradeJournal: React.FC<{
 };
 
 export default TradeJournal;
-
-import { AnySegment, JournalRange, type AnySegmentId, type JournalRangeId } from '@/utils/uiEnums';

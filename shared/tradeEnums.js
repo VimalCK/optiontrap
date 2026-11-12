@@ -77,9 +77,6 @@ export const OrderStatus = Object.freeze({ Open: 'Open', Filled: 'Filled', Cance
 
 /** @typedef {typeof OrderStatus[keyof typeof OrderStatus]} OrderStatusId */
 
-/** Every order status. */
-export const ORDER_STATUSES = /** @type {OrderStatusId[]} */ (Object.values(OrderStatus));
-
 /** How an order is priced: at a limit, or at the market (the bid / ask). */
 export const OrderType = Object.freeze({ Limit: 'Limit', Market: 'Market' });
 

@@ -39,7 +39,7 @@ import { addDays } from '../shared/marketTime.js';
 import { JobRunStatus } from '../shared/appEnums.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-export const NIGHTLY_JOBS_DIR = path.join(__dirname, 'jobs', 'nightly');
+const NIGHTLY_JOBS_DIR = path.join(__dirname, 'jobs', 'nightly');
 export const NIGHTLY_JOB_PREFIX = 'nightly:';
 /** Checked at startup, then hourly: the 08:30-midnight window always contains a check. */
 const CHECK_INTERVAL_MS = 60 * 60 * 1000;
@@ -83,7 +83,7 @@ async function runJobFile(file, date) {
 }
 
 /** Run every job not yet run for `date`. Exported so a run can be triggered by hand. */
-export async function runNightlyJobs(date) {
+async function runNightlyJobs(date) {
   for (const file of listJobFiles()) {
     const job = NIGHTLY_JOB_PREFIX + file;
     const status = await getScheduledJobStatus(job, date);

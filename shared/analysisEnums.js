@@ -59,7 +59,7 @@ export const OiSignal = Object.freeze({
 /** @typedef {typeof OiSignal[keyof typeof OiSignal]} OiSignalId */
 
 /** Every OI signal with its label. */
-export const OI_SIGNALS = /** @type {{ id: OiSignalId, label: string }[]} */ ([
+const OI_SIGNALS = /** @type {{ id: OiSignalId, label: string }[]} */ ([
   { id: OiSignal.LongBuildup, label: 'Long Buildup' },
   { id: OiSignal.ShortBuildup, label: 'Short Buildup' },
   { id: OiSignal.LongUnwinding, label: 'Long Unwinding' },
@@ -94,7 +94,7 @@ export const VelocityTrend = Object.freeze({
 /** @typedef {typeof VelocityTrend[keyof typeof VelocityTrend]} VelocityTrendId */
 
 /** Every velocity trend with its label. */
-export const VELOCITY_TRENDS = /** @type {{ id: VelocityTrendId, label: string }[]} */ ([
+const VELOCITY_TRENDS = /** @type {{ id: VelocityTrendId, label: string }[]} */ ([
   { id: VelocityTrend.AcceleratingBuildup, label: 'Accelerating Buildup' },
   { id: VelocityTrend.SteadyBuildup, label: 'Steady Buildup' },
   { id: VelocityTrend.SlowingBuildup, label: 'Slowing Buildup' },
@@ -127,7 +127,7 @@ export const OptionSetup = Object.freeze({
 /** @typedef {typeof OptionSetup[keyof typeof OptionSetup]} OptionSetupId */
 
 /** Every option setup with its label. */
-export const OPTION_SETUPS = /** @type {{ id: OptionSetupId, label: string }[]} */ ([
+const OPTION_SETUPS = /** @type {{ id: OptionSetupId, label: string }[]} */ ([
   { id: OptionSetup.SellCe, label: 'Sell CE' },
   { id: OptionSetup.SellPe, label: 'Sell PE' },
   { id: OptionSetup.SellStraddle, label: 'Straddle' },
@@ -159,7 +159,7 @@ export const SetupPattern = Object.freeze({
 /** @typedef {typeof SetupPattern[keyof typeof SetupPattern]} SetupPatternId */
 
 /** Every setup pattern with its label. */
-export const SETUP_PATTERNS = /** @type {{ id: SetupPatternId, label: string }[]} */ ([
+const SETUP_PATTERNS = /** @type {{ id: SetupPatternId, label: string }[]} */ ([
   { id: SetupPattern.Pinning, label: 'Pinning' },
   { id: SetupPattern.WallDefense, label: 'Wall Defense' },
   { id: SetupPattern.VelocityConfirmed, label: 'Velocity Confirmed' },
@@ -182,7 +182,7 @@ export const TrapVerdict = Object.freeze({ Safe: 'Safe', Caution: 'Caution', Lik
 /** @typedef {typeof TrapVerdict[keyof typeof TrapVerdict]} TrapVerdictId */
 
 /** Every trap verdict with its label. */
-export const TRAP_VERDICTS = /** @type {{ id: TrapVerdictId, label: string }[]} */ ([
+const TRAP_VERDICTS = /** @type {{ id: TrapVerdictId, label: string }[]} */ ([
   { id: TrapVerdict.Safe, label: 'Looks Safe' },
   { id: TrapVerdict.Caution, label: 'Caution' },
   { id: TrapVerdict.LikelyTrapped, label: 'Likely Trapped' },
@@ -202,7 +202,7 @@ export const VolVerdict = Object.freeze({ OptionsExpensive: 'OptionsExpensive', 
 /** @typedef {typeof VolVerdict[keyof typeof VolVerdict]} VolVerdictId */
 
 /** Every volatility verdict with its label. */
-export const VOL_VERDICTS = /** @type {{ id: VolVerdictId, label: string }[]} */ ([
+const VOL_VERDICTS = /** @type {{ id: VolVerdictId, label: string }[]} */ ([
   { id: VolVerdict.OptionsExpensive, label: 'Options expensive' },
   { id: VolVerdict.FairlyPriced, label: 'Fairly priced' },
   { id: VolVerdict.OptionsCheap, label: 'Options cheap' },
@@ -249,7 +249,7 @@ export const OiFlow = Object.freeze({
 /** @typedef {typeof OiFlow[keyof typeof OiFlow]} OiFlowId */
 
 /** Every OI flow with its label. */
-export const OI_FLOWS = /** @type {{ id: OiFlowId, label: string }[]} */ ([
+const OI_FLOWS = /** @type {{ id: OiFlowId, label: string }[]} */ ([
   { id: OiFlow.BuyersAdding, label: 'Buyers Adding' },
   { id: OiFlow.WritersAdding, label: 'Writers Adding' },
   { id: OiFlow.BuyersExiting, label: 'Buyers Exiting' },
@@ -288,7 +288,7 @@ export const RolloverPattern = Object.freeze({
 /** @typedef {typeof RolloverPattern[keyof typeof RolloverPattern]} RolloverPatternId */
 
 /** Every rollover pattern with its label. */
-export const ROLLOVER_PATTERNS = /** @type {{ id: RolloverPatternId, label: string }[]} */ ([
+const ROLLOVER_PATTERNS = /** @type {{ id: RolloverPatternId, label: string }[]} */ ([
   { id: RolloverPattern.RollingOverLong, label: 'Rolling Over (Long)' },
   { id: RolloverPattern.RollingOverShort, label: 'Rolling Over (Short)' },
   { id: RolloverPattern.RollingOver, label: 'Rolling Over' },
@@ -331,7 +331,7 @@ export const SellingSetup = Object.freeze({ CallSell: 'CallSell', PutSell: 'PutS
 /** @typedef {typeof SellingSetup[keyof typeof SellingSetup]} SellingSetupId */
 
 /** Every selling setup with its label. */
-export const SELLING_SETUPS = /** @type {{ id: SellingSetupId, label: string }[]} */ ([
+const SELLING_SETUPS = /** @type {{ id: SellingSetupId, label: string }[]} */ ([
   { id: SellingSetup.CallSell, label: 'Call Sell' },
   { id: SellingSetup.PutSell, label: 'Put Sell' },
   { id: SellingSetup.RangeSell, label: 'Range Sell' },
@@ -347,7 +347,7 @@ export const SignalVerdict = Object.freeze({ Working: 'Working', Mixed: 'Mixed',
 /** @typedef {typeof SignalVerdict[keyof typeof SignalVerdict]} SignalVerdictId */
 
 /** Every signal verdict with its label. */
-export const SIGNAL_VERDICTS = /** @type {{ id: SignalVerdictId, label: string }[]} */ ([
+const SIGNAL_VERDICTS = /** @type {{ id: SignalVerdictId, label: string }[]} */ ([
   { id: SignalVerdict.Working, label: 'Working' },
   { id: SignalVerdict.Mixed, label: 'Mixed' },
   { id: SignalVerdict.Losing, label: 'Losing' },

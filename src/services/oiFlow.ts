@@ -34,16 +34,16 @@ const MS_PER_YEAR = 365 * 24 * 60 * 60 * 1000;
 const MIN_YEARS = 2 / (365 * 24);
 
 /** Relative IV change, in vol points as a decimal (0.005 = 0.5 pts), that counts as a move. */
-export const IV_MOVE_THRESHOLD = 0.005;
+const IV_MOVE_THRESHOLD = 0.005;
 /** Fallback OI move threshold when the strike has too little history to judge what is unusual. */
-export const OI_MOVE_PCT = 0.02;
+const OI_MOVE_PCT = 0.02;
 /** OI change this many times the strike's median daily change counts as a move. */
-export const UNUSUAL_RATIO = 1.5;
+const UNUSUAL_RATIO = 1.5;
 /** Ignore OI changes smaller than this share of the previous OI, however unusual. */
 const MIN_OI_MOVE_PCT = 0.005;
 const MIN_HISTORY_CHANGES = 3;
 const HISTORY_WINDOW = 10;
-export const RECENT_SESSIONS = 3;
+const RECENT_SESSIONS = 3;
 
 export interface FlowInput {
   token: number;

@@ -138,7 +138,7 @@ export async function withAdvisoryLock(lockKey, fn) {
  * @param {string} value
  * @returns {bigint}
  */
-export function advisoryLockKey(value) {
+function advisoryLockKey(value) {
   const hash = crypto.createHash('sha256').update(value).digest();
   // Read the first 8 bytes as a signed BigInt (pg advisory keys are bigint).
   return hash.readBigInt64BE(0);
@@ -350,8 +350,15 @@ export class SubscriptionPlanNotFoundError extends Error {
   }
 }
 
-export async function activateSubscription(userId, planId = 'one_month', provider = SubscriptionProvider.Internal) {
-  const plan = await requirePlan(planId);
+/** The plan a user gets when they pick none: the first of the plans list (cheapest first). */
+async function defaultPlanId() {
+  const row = await firstRow('SELECT id FROM subscription_plans WHERE is_active ORDER BY price ASC, id ASC LIMIT 1');
+  return row?.id;
+}
+
+/** Activate a plan for a user (the default plan when `planId` is left out). */
+export async function activateSubscription(userId, planId, provider = SubscriptionProvider.Internal) {
+  const plan = await requirePlan(planId ?? await defaultPlanId());
 
   const id = crypto.randomUUID();
   const startsAt = formatDbTimestamp(new Date());
@@ -361,7 +368,7 @@ export async function activateSubscription(userId, planId = 'one_month', provide
     `INSERT INTO subscriptions (id, user_id, plan_id, status, starts_at, expires_at, provider, updated_at)
      VALUES ($1, $2, $3, ${sqlEnum(SubscriptionState.Active)}, $4, $5, $6, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))
      ON CONFLICT (id) DO NOTHING`,
-    [id, userId, planId, startsAt, expiresAt, provider],
+    [id, userId, plan.id, startsAt, expiresAt, provider],
   );
 
   const existing = await firstRow(
@@ -379,7 +386,7 @@ export async function activateSubscription(userId, planId = 'one_month', provide
         provider = $4,
         updated_at = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
        WHERE id = $5`,
-      [planId, startsAt, expiresAt, provider, existing.id],
+      [plan.id, startsAt, expiresAt, provider, existing.id],
     );
     await query('DELETE FROM subscriptions WHERE id = $1', [id]);
     return getUserSubscription(userId);
@@ -2263,34 +2270,6 @@ export async function getStoredOiHistoryStrikes(scrip, expiryMonth) {
   return result.map((r) => Number(r.strike)).filter(Number.isFinite);
 }
 
-export async function getOiHistoryDates(scrip, fromDate, toDate, minExpiries = 0) {
-  let where = ' WHERE scrip = $1';
-  const params = [scrip];
-  let n = 2;
-
-  if (fromDate && toDate) {
-    where += ` AND date >= $${n++} AND date <= $${n++}`;
-    params.push(fromDate, toDate);
-  } else if (fromDate) {
-    where += ` AND date >= $${n++}`;
-    params.push(fromDate);
-  } else if (toDate) {
-    where += ` AND date <= $${n++}`;
-    params.push(toDate);
-  }
-
-  if (minExpiries > 0) {
-    const sql = `SELECT date, COUNT(DISTINCT expiry) AS ec FROM oi_history_options${where} GROUP BY date HAVING COUNT(DISTINCT expiry) >= $${n}`;
-    params.push(minExpiries);
-    const result = await rows(sql, params);
-    return new Set(result.map((r) => r.date));
-  }
-
-  const sql = `SELECT DISTINCT date FROM oi_history_options${where}`;
-  const result = await rows(sql, params);
-  return new Set(result.map((r) => r.date));
-}
-
 export async function getOiHistoryDatesForExpiryMonth(scrip, expiryMonth, fromDate, toDate, minExpiries = 0) {
   let where = " WHERE scrip = $1 AND expiry LIKE $2 || '%'";
   const params = [scrip, expiryMonth];
@@ -2317,14 +2296,6 @@ export async function getOiHistoryDatesForExpiryMonth(scrip, expiryMonth, fromDa
   const sql = `SELECT DISTINCT date FROM oi_history_options${where}`;
   const result = await rows(sql, params);
   return new Set(result.map((r) => r.date));
-}
-
-export async function getOiHistoryMonths(scrip) {
-  const result = await rows(
-    "SELECT DISTINCT substr(date, 1, 7) AS month FROM oi_history_options WHERE scrip = $1 ORDER BY month DESC",
-    [scrip],
-  );
-  return result.map((r) => r.month);
 }
 
 export async function getStoredOiHistoryExpiryMonths(scrip) {
@@ -2456,22 +2427,6 @@ export async function getScheduledJobRuns(job, limit = 10) {
   );
 }
 
-export async function getOiHistoryExpiryMonths(scrip, minExpiryDate, limit = 3) {
-  const result = await rows(
-    `SELECT DISTINCT substr(expiry, 1, 7) AS month
-     FROM instruments
-     WHERE name = $1
-       AND exchange = ${sqlEnum(Exchange.NFO)}
-       AND instrument_type IN (${sqlEnumList(OptionType.CE, OptionType.PE)})
-       AND expiry IS NOT NULL
-       AND expiry >= $2
-     ORDER BY month
-     LIMIT $3`,
-    [scrip, minExpiryDate, limit],
-  );
-  return result.map((r) => r.month);
-}
-
 export async function deleteOiHistoryByMonth(month) {
   const res = await query("DELETE FROM oi_history_options WHERE date LIKE $1 || '%'", [month]);
   await query("DELETE FROM oi_history_futures WHERE date LIKE $1 || '%'", [month]);
@@ -2487,23 +2442,6 @@ export async function deleteOiHistoryByScrip(scrip) {
 export async function deleteOiHistoryByExpiryMonth(scrip, expiryMonth) {
   const res = await query("DELETE FROM oi_history_options WHERE scrip = $1 AND expiry LIKE $2 || '%'", [scrip, expiryMonth]);
   await query("DELETE FROM oi_history_futures WHERE scrip = $1 AND expiry LIKE $2 || '%'", [scrip, expiryMonth]);
-  return res.rowCount;
-}
-
-export async function deleteOiHistoryByDates(scrip, dates) {
-  if (!dates.length) return 0;
-  const placeholders = dates.map((_, i) => `$${i + 2}`).join(', ');
-  const res = await query(`DELETE FROM oi_history_options WHERE scrip = $1 AND date IN (${placeholders})`, [scrip, ...dates]);
-  return res.rowCount;
-}
-
-export async function deleteOiHistoryByDatesForExpiryMonth(scrip, expiryMonth, dates) {
-  if (!dates.length) return 0;
-  const placeholders = dates.map((_, i) => `$${i + 3}`).join(', ');
-  const res = await query(
-    `DELETE FROM oi_history_options WHERE scrip = $1 AND expiry LIKE $2 || '%' AND date IN (${placeholders})`,
-    [scrip, expiryMonth, ...dates],
-  );
   return res.rowCount;
 }
 

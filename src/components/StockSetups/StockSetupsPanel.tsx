@@ -10,6 +10,7 @@ import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import { realizedVol, REALIZED_WINDOW, TRADING_DAYS } from '@/services/fairValue';
 import { PriceAlertCondition, type PriceAlertConditionId } from '../../../shared/appEnums.js';
 import { Side } from '../../../shared/tradeEnums.js';
+import { StockSetupsView, type StockSetupsViewId } from '@/utils/uiEnums';
 // Also opened from OI History, where the watchlist styles aren't otherwise loaded.
 import '@/styles/watchlist.css';
 
@@ -506,5 +507,3 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
 };
 
 export default StockSetupsPanel;
-
-import { StockSetupsView, type StockSetupsViewId } from '@/utils/uiEnums';

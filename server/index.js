@@ -125,7 +125,7 @@ import { resolveSessionSecret } from './sessionSecret.js';
 import { createConcurrencyLimit } from './concurrencyLimit.js';
 import { allowOnlyKnownKiteCalls } from './kiteProxyAllowlist.js';
 import { MAX_CLIENT_MESSAGE_BYTES, MAX_CONNECTIONS_PER_USER } from './wsLimits.js';
-import { Exchange, InstrumentType, OptionType, OrderStatus, Side, isOptionType, isSide } from '../shared/tradeEnums.js';
+import { Exchange, OrderStatus, isOptionType, isSide } from '../shared/tradeEnums.js';
 import { AccessDenial, FEEDBACK_STATUSES, FetchEvent, PriceAlertStatus, SignalOutcome, StrikeMode, SubscriptionAction, SubscriptionProvider, isFeedbackStatus, isFeedbackType, strikeModeFrom } from '../shared/appEnums.js';
 import { TradeSetupStatus, isTradeSetupStatus } from '../shared/analysisEnums.js';
 import { sendCreated, sendError, sendOk } from './replies.js';
@@ -281,7 +281,7 @@ app.get('/auth/status', (req, res) => {
 app.get('/auth/login-url', (req, res) => {
   const { url, error } = kiteLoginUrl(req.query.api_key);
   if (error) return sendError(res, 400, error);
-  res.json({ url });
+  sendOk(res, { url });
 });
 
 // Check session (backward compat with useKiteSession)
@@ -512,7 +512,7 @@ const sendSubscriptionFailure = (res, err, log) => {
 
 // Activate a plan for the signed-in user: creates a subscription.
 app.post('/api/subscriptions', requireAuth, async (req, res) => {
-  const { planId = 'one_month' } = req.body || {};
+  const { planId } = req.body || {};
 
   try {
     const subscription = await activateSubscription(req.session.kiteSession.userId, planId, SubscriptionProvider.Internal);

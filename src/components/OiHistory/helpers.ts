@@ -4,7 +4,7 @@ import { formatCalendarDate } from '@/utils/marketStatus';
 import { OptionType, type OptionTypeId } from '../../../shared/tradeEnums.js';
 import { MoveDirection, OiSignal, RolloverPattern, type MoveDirectionId, type OiSignalId, type RolloverPatternId } from '../../../shared/analysisEnums.js';
 
-export const RECENT_SCRIPS_KEY = 'optiontrap_oi_history_recent_scrips';
+const RECENT_SCRIPS_KEY = 'optiontrap_oi_history_recent_scrips';
 export const MAX_RECENT_SCRIPS = 5;
 
 export function loadRecentScrips(): string[] {

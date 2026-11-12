@@ -30,7 +30,7 @@ const Subscribe: React.FC = () => {
   const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [activating, setActivating] = useState(false);
-  const [selectedPlanId, setSelectedPlanId] = useState('one_month');
+  const [selectedPlanId, setSelectedPlanId] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -38,7 +38,7 @@ const Subscribe: React.FC = () => {
       .then(([planData, status]) => {
         setPlans(planData);
         setSubscription(status);
-        setSelectedPlanId(status.planId || planData[0]?.id || 'one_month');
+        setSelectedPlanId(status.planId || planData[0]?.id || '');
       })
       .catch((err) => setError(err.message || 'Failed to load subscription details.'))
       .finally(() => setLoading(false));

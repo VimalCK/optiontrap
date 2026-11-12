@@ -31,7 +31,7 @@ import { HORIZONS, Horizon, INSTRUMENT_TYPES, InstrumentType, PaperTradeAction, 
  * open: a trade fills now; exit: a position closes now; place: an order is placed, to fill later or now;
  * square-off: the engine closes a position its session left open, after the close, at the closing price.
  */
-export const PAPER_TRADE_ACTIONS = Object.values(PaperTradeAction);
+const PAPER_TRADE_ACTIONS = Object.values(PaperTradeAction);
 
 /** Error codes a rule can report. */
 export const RULE_CODES = {

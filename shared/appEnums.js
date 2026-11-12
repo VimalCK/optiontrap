@@ -133,13 +133,6 @@ export const SubscriptionAction = Object.freeze({ Activate: 'Activate', Extend: 
 
 /** @typedef {typeof SubscriptionAction[keyof typeof SubscriptionAction]} SubscriptionActionId */
 
-/**
- * Whether a value is a subscription action.
- * @param {unknown} value
- * @returns {value is SubscriptionActionId}
- */
-export const isSubscriptionAction = (value) => Object.values(SubscriptionAction).some((action) => action === value);
-
 /** Why a request may not use a subscription feature (server/subscriptionAccess.js). */
 export const AccessDenial = Object.freeze({ Unauthenticated: 'Unauthenticated', SubscriptionRequired: 'SubscriptionRequired' });
 
@@ -151,7 +144,7 @@ export const DurationUnit = Object.freeze({ Day: 'Day', Week: 'Week', Month: 'Mo
 /** @typedef {typeof DurationUnit[keyof typeof DurationUnit]} DurationUnitId */
 
 /** Every duration unit with its label, as read in "6 months". */
-export const DURATION_UNITS = /** @type {{ id: DurationUnitId, label: string }[]} */ ([
+const DURATION_UNITS = /** @type {{ id: DurationUnitId, label: string }[]} */ ([
   { id: DurationUnit.Day, label: 'day' },
   { id: DurationUnit.Week, label: 'week' },
   { id: DurationUnit.Month, label: 'month' },

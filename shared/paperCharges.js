@@ -37,7 +37,7 @@ const GST_RATE = 0.18;
  */
 
 /** @type {Record<ChargeSegmentId, ChargeSchedule>} */
-export const CHARGE_SCHEDULES = {
+const CHARGE_SCHEDULES = {
   [ChargeSegment.Option]: { brokerage: { flat: 20 }, stt: { SELL: 0.0015 }, exchange: 0.0003553, stamp: 0.00003 },
   [ChargeSegment.Future]: { brokerage: { percent: 0.0003, cap: 20 }, stt: { SELL: 0.0005 }, exchange: 0.0000183, stamp: 0.00002 },
   [ChargeSegment.EquityIntraday]: { brokerage: { percent: 0.0003, cap: 20 }, stt: { SELL: 0.00025 }, exchange: 0.0000307, stamp: 0.00003 },
@@ -92,7 +92,7 @@ export function orderCharges(segment, side, price, quantity) {
 }
 
 /** Two sets of charges added together. @param {Charges} a @param {Charges} b @returns {Charges} */
-export function addCharges(a, b) {
+function addCharges(a, b) {
   return withTotal(/** @type {Omit<Charges, 'total'>} */ (Object.fromEntries(CHARGE_KEYS.map((key) => [key, paise(a[key] + b[key])]))));
 }
 

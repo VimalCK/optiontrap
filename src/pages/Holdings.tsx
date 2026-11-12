@@ -10,6 +10,7 @@ import HoldingsView from './HoldingsView';
 import PositionsView from './Positions';
 import TabBar from '@/components/TabBar/TabBar';
 import { isTradingMode, type TradingModeId } from '../../shared/tradeEnums.js';
+import { PortfolioTab, enumFromParam, type PortfolioTabId } from '@/utils/uiEnums';
 import '@/styles/analytics.css'; // reuse same tab-bar CSS
 import '@/styles/portfolio.css';
 
@@ -66,5 +67,3 @@ const Holdings: React.FC = () => {
 };
 
 export default Holdings;
-
-import { PortfolioTab, enumFromParam, type PortfolioTabId } from '@/utils/uiEnums';

@@ -40,7 +40,6 @@ export class KiteTicker {
     this.ws.binaryType = 'arraybuffer';
 
     this.ws.onopen = () => {
-      console.log('[KiteTicker] Connected via proxy');
       // Use this.instrumentTokens (not the captured parameter) so tokens
       // updated via updateSubscriptions() during CONNECTING are picked up.
       this.subscribe(this.instrumentTokens);
@@ -62,7 +61,6 @@ export class KiteTicker {
     };
 
     this.ws.onclose = (event) => {
-      console.log('[KiteTicker] Disconnected');
       if (event.code === WS_SESSION_EXPIRED) {
         // The Kite token expired: reconnecting can't help, so go to login.
         this.shouldReconnect = false;
@@ -90,7 +88,6 @@ export class KiteTicker {
       this.ws.close();
       this.ws = null;
     }
-    console.log('[KiteTicker] Closed');
   }
 
   /** Whether the WebSocket is open and ready to send messages */
@@ -127,7 +124,6 @@ export class KiteTicker {
 
   private reconnect(): void {
     if (this.onTickCallback && this.instrumentTokens.length > 0) {
-      console.log('[KiteTicker] Reconnecting...');
       this.connect(this.instrumentTokens, this.onTickCallback);
     }
   }

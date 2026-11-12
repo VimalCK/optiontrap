@@ -27,7 +27,7 @@ import { AFTER_CLOSE_MINUTES, daysBefore, istClock } from './marketClock.js';
 import { SETUP_BACKFILL_DAYS, analyzeStock, evaluateSetup, parseKiteCandles, replaySetups, scanSummary } from '../shared/stockSetups.js';
 
 /** One day under Kite's 2000-day limit for daily candles. */
-export const HISTORY_DAYS = 1999;
+const HISTORY_DAYS = 1999;
 /** Calendar days re-fetched on each update: about five sessions. */
 const OVERLAP_DAYS = 7;
 /** A re-fetched close further than this from the stored one means Kite rewrote history. */

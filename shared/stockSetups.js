@@ -153,7 +153,7 @@ export function relativeStrengthIndex(/** @type {number[]} */ closes, n = 14) {
 }
 
 /** @param {Candle[]} candles @returns {Indicators} */
-export function indicatorsOf(candles) {
+function indicatorsOf(candles) {
   const closes = candles.map((c) => c.close);
   return {
     sma20: sma(closes, 20),
@@ -203,7 +203,7 @@ export function swingLevels(candles) {
  * @param {number} binWidth
  * @returns {Level[]}
  */
-export function volumeLevels(candles, binWidth) {
+function volumeLevels(candles, binWidth) {
   const recent = candles.slice(-VOLUME_LOOKBACK).filter((c) => c.volume > 0 && c.high >= c.low);
   if (recent.length < 20 || !(binWidth > 0)) return [];
   const lowest = Math.min(...recent.map((c) => c.low));
@@ -562,7 +562,7 @@ const rs = (/** @type {number} */ v) => `₹${v.toFixed(2)}`;
  * @param {number} atr
  * @param {Candle} last
  */
-export function planText(state, price, supports, resistances, atr, last) {
+function planText(state, price, supports, resistances, atr, last) {
   const zone = supports.find((z) => z.strength >= 2) ?? supports[0];
   const target = resistances[0];
   if (!zone) return 'No support zone below the price in the stored history: no level-based entry.';

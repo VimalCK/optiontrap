@@ -21,7 +21,7 @@ import { istClock, isMarketOpen } from './marketClock.js';
 import { marketDateTime, marketTimeLabel } from '../shared/marketTime.js';
 import { findWorkingAdminSession } from './oiHistoryScheduler.js';
 import { fetchQuotes, KiteAuthError } from './kiteQuotes.js';
-import { Exchange, InstrumentType, isOptionType } from '../shared/tradeEnums.js';
+import { Exchange, isOptionType } from '../shared/tradeEnums.js';
 import { SnapshotContractType } from '../shared/analysisEnums.js';
 
 /** Strikes each side of ATM. The analyzer shows ±15; the extra covers ATM drifting during the day. */

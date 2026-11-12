@@ -53,7 +53,7 @@ import { isMarketOpen, lastSessionEnd, marketDate } from '../../../shared/market
 import { normalizeTradeInput } from '../../../shared/paperTradeRules.js';
 import { CANCELLED_AT_CLOSE, CANCELLED_BY_USER, canFill, parseOrder } from '../../../shared/paperOrders.js';
 import { quotedFillPrice } from '../fillPrice.js';
-import { OrderStatus, OrderType, Side, TradeSource, oppositeSide } from '../../../shared/tradeEnums.js';
+import { OrderStatus, OrderType, TradeSource, oppositeSide } from '../../../shared/tradeEnums.js';
 
 /** This trade engine service's id: its key in ctx.services and on Admin Services. */
 export const ORDERS_SERVICE_ID = 'orders';

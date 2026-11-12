@@ -28,16 +28,6 @@ const CACHE_VERSION = 'v4-bse-scrip-code';
 // ---------------------------------------------------------------------------
 
 /**
- * Strip surrounding double-quotes from a CSV field value.
- */
-function unquote(val) {
-  if (val && val.startsWith('"') && val.endsWith('"')) {
-    return val.slice(1, -1);
-  }
-  return val;
-}
-
-/**
  * Parse a Kite instruments CSV and return matching rows based on a filter.
  *
  * @param {string} csv - Raw CSV text

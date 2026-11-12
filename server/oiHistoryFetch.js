@@ -84,7 +84,7 @@ export async function fetchOiHistoryMonth(options) {
  * @param {AbortSignal} [options.signal]  stops Kite calls and skips the save
  * @returns {Promise<{ rowCount: number, tradingDays: number, skippedDays: number, fetchedDays: number, uniqueTokens: number, message?: string }>}
  */
-export async function fetchOiHistoryMonthNow({
+async function fetchOiHistoryMonthNow({
   scrip,
   expiryMonth,
   strikeMode = StrikeMode.AtmRange,

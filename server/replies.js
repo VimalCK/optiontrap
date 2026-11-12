@@ -12,10 +12,10 @@ const OK = 'ok';
 const ERROR = 'error';
 
 /** A success body: `data` plus any extra top-level fields (e.g. `authenticated`). */
-export const okReply = (data, fields = {}) => ({ status: OK, ...fields, data });
+const okReply = (data, fields = {}) => ({ status: OK, ...fields, data });
 
 /** A failure body: the message plus any extra fields (`code`, `data`). */
-export const errorReply = (message, fields = {}) => ({ status: ERROR, ...fields, message });
+const errorReply = (message, fields = {}) => ({ status: ERROR, ...fields, message });
 
 /** Reply 200 with `data` (left out of the body when undefined). */
 export const sendOk = (res, data, fields) => res.json(okReply(data, fields));
