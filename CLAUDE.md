@@ -102,7 +102,7 @@ It never places real orders. The user is the sole developer; prod (optiontrap.co
 **Logic must never depend on a hardcoded symbol.** No index/symbol names (`NIFTY…`, `BANKNIFTY`, `SENSEX`, …) or
 instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filters or any other code that decides behaviour.
 - Which symbols are indices, their labels, TradingView symbols, lot sizes, `always_snapshot` and `is_market_reference`
-  all come from the **instruments table** (migration 017), via `getUnderlying(s)` / `GET /api/underlyings` / `useUnderlyings`.
+  all come from the **instruments table** (its own columns, in `000_base_schema.sql`), via `getUnderlying(s)` / `GET /api/underlyings` / `useUnderlyings`.
   If logic needs to treat a symbol specially, add a column/flag to the table, not an `if (symbol === …)`.
 - **Quoting a symbol as information is fine:** comments, docs, help notes, examples or explanatory text shown to the user
   (e.g. "e.g. NIFTY weekly options"), test data and migrations may name symbols. The rule is about behaviour, not text.
@@ -112,17 +112,24 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
 
 ## Database and migrations
 
-- Schema changes are numbered SQL files in `server/migrations/NNN_description.sql`, applied on startup in order and
-  recorded with a checksum in `schema_migrations`. Line endings are normalised to LF (`.gitattributes`: `*.sql eol=lf`).
+- Schema changes are numbered SQL files in `server/migrations/NNN_description.sql`, applied on startup in order by
+  `server/migrationRunner.js` and recorded with a checksum in `schema_migrations`. Line endings are normalised to LF
+  (`.gitattributes`: `*.sql eol=lf`).
 - An applied migration whose content changes **blocks server startup**.
+- **The base schema** `000_base_schema.sql` (a fixed name) is the end state of every migration folded into it, one
+  `CREATE TABLE` per table with its indexes. Its `-- replaces: <file>` line names the last migration folded in. A new
+  database runs it; a database with that migration recorded only records it (and clears the rows of deleted files);
+  one behind it is refused. To squash again, in one release with no code change: regenerate the base file from a scratch
+  DB built by the current files (`pg_dump --schema-only`, rewritten per table, plus seed rows), update its `replaces`
+  line, delete the folded-in files, and prove a fresh build's `pg_dump` matches the old one exactly.
 - **If the latest migration hasn't reached prod yet, edit it instead of adding a new file.** Check with
-  `git log origin/master..HEAD`. Everything up to `023_auto_trade_results.sql` is in prod, so the next schema change is a new
-  `024_…` file (which can then be edited until it is pushed).
+  `git log origin/master..HEAD`. The base schema is all that is in prod, so the next schema change is a new `001_…`
+  file (which can then be edited until it is pushed).
   - After editing it, the local DB's row for it must be deleted so it re-applies. The user does this themselves; tell them the command:
     `docker exec optiontrap-postgres psql -U optiontrap -d optiontrap -c "DELETE FROM schema_migrations WHERE name = '<file>'"`.
 - Migrations must work on an existing DB with data: `IF NOT EXISTS`, backfill before `NOT NULL`, add constraints in a
   `DO` block guarded by an existence check, and don't fail on odd legacy rows.
-- Comment each migration block: what it's for and which query/route it serves (see `018_lookup_indexes.sql`).
+- Comment each migration block: what it's for and which query/route it serves (see `000_base_schema.sql`).
 - **Indexes** (all tables are assumed to hold millions of rows):
   - Create them in the migration that adds the table/column/query, not "later". `CREATE INDEX IF NOT EXISTS`.
   - Match the query: equality columns first (`user_id`, `mode`, `status`…), then the range/sort column

@@ -2,7 +2,7 @@
  * Guard: no symbol names or index tokens in the app code. Which symbols are
  * indices, how they are labelled and charted, which are always snapshotted and
  * which is the market reference all live in the instruments table
- * (see server/migrations/017_instrument_underlyings.sql), so a name or token
+ * (see the instruments table in server/migrations/000_base_schema.sql), so a name or token
  * written into the code would quietly bypass it.
  *
  * Checked: code in src, server and shared. Not checked: comments, test files

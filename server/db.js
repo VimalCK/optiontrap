@@ -12,7 +12,6 @@
  */
 
 import crypto from 'crypto';
-import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import pg from 'pg';
@@ -21,6 +20,7 @@ import { buildDailyPnlQuery, buildPositionsQuery, buildStatsQueries } from './po
 import { MAX_DRAWDOWN_SQL, RESULTS_SQL, resultsParams, toResults } from './autoTradeResults.js';
 import { roundTripCharges } from '../shared/paperCharges.js';
 import { Horizon } from '../shared/horizons.js';
+import { runMigrations } from './migrationRunner.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
@@ -77,70 +77,12 @@ export async function initDb() {
     console.error('[DB] Unexpected pool error:', err.message);
   });
 
-  await runMigrations();
+  await runMigrations(pool, MIGRATIONS_DIR);
 
   // Clean expired sessions on startup
   await query('DELETE FROM sessions WHERE expires < $1', [Date.now()]);
 
   console.log('[DB] PostgreSQL initialised');
-}
-
-/**
- * Apply pending SQL migrations from server/migrations/.
- *
- * Each *.sql file (e.g. 001_init_schema.sql, 004_add_column.sql) runs exactly
- * once, in filename order. Applied files are recorded in schema_migrations by
- * name + checksum, so restarts skip them. To change the schema, add a NEW
- * numbered file — never edit an already-applied one.
- */
-async function runMigrations() {
-  await query(`
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      name       TEXT PRIMARY KEY,
-      checksum   TEXT NOT NULL,
-      applied_at TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
-    )
-  `);
-
-  if (!fs.existsSync(MIGRATIONS_DIR)) return;
-
-  const files = fs.readdirSync(MIGRATIONS_DIR)
-    .filter((f) => f.endsWith('.sql'))
-    .sort();
-
-  for (const file of files) {
-    const raw = fs.readFileSync(path.join(MIGRATIONS_DIR, file), 'utf8');
-    // Normalize CRLF -> LF before hashing so checksums stay stable across
-    // platforms and git autocrlf checkouts (Windows). Otherwise a line-ending
-    // rewrite would look like a modified migration and block startup.
-    const sql = raw.replace(/\r\n/g, '\n');
-    const checksum = crypto.createHash('sha256').update(sql).digest('hex');
-
-    const existing = await firstRow('SELECT checksum FROM schema_migrations WHERE name = $1', [file]);
-    if (existing) {
-      if (existing.checksum !== checksum) {
-        throw new Error(`Migration ${file} was modified after being applied. Add a new migration instead of editing it.`);
-      }
-      continue; // already applied
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query(sql);
-      await client.query(
-        'INSERT INTO schema_migrations (name, checksum) VALUES ($1, $2)',
-        [file, checksum],
-      );
-      await client.query('COMMIT');
-      console.log(`[DB] Applied migration ${file}`);
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw new Error(`Migration ${file} failed: ${err.message}`);
-    } finally {
-      client.release();
-    }
-  }
 }
 
 /** Run a query against the pool. For nightly JS jobs; app code uses the named helpers. */
@@ -1305,7 +1247,7 @@ function firstPerKey(items, keyOf) {
 }
 
 /**
- * Our own columns on an underlying's price row (migration 017). The sync keeps
+ * Our own columns on an underlying's price row (the instruments table in 000_base_schema.sql). The sync keeps
  * them, and resets them to their defaults when Zerodha gives a token to a
  * different tradingsymbol, so a setting never moves to another instrument.
  */
