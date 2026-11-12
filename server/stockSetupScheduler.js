@@ -6,12 +6,10 @@
  * candles up to date, then re-scan each for setups and move open setups
  * forward. The market reference index (is_market_reference) is synced first.
  *
- * One run per IST date, recorded in scheduled_job_runs.
+ * One run per IST date, recorded in scheduled_job_runs (dailyKiteJob.js).
  */
 
 import {
-  claimScheduledJobRun,
-  finishScheduledJobRun,
   getMarketReference,
   getScheduledJobStatus,
   getStockCandles,
@@ -20,75 +18,69 @@ import {
 import { istClock } from './marketClock.js';
 import { OI_HISTORY_JOB, findWorkingAdminSession } from './oiHistoryScheduler.js';
 import { scanStock, syncStockCandles } from './stockCandles.js';
+import { createDailyKiteJob, isKiteLoginRefused } from './dailyKiteJob.js';
 import { JobRunStatus } from '../shared/appEnums.js';
 
-export const STOCK_SETUPS_JOB ='stock-setups-after-close';
+export const STOCK_SETUPS_JOB = 'stock-setups-after-close';
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 /** Gap between Kite calls: Kite allows three historical requests a second. */
 const KITE_GAP_MS = 400;
 
-let lastDoneDate = null;
-
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function runAfterCloseScan(date) {
-  if (lastDoneDate === date) return;
-  if ((await getScheduledJobStatus(STOCK_SETUPS_JOB, date)) === JobRunStatus.Done) {
-    lastDoneDate = date;
-    return;
-  }
-  const oiStatus = await getScheduledJobStatus(OI_HISTORY_JOB, date);
-  if (oiStatus !== JobRunStatus.Done && oiStatus !== JobRunStatus.Failed) return;
-
-  const kite = await findWorkingAdminSession();
-  if (!kite) return;
-  if (!(await claimScheduledJobRun(STOCK_SETUPS_JOB, date))) return;
-
-  const started = Date.now();
-  const results = [];
-  let authFailed = false;
-  try {
-    const stocks = await getWatchlistStocks();
-    console.log(`[Scheduler] ${STOCK_SETUPS_JOB}: syncing ${stocks.length} watchlist stock(s)`);
-
-    // Without a market reference the setups skip the market check.
-    const reference = await getMarketReference();
-    if (reference) {
-      try {
-        await syncStockCandles(reference.instrumentToken, kite);
-      } catch (err) {
-        results.push({ tradingsymbol: reference.label, error: err.message });
-        if (err.status === 401 || err.status === 403) authFailed = true;
-      }
-    }
-    const market = reference ? await getStockCandles(reference.instrumentToken) : [];
-
-    for (const stock of authFailed ? [] : stocks) {
-      try {
-        const sync = await syncStockCandles(stock.instrumentToken, kite);
-        const analysis = await scanStock(stock, market);
-        results.push({ tradingsymbol: stock.tradingsymbol, fetched: sync.fetched, full: sync.full, setups: analysis?.setups.length ?? 0 });
-        if (!sync.skipped) await pause(KITE_GAP_MS);
-      } catch (err) {
-        results.push({ tradingsymbol: stock.tradingsymbol, error: err.message });
-        if (err.status === 401 || err.status === 403) {
-          authFailed = true;
-          break;
-        }
-      }
-    }
-
-    const status = authFailed ? JobRunStatus.Failed : JobRunStatus.Done;
-    await finishScheduledJobRun(STOCK_SETUPS_JOB, date, status, { userId: kite.userId, results });
-    if (status === JobRunStatus.Done) lastDoneDate = date;
-    const setups = results.reduce((sum, r) => sum + (r.setups || 0), 0);
-    const errors = results.filter((r) => r.error).length;
-    console.log(`[Scheduler] ${STOCK_SETUPS_JOB}: ${status} for ${date} — ${stocks.length} stocks, ${setups} setup(s), ${errors} error(s), ${Math.round((Date.now() - started) / 1000)}s`);
-  } catch (err) {
-    console.error(`[Scheduler] ${STOCK_SETUPS_JOB} failed:`, err.message);
-    await finishScheduledJobRun(STOCK_SETUPS_JOB, date, JobRunStatus.Failed, { error: err.message, results }).catch(() => {});
-  }
+/** The scan waits for today's OI history run to finish (done or failed): both use Kite's historical-data limit. */
+async function oiHistoryFinished(date) {
+  const status = await getScheduledJobStatus(OI_HISTORY_JOB, date);
+  return status === JobRunStatus.Done || status === JobRunStatus.Failed;
 }
+
+/**
+ * Sync the market reference index's candles, so setups can check the market.
+ * @returns {Promise<{ candles: unknown[], loginRefused: boolean }>} its candles (none without a reference)
+ */
+async function syncMarketReference(kite, results) {
+  const reference = await getMarketReference();
+  if (!reference) return { candles: [], loginRefused: false };
+  try {
+    await syncStockCandles(reference.instrumentToken, kite);
+  } catch (err) {
+    results.push({ tradingsymbol: reference.label, error: err.message });
+    if (isKiteLoginRefused(err)) return { candles: [], loginRefused: true };
+  }
+  return { candles: await getStockCandles(reference.instrumentToken), loginRefused: false };
+}
+
+/** Sync each watchlist stock's candles and re-scan it for setups; stops at a refused login. */
+async function scanWatchlist({ kite, results }) {
+  const stocks = await getWatchlistStocks();
+  console.log(`[Scheduler] ${STOCK_SETUPS_JOB}: syncing ${stocks.length} watchlist stock(s)`);
+
+  const market = await syncMarketReference(kite, results);
+  let loginRefused = market.loginRefused;
+  for (const stock of loginRefused ? [] : stocks) {
+    try {
+      const sync = await syncStockCandles(stock.instrumentToken, kite);
+      const analysis = await scanStock(stock, market.candles);
+      results.push({ tradingsymbol: stock.tradingsymbol, fetched: sync.fetched, full: sync.full, setups: analysis?.setups.length ?? 0 });
+      if (!sync.skipped) await pause(KITE_GAP_MS);
+    } catch (err) {
+      results.push({ tradingsymbol: stock.tradingsymbol, error: err.message });
+      if (isKiteLoginRefused(err)) {
+        loginRefused = true;
+        break;
+      }
+    }
+  }
+  const setups = results.reduce((sum, r) => sum + (r.setups || 0), 0);
+  return { loginRefused, summary: `${stocks.length} stocks, ${setups} setup(s)` };
+}
+
+const runAfterCloseScan = createDailyKiteJob({
+  job: STOCK_SETUPS_JOB,
+  findSession: findWorkingAdminSession,
+  isReady: oiHistoryFinished,
+  work: scanWatchlist,
+});
 
 /** The stock scan plug-in: checks every five minutes after the close until today's run is done. */
 export const stockSetupJob = {

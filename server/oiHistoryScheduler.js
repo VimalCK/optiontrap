@@ -8,28 +8,22 @@
  *
  * Uses the newest admin Kite session from today's logins. If none is valid
  * yet, it keeps checking until midnight, so an evening login still saves the
- * day. One run per IST date, recorded in scheduled_job_runs.
+ * day. One run per IST date, recorded in scheduled_job_runs (dailyKiteJob.js).
  */
 
 import {
-  claimScheduledJobRun,
   evaluateTradeSetupSignalOutcomes,
-  finishScheduledJobRun,
   getAdminKiteSessions,
   getRecentOiHistoryScrips,
-  getScheduledJobStatus,
   getStoredOiHistoryExpiryMonths,
 } from './db.js';
 import { daysBefore, istClock } from './marketClock.js';
 import { fetchOiHistoryMonth } from './oiHistoryFetch.js';
-import { JobRunStatus } from '../shared/appEnums.js';
+import { createDailyKiteJob, isKiteLoginRefused } from './dailyKiteJob.js';
 
 export const OI_HISTORY_JOB = 'oi-history-after-close';
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const TRACKED_SCRIP_DAYS = 14;
-
-let lastDoneDate = null;
-let lastWaitingLogDate = null;
 
 /** The newest admin session whose Kite token still works, or null. */
 export async function findWorkingAdminSession() {
@@ -53,65 +47,54 @@ async function monthsToFetch(scrip, currentMonth) {
   return [...new Set([currentMonth, ...stored.filter((month) => month >= currentMonth)])].sort();
 }
 
-async function runAfterCloseFetch(date) {
-  if (lastDoneDate === date) return;
-  if ((await getScheduledJobStatus(OI_HISTORY_JOB, date)) === JobRunStatus.Done) {
-    lastDoneDate = date;
-    return;
-  }
-
-  const kite = await findWorkingAdminSession();
-  if (!kite) {
-    if (lastWaitingLogDate !== date) {
-      console.log(`[Scheduler] ${OI_HISTORY_JOB}: waiting for an admin Kite login today to fetch ${date}`);
-      lastWaitingLogDate = date;
+/**
+ * Fetch one scrip's months; stops at a refused login.
+ * @returns {Promise<boolean>} whether Kite refused the login
+ */
+async function fetchScrip(scrip, date, kite, results) {
+  for (const expiryMonth of await monthsToFetch(scrip, date.slice(0, 7))) {
+    try {
+      const summary = await fetchOiHistoryMonth({
+        scrip, expiryMonth, apiKey: kite.apiKey, accessToken: kite.accessToken,
+      });
+      results.push({ scrip, expiryMonth, rowCount: summary.rowCount, fetchedDays: summary.fetchedDays });
+    } catch (err) {
+      results.push({ scrip, expiryMonth, error: err.message });
+      if (isKiteLoginRefused(err)) return true;
     }
-    return;
   }
-  if (!(await claimScheduledJobRun(OI_HISTORY_JOB, date))) return;
+  return false;
+}
 
-  const started = Date.now();
-  const results = [];
-  let authFailed = false;
+/** Re-score a scrip's open trade setup signals with the prices just fetched. */
+async function scoreSignals(scrip) {
   try {
-    const scrips = await getRecentOiHistoryScrips(daysBefore(date, TRACKED_SCRIP_DAYS));
-    console.log(`[Scheduler] ${OI_HISTORY_JOB}: fetching ${date} for ${scrips.join(', ') || 'no tracked scrips'}`);
-
-    for (const scrip of scrips) {
-      for (const expiryMonth of await monthsToFetch(scrip, date.slice(0, 7))) {
-        try {
-          const summary = await fetchOiHistoryMonth({
-            scrip, expiryMonth, apiKey: kite.apiKey, accessToken: kite.accessToken,
-          });
-          results.push({ scrip, expiryMonth, rowCount: summary.rowCount, fetchedDays: summary.fetchedDays });
-        } catch (err) {
-          results.push({ scrip, expiryMonth, error: err.message });
-          if (err.status === 401 || err.status === 403) {
-            authFailed = true;
-            break;
-          }
-        }
-      }
-      if (authFailed) break;
-
-      try {
-        await evaluateTradeSetupSignalOutcomes(scrip);
-      } catch (err) {
-        console.warn(`[Scheduler] Signal outcome evaluation failed for ${scrip}:`, err.message);
-      }
-    }
-
-    const status = authFailed ? JobRunStatus.Failed : JobRunStatus.Done;
-    await finishScheduledJobRun(OI_HISTORY_JOB, date, status, { userId: kite.userId, results });
-    if (status === JobRunStatus.Done) lastDoneDate = date;
-    const rowCount = results.reduce((sum, r) => sum + (r.rowCount || 0), 0);
-    const errors = results.filter((r) => r.error).length;
-    console.log(`[Scheduler] ${OI_HISTORY_JOB}: ${status} for ${date} — ${rowCount} rows, ${errors} error(s), ${Math.round((Date.now() - started) / 1000)}s`);
+    await evaluateTradeSetupSignalOutcomes(scrip);
   } catch (err) {
-    console.error(`[Scheduler] ${OI_HISTORY_JOB} failed:`, err.message);
-    await finishScheduledJobRun(OI_HISTORY_JOB, date, JobRunStatus.Failed, { error: err.message, results }).catch(() => {});
+    console.warn(`[Scheduler] Signal outcome evaluation failed for ${scrip}:`, err.message);
   }
 }
+
+/** Fetch every tracked scrip for `date`, scoring each one's signals after it. */
+async function fetchTrackedScrips({ kite, date, results }) {
+  const scrips = await getRecentOiHistoryScrips(daysBefore(date, TRACKED_SCRIP_DAYS));
+  console.log(`[Scheduler] ${OI_HISTORY_JOB}: fetching ${date} for ${scrips.join(', ') || 'no tracked scrips'}`);
+
+  let loginRefused = false;
+  for (const scrip of scrips) {
+    loginRefused = await fetchScrip(scrip, date, kite, results);
+    if (loginRefused) break;
+    await scoreSignals(scrip);
+  }
+  const rowCount = results.reduce((sum, r) => sum + (r.rowCount || 0), 0);
+  return { loginRefused, summary: `${rowCount} rows` };
+}
+
+const runAfterCloseFetch = createDailyKiteJob({
+  job: OI_HISTORY_JOB,
+  findSession: findWorkingAdminSession,
+  work: fetchTrackedScrips,
+});
 
 /** The OI history plug-in: checks every five minutes after the close until today's run is done. */
 export const oiHistoryJob = {
