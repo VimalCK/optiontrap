@@ -81,7 +81,6 @@ export async function initDb() {
 
   await runMigrations(pool, MIGRATIONS_DIR);
 
-  // Clean expired sessions on startup
   await query('DELETE FROM sessions WHERE expires < $1', [Date.now()]);
 
   console.log('[DB] PostgreSQL initialised');

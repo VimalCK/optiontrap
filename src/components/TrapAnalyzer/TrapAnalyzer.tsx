@@ -43,12 +43,10 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   const [view, setView] = useState<AnalyzerViewId>(AnalyzerView.Map);
   const [hoveredStrike, setHoveredStrike] = useState<number | null>(null);
 
-  // Update selected strike when ATM changes
   React.useEffect(() => {
     if (atmStrike > 0) setSelectedStrike(atmStrike);
   }, [atmStrike]);
 
-  // Get available strikes for the dropdown
   const strikes = useMemo(() => chain.map((r) => r.strike), [chain]);
 
   // Shared context — computed ONCE per tick for the entire chain.

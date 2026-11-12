@@ -77,7 +77,6 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, totals, endDate, mont
     // Always start from January of the current year, show all 12 months
     const startYear = today.getFullYear();
 
-    // Build month groups — Jan through Dec of current year
     const groups: MonthGroup[] = [];
 
     for (let m = 0; m < 12; m++) {
@@ -93,7 +92,6 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, totals, endDate, mont
 
       const weeks: (DayCell | null)[][] = [];
 
-      // Iterate weeks until we've passed the end of the month
       while (cursor <= monthEnd) {
         const week: (DayCell | null)[] = [];
         for (let di = 0; di < DAY_LABELS.length; di++) {

@@ -274,7 +274,6 @@ const OptionChain: React.FC = () => {
     });
   }, []);
 
-  // Load options when symbol changes
   useEffect(() => {
     if (selectedSymbol) loadOptions();
   }, [selectedSymbol]);
@@ -334,19 +333,16 @@ const OptionChain: React.FC = () => {
     [chain, oiData, prevDayOi, livePrices, closePrices, spotPrice, spotPrevClose, volumeData],
   );
 
-  // Compute combined CE+PE market stance signal per strike
   const strikeSignals = useMemo(
     () => computeStrikeSignals(visibleChain, oiData, livePrices, snapshots, volumeData, avgVolume),
     [visibleChain, oiData, livePrices, snapshots, volumeData, avgVolume]
   );
 
-  // Calculate days to expiry
   const daysToExpiry = useMemo(() => {
     if (!selectedExpiry) return undefined;
     return Math.max(0, istDaysUntil(selectedExpiry));
   }, [selectedExpiry]);
 
-  // Calculate expected move from ATM straddle
   const expectedMove = useMemo(
     () => calculateExpectedMove(visibleChain, atmStrike, livePrices),
     [visibleChain, atmStrike, livePrices],
@@ -481,7 +477,6 @@ const OptionChain: React.FC = () => {
     // The spot key is part of it: the symbol list (and so the spot) may arrive after the chain.
     const fetchKey = `${spotQuoteKey}_${selectedExpiry}_${strikes[0]?.strike}_${strikes[strikes.length - 1]?.strike}`;
 
-    // Skip if we already fetched for this exact range
     if (quoteFetchedRef.current === fetchKey) return;
     quoteFetchedRef.current = fetchKey;
 
@@ -523,7 +518,6 @@ const OptionChain: React.FC = () => {
         if (spotQuote.ohlc.close > 0) setSpotPrevClose(spotQuote.ohlc.close);
       }
 
-      // Log any missing instruments
       const missing: string[] = [];
       strikes.forEach((row) => {
         if (row.ce && !quotes.has(`NFO:${row.ce.tradingsymbol}`)) missing.push(`NFO:${row.ce.tradingsymbol}`);
@@ -567,7 +561,6 @@ const OptionChain: React.FC = () => {
     return { pct, color };
   };
 
-  // Helper to get OI % change from previous day's closing OI
   const getOiChange = (instrument: OptionInstrument | null): { pct: number; color: string } | null => {
     if (!instrument) return null;
     const currentOi = oiData.get(instrument.instrumentToken);
@@ -941,7 +934,6 @@ const OptionChain: React.FC = () => {
                 {expectedMove > 0 && spotPrice > 0 && (() => {
                   const totalStrikes = visibleChain.length;
                   if (totalStrikes < 2) return null;
-                  // Find first and last strike index within expected range
                   let startIdx = -1;
                   let endIdx = -1;
                   for (let i = 0; i < totalStrikes; i++) {

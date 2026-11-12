@@ -171,7 +171,6 @@ function scorePinning(
     reasons.push(`Spot near max pain in ${pinnedCount} snapshots`);
   }
 
-  // PCR balance check
   const pcr = calculatePCR(chain, oiData);
   if (pcr >= 0.7 && pcr <= 1.3) {
     score += 10;
@@ -222,7 +221,6 @@ function scoreOiWall(
 
   const bestWall = relevantWalls.sort((a, b) => b.strength - a.strength)[0];
 
-  // Wall strength scoring
   if (bestWall.strength >= 2.0) {
     score += 15;
     reasons.push(`Strong ${wallType} wall at ${bestWall.strike} (${bestWall.strength.toFixed(1)}x avg OI)`);
@@ -372,7 +370,6 @@ function scorePcrExtreme(
     if (totalCeOi > 0) pcrHistory.push(totalPeOi / totalCeOi);
   }
 
-  // Current PCR
   const currentPcr = calculatePCR(chain, oiData);
   pcrHistory.push(currentPcr);
 
@@ -577,10 +574,8 @@ export function computeSellRecommendations(
     }
   }
 
-  // Build recommendations
   /** @type {SellRecommendation[]} */ const recommendations = [];
 
-  // Individual CE and PE recommendations
   for (const ss of strikeScores) {
     if (ss.score >= 30) {
       recommendations.push({
@@ -653,7 +648,6 @@ export function computeSellRecommendations(
     }
   }
 
-  // Sort by score descending, return top 5
   return recommendations.sort((a, b) => b.score - a.score).slice(0, 5);
 }
 
@@ -949,7 +943,6 @@ function scorePcrShift(
 ) {
   /** @type {string[]} */ const reasons = [];
 
-  // Build PCR history from snapshots
   /** @type {number[]} */ const pcrHistory = [];
   for (const snap of snapshots) {
     let totalCeOi = 0;
@@ -1194,10 +1187,8 @@ export function computeBuyRecommendations(
     }
   }
 
-  // Build recommendations
   /** @type {BuyRecommendation[]} */ const recommendations = [];
 
-  // Individual CE and PE
   for (const ss of strikeScores) {
     if (ss.score >= 30) {
       recommendations.push({

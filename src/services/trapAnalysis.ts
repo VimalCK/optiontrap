@@ -131,24 +131,20 @@ export function analyzeTrap(
   // 3. Score the position
   let trapScore = 0; // 0 = safe, higher = more trapped
 
-  // Max Pain analysis
   if (positionType === OptionSetup.BuyCe) {
     // Buying call — you need price to go UP
     if (strike > maxPain) {
       trapScore += 2;
       reasons.push(`Target strike ${strike} is above max pain ${maxPain} — price tends to fall toward max pain near expiry`);
     }
-    // Check resistance wall above
     if (nearestResistance && nearestResistance.strike <= strike) {
       trapScore += 2;
       reasons.push(`Heavy CE OI wall at ${nearestResistance.strike} (${nearestResistance.strength.toFixed(1)}x avg) — sellers defending this level`);
     }
-    // PCR check
     if (pcr < 0.7) {
       trapScore += 1;
       reasons.push(`Low PCR (${pcr.toFixed(2)}) — market skewed bearish, calls may struggle`);
     }
-    // OI signal check
     if (oiSignal.sentiment === Bias.Bearish) {
       trapScore += 2;
       reasons.push(`${oiSignal.label} at this strike — ${oiSignal.description}`);
@@ -159,17 +155,14 @@ export function analyzeTrap(
       trapScore += 2;
       reasons.push(`Target strike ${strike} is below max pain ${maxPain} — price tends to rise toward max pain near expiry`);
     }
-    // Check support wall below
     if (nearestSupport && nearestSupport.strike >= strike) {
       trapScore += 2;
       reasons.push(`Heavy PE OI wall at ${nearestSupport.strike} (${nearestSupport.strength.toFixed(1)}x avg) — sellers defending this level`);
     }
-    // PCR check
     if (pcr > 1.5) {
       trapScore += 1;
       reasons.push(`High PCR (${pcr.toFixed(2)}) — market skewed bullish, puts may struggle`);
     }
-    // OI signal check
     if (oiSignal.sentiment === Bias.Bullish) {
       trapScore += 2;
       reasons.push(`${oiSignal.label} at this strike — ${oiSignal.description}`);
@@ -196,7 +189,6 @@ export function analyzeTrap(
     }
   }
 
-  // Add positive signals
   if (reasons.length === 0) {
     if (positionType === OptionSetup.BuyCe && oiSignal.sentiment === Bias.Bullish) {
       reasons.push(`${oiSignal.label} — supportive for your long call position`);
@@ -225,7 +217,6 @@ export function analyzeTrap(
     trapScore += timePressureBonus;
   }
 
-  // Determine verdict
   let verdict: TrapVerdictId;
   if (trapScore >= 4) {
     verdict = TrapVerdict.LikelyTrapped;

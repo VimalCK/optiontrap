@@ -53,7 +53,6 @@ const App: React.FC = () => {
     setSidebarCollapsed((prev) => !prev);
   }, []);
 
-  // Show nothing while checking session status
   if (loading) {
     return null;
   }

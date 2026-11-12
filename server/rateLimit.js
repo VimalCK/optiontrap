@@ -37,7 +37,6 @@ export function createRateLimiter({
   /** @type {Map<string, { count: number, resetAt: number }>} */
   const hits = new Map();
 
-  // Periodic cleanup — evict expired entries every 5 minutes
   const cleanup = setInterval(() => {
     const now = Date.now();
     for (const [key, entry] of hits) {
@@ -62,7 +61,6 @@ export function createRateLimiter({
 
     entry.count++;
 
-    // Standard rate-limit headers
     const remaining = Math.max(0, max - entry.count);
     const retryAfter = Math.ceil((entry.resetAt - now) / 1000);
 
@@ -78,7 +76,6 @@ export function createRateLimiter({
     next();
   };
 
-  // Expose cleanup for graceful shutdown
   middleware.close = () => clearInterval(cleanup);
 
   return middleware;

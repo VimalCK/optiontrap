@@ -60,7 +60,6 @@ const AppSelect: React.FC<AppSelectProps> = ({
     );
   }, [options, search, searchable]);
 
-  // Reset highlighted index when filtered options change
   useEffect(() => {
     if (!open) return;
     setHighlightedIdx((prev) => {
@@ -138,12 +137,10 @@ const AppSelect: React.FC<AppSelectProps> = ({
     setSearch('');
   };
 
-  // Keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') { setOpen(false); return; }
     if (e.key === 'Enter') {
       if (!open) { handleOpen(); return; }
-      // Select the currently highlighted option
       if (highlightedIdx !== null && filteredOptions[highlightedIdx]) {
         handleSelect(filteredOptions[highlightedIdx].value);
       }

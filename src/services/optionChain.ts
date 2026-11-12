@@ -32,7 +32,6 @@ export async function fetchOptions(symbol: string, signal?: AbortSignal): Promis
     instrumentsCache = await apiClient.get<Instrument[]>('/api/instruments', { signal });
   }
 
-  // Filter for the given symbol's CE/PE options
   return instrumentsCache
     .filter((i) => i.exchange === Exchange.NFO && i.name === symbol && isOptionType(i.instrumentType))
     .map((i) => ({

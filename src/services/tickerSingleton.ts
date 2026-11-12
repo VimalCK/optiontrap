@@ -25,7 +25,6 @@ interface Subscriber {
   callback: TickCallback;
 }
 
-// Module-level singleton state
 let ticker: KiteTicker | null = null;
 const subscribers = new Map<string, Subscriber>();
 

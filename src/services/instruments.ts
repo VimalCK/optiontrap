@@ -80,7 +80,6 @@ export function getDisplayLabel(inst: Instrument): string {
     return `${inst.name} FUT ${expLabel}`.trim();
   }
 
-  // CE or PE
   const strike = inst.strike ? inst.strike.toFixed(0) : '';
   return `${inst.name} ${strike} ${inst.instrumentType} ${expLabel}`.trim();
 }

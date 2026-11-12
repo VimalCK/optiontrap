@@ -151,7 +151,6 @@ export function findOiWalls(
 ) {
   /** @type {OiWall[]} */ const walls = [];
 
-  // Calculate average OI for CE and PE separately
   let totalCeOi = 0;
   let totalPeOi = 0;
   let ceCount = 0;
@@ -191,7 +190,6 @@ export function findOiWalls(
     }
   }
 
-  // Sort by strength descending
   return walls.sort((a, b) => b.strength - a.strength);
 }
 

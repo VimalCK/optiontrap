@@ -43,7 +43,6 @@ export const StrikeOiChart: React.FC<StrikeOiChartProps> = ({ optionType, dates,
   const xAt = (i: number) => PAD_L + (i + 0.5) * (plotW / n);
   const yAt = (price: number) => PAD_T + plotH - (price / safeMaxPrice) * plotH;
 
-  // Build price lines per expiry
   const priceLines = expiries.map((exp) => {
     const pts: { x: number; y: number; price: number; date: string }[] = [];
     dates.forEach((d, i) => {
@@ -55,7 +54,6 @@ export const StrikeOiChart: React.FC<StrikeOiChartProps> = ({ optionType, dates,
     return { exp, pts, points: pts.map((p) => `${p.x},${p.y}`).join(' ') };
   }).filter((l) => l.pts.length > 0);
 
-  // Fair-value line per expiry
   const fairLines = showFair ? expiries.map((exp) => {
     const pts: { x: number; y: number; priceY: number | null; pct: number | null; label: RichnessId | null }[] = [];
     dates.forEach((d, i) => {

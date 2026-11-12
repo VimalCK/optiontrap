@@ -268,7 +268,6 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
     }
   }, [chain, effectivePrices, orderMode, expiry, onToast, mode, horizon, showLegs]);
 
-  // Reset expanded row when switching modes
   const handleModeChange = useCallback((newMode: StrategyModeId) => {
     onModeChange(newMode);
     setExpandedIdx(null);

@@ -842,7 +842,6 @@ export function classifyPattern(
 ): RolloverPatternId {
   // Single expiry (monthly scrips like BANKNIFTY): use OI + Price signal
   if (expiries.length < 2) {
-    // Find the expiry with data
     let entry: { oi: number; prevOi: number | undefined; close: number; prevClose: number | undefined } | undefined;
     for (const exp of expiries) {
       if (oiByExpiry.has(exp)) { entry = oiByExpiry.get(exp); break; }
@@ -851,7 +850,6 @@ export function classifyPattern(
     return classifyOptionMove(entry.oi, entry.prevOi, entry.close, entry.prevClose);
   }
 
-  // Find the nearest expiry with data
   let nearestIdx = -1;
   for (let i = 0; i < expiries.length; i++) {
     if (oiByExpiry.has(expiries[i])) { nearestIdx = i; break; }
@@ -863,7 +861,6 @@ export function classifyPattern(
     ? (nearest.oi - nearest.prevOi) / nearest.prevOi
     : 0;
 
-  // Check further expiries
   let anyRising = false;
   let anyFalling = false;
   let farCount = 0;
@@ -885,14 +882,12 @@ export function classifyPattern(
   // Premium direction: rising premiums mean longs, falling ones shorts (or, exiting, the side that is leaving)
   const pDir = priceDirection(oiByExpiry, expiries);
 
-  // No data on further expiries
   if (farCount === 0) {
     if (nearFalling) return EXITING[pDir];
     if (nearRising) return FRESH_BUILD[pDir];
     return RolloverPattern.Stable;
   }
 
-  // Classification logic
   if (nearFalling && anyRising) return ROLLING_OVER[pDir];
   if (nearFalling && !anyRising && anyFalling) return RolloverPattern.Unwinding;
   if (nearFalling && !anyRising) return EXITING[pDir];

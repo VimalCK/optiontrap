@@ -75,7 +75,6 @@ function combineSignals(ceSignal: OiSignalId, peSignal: OiSignalId): StanceConfi
     }
   }
 
-  // Both neutral
   if (ceSignal === OiSignal.Neutral && peSignal === OiSignal.Neutral) {
     return { stance: null, label: '', color: 'transparent', weak: false };
   }
@@ -100,7 +99,6 @@ function classifyInstrument(
   const oiChangePct = ((currentOi - snapshotOi) / snapshotOi) * 100;
   const priceChangePct = ((currentPrice - snapshotPrice) / snapshotPrice) * 100;
 
-  // Filter noise
   if (Math.abs(oiChangePct) < OI_THRESHOLD && Math.abs(priceChangePct) < PRICE_THRESHOLD) {
     return OiSignal.Neutral;
   }
@@ -173,7 +171,6 @@ export function computeStrikeSignals(
     const ceToken = row.ce?.instrumentToken;
     const peToken = row.pe?.instrumentToken;
 
-    // Classify CE
     let ceSignal: OiSignalId = OiSignal.Neutral;
     if (ceToken) {
       const curOi = currentOi.get(ceToken) || 0;
@@ -185,7 +182,6 @@ export function computeStrikeSignals(
       }
     }
 
-    // Classify PE
     let peSignal: OiSignalId = OiSignal.Neutral;
     if (peToken) {
       const curOi = currentOi.get(peToken) || 0;
@@ -197,7 +193,6 @@ export function computeStrikeSignals(
       }
     }
 
-    // Combine
     const config = combineSignals(ceSignal, peSignal);
     const confidence = computeVolumeConfidence(ceToken, peToken, volData, avgVol);
 

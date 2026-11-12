@@ -56,7 +56,6 @@ const Watchlist: React.FC = () => {
   const [itemsLoading, setItemsLoading] = useState(false);
   const loadedTabRef = useRef<string | null>(null);
 
-  // Search state
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Instrument[]>([]);
   const [showDropdown, setShowDropdown] = useState(false);
@@ -65,19 +64,16 @@ const Watchlist: React.FC = () => {
   const searchRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Inline rename state
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
   // Width of the tab being renamed, so its name box starts the same size and nothing moves.
   const [renameWidth, setRenameWidth] = useState<number | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  // New list prompt
   const [showNewInput, setShowNewInput] = useState(false);
   const [newListName, setNewListName] = useState('');
   const newInputRef = useRef<HTMLInputElement>(null);
 
-  // Live prices
   const [livePrices, setLivePrices] = useState<Map<number, LivePrice>>(new Map());
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
   // Read by the tick handler, which fires too often to re-create on every alert change.
@@ -102,7 +98,6 @@ const Watchlist: React.FC = () => {
   const [scans, setScans] = useState<Map<number, ScanSummary>>(new Map());
   const [scansVersion, setScansVersion] = useState(0);
 
-  // Active tab metadata
   const activeTab = useMemo(
     () => tabs.find((t) => t.id === activeTabId) ?? null,
     [tabs, activeTabId],
@@ -276,7 +271,6 @@ const Watchlist: React.FC = () => {
     }
     const results = searchInstruments(instruments, searchQuery);
 
-    // Filter out instruments already in the active tab
     const existingTokens = new Set(items.map((i) => i.instrumentToken));
     const filtered = results.filter((r) => !existingTokens.has(r.instrumentToken));
 
@@ -296,7 +290,6 @@ const Watchlist: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClick);
   }, []);
 
-  // Focus rename input when entering rename mode
   useEffect(() => {
     if (renamingId && renameInputRef.current) {
       renameInputRef.current.focus();
@@ -304,7 +297,6 @@ const Watchlist: React.FC = () => {
     }
   }, [renamingId]);
 
-  // Focus new list input
   useEffect(() => {
     if (showNewInput && newInputRef.current) {
       newInputRef.current.focus();
@@ -383,7 +375,6 @@ const Watchlist: React.FC = () => {
       });
 
       setItems((prev) => [...prev, item]);
-      // Update tab's item count
       setTabs((prev) =>
         prev.map((t) =>
           t.id === activeTabId ? { ...t, itemCount: t.itemCount + 1 } : t,
@@ -402,7 +393,6 @@ const Watchlist: React.FC = () => {
     try {
       await removeWatchlistItem(activeTabId, item.id);
       setItems((prev) => prev.filter((i) => i.id !== item.id));
-      // Update tab's item count
       setTabs((prev) =>
         prev.map((t) =>
           t.id === activeTabId ? { ...t, itemCount: Math.max(0, t.itemCount - 1) } : t,

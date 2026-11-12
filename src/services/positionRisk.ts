@@ -130,7 +130,6 @@ export function computeRiskGroups(
 ): RiskGroup[] {
   const open = positions.filter((p) => !p.exited).filter(isOptionPosition);
 
-  // Group by underlying + expiry
   const groups = new Map<string, OptionPosition[]>();
   for (const pos of open) {
     const underlying = underlyingFromSymbol(pos.tradingsymbol);
@@ -145,7 +144,6 @@ export function computeRiskGroups(
   for (const [key, legsPos] of groups) {
     const [underlying, expiry] = key.split('|');
 
-    // Build per-leg risk
     const legs: LegRisk[] = legsPos.map((pos) => {
       const ltp = livePrices.get(pos.instrumentToken) ?? null;
       const pnl = ltp != null ? legLivePnL(pos, ltp) : null;
@@ -212,7 +210,6 @@ export function computeRiskGroups(
     });
   }
 
-  // Sort by nearest expiry first
   return result.sort((a, b) => a.expiry.localeCompare(b.expiry));
 }
 
@@ -357,7 +354,6 @@ export async function loadGroupOi(group: RiskGroup): Promise<OiBar[]> {
     );
     if (rows.length === 0) return [];
 
-    // Use the most recent date's OI.
     const latestDate = rows.reduce((max, r) => (r.date > max ? r.date : max), rows[0].date);
     const latestRows = rows.filter((r) => r.date === latestDate);
 
