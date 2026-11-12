@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { StrikeMode } from '../shared/appEnums.js';
 
 vi.mock('./db.js', () => ({
   createOiHistoryTable: vi.fn(async () => {}),
@@ -67,6 +68,12 @@ describe('fetchOiHistoryMonth sharing', () => {
     expect(fetchMock.mock.calls.map(([, { headers }]) => headers.Authorization)).toEqual(['token key:a', 'token key:b']);
   });
 
+  it('refuses a strike mode it does not know, before calling Kite', async () => {
+    const { fetchMock } = stubKite({ a: noCandles });
+    await expect(fetchOiHistoryMonth(request('a', { strikeMode: 'nearby' }))).rejects.toThrow(/strikeMode must be one of AtmRange, AllStored, Specific/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it('gives the starter its own failure', async () => {
     stubKite({ a: badToken });
     await expect(fetchOiHistoryMonth(request('a'))).rejects.toMatchObject({ status: 403 });
@@ -76,7 +83,7 @@ describe('fetchOiHistoryMonth sharing', () => {
     const { fetchMock, release } = stubKite({ a: noCandles, b: noCandles }, ['a']);
 
     const a = fetchOiHistoryMonth(request('a'));
-    const b = fetchOiHistoryMonth(request('b', { strikeMode: 'specific', specificStrike: 1700 }));
+    const b = fetchOiHistoryMonth(request('b', { strikeMode: StrikeMode.Specific, specificStrike: 1700 }));
     release();
     await Promise.all([a, b]);
 
@@ -87,9 +94,9 @@ describe('fetchOiHistoryMonth sharing', () => {
 describe('oiHistoryFetchKey', () => {
   it('matches requests that fetch the same rows', () => {
     expect(oiHistoryFetchKey({ scrip: 'HDFCBANK', expiryMonth: '2026-11' }))
-      .toBe(oiHistoryFetchKey({ scrip: 'HDFCBANK', expiryMonth: '2026-11', strikeMode: 'atmRange', specificStrike: 1700 }));
-    expect(oiHistoryFetchKey({ scrip: 'HDFCBANK', expiryMonth: '2026-11', strikeMode: 'specific', specificStrike: '1700' }))
-      .toBe(oiHistoryFetchKey({ scrip: 'HDFCBANK', expiryMonth: '2026-11', strikeMode: 'specific', specificStrike: 1700 }));
+      .toBe(oiHistoryFetchKey({ scrip: 'HDFCBANK', expiryMonth: '2026-11', strikeMode: StrikeMode.AtmRange, specificStrike: 1700 }));
+    expect(oiHistoryFetchKey({ scrip: 'HDFCBANK', expiryMonth: '2026-11', strikeMode: StrikeMode.Specific, specificStrike: '1700' }))
+      .toBe(oiHistoryFetchKey({ scrip: 'HDFCBANK', expiryMonth: '2026-11', strikeMode: StrikeMode.Specific, specificStrike: 1700 }));
   });
 
   it('separates scrips, months and strike choices', () => {
@@ -97,9 +104,9 @@ describe('oiHistoryFetchKey', () => {
       oiHistoryFetchKey({ scrip: 'HDFCBANK', expiryMonth: '2026-11' }),
       oiHistoryFetchKey({ scrip: 'HDFCBANK', expiryMonth: '2026-12' }),
       oiHistoryFetchKey({ scrip: 'RELIANCE', expiryMonth: '2026-11' }),
-      oiHistoryFetchKey({ scrip: 'HDFCBANK', expiryMonth: '2026-11', strikeMode: 'allStored' }),
-      oiHistoryFetchKey({ scrip: 'HDFCBANK', expiryMonth: '2026-11', strikeMode: 'specific', specificStrike: 1700 }),
-      oiHistoryFetchKey({ scrip: 'HDFCBANK', expiryMonth: '2026-11', strikeMode: 'specific', specificStrike: 1710 }),
+      oiHistoryFetchKey({ scrip: 'HDFCBANK', expiryMonth: '2026-11', strikeMode: StrikeMode.AllStored }),
+      oiHistoryFetchKey({ scrip: 'HDFCBANK', expiryMonth: '2026-11', strikeMode: StrikeMode.Specific, specificStrike: 1700 }),
+      oiHistoryFetchKey({ scrip: 'HDFCBANK', expiryMonth: '2026-11', strikeMode: StrikeMode.Specific, specificStrike: 1710 }),
     ]);
     expect(keys.size).toBe(6);
   });

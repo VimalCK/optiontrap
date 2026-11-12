@@ -233,3 +233,8 @@ export const ResultDimension = Object.freeze({
 });
 
 /** @typedef {typeof ResultDimension[keyof typeof ResultDimension]} ResultDimensionId */
+
+/** How a Kite holding is held as collateral, in Kite's own words (holdings' collateral_type). */
+export const CollateralType = Object.freeze({ pledge: 'pledge' });
+
+/** @typedef {typeof CollateralType[keyof typeof CollateralType]} CollateralTypeId */

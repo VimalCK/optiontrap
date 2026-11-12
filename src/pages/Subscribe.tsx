@@ -3,10 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import ParticleNetwork from '@/components/ParticleNetwork/ParticleNetwork';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import { SubscriptionPlan, SubscriptionStatus } from '@/services/kiteAuth';
-import { activateSubscription, formatDuration, getSubscriptionPlans, getSubscriptionStatus } from '@/services/subscription';
+import { activateSubscription, currencySymbol, formatDuration, getSubscriptionPlans, getSubscriptionStatus } from '@/services/subscription';
 import '@/styles/subscribe.css';
 
-const currencySymbol = (code: string) => (code === 'INR' ? '₹' : `${code} `);
 const getPlanPriceLabel = (plan: SubscriptionPlan) =>
   `${currencySymbol(plan.currency)}${plan.price.toLocaleString('en-IN')} / ${formatDuration(plan.durationCount, plan.durationUnit)}`;
 

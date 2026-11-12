@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import {
+  StrikeMode,
+  isStrikeMode,
+  strikeModeFrom,
   FEEDBACK_STATUSES,
   FEEDBACK_TYPES,
   JobRunStatus,
@@ -34,5 +37,20 @@ describe('appEnums', () => {
   it('labels a price alert condition', () => {
     expect(priceAlertConditionLabel(PriceAlertCondition.Above)).toBe('Above');
     expect(priceAlertConditionLabel('sideways')).toBe('sideways');
+  });
+});
+
+describe('strikeModeFrom', () => {
+  it('reads a strike mode in any letter case, so browsers loaded before the enum still fetch', () => {
+    expect(strikeModeFrom('atmRange')).toBe(StrikeMode.AtmRange);
+    expect(strikeModeFrom('allStored')).toBe(StrikeMode.AllStored);
+    expect(strikeModeFrom('specific')).toBe(StrikeMode.Specific);
+    expect(strikeModeFrom(StrikeMode.Specific)).toBe(StrikeMode.Specific);
+  });
+
+  it('passes anything else on unchanged, for the fetch to refuse', () => {
+    expect(strikeModeFrom('nearby')).toBe('nearby');
+    expect(strikeModeFrom(3)).toBe(3);
+    expect(isStrikeMode(strikeModeFrom('nearby'))).toBe(false);
   });
 });

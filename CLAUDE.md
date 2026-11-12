@@ -183,7 +183,8 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   - Lists that can grow are paged or range-limited on the server (by the user's chosen range, never an invented cap).
   - The resource belongs to the logged-in user; the user id comes from the session, never from the URL or body.
 - Every reply is `{ status: 'ok', data }` or `{ status: 'error', message }` (plus `code` when callers branch on it,
-  e.g. `SUBSCRIPTION_REQUIRED`, rule codes). Use 400 for bad input, 401 not logged in, 402 no subscription,
+  e.g. `SUBSCRIPTION_REQUIRED`, rule codes), sent through `sendOk` / `sendCreated` / `sendError` (`server/replies.js`),
+  never a hand-written envelope. Use 400 for bad input, 401 not logged in, 402 no subscription,
   403 not admin, 404 not found, 500 server failure.
 - Middleware: `requireAuth`, `requireSubscription` (app features), `requireAdmin`. Own routes go **before** the Kite proxy.
 - Validate and parse request bodies in pure functions (in `shared/` when the browser can use them too), returning

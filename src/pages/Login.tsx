@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import ParticleNetwork from '@/components/ParticleNetwork/ParticleNetwork';
 import { getLoginUrl, getLastAvatarUrl, saveCredentials, hasCredentials, getCredentials, SubscriptionPlan } from '@/services/kiteAuth';
-import { getPublicPlans, formatDuration } from '@/services/subscription';
+import { currencySymbol, getPublicPlans, formatDuration } from '@/services/subscription';
 import {
   ShieldIcon, AnalyticsIcon, TradesIcon, WatchlistIcon,
   PaperTradingIcon, DashboardIcon, LogoIcon,
@@ -45,7 +45,6 @@ const monthsOf = (p: SubscriptionPlan): number => {
   }
 };
 
-const currencySymbol = (code: string) => (code === 'INR' ? '₹' : `${code} `);
 
 // The redirect URL that must be registered in the user's Kite Connect app.
 const REDIRECT_URL = 'https://optiontrap.com/redirect';

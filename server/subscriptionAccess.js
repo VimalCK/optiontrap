@@ -3,6 +3,9 @@
 // two gates cannot drift apart. DB lookups are injected to keep this testable.
 import { AccessDenial, SubscriptionState } from '../shared/appEnums.js';
 
+/** The error code a 402 reply carries when the user has no active subscription. */
+export const SUBSCRIPTION_REQUIRED = 'SUBSCRIPTION_REQUIRED';
+
 export const inactiveSubscription = {
   status: SubscriptionState.Inactive,
   active: false,

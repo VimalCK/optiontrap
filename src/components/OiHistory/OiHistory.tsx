@@ -29,6 +29,7 @@ import { Bias, OiFlow, RolloverPattern, SellingSetup, TradeSetupStatus, VolVerdi
 import { SignalOutcome } from '../../../shared/appEnums.js';
 import { ToastColor, type ToastColorId } from '@/utils/uiEnums';
 import { OiHistoryTab, type OiHistoryTabId } from '@/utils/uiEnums';
+import { FetchEvent, StrikeMode } from '../../../shared/appEnums.js';
 
 /** When a day's prices were taken: the close, or now for today's rows, which are a live snapshot until the close. */
 function snapshotTime(date: string): Date {
@@ -255,7 +256,7 @@ const OiHistory: React.FC = () => {
       body: {
         scrip,
         expiryMonth: month,
-        strikeMode: strikeRange === -1 ? 'specific' : strikeRange === 0 ? 'allStored' : 'atmRange',
+        strikeMode: strikeRange === -1 ? StrikeMode.Specific : strikeRange === 0 ? StrikeMode.AllStored : StrikeMode.AtmRange,
         specificStrike: strikeRange === -1 ? specificStrikeValue : undefined,
       },
       signal: pageSignal,
@@ -281,10 +282,10 @@ const OiHistory: React.FC = () => {
         return; // ignore malformed SSE data
       }
       switch (eventType) {
-        case 'step':
+        case FetchEvent.Step:
           setProgress({ step: `${monthLabel}: ${payload.message}`, pct: 0, detail: '' });
           break;
-        case 'progress':
+        case FetchEvent.Progress:
           setProgress((prev) => {
             if (prev && payload.pct < prev.pct && prev.step.startsWith(monthLabel)) return prev;
             return {
@@ -294,7 +295,7 @@ const OiHistory: React.FC = () => {
             };
           });
           break;
-        case 'error':
+        case FetchEvent.Error:
           throw new Error(payload.message);
       }
     };

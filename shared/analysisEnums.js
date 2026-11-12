@@ -389,3 +389,12 @@ export const LevelKind = Object.freeze({
 });
 
 /** @typedef {typeof LevelKind[keyof typeof LevelKind]} LevelKindId */
+
+/**
+ * What a token in an OI snapshot's `contracts` map is (oi_snapshots.contracts):
+ * an option, by its Kite type (CE / PE), or the underlying's price (SPOT).
+ * The stored text is exported for offline analysis, so it never changes.
+ */
+export const SnapshotContractType = Object.freeze({ CE: 'CE', PE: 'PE', SPOT: 'SPOT' });
+
+/** @typedef {typeof SnapshotContractType[keyof typeof SnapshotContractType]} SnapshotContractTypeId */

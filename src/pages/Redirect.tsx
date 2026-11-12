@@ -3,6 +3,9 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { exchangeToken } from '@/services/kiteAuth';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 
+/** The status Kite's login redirect carries when the login failed or was cancelled. */
+const KITE_LOGIN_FAILED = 'error';
+
 const Redirect: React.FC = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -12,7 +15,7 @@ const Redirect: React.FC = () => {
     const requestToken = searchParams.get('request_token');
     const status = searchParams.get('status');
 
-    if (status === 'error' || !requestToken) {
+    if (status === KITE_LOGIN_FAILED || !requestToken) {
       setError('Login failed or was cancelled. Please try again.');
       return;
     }

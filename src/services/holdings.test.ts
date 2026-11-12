@@ -5,7 +5,8 @@ const apiGet = vi.hoisted(() => vi.fn());
 vi.mock('./apiClient', () => ({ apiClient: { get: apiGet } }));
 
 import type { Tick } from './kiteTicker';
-import { applyQuotes, applyTicks, fetchPricedHoldings, heldQuantity, holdingTotals, priceHolding } from './holdings';
+import { applyQuotes, applyTicks, fetchPricedHoldings, heldQuantity, holdingTotals, isPledged, priceHolding } from './holdings';
+import { CollateralType } from '../../shared/tradeEnums.js';
 
 function holding(tradingsymbol: string, exchange: string, quantity: number, average_price: number,
   last_price: number, close_price: number, collateral_quantity = 0): Holding {
@@ -15,7 +16,7 @@ function holding(tradingsymbol: string, exchange: string, quantity: number, aver
     average_price, last_price, close_price,
     pnl: (last_price - average_price) * (quantity || collateral_quantity),
     day_change: last_price - close_price, day_change_percentage: 0,
-    collateral_quantity, collateral_type: collateral_quantity ? 'pledge' : '',
+    collateral_quantity, collateral_type: collateral_quantity ? CollateralType.pledge : '',
   };
 }
 
@@ -82,6 +83,14 @@ describe('heldQuantity', () => {
 
   it('leaves out shares sold today', () => {
     expect(heldQuantity({ ...base, used_quantity: 400 })).toBe(600);
+  });
+});
+
+describe('isPledged', () => {
+  it('is true only for shares Kite reports pledged as collateral', () => {
+    expect(isPledged(STALE[4])).toBe(true); // LICI, fully pledged
+    expect(isPledged(STALE[0])).toBe(false);
+    expect(isPledged({ ...STALE[0], collateral_quantity: 100, collateral_type: '' })).toBe(false);
   });
 });
 

@@ -170,3 +170,29 @@ export const PluginKind = Object.freeze({ Service: 'Service', Strategy: 'Strateg
 export const MigrationAction = Object.freeze({ Run: 'Run', Record: 'Record' });
 
 /** @typedef {typeof MigrationAction[keyof typeof MigrationAction]} MigrationActionId */
+
+/**
+ * Which strikes an OI history fetch loads (POST /api/oi-history/fetch):
+ * a range around the money, every strike already stored, or one strike.
+ */
+export const StrikeMode = Object.freeze({ AtmRange: 'AtmRange', AllStored: 'AllStored', Specific: 'Specific' });
+
+/** @typedef {typeof StrikeMode[keyof typeof StrikeMode]} StrikeModeId */
+
+/** @returns {value is StrikeModeId} */
+export const isStrikeMode = (/** @type {unknown} */ value) => Object.values(StrikeMode).includes(/** @type {StrikeModeId} */ (value));
+
+/**
+ * The strike mode a request names in any letter case (browsers loaded before
+ * this enum send atmRange), or the text unchanged when it names none, so the
+ * fetch can refuse it.
+ * @param {unknown} value
+ * @returns {unknown}
+ */
+export const strikeModeFrom = (value) =>
+  Object.values(StrikeMode).find((mode) => typeof value === 'string' && mode.toLowerCase() === value.toLowerCase()) ?? value;
+
+/** The events an OI history fetch streams to the browser (server-sent event names). */
+export const FetchEvent = Object.freeze({ Step: 'Step', Progress: 'Progress', Done: 'Done', Error: 'Error' });
+
+/** @typedef {typeof FetchEvent[keyof typeof FetchEvent]} FetchEventId */

@@ -105,7 +105,7 @@ import { fetchOiHistoryMonth, OiHistoryFetchError, todayIST } from './oiHistoryF
 import { OI_HISTORY_JOB, startOiHistoryScheduler } from './oiHistoryScheduler.js';
 import { startOiSnapshotScheduler, watchOiSnapshotSymbol } from './oiSnapshotScheduler.js';
 import { startInstrumentSync } from './instrumentSyncScheduler.js';
-import { checkSubscriptionAccess, inactiveSubscription } from './subscriptionAccess.js';
+import { SUBSCRIPTION_REQUIRED, checkSubscriptionAccess, inactiveSubscription } from './subscriptionAccess.js';
 import { backfillStockSetups, candleSyncWarning, scanStock, syncStockCandles } from './stockCandles.js';
 import { startStockSetupScheduler } from './stockSetupScheduler.js';
 import { NIGHTLY_JOB_PREFIX, nightlyJobsStatus, startNightlyJobs } from './nightlyJobs.js';
@@ -126,8 +126,9 @@ import { createConcurrencyLimit } from './concurrencyLimit.js';
 import { allowOnlyKnownKiteCalls } from './kiteProxyAllowlist.js';
 import { MAX_CLIENT_MESSAGE_BYTES, MAX_CONNECTIONS_PER_USER } from './wsLimits.js';
 import { Exchange, InstrumentType, OptionType, OrderStatus, Side, isOptionType, isSide } from '../shared/tradeEnums.js';
-import { AccessDenial, FEEDBACK_STATUSES, PriceAlertStatus, SignalOutcome, SubscriptionAction, SubscriptionProvider, isFeedbackStatus, isFeedbackType } from '../shared/appEnums.js';
+import { AccessDenial, FEEDBACK_STATUSES, FetchEvent, PriceAlertStatus, SignalOutcome, StrikeMode, SubscriptionAction, SubscriptionProvider, isFeedbackStatus, isFeedbackType, strikeModeFrom } from '../shared/appEnums.js';
 import { TradeSetupStatus, isTradeSetupStatus } from '../shared/analysisEnums.js';
+import { sendCreated, sendError, sendOk } from './replies.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -266,28 +267,20 @@ app.get('/auth/status', (req, res) => {
 
   if (activeSession) {
     getSafeSession(activeSession)
-      .then((safe) => res.json({
-        status: 'ok',
-        authenticated: true,
-        data: safe,
-      }))
+      .then((safe) => sendOk(res, safe, { authenticated: true }))
       .catch((err) => {
         console.error(`${ts()} ${RED}AUTH${RESET} status error:`, err);
-        res.status(500).json({ status: 'error', message: 'Failed to load auth status' });
+        sendError(res, 500, 'Failed to load auth status');
       });
   } else {
-    res.json({
-      status: 'ok',
-      authenticated: false,
-      data: null,
-    });
+    sendOk(res, null, { authenticated: false });
   }
 });
 
 // Get Kite OAuth login URL — apiKey comes from client (stored in localStorage)
 app.get('/auth/login-url', (req, res) => {
   const { url, error } = kiteLoginUrl(req.query.api_key);
-  if (error) return res.status(400).json({ status: 'error', message: error });
+  if (error) return sendError(res, 400, error);
   res.json({ url });
 });
 
@@ -295,13 +288,13 @@ app.get('/auth/login-url', (req, res) => {
 app.get('/auth/me', (req, res) => {
   if (req.session?.kiteSession) {
     getSafeSession(req.session.kiteSession)
-      .then((safe) => res.json({ status: 'ok', data: safe }))
+      .then((safe) => sendOk(res, safe))
       .catch((err) => {
         console.error(`${ts()} ${RED}AUTH${RESET} me error:`, err);
-        res.status(500).json({ status: 'error', message: 'Failed to load session' });
+        sendError(res, 500, 'Failed to load session');
       });
   } else {
-    res.status(401).json({ status: 'error', message: 'Not authenticated' });
+    sendError(res, 401, 'Not authenticated');
   }
 });
 
@@ -311,10 +304,7 @@ app.post('/auth/token', async (req, res) => {
   const { request_token, apiKey, apiSecret } = req.body;
 
   if (!request_token || !apiKey || !apiSecret) {
-    return res.status(400).json({
-      status: 'error',
-      message: 'request_token, apiKey, and apiSecret are required',
-    });
+    return sendError(res, 400, 'request_token, apiKey, and apiSecret are required');
   }
 
   // Clear any stale session before exchanging a new token
@@ -346,7 +336,7 @@ app.post('/auth/token', async (req, res) => {
         const parsed = JSON.parse(errorText);
         if (parsed.message) message = parsed.message;
       } catch { /* use default message */ }
-      return res.status(response.status).json({ status: 'error', message });
+      return sendError(res, response.status, message);
     }
 
     const result = await response.json();
@@ -375,7 +365,7 @@ app.post('/auth/token', async (req, res) => {
     const safe = await getSafeSession(kiteSession);
     await startLoggedInSession(req, kiteSession);
     console.log(`${ts()} ${GREEN}AUTH${RESET} logged in: ${data.user_id} (${data.user_name})`);
-    res.json({ status: 'ok', data: safe });
+    sendOk(res, safe);
   } catch (err) {
     sendFailure(res, err, { log: `${ts()} ${RED}AUTH${RESET} exchange error`, message: 'Login failed on the server · try again' });
   }
@@ -401,7 +391,7 @@ app.post('/auth/logout', async (req, res) => {
 
   req.session.destroy(() => {
     res.clearCookie('optiontrap_sid');
-    res.json({ status: 'ok' });
+    sendOk(res);
   });
 });
 
@@ -411,7 +401,7 @@ app.delete('/auth/account', async (req, res) => {
   const userId = kiteSession?.userId;
 
   if (!userId) {
-    return res.status(400).json({ status: 'error', message: 'No account found to delete' });
+    return sendError(res, 400, 'No account found to delete');
   }
 
   // Invalidate Kite token if we have one
@@ -432,7 +422,7 @@ app.delete('/auth/account', async (req, res) => {
   req.session.destroy(() => {
     res.clearCookie('optiontrap_sid');
     console.log(`${ts()} ${RED}AUTH${RESET} account deleted: ${userId}`);
-    res.json({ status: 'ok' });
+    sendOk(res);
   });
 });
 
@@ -440,7 +430,7 @@ app.delete('/auth/account', async (req, res) => {
 
 const requireAuth = (req, res, next) => {
   if (!req.session?.kiteSession?.apiKey) {
-    return res.status(401).json({ status: 'error', message: 'Not authenticated' });
+    return sendError(res, 401, 'Not authenticated');
   }
   next();
 };
@@ -449,19 +439,19 @@ const requireAdmin = async (req, res, next) => {
   const userId = req.session?.kiteSession?.userId;
 
   if (!userId) {
-    return res.status(401).json({ status: 'error', message: 'Not authenticated' });
+    return sendError(res, 401, 'Not authenticated');
   }
 
   try {
     // Authoritative check against the DB (live), not the cached session flag —
     // so role changes take effect without requiring the user to log in again.
     if (!(await isUserAdmin(userId))) {
-      return res.status(403).json({ status: 'error', message: 'Admin access required' });
+      return sendError(res, 403, 'Admin access required');
     }
     next();
   } catch (err) {
     console.error(`${ts()} ${RED}ADMIN${RESET} guard error:`, err);
-    res.status(500).json({ status: 'error', message: 'Failed to verify admin access' });
+    sendError(res, 500, 'Failed to verify admin access');
   }
 };
 
@@ -475,18 +465,13 @@ const requireSubscription = async (req, res, next) => {
     }
 
     if (access.reason === AccessDenial.Unauthenticated) {
-      return res.status(401).json({ status: 'error', message: 'Not authenticated' });
+      return sendError(res, 401, 'Not authenticated');
     }
 
-    return res.status(402).json({
-      status: 'error',
-      code: 'SUBSCRIPTION_REQUIRED',
-      message: 'An active subscription is required',
-      data: access.subscription,
-    });
+    return sendError(res, 402, 'An active subscription is required', { code: SUBSCRIPTION_REQUIRED, data: access.subscription });
   } catch (err) {
     console.error(`${ts()} ${RED}SUBSCRIPTION${RESET} gate error:`, err);
-    res.status(500).json({ status: 'error', message: 'Failed to verify subscription' });
+    sendError(res, 500, 'Failed to verify subscription');
   }
 };
 
@@ -496,32 +481,32 @@ const requireSubscription = async (req, res, next) => {
 const getCachedPlans = cached(getActiveSubscriptionPlans, 30 * 60_000);
 
 app.get('/api/version', (_req, res) => {
-  res.json({ status: 'ok', data: { version: APP_VERSION } });
+  sendOk(res, { version: APP_VERSION });
 });
 
 app.get('/api/public/plans', async (_req, res) => {
   try {
     const plans = await getCachedPlans();
-    res.json({ status: 'ok', data: plans });
+    sendOk(res, plans);
   } catch (err) {
     console.error(`${ts()} ${RED}PLANS${RESET} public plans error:`, err);
-    res.status(500).json({ status: 'error', message: 'Failed to load plans' });
+    sendError(res, 500, 'Failed to load plans');
   }
 });
 
 app.get('/api/subscription/plans', requireAuth, async (_req, res) => {
   const plans = await getActiveSubscriptionPlans();
-  res.json({ status: 'ok', data: plans });
+  sendOk(res, plans);
 });
 
 app.get('/api/subscription/status', requireAuth, async (req, res) => {
   const subscription = await getSubscriptionSummary(req.session.kiteSession.userId);
-  res.json({ status: 'ok', data: subscription });
+  sendOk(res, subscription);
 });
 
 /** Reply to a failed subscription change: 400 for an unknown plan, otherwise a generic 500. */
 const sendSubscriptionFailure = (res, err, log) => {
-  if (err instanceof SubscriptionPlanNotFoundError) return res.status(400).json({ status: 'error', message: err.message });
+  if (err instanceof SubscriptionPlanNotFoundError) return sendError(res, 400, err.message);
   sendFailure(res, err, { log, message: 'Failed to update the subscription' });
 };
 
@@ -531,7 +516,7 @@ app.post('/api/subscriptions', requireAuth, async (req, res) => {
 
   try {
     const subscription = await activateSubscription(req.session.kiteSession.userId, planId, SubscriptionProvider.Internal);
-    res.status(201).json({ status: 'ok', data: subscription });
+    sendCreated(res, subscription);
   } catch (err) {
     sendSubscriptionFailure(res, err, '[Subscription] activate error');
   }
@@ -541,11 +526,11 @@ app.post('/api/feedback', requireAuth, async (req, res) => {
   const { type, message, pageUrl, userAgent } = req.body || {};
 
   if (!isFeedbackType(type)) {
-    return res.status(400).json({ status: 'error', message: 'Valid feedback type is required' });
+    return sendError(res, 400, 'Valid feedback type is required');
   }
 
   if (!message || typeof message !== 'string' || message.trim().length < 5) {
-    return res.status(400).json({ status: 'error', message: 'Feedback message must be at least 5 characters' });
+    return sendError(res, 400, 'Feedback message must be at least 5 characters');
   }
 
   const feedback = await createFeedback({
@@ -556,7 +541,7 @@ app.post('/api/feedback', requireAuth, async (req, res) => {
     userAgent: typeof userAgent === 'string' ? userAgent.slice(0, 1000) : req.get('user-agent'),
   });
 
-  res.status(201).json({ status: 'ok', data: feedback });
+  sendCreated(res, feedback);
 });
 
 // ---------- Admin Routes ----------
@@ -565,20 +550,20 @@ app.post('/api/feedback', requireAuth, async (req, res) => {
 // Recent runs of the after-close OI history fetch, newest first.
 app.get('/api/admin/scheduled-jobs/oi-history', requireAuth, requireAdmin, async (req, res) => {
   try {
-    res.json({ status: 'ok', data: await getScheduledJobRuns(OI_HISTORY_JOB, 14) });
+    sendOk(res, await getScheduledJobRuns(OI_HISTORY_JOB, 14));
   } catch (err) {
     console.error(`${ts()} ${RED}ADMIN${RESET} scheduled job runs error:`, err);
-    res.status(500).json({ status: 'error', message: 'Failed to load scheduled job runs' });
+    sendError(res, 500, 'Failed to load scheduled job runs');
   }
 });
 
 // Recent runs of the nightly jobs (server/jobs/nightly/), newest first.
 app.get('/api/admin/scheduled-jobs/nightly', requireAuth, requireAdmin, async (req, res) => {
   try {
-    res.json({ status: 'ok', data: await getScheduledJobRunsByPrefix(NIGHTLY_JOB_PREFIX, 100) });
+    sendOk(res, await getScheduledJobRunsByPrefix(NIGHTLY_JOB_PREFIX, 100));
   } catch (err) {
     console.error(`${ts()} ${RED}ADMIN${RESET} nightly job runs error:`, err);
-    res.status(500).json({ status: 'error', message: 'Failed to load nightly job runs' });
+    sendError(res, 500, 'Failed to load nightly job runs');
   }
 });
 
@@ -586,19 +571,19 @@ app.get('/api/admin/feedback', requireAuth, requireAdmin, async (req, res) => {
   const { type, status } = req.query;
 
   if (type && !isFeedbackType(type)) {
-    return res.status(400).json({ status: 'error', message: 'Invalid feedback type filter' });
+    return sendError(res, 400, 'Invalid feedback type filter');
   }
 
   if (status && !isFeedbackStatus(status)) {
-    return res.status(400).json({ status: 'error', message: 'Invalid feedback status filter' });
+    return sendError(res, 400, 'Invalid feedback status filter');
   }
 
   try {
     const feedback = await getFeedbackList({ type: type || null, status: status || null });
-    res.json({ status: 'ok', data: feedback });
+    sendOk(res, feedback);
   } catch (err) {
     console.error(`${ts()} ${RED}ADMIN${RESET} feedback list error:`, err);
-    res.status(500).json({ status: 'error', message: 'Failed to load feedback' });
+    sendError(res, 500, 'Failed to load feedback');
   }
 });
 
@@ -606,23 +591,20 @@ app.patch('/api/admin/feedback/:id', requireAuth, requireAdmin, async (req, res)
   const { status } = req.body || {};
 
   if (!isFeedbackStatus(status)) {
-    return res.status(400).json({
-      status: 'error',
-      message: `status must be one of: ${FEEDBACK_STATUSES.join(', ')}`,
-    });
+    return sendError(res, 400, `status must be one of: ${FEEDBACK_STATUSES.join(', ')}`);
   }
 
   try {
     const updated = await updateFeedbackStatus(req.params.id, status);
 
     if (!updated) {
-      return res.status(404).json({ status: 'error', message: 'Feedback not found' });
+      return sendError(res, 404, 'Feedback not found');
     }
 
-    res.json({ status: 'ok' });
+    sendOk(res);
   } catch (err) {
     console.error(`${ts()} ${RED}ADMIN${RESET} feedback update error:`, err);
-    res.status(500).json({ status: 'error', message: 'Failed to update feedback' });
+    sendError(res, 500, 'Failed to update feedback');
   }
 });
 
@@ -640,39 +622,36 @@ app.get('/api/admin/health', requireAuth, requireAdmin, async (req, res) => {
   const val = (r, fallback) => (r.status === 'fulfilled' ? r.value : fallback);
   const kite = req.session?.kiteSession;
 
-  res.json({
-    status: 'ok',
-    data: {
-      db: { connected: dbConnected },
-      kite: {
-        connected: Boolean(kite?.accessToken),
-        userId: kite?.userId || null,
-        userName: kite?.userName || null,
-        loginTime: kite?.loginTime || null,
-      },
-      lastOiUpdate: val(lastOi, null),
-      usage: val(usage, { activeSessions: 0, totalUsers: 0 }),
-      feedback: val(feedback, { total: 0, open: 0 }),
-      checks: {
-        tradeEngine: tradeEngineHealth(tradeEngine.status()),
-        nightlyJobs: nightly.status === 'fulfilled' ? nightlyJobsHealth(nightly.value) : unreadableHealth('job runs', nightly.reason),
-      },
-      server: {
-        uptimeSeconds: Math.round(process.uptime()),
-        mode: IS_PROD ? 'production' : 'development',
-      },
-      timestamp: Date.now(),
+  sendOk(res, {
+    db: { connected: dbConnected },
+    kite: {
+      connected: Boolean(kite?.accessToken),
+      userId: kite?.userId || null,
+      userName: kite?.userName || null,
+      loginTime: kite?.loginTime || null,
     },
+    lastOiUpdate: val(lastOi, null),
+    usage: val(usage, { activeSessions: 0, totalUsers: 0 }),
+    feedback: val(feedback, { total: 0, open: 0 }),
+    checks: {
+      tradeEngine: tradeEngineHealth(tradeEngine.status()),
+      nightlyJobs: nightly.status === 'fulfilled' ? nightlyJobsHealth(nightly.value) : unreadableHealth('job runs', nightly.reason),
+    },
+    server: {
+      uptimeSeconds: Math.round(process.uptime()),
+      mode: IS_PROD ? 'production' : 'development',
+    },
+    timestamp: Date.now(),
   });
 });
 
 app.get('/api/admin/users', requireAuth, requireAdmin, async (_req, res) => {
   try {
     const users = await getAdminUsers();
-    res.json({ status: 'ok', data: users });
+    sendOk(res, users);
   } catch (err) {
     console.error(`${ts()} ${RED}ADMIN${RESET} users list error:`, err);
-    res.status(500).json({ status: 'error', message: 'Failed to load users' });
+    sendError(res, 500, 'Failed to load users');
   }
 });
 
@@ -683,18 +662,18 @@ app.post('/api/admin/users/:userId/subscription', requireAuth, requireAdmin, asy
   try {
     let subscription;
     if (action === SubscriptionAction.Activate) {
-      if (!planId) return res.status(400).json({ status: 'error', message: 'planId is required' });
+      if (!planId) return sendError(res, 400, 'planId is required');
       subscription = await adminActivateSubscription(userId, planId);
     } else if (action === SubscriptionAction.Extend) {
-      if (!planId) return res.status(400).json({ status: 'error', message: 'planId is required' });
+      if (!planId) return sendError(res, 400, 'planId is required');
       subscription = await adminExtendSubscription(userId, planId);
     } else if (action === SubscriptionAction.Cancel) {
       subscription = await adminCancelSubscription(userId);
     } else {
-      return res.status(400).json({ status: 'error', message: `action must be ${Object.values(SubscriptionAction).join(', ')}` });
+      return sendError(res, 400, `action must be ${Object.values(SubscriptionAction).join(', ')}`);
     }
 
-    res.json({ status: 'ok', data: subscription });
+    sendOk(res, subscription);
   } catch (err) {
     sendSubscriptionFailure(res, err, `${ts()} ${RED}ADMIN${RESET} subscription update error`);
   }
@@ -705,7 +684,7 @@ app.post('/api/admin/users/:userId/subscription', requireAuth, requireAdmin, asy
 app.get('/api/watchlists', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const lists = await getWatchlists(userId);
-  res.json({ status: 'ok', data: lists });
+  sendOk(res, lists);
 });
 
 app.get('/api/watchlists/:id', requireAuth, requireSubscription, async (req, res) => {
@@ -713,10 +692,10 @@ app.get('/api/watchlists/:id', requireAuth, requireSubscription, async (req, res
   const list = await getWatchlistItems(req.params.id, userId);
 
   if (!list) {
-    return res.status(404).json({ status: 'error', message: 'Watchlist not found' });
+    return sendError(res, 404, 'Watchlist not found');
   }
 
-  res.json({ status: 'ok', data: list });
+  sendOk(res, list);
 });
 
 app.post('/api/watchlists', requireAuth, requireSubscription, async (req, res) => {
@@ -724,11 +703,11 @@ app.post('/api/watchlists', requireAuth, requireSubscription, async (req, res) =
   const { name } = req.body;
 
   if (typeof name !== 'string' || !name.trim()) {
-    return res.status(400).json({ status: 'error', message: 'Watchlist name is required' });
+    return sendError(res, 400, 'Watchlist name is required');
   }
 
   const list = await createWatchlist(userId, name);
-  res.status(201).json({ status: 'ok', data: list });
+  sendCreated(res, list);
 });
 
 // Rename (the only field a watchlist has to change).
@@ -737,15 +716,15 @@ app.patch('/api/watchlists/:id', requireAuth, requireSubscription, async (req, r
   const { name } = req.body;
 
   if (typeof name !== 'string' || !name.trim()) {
-    return res.status(400).json({ status: 'error', message: 'Name is required' });
+    return sendError(res, 400, 'Name is required');
   }
 
   const updated = await renameWatchlist(req.params.id, userId, name);
   if (!updated) {
-    return res.status(404).json({ status: 'error', message: 'Watchlist not found' });
+    return sendError(res, 404, 'Watchlist not found');
   }
 
-  res.json({ status: 'ok' });
+  sendOk(res);
 });
 
 app.delete('/api/watchlists/:id', requireAuth, requireSubscription, async (req, res) => {
@@ -753,10 +732,10 @@ app.delete('/api/watchlists/:id', requireAuth, requireSubscription, async (req, 
   const deleted = await deleteWatchlist(req.params.id, userId);
 
   if (!deleted) {
-    return res.status(404).json({ status: 'error', message: 'Watchlist not found' });
+    return sendError(res, 404, 'Watchlist not found');
   }
 
-  res.json({ status: 'ok' });
+  sendOk(res);
 });
 
 app.post('/api/watchlists/:id/items', requireAuth, requireSubscription, async (req, res) => {
@@ -764,10 +743,7 @@ app.post('/api/watchlists/:id/items', requireAuth, requireSubscription, async (r
   const { instrumentToken, tradingsymbol, exchange } = req.body;
 
   if (!instrumentToken || !tradingsymbol) {
-    return res.status(400).json({
-      status: 'error',
-      message: 'instrumentToken and tradingsymbol are required',
-    });
+    return sendError(res, 400, 'instrumentToken and tradingsymbol are required');
   }
 
   const item = await addWatchlistItem(req.params.id, userId, {
@@ -777,13 +753,10 @@ app.post('/api/watchlists/:id/items', requireAuth, requireSubscription, async (r
   });
 
   if (!item) {
-    return res.status(400).json({
-      status: 'error',
-      message: 'Limit reached (100), duplicate instrument, or watchlist not found',
-    });
+    return sendError(res, 400, 'Limit reached (100), duplicate instrument, or watchlist not found');
   }
 
-  res.status(201).json({ status: 'ok', data: item });
+  sendCreated(res, item);
 });
 
 // Save the order of a watchlist's items after the user drags one to a new position.
@@ -791,15 +764,15 @@ app.put('/api/watchlists/:id/items/order', requireAuth, requireSubscription, asy
   const userId = req.session.kiteSession.userId;
   const { itemIds } = req.body || {};
   if (!Array.isArray(itemIds) || !itemIds.every((id) => typeof id === 'string')) {
-    return res.status(400).json({ status: 'error', message: 'itemIds must be a list of item ids' });
+    return sendError(res, 400, 'itemIds must be a list of item ids');
   }
 
   try {
     const saved = await reorderWatchlistItems(req.params.id, userId, itemIds);
     if (!saved) {
-      return res.status(400).json({ status: 'error', message: 'Watchlist not found, or the items changed: reload and try again' });
+      return sendError(res, 400, 'Watchlist not found, or the items changed: reload and try again');
     }
-    res.json({ status: 'ok' });
+    sendOk(res);
   } catch (err) {
     sendFailure(res, err, { log: '[Watchlist] Reorder error', message: 'Failed to save the watchlist order' });
   }
@@ -810,62 +783,62 @@ app.delete('/api/watchlists/:id/items/:itemId', requireAuth, requireSubscription
   const removed = await removeWatchlistItem(req.params.itemId, userId);
 
   if (!removed) {
-    return res.status(404).json({ status: 'error', message: 'Item not found' });
+    return sendError(res, 404, 'Item not found');
   }
 
-  res.json({ status: 'ok' });
+  sendOk(res);
 });
 
 // ---------- Trade automation ----------
 
 app.get('/api/automation/config', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
-  res.json({ status: 'ok', data: await getAutomationConfig(userId) });
+  sendOk(res, await getAutomationConfig(userId));
 });
 
 app.put('/api/automation/config', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { config, error } = parseAutomationConfig(req.body, strategyInfos());
-  if (error) return res.status(400).json({ status: 'error', message: error });
+  if (error) return sendError(res, 400, error);
   const saved = await saveAutomationConfig(userId, config);
   await tradeEngine.services.tradeMonitor.refreshUser(userId); // new exit rules apply from the next tick
-  res.json({ status: 'ok', data: saved });
+  sendOk(res, saved);
 });
 
 // The trade engine's strategies, as the Automation page shows and configures them.
 app.get('/api/strategies', requireAuth, requireSubscription, (req, res) => {
-  res.json({ status: 'ok', data: strategyInfos() });
+  sendOk(res, strategyInfos());
 });
 
 // The automated trades created in ?from=…&to=… (market days, both required), each with its lifecycle.
 app.get('/api/automation/trades', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const range = parseRange(req.query.from, req.query.to, { required: true });
-  if (range.error) return res.status(400).json({ status: 'error', message: range.error });
-  res.json({ status: 'ok', data: await getAutoTrades(userId, range) });
+  if (range.error) return sendError(res, 400, range.error);
+  sendOk(res, await getAutoTrades(userId, range));
 });
 
 // Win/Loss Patterns: closed automated trades entered in ?from=…&to=… (market days, both required), measured and grouped.
 app.get('/api/automation/results', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const range = parseRange(req.query.from, req.query.to, { required: true });
-  if (range.error) return res.status(400).json({ status: 'error', message: range.error });
-  res.json({ status: 'ok', data: await getAutoTradeResults(userId, range) });
+  if (range.error) return sendError(res, 400, range.error);
+  sendOk(res, await getAutoTradeResults(userId, range));
 });
 
 // ---------- Price alerts ----------
 
 app.get('/api/price-alerts', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
-  res.json({ status: 'ok', data: await getPriceAlerts(userId) });
+  sendOk(res, await getPriceAlerts(userId));
 });
 
 app.post('/api/price-alerts', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { alert, error } = parsePriceAlertInput(req.body);
-  if (error) return res.status(400).json({ status: 'error', message: error });
+  if (error) return sendError(res, 400, error);
 
-  res.status(201).json({ status: 'ok', data: await createPriceAlert(userId, alert) });
+  sendCreated(res, await createPriceAlert(userId, alert));
 });
 
 // Change an alert's status:
@@ -879,27 +852,27 @@ app.patch('/api/price-alerts/:id', requireAuth, requireSubscription, async (req,
   if (status === PriceAlertStatus.Triggered) {
     const price = Number(req.body.price);
     if (!Number.isFinite(price) || price <= 0) {
-      return res.status(400).json({ status: 'error', message: 'price must be above 0' });
+      return sendError(res, 400, 'price must be above 0');
     }
     const alert = await triggerPriceAlert(req.params.id, userId, price);
-    if (!alert) return res.status(404).json({ status: 'error', message: 'Active alert not found' });
-    return res.json({ status: 'ok', data: alert });
+    if (!alert) return sendError(res, 404, 'Active alert not found');
+    return sendOk(res, alert);
   }
 
   if (status === PriceAlertStatus.Active) {
     const alert = await resetPriceAlert(req.params.id, userId);
-    if (!alert) return res.status(404).json({ status: 'error', message: 'Alert not found' });
-    return res.json({ status: 'ok', data: alert });
+    if (!alert) return sendError(res, 404, 'Alert not found');
+    return sendOk(res, alert);
   }
 
-  res.status(400).json({ status: 'error', message: `status must be '${PriceAlertStatus.Triggered}' or '${PriceAlertStatus.Active}'` });
+  sendError(res, 400, `status must be '${PriceAlertStatus.Triggered}' or '${PriceAlertStatus.Active}'`);
 });
 
 app.delete('/api/price-alerts/:id', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const deleted = await deletePriceAlert(req.params.id, userId);
-  if (!deleted) return res.status(404).json({ status: 'error', message: 'Alert not found' });
-  res.json({ status: 'ok' });
+  if (!deleted) return sendError(res, 404, 'Alert not found');
+  sendOk(res);
 });
 
 // ---------- Positions ----------
@@ -907,23 +880,23 @@ app.delete('/api/price-alerts/:id', requireAuth, requireSubscription, async (req
 app.get('/api/positions', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { filter, error } = parsePositionsQuery(req.query);
-  if (error) return res.status(400).json({ status: 'error', message: error });
+  if (error) return sendError(res, 400, error);
   const positions = await getPositions(userId, filter);
-  res.json({ status: 'ok', data: positions });
+  sendOk(res, positions);
 });
 
 app.get('/api/positions/daily-pnl', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { filter, error } = parseDailyPnlQuery(req.query);
-  if (error) return res.status(400).json({ status: 'error', message: error });
-  res.json({ status: 'ok', data: await getDailyPnl(userId, filter) });
+  if (error) return sendError(res, 400, error);
+  sendOk(res, await getDailyPnl(userId, filter));
 });
 
 app.get('/api/positions/stats', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { filter, error } = parseStatsQuery(req.query);
-  if (error) return res.status(400).json({ status: 'error', message: error });
-  res.json({ status: 'ok', data: await getPositionStats(userId, filter) });
+  if (error) return sendError(res, 400, error);
+  sendOk(res, await getPositionStats(userId, filter));
 });
 
 // ---------- Orders (the trade engine's order service, server/tradeEngine/services/orders.js) ----------
@@ -934,10 +907,9 @@ app.get('/api/positions/stats', requireAuth, requireSubscription, async (req, re
 const ORDER_HTTP_STATUS = { INVALID_TRADE: 400, MARKET_CLOSED: 409, NOT_FOUND: 404, NO_PRICE: 502 };
 
 /** Reply with an order result: the order, or the refusal with its status. */
-const sendOrderResult = (res, result, okStatus = 200) => {
-  if (result.ok) return res.status(okStatus).json({ status: 'ok', data: result.order });
-  return res.status(ORDER_HTTP_STATUS[result.code] ?? 400)
-    .json({ status: 'error', code: result.code, message: result.message });
+const sendOrderResult = (res, result, sendSuccess = sendOk) => {
+  if (result.ok) return sendSuccess(res, result.order);
+  return sendError(res, ORDER_HTTP_STATUS[result.code] ?? 400, result.message, { code: result.code });
 };
 
 // The user's orders, newest first: ?status=Open for every open one (whenever it
@@ -945,12 +917,12 @@ const sendOrderResult = (res, result, okStatus = 200) => {
 app.get('/api/orders', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   if (req.query.status !== undefined) {
-    if (req.query.status !== OrderStatus.Open) return res.status(400).json({ status: 'error', message: `status must be '${OrderStatus.Open}'` });
-    return res.json({ status: 'ok', data: await getUserOpenOrders(userId) });
+    if (req.query.status !== OrderStatus.Open) return sendError(res, 400, `status must be '${OrderStatus.Open}'`);
+    return sendOk(res, await getUserOpenOrders(userId));
   }
   const range = parseRange(req.query.from, req.query.to, { required: true });
-  if (range.error) return res.status(400).json({ status: 'error', message: range.error });
-  res.json({ status: 'ok', data: await getOrders(userId, range) });
+  if (range.error) return sendError(res, 400, range.error);
+  sendOk(res, await getOrders(userId, range));
 });
 
 // Place an order: 201 with the order. A body with positionId exits that open position: a
@@ -967,7 +939,7 @@ app.post('/api/orders', requireAuth, requireSubscription, async (req, res) => {
     const result = body.positionId !== undefined
       ? await orders.exit(userId, String(body.positionId), { exitPrice: body.exitPrice, kite })
       : await orders.place(userId, body, kite);
-    sendOrderResult(res, result, 201);
+    sendOrderResult(res, result, sendCreated);
   } catch (err) {
     sendFailure(res, err, { log: '[Orders] POST error', message: 'Failed to place the order' });
   }
@@ -975,7 +947,7 @@ app.post('/api/orders', requireAuth, requireSubscription, async (req, res) => {
 
 // Cancel an open order: the only change an order takes, { status: 'Cancelled' }.
 app.patch('/api/orders/:id', requireAuth, requireSubscription, async (req, res) => {
-  if (req.body?.status !== OrderStatus.Cancelled) return res.status(400).json({ status: 'error', message: `status must be '${OrderStatus.Cancelled}'` });
+  if (req.body?.status !== OrderStatus.Cancelled) return sendError(res, 400, `status must be '${OrderStatus.Cancelled}'`);
   sendOrderResult(res, await tradeEngine.services.orders.cancel(req.session.kiteSession.userId, req.params.id));
 });
 
@@ -984,7 +956,7 @@ app.patch('/api/orders/:id', requireAuth, requireSubscription, async (req, res) 
 app.get('/api/oi-snapshots', requireAuth, requireSubscription, async (req, res) => {
   try {
     const snapshots = await getTodayOiSnapshots();
-    res.json({ status: 'ok', data: snapshots });
+    sendOk(res, snapshots);
   } catch (err) {
     sendFailure(res, err, { log: '[OI Snapshots] GET error', message: 'Failed to load OI snapshots' });
   }
@@ -993,7 +965,7 @@ app.get('/api/oi-snapshots', requireAuth, requireSubscription, async (req, res) 
 app.get('/api/oi-snapshots/latest', requireAuth, requireSubscription, async (req, res) => {
   try {
     const timestamp = await getLatestOiSnapshotTimestamp();
-    res.json({ status: 'ok', data: { timestamp } });
+    sendOk(res, { timestamp });
   } catch (err) {
     sendFailure(res, err, { log: '[OI Snapshots] GET latest error', message: 'Failed to load the latest OI snapshot time' });
   }
@@ -1005,13 +977,13 @@ app.get('/api/oi-snapshots/latest', requireAuth, requireSubscription, async (req
 app.post('/api/oi-snapshots/watched-symbols', requireAuth, requireSubscription, async (req, res) => {
   const symbol = typeof req.body?.symbol === 'string' ? req.body.symbol.trim().toUpperCase() : '';
   if (!/^[A-Z0-9&_-]{1,30}$/.test(symbol)) {
-    return res.status(400).json({ status: 'error', message: 'A valid symbol is required' });
+    return sendError(res, 400, 'A valid symbol is required');
   }
   try {
-    res.json({ status: 'ok', data: await watchOiSnapshotSymbol(symbol) });
+    sendOk(res, await watchOiSnapshotSymbol(symbol));
   } catch (err) {
     console.error(`[OI Snapshots] watch ${symbol} error:`, err.message);
-    res.status(500).json({ status: 'error', message: 'Failed to start snapshots for this symbol' });
+    sendError(res, 500, 'Failed to start snapshots for this symbol');
   }
 });
 
@@ -1037,7 +1009,7 @@ const oiHistoryFetches = createConcurrencyLimit(1);
 app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   if (!oiHistoryFetches.tryAcquire(userId)) {
-    return res.status(429).json({ status: 'error', message: 'An OI history fetch is already running · wait for it to finish' });
+    return sendError(res, 429, 'An OI history fetch is already running · wait for it to finish');
   }
   try {
     await streamOiHistoryFetch(req, res);
@@ -1068,10 +1040,10 @@ async function streamOiHistoryFetch(req, res) {
   });
 
   try {
-    const { scrip, expiryMonth, strikeMode = 'atmRange', specificStrike } = req.body;
+    const { scrip, expiryMonth, strikeMode = StrikeMode.AtmRange, specificStrike } = req.body;
     const { apiKey, accessToken } = req.session.kiteSession;
     const summary = await fetchOiHistoryMonth({
-      scrip, expiryMonth, strikeMode, specificStrike, apiKey, accessToken, send, signal: cancel.signal,
+      scrip, expiryMonth, strikeMode: strikeModeFrom(strikeMode), specificStrike, apiKey, accessToken, send, signal: cancel.signal,
     });
 
     // New prices may settle open signals; score them before the client reloads.
@@ -1081,7 +1053,7 @@ async function streamOiHistoryFetch(req, res) {
       console.warn('[OI History] Signal outcome evaluation failed:', err.message);
     }
 
-    send('done', summary);
+    send(FetchEvent.Done, summary);
     res.end();
   } catch (err) {
     if (cancel.signal.aborted) {
@@ -1089,11 +1061,11 @@ async function streamOiHistoryFetch(req, res) {
       return;
     }
     if (err instanceof OiHistoryFetchError) {
-      send('error', { message: err.message });
+      send(FetchEvent.Error, { message: err.message });
       return res.end();
     }
     console.error('[OI History] Fetch error:', err);
-    send('error', { message: 'OI history fetch failed on the server' });
+    send(FetchEvent.Error, { message: 'OI history fetch failed on the server' });
     res.end();
   }
 }
@@ -1106,7 +1078,7 @@ app.get('/api/oi-history/expiry-months', requireAuth, requireSubscription, async
   try {
     const { scrip } = req.query;
     if (!scrip) {
-      return res.status(400).json({ status: 'error', message: 'scrip is required' });
+      return sendError(res, 400, 'scrip is required');
     }
 
     const { apiKey, accessToken } = req.session.kiteSession;
@@ -1129,7 +1101,7 @@ app.get('/api/oi-history/expiry-months', requireAuth, requireSubscription, async
       ...await getStoredOiHistoryExpiryMonths(scrip),
       ...liveMonths,
     ])].sort();
-    res.json({ status: 'ok', data: months });
+    sendOk(res, months);
   } catch (err) {
     sendFailure(res, err, { log: '[OI History] Expiry months error', message: 'Failed to load expiry months' });
   }
@@ -1144,10 +1116,10 @@ app.get('/api/oi-history', requireAuth, requireSubscription, async (req, res) =>
   try {
     const { scrip, from, expiryMonth } = req.query;
     if (!scrip || !expiryMonth) {
-      return res.status(400).json({ status: 'error', message: 'scrip and expiryMonth are required' });
+      return sendError(res, 400, 'scrip and expiryMonth are required');
     }
     const data = await getOiHistoryDataByExpiryMonth(scrip, expiryMonth, from || null);
-    res.json({ status: 'ok', data });
+    sendOk(res, data);
   } catch (err) {
     sendFailure(res, err, { log: '[OI History] GET error', message: 'Failed to load OI history' });
   }
@@ -1156,9 +1128,9 @@ app.get('/api/oi-history', requireAuth, requireSubscription, async (req, res) =>
 app.get('/api/oi-history/futures', requireAuth, requireSubscription, async (req, res) => {
   try {
     const { scrip, expiryMonth, from } = req.query;
-    if (!scrip || !expiryMonth) return res.status(400).json({ status: 'error', message: 'scrip and expiryMonth are required' });
+    if (!scrip || !expiryMonth) return sendError(res, 400, 'scrip and expiryMonth are required');
     const data = await getOiHistoryFuturesData(scrip, expiryMonth, from || null);
-    res.json({ status: 'ok', data });
+    sendOk(res, data);
   } catch (err) {
     sendFailure(res, err, { log: '[OI History] Futures GET error', message: 'Failed to load futures OI history' });
   }
@@ -1177,7 +1149,7 @@ app.get('/api/stocks/:token/candles', requireAuth, requireSubscription, async (r
   try {
     const token = Number(req.params.token);
     const stock = Number.isInteger(token) ? await getCashStock(token) : null;
-    if (!stock) return res.status(400).json({ status: 'error', message: 'Entry and exit zones cover NSE and BSE cash stocks only' });
+    if (!stock) return sendError(res, 400, 'Entry and exit zones cover NSE and BSE cash stocks only');
 
     const kite = req.session.kiteSession;
     let warning = null;
@@ -1195,12 +1167,12 @@ app.get('/api/stocks/:token/candles', requireAuth, requireSubscription, async (r
     const [candles, market] = await Promise.all([getStockCandles(token), reference ? getStockCandles(reference.instrumentToken) : []]);
     if (!candles.length) {
       const message = warning ? `Couldn't load daily candles from Kite (${warning})` : 'Kite returned no daily candles for this stock';
-      return res.status(502).json({ status: 'error', message });
+      return sendError(res, 502, message);
     }
     // Keep the watchlist's Setups column in step with what the panel shows.
     if (synced) await scanStock(stock, market).catch((err) => console.warn(`[Stocks] Scan failed for ${stock.tradingsymbol}:`, err.message));
 
-    res.json({ status: 'ok', data: { stock, candles: compactCandles(candles), market: compactCandles(market), marketLabel: reference?.label ?? null, warning } });
+    sendOk(res, { stock, candles: compactCandles(candles), market: compactCandles(market), marketLabel: reference?.label ?? null, warning });
   } catch (err) {
     sendFailure(res, err, { log: '[Stocks] Candles GET error', message: 'Failed to load daily candles' });
   }
@@ -1212,7 +1184,7 @@ app.post('/api/stocks/:token/setup-history', requireAuth, requireSubscription, a
   try {
     const token = Number(req.params.token);
     const stock = Number.isInteger(token) ? await getCashStock(token) : null;
-    if (!stock) return res.status(400).json({ status: 'error', message: 'Setup history covers NSE and BSE cash stocks only' });
+    if (!stock) return sendError(res, 400, 'Setup history covers NSE and BSE cash stocks only');
 
     try {
       await syncStockCandles(token, req.session.kiteSession);
@@ -1220,12 +1192,12 @@ app.post('/api/stocks/:token/setup-history', requireAuth, requireSubscription, a
       console.warn(`[Stocks] Candle sync before setup history failed for ${stock.tradingsymbol}:`, err.message);
     }
     if (!(await getStockCandles(token)).length) {
-      return res.status(502).json({ status: 'error', message: 'No daily candles stored for this stock and Kite could not supply them' });
+      return sendError(res, 502, 'No daily candles stored for this stock and Kite could not supply them');
     }
 
     const counts = await backfillStockSetups(stock);
     console.log(`[Stocks] Setup history for ${stock.tradingsymbol}: ${counts.found} setup(s)`);
-    res.json({ status: 'ok', data: counts });
+    sendOk(res, counts);
   } catch (err) {
     sendFailure(res, err, { log: '[Stocks] Setup history error', message: 'Failed to build the setup history' });
   }
@@ -1234,7 +1206,7 @@ app.post('/api/stocks/:token/setup-history', requireAuth, requireSubscription, a
 // Latest scan summary for every stock in the user's watchlists (the Setups column).
 app.get('/api/stocks/scans', requireAuth, requireSubscription, async (req, res) => {
   try {
-    res.json({ status: 'ok', data: await getStockScansForUser(req.session.kiteSession.userId) });
+    sendOk(res, await getStockScansForUser(req.session.kiteSession.userId));
   } catch (err) {
     sendFailure(res, err, { log: '[Stocks] Scans GET error', message: 'Failed to load stock scans' });
   }
@@ -1244,9 +1216,9 @@ app.get('/api/stocks/scans', requireAuth, requireSubscription, async (req, res) 
 app.get('/api/stocks/:token/setups', requireAuth, requireSubscription, async (req, res) => {
   try {
     const token = Number(req.params.token);
-    if (!Number.isInteger(token)) return res.status(400).json({ status: 'error', message: 'Invalid instrument token' });
+    if (!Number.isInteger(token)) return sendError(res, 400, 'Invalid instrument token');
     const [stats, recent] = await Promise.all([getStockSetupStats(token), getStockSetupSignals(token, 30)]);
-    res.json({ status: 'ok', data: { stats, recent } });
+    sendOk(res, { stats, recent });
   } catch (err) {
     sendFailure(res, err, { log: '[Stocks] Setups GET error', message: 'Failed to load stock setups' });
   }
@@ -1256,17 +1228,17 @@ app.post('/api/oi-history/signals', requireAuth, requireSubscription, async (req
   try {
     const { scrip, signalDate, expiry, strike, optionType, action, status, entryPremium, spotPrice, details } = req.body || {};
     if (!scrip || !signalDate || !Number.isFinite(Number(strike)) || !isOptionType(optionType) || !isSide(action) || (status && !isTradeSetupStatus(status))) {
-      return res.status(400).json({ status: 'error', message: 'Invalid trade setup signal' });
+      return sendError(res, 400, 'Invalid trade setup signal');
     }
     const signal = await saveTradeSetupSignal(req.session.kiteSession.userId, {
       scrip, signalDate, expiry, strike: Number(strike), optionType, action,
       status: status || TradeSetupStatus.Watch, entryPremium: Number(entryPremium) || null,
       spotPrice: Number(spotPrice) || null, details,
     });
-    res.status(201).json({ status: 'ok', data: signal });
+    sendCreated(res, signal);
   } catch (err) {
     console.error('[OI History] Signal save error:', err.message);
-    res.status(500).json({ status: 'error', message: 'Failed to save trade setup signal' });
+    sendError(res, 500, 'Failed to save trade setup signal');
   }
 });
 
@@ -1276,10 +1248,10 @@ app.get('/api/oi-history/signals', requireAuth, requireSubscription, async (req,
       scrip: req.query.scrip || null,
       limit: req.query.limit,
     });
-    res.json({ status: 'ok', data: signals });
+    sendOk(res, signals);
   } catch (err) {
     console.error('[OI History] Signal list error:', err.message);
-    res.status(500).json({ status: 'error', message: 'Failed to load trade setup signals' });
+    sendError(res, 500, 'Failed to load trade setup signals');
   }
 });
 
@@ -1287,14 +1259,14 @@ app.delete('/api/oi-history/signals/:id', requireAuth, requireSubscription, asyn
   try {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) {
-      return res.status(400).json({ status: 'error', message: 'Invalid signal id' });
+      return sendError(res, 400, 'Invalid signal id');
     }
     const deleted = await deleteTradeSetupSignal(req.session.kiteSession.userId, id);
-    if (!deleted) return res.status(404).json({ status: 'error', message: 'Signal not found' });
-    res.json({ status: 'ok' });
+    if (!deleted) return sendError(res, 404, 'Signal not found');
+    sendOk(res);
   } catch (err) {
     console.error('[OI History] Signal delete error:', err.message);
-    res.status(500).json({ status: 'error', message: 'Failed to delete signal' });
+    sendError(res, 500, 'Failed to delete signal');
   }
 });
 
@@ -1304,17 +1276,17 @@ app.patch('/api/oi-history/signals/:id/outcome', requireAuth, requireSubscriptio
     if (!Number.isFinite(Number(price)) || !date || !Number.isFinite(Number(returnPct)) ||
         !Number.isFinite(Number(maxFavorableReturn)) || !Number.isFinite(Number(maxAdverseReturn)) ||
         !Object.values(SignalOutcome).includes(status)) {
-      return res.status(400).json({ status: 'error', message: 'Invalid signal outcome' });
+      return sendError(res, 400, 'Invalid signal outcome');
     }
     const outcome = await updateTradeSetupSignalOutcome(req.session.kiteSession.userId, req.params.id, {
       price: Number(price), date, returnPct: Number(returnPct), status,
       maxFavorableReturn: Number(maxFavorableReturn), maxAdverseReturn: Number(maxAdverseReturn), final: Boolean(final),
     });
-    if (!outcome) return res.status(404).json({ status: 'error', message: 'Signal not found' });
-    res.json({ status: 'ok', data: outcome });
+    if (!outcome) return sendError(res, 404, 'Signal not found');
+    sendOk(res, outcome);
   } catch (err) {
     console.error('[OI History] Signal outcome error:', err.message);
-    res.status(500).json({ status: 'error', message: 'Failed to save signal outcome' });
+    sendError(res, 500, 'Failed to save signal outcome');
   }
 });
 
@@ -1330,28 +1302,28 @@ app.delete('/api/oi-history', requireAuth, requireAdmin, async (req, res) => {
     if (scrip && !expiryMonth) {
       const deleted = await deleteOiHistoryByScrip(scrip);
       console.log(`[OI History] Deleted ${deleted} rows for ${scrip}`);
-      return res.json({ status: 'ok', data: { deleted } });
+      return sendOk(res, { deleted });
     }
 
     if (expiryMonth) {
       if (!scrip) {
-        return res.status(400).json({ status: 'error', message: 'scrip is required' });
+        return sendError(res, 400, 'scrip is required');
       }
       if (!/^\d{4}-\d{2}$/.test(expiryMonth)) {
-        return res.status(400).json({ status: 'error', message: 'expiryMonth is required (format: YYYY-MM)' });
+        return sendError(res, 400, 'expiryMonth is required (format: YYYY-MM)');
       }
       const deleted = await deleteOiHistoryByExpiryMonth(scrip, expiryMonth);
       console.log(`[OI History] Deleted ${deleted} rows for ${scrip} expiry month ${expiryMonth}`);
-      return res.json({ status: 'ok', data: { deleted } });
+      return sendOk(res, { deleted });
     }
 
     if (!month || !/^\d{4}-\d{2}$/.test(month)) {
-      return res.status(400).json({ status: 'error', message: 'expiryMonth is required (format: YYYY-MM)' });
+      return sendError(res, 400, 'expiryMonth is required (format: YYYY-MM)');
     }
 
     const deleted = await deleteOiHistoryByMonth(month);
     console.log(`[OI History] Deleted ${deleted} rows for month ${month}`);
-    res.json({ status: 'ok', data: { deleted } });
+    sendOk(res, { deleted });
   } catch (err) {
     sendFailure(res, err, { log: '[OI History] DELETE error', message: 'Failed to delete OI history' });
   }
@@ -1362,7 +1334,7 @@ app.delete('/api/oi-history', requireAuth, requireAdmin, async (req, res) => {
 app.get('/api/fno-symbols', requireAuth, requireSubscription, async (req, res) => {
   try {
     const symbols = await getFnoSymbols();
-    res.json({ status: 'ok', data: symbols });
+    sendOk(res, symbols);
   } catch (err) {
     sendFailure(res, err, { log: '[F&O Symbols] Error', message: 'Failed to load F&O symbols' });
   }
@@ -1375,7 +1347,7 @@ app.get('/api/fno-symbols', requireAuth, requireSubscription, async (req, res) =
  */
 app.get('/api/underlyings', requireAuth, requireSubscription, async (req, res) => {
   try {
-    res.json({ status: 'ok', data: await getUnderlyings() });
+    sendOk(res, await getUnderlyings());
   } catch (err) {
     sendFailure(res, err, { log: '[Underlyings] Error', message: 'Failed to load underlyings' });
   }
@@ -1388,12 +1360,12 @@ app.get('/api/underlyings', requireAuth, requireSubscription, async (req, res) =
 app.patch('/api/admin/underlyings/:name', requireAuth, requireAdmin, async (req, res) => {
   const { alwaysSnapshot } = req.body || {};
   if (typeof alwaysSnapshot !== 'boolean') {
-    return res.status(400).json({ status: 'error', message: 'alwaysSnapshot must be true or false' });
+    return sendError(res, 400, 'alwaysSnapshot must be true or false');
   }
   try {
     const underlying = await setAlwaysSnapshot(req.params.name, alwaysSnapshot);
-    if (!underlying) return res.status(404).json({ status: 'error', message: `No price instrument for ${req.params.name}` });
-    res.json({ status: 'ok', data: underlying });
+    if (!underlying) return sendError(res, 404, `No price instrument for ${req.params.name}`);
+    sendOk(res, underlying);
   } catch (err) {
     sendFailure(res, err, { log: '[Underlyings] Update error', message: 'Failed to update the underlying' });
   }
@@ -1405,7 +1377,7 @@ app.get('/api/instruments', requireAuth, requireSubscription, async (req, res) =
   try {
     const { apiKey, accessToken } = req.session.kiteSession;
     const instruments = await getOrFetchInstruments(apiKey, accessToken);
-    res.json({ status: 'ok', data: instruments });
+    sendOk(res, instruments);
   } catch (err) {
     sendFailure(res, err, { log: '[Instruments] Error', message: 'Failed to load instruments from Kite', status: 502 });
   }

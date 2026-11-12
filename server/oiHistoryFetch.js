@@ -25,6 +25,7 @@ import { getOrFetchInstruments } from './instruments.js';
 import { createKeyedQueue, createSharedRuns } from './sharedRuns.js';
 import { marketDate } from '../shared/marketTime.js';
 import { Exchange, InstrumentType } from '../shared/tradeEnums.js';
+import { FetchEvent, StrikeMode, isStrikeMode } from '../shared/appEnums.js';
 
 /** Get current date in IST as YYYY-MM-DD */
 export function todayIST() {
@@ -44,8 +45,8 @@ const sharedFetches = createSharedRuns();
 const monthQueue = createKeyedQueue();
 
 /** Requests with the same key fetch the same rows, so they can share one run. */
-export function oiHistoryFetchKey({ scrip, expiryMonth, strikeMode = 'atmRange', specificStrike }) {
-  return [scrip, expiryMonth, strikeMode, strikeMode === 'specific' ? Number(specificStrike) : ''].join('|');
+export function oiHistoryFetchKey({ scrip, expiryMonth, strikeMode = StrikeMode.AtmRange, specificStrike }) {
+  return [scrip, expiryMonth, strikeMode, strikeMode === StrikeMode.Specific ? Number(specificStrike) : ''].join('|');
 }
 
 /**
@@ -60,7 +61,7 @@ export async function fetchOiHistoryMonth(options) {
   const work = ({ emit, signal: runSignal }) => fetchOiHistoryMonthNow({ ...options, send: emit, signal: runSignal });
 
   const joined = sharedFetches.join(key, work, { onEvent: send, signal });
-  if (!joined.started) send('step', { step: 0, message: 'Joining a fetch already running for this month...' });
+  if (!joined.started) send(FetchEvent.Step, { step: 0, message: 'Joining a fetch already running for this month...' });
   try {
     return await joined.result;
   } catch (err) {
@@ -75,7 +76,7 @@ export async function fetchOiHistoryMonth(options) {
  * @param {object} options
  * @param {string} options.scrip          F&O name, e.g. 'NIFTY'
  * @param {string} options.expiryMonth    'YYYY-MM'
- * @param {string} [options.strikeMode]   'atmRange' | 'allStored' | 'specific'
+ * @param {string} [options.strikeMode]   a StrikeMode (AtmRange when left out)
  * @param {number} [options.specificStrike]
  * @param {string} options.apiKey
  * @param {string} options.accessToken
@@ -86,7 +87,7 @@ export async function fetchOiHistoryMonth(options) {
 export async function fetchOiHistoryMonthNow({
   scrip,
   expiryMonth,
-  strikeMode = 'atmRange',
+  strikeMode = StrikeMode.AtmRange,
   specificStrike,
   apiKey,
   accessToken,
@@ -105,8 +106,12 @@ export async function fetchOiHistoryMonthNow({
     throw new OiHistoryFetchError('expiryMonth must be in YYYY-MM format');
   }
 
+  if (!isStrikeMode(strikeMode)) {
+    throw new OiHistoryFetchError(`strikeMode must be one of ${Object.values(StrikeMode).join(', ')}`);
+  }
+
   const exactStrike = Number(specificStrike);
-  if (strikeMode === 'specific' && (!Number.isFinite(exactStrike) || exactStrike <= 0)) {
+  if (strikeMode === StrikeMode.Specific && (!Number.isFinite(exactStrike) || exactStrike <= 0)) {
     throw new OiHistoryFetchError('specificStrike must be a positive number');
   }
 
@@ -129,14 +134,14 @@ export async function fetchOiHistoryMonthNow({
 
   const stepSize = await getStrikeStepSize(scrip);
   const range = 20;
-  const fetchAllStoredStrikes = strikeMode === 'allStored';
-  const fetchSpecificStrike = strikeMode === 'specific';
+  const fetchAllStoredStrikes = strikeMode === StrikeMode.AllStored;
+  const fetchSpecificStrike = strikeMode === StrikeMode.Specific;
 
   await createOiHistoryTable();
 
   // Step 1: Fetch spot index daily candles for spot close. This is cheap and
   // gives the trading-day calendar, so cache skipping can avoid option calls.
-  send('step', { step: 1, message: `Fetching ${scrip} spot data...` });
+  send(FetchEvent.Step, { step: 1, message: `Fetching ${scrip} spot data...` });
 
   const spotUrl = `https://api.kite.trade/instruments/historical/${spotToken}/day?from=${from}&to=${to}&oi=1`;
   const spotRes = await fetch(spotUrl, {
@@ -175,7 +180,7 @@ export async function fetchOiHistoryMonthNow({
     const storedStrikes = fetchAllStoredStrikes
       ? await getStoredOiHistoryStrikes(scrip, expiryMonth)
       : [];
-    send('step', { step: 2, message: `Found ${spotCandles.length} trading days.` });
+    send(FetchEvent.Step, { step: 2, message: `Found ${spotCandles.length} trading days.` });
 
     const allDays = []; // all trading days from Kite
     for (const candle of spotCandles) {
@@ -204,7 +209,7 @@ export async function fetchOiHistoryMonthNow({
         && inst.expiry && inst.expiry.startsWith(expiryMonth) && inst.expiry >= today)
       .sort((a, b) => a.expiry.localeCompare(b.expiry))[0];
     if (futuresContract) {
-      send('step', { step: 2, message: `Fetching futures OI and volume for ${futuresContract.tradingsymbol}...` });
+      send(FetchEvent.Step, { step: 2, message: `Fetching futures OI and volume for ${futuresContract.tradingsymbol}...` });
       try {
         const futuresUrl = `https://api.kite.trade/instruments/historical/${futuresContract.instrumentToken}/day?from=${futuresFetchFrom}&to=${futuresFetchTo}&oi=1`;
         const futuresResponse = await fetch(futuresUrl, { headers: { Authorization: authHeader, 'X-Kite-Version': '3' }, signal });
@@ -256,7 +261,7 @@ export async function fetchOiHistoryMonthNow({
     }
 
     // Step 3: Fetch daily candles for each unique token (batches of 5, 300ms delay)
-    send('step', { step: 3, message: `Fetching OI candles for ${uniqueTokens.size} instruments...` });
+    send(FetchEvent.Step, { step: 3, message: `Fetching OI candles for ${uniqueTokens.size} instruments...` });
 
     const tokenCandles = new Map();
     const tokenList = [...uniqueTokens.keys()];
@@ -296,7 +301,7 @@ export async function fetchOiHistoryMonthNow({
       const done = Math.min(i + batchSize, tokenList.length);
       const lastToken = batch[batch.length - 1];
       const lastMeta = uniqueTokens.get(lastToken);
-      send('progress', {
+      send(FetchEvent.Progress, {
         done,
         total: tokenList.length,
         pct: Math.round((done / tokenList.length) * 100),
@@ -312,7 +317,7 @@ export async function fetchOiHistoryMonthNow({
 
     // Step 4: Build rows and upsert
     throwIfCancelled();
-    send('step', { step: 4, message: 'Saving to database...' });
+    send(FetchEvent.Step, { step: 4, message: 'Saving to database...' });
 
     const rows = [];
     for (const { date, spotClose, tokens } of dayTokenSets) {

@@ -9,6 +9,8 @@
  * bounded even under sustained traffic.
  */
 
+import { sendError } from './replies.js';
+
 /**
  * The client's IP: Cloudflare's CF-Connecting-IP in prod (Cloudflare overwrites any value the client
  * sends), else the socket address. Never X-Forwarded-For, whose first entry the client controls.
@@ -70,7 +72,7 @@ export function createRateLimiter({
 
     if (entry.count > max) {
       res.setHeader('Retry-After', String(retryAfter));
-      return res.status(429).json({ status: 'error', message });
+      return sendError(res, 429, message);
     }
 
     next();

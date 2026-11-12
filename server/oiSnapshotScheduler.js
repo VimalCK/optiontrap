@@ -22,6 +22,7 @@ import { marketDateTime, marketTimeLabel } from '../shared/marketTime.js';
 import { findWorkingAdminSession } from './oiHistoryScheduler.js';
 import { fetchQuotes, KiteAuthError } from './kiteQuotes.js';
 import { Exchange, InstrumentType, isOptionType } from '../shared/tradeEnums.js';
+import { SnapshotContractType } from '../shared/analysisEnums.js';
 
 /** Strikes each side of ATM. The analyzer shows ±15; the extra covers ATM drifting during the day. */
 const STRIKES_EACH_SIDE = 20;
@@ -96,7 +97,7 @@ const optionContract = (option) => ({
 });
 
 /** What an underlying's price token is, for the snapshot's `contracts` map. */
-const spotContract = (underlying, symbol) => ({ symbol, underlying, type: 'SPOT' });
+const spotContract = (underlying, symbol) => ({ symbol, underlying, type: SnapshotContractType.SPOT });
 
 /** Option chains of each underlying in the instrument list, by underlying name. */
 function optionsByUnderlying(instruments) {

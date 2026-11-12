@@ -1194,8 +1194,11 @@ export async function getAutoTradeResults(userId, range) {
 // Instruments (shared across all users)
 // ---------------------------------------------------------------------------
 
+/** The instruments_meta key holding the IST date the instrument list was last fetched. */
+const INSTRUMENTS_FETCHED_DATE_KEY = 'last_fetched_date';
+
 export async function getInstrumentsDate() {
-  const row = await firstRow("SELECT value FROM instruments_meta WHERE key = 'last_fetched_date'");
+  const row = await firstRow('SELECT value FROM instruments_meta WHERE key = $1', [INSTRUMENTS_FETCHED_DATE_KEY]);
   return row ? row.value : null;
 }
 
@@ -1330,8 +1333,8 @@ export async function saveInstruments(instruments, stamp) {
     );
 
     await client.query(
-      "INSERT INTO instruments_meta (key, value) VALUES ('last_fetched_date', $1) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
-      [stamp],
+      'INSERT INTO instruments_meta (key, value) VALUES ($1, $2) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value',
+      [INSTRUMENTS_FETCHED_DATE_KEY, stamp],
     );
     await client.query('COMMIT');
     return { added, updated, removed: removed.rowCount };

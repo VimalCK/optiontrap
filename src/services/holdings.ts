@@ -8,6 +8,7 @@
  */
 import { fetchHoldings, fetchQuotes, Holding, QuoteData } from './kiteApi';
 import type { Tick } from './kiteTicker';
+import { CollateralType } from '../../shared/tradeEnums.js';
 
 /**
  * Shares held, the one count used for P&L, value and day change: settled,
@@ -19,6 +20,9 @@ export const heldQuantity = (h: Holding) =>
   h.quantity + h.t1_quantity + h.collateral_quantity - h.used_quantity;
 
 /** The holding at `lastPrice`, with P&L and day change worked out from it. */
+/** Whether a holding is pledged as collateral (Kite's collateral_type). */
+export const isPledged = (h: Holding) => h.collateral_quantity > 0 && h.collateral_type === CollateralType.pledge;
+
 export function priceHolding(h: Holding, lastPrice: number, closePrice: number = h.close_price): Holding {
   const dayChange = lastPrice - closePrice;
   return {

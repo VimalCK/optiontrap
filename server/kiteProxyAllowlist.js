@@ -7,6 +7,8 @@
  * src/pages/Profile.tsx make the current ones).
  */
 
+import { sendError } from './replies.js';
+
 /** Allowed calls: GET only, matched against the whole path after /api. */
 const ALLOWED_KITE_PATHS = [
   /^\/quote$/,
@@ -28,5 +30,5 @@ export function isAllowedKiteRequest(method, path) {
  */
 export function allowOnlyKnownKiteCalls(req, res, next) {
   if (isAllowedKiteRequest(req.method, req.path)) return next();
-  res.status(404).json({ status: 'error', message: 'Not available through OptionTrap' });
+  sendError(res, 404, 'Not available through OptionTrap');
 }

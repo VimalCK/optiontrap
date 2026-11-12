@@ -6,7 +6,7 @@
 import React, { useState } from 'react';
 import { HoldingsIcon } from '@/components/icons/Icons';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
-import { heldQuantity } from '@/services/holdings';
+import { heldQuantity, isPledged } from '@/services/holdings';
 import { useHoldings } from '@/hooks/useHoldings';
 import { formatAmount, formatSignedAmount } from '@/utils/formatAmount';
 import { MarketStatus } from '../../shared/tradeEnums.js';
@@ -52,7 +52,7 @@ const HoldingsView: React.FC = () => {
         percentage: totalCurrentValue > 0 ? (currentValue / totalCurrentValue) * 100 : 0,
         pnl: h.pnl,
         pnlPercentage: investedValue > 0 ? (h.pnl / investedValue) * 100 : 0,
-        isPledged: h.collateral_quantity > 0 && h.collateral_type === 'pledge',
+        isPledged: isPledged(h),
       };
     })
     .sort((a, b) => b.currentValue - a.currentValue);
@@ -215,13 +215,12 @@ const HoldingsView: React.FC = () => {
                   const qty = heldQuantity(h);
                   const investedValue = h.average_price * qty;
                   const pnlPct = investedValue > 0 ? (h.pnl / investedValue) * 100 : 0;
-                  const isPledged = h.collateral_quantity > 0 && h.collateral_type === 'pledge';
                   return (
                     <tr key={`${h.exchange}:${h.tradingsymbol}`}>
                       <td>
                         <span className="holdings-table__symbol">{h.tradingsymbol}</span>
                         <TradingViewLink symbol={h.tradingsymbol} exchange={h.exchange} />
-                        {isPledged && <span className="badge-pledged" title="Pledged">P</span>}
+                        {isPledged(h) && <span className="badge-pledged" title="Pledged">P</span>}
                         <span className="holdings-table__exchange">{h.exchange}</span>
                       </td>
                       <td className={privacyMode ? 'blurred' : ''}>{qty}</td>

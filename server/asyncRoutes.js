@@ -4,6 +4,8 @@
  * (a Postgres or Kite message can expose SQL, table names or upstream details).
  */
 
+import { sendError } from './replies.js';
+
 const ROUTE_METHODS = ['get', 'post', 'put', 'patch', 'delete'];
 
 /** A handler whose thrown error or rejected promise goes to `next` instead of crashing the process. */
@@ -33,7 +35,7 @@ export function catchAsyncErrors(app) {
 /** Log a route's caught error in full and reply with the route's fixed `message`, never the error's text. */
 export function sendFailure(res, err, { log, message, status = 500 }) {
   console.error(`${log}:`, err);
-  res.status(status).json({ status: 'error', message });
+  sendError(res, status, message);
 }
 
 /** The last middleware: a JSON error reply (body-parser 4xx kept, anything else 500). */
@@ -44,5 +46,5 @@ export function sendServerError(err, req, res, _next) {
     res.end();
     return;
   }
-  res.status(status).json({ status: 'error', message: status === 500 ? 'Something went wrong on the server' : 'Invalid request' });
+  sendError(res, status, status === 500 ? 'Something went wrong on the server' : 'Invalid request');
 }

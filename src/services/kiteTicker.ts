@@ -14,6 +14,9 @@ import { TickerMode, type TickerModeId } from '../../shared/tradeEnums.js';
 /** Close code the server sends when Kite rejects the access token (see server/index.js). */
 const WS_SESSION_EXPIRED = 4001;
 
+/** WebSocket close code for a connection that dropped without a close frame (e.g. a refused upgrade). */
+const WS_ABNORMAL_CLOSE = 1006;
+
 export type { Tick } from '../../shared/kiteTicks.js';
 
 type TickCallback = (ticks: Tick[]) => void;
@@ -66,7 +69,7 @@ export class KiteTicker {
         handleKiteAuthFailure();
         return;
       }
-      if (event.code === 1006) {
+      if (event.code === WS_ABNORMAL_CLOSE) {
         // Abnormal close, e.g. the server refused the upgrade because the session
         // is gone. A 401 here makes apiClient send the user to login.
         apiClient.get('/auth/me').catch(() => {});
