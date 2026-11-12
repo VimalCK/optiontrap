@@ -199,3 +199,37 @@ export const isHorizon = (value) => HORIZONS.some((h) => h.id === value);
 
 /** A horizon's label (Intraday, Positional), or the value itself when unknown. */
 export const horizonLabel = (/** @type {unknown} */ horizon) => HORIZONS.find((h) => h.id === horizon)?.label ?? String(horizon);
+
+/** Which Zerodha charge schedule a trade pays (shared/paperCharges.js): options, futures, or stocks held intraday or overnight. */
+export const ChargeSegment = Object.freeze({ Option: 'Option', Future: 'Future', EquityIntraday: 'EquityIntraday', EquityDelivery: 'EquityDelivery' });
+
+/** @typedef {typeof ChargeSegment[keyof typeof ChargeSegment]} ChargeSegmentId */
+
+/** The kinds of value an entry or exit rule's setting can be (shared/rules/paramTypes.js). */
+export const ParamType = Object.freeze({ Count: 'Count', Amount: 'Amount', Percent: 'Percent', Time: 'Time' });
+
+/** @typedef {typeof ParamType[keyof typeof ParamType]} ParamTypeId */
+
+/**
+ * How much a Kite ticker subscription streams per token, in Kite's own words
+ * (its WebSocket "mode" message): the last price, a quote, or the full depth.
+ */
+export const TickerMode = Object.freeze({ ltp: 'ltp', quote: 'quote', full: 'full' });
+
+/** @typedef {typeof TickerMode[keyof typeof TickerMode]} TickerModeId */
+
+/**
+ * What a row of the automation results query groups by (server/autoTradeResults.js):
+ * one GROUPING SETS column, or All for the summary row.
+ */
+export const ResultDimension = Object.freeze({
+  Strategy: 'Strategy',
+  Setup: 'Setup',
+  ExitRule: 'ExitRule',
+  EntrySlot: 'EntrySlot',
+  Side: 'Side',
+  Day: 'Day',
+  All: 'All',
+});
+
+/** @typedef {typeof ResultDimension[keyof typeof ResultDimension]} ResultDimensionId */

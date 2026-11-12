@@ -49,6 +49,9 @@ import { marketDayStartMs } from '../../../shared/marketTime.js';
 import { algoLogger } from '../../algoLog.js';
 import { Horizon, LifecycleStage, OrderStatus, OrderType, TradeSource, isOptionType } from '../../../shared/tradeEnums.js';
 
+/** This trade engine service's id: its key in ctx.services and on Admin Services. */
+export const SIGNALS_SERVICE_ID = 'signals';
+
 /** Intraday strategies follow the OI snapshots; positional ones (OI history) come later. */
 const HORIZON = Horizon.Intraday;
 
@@ -281,7 +284,7 @@ export function createSignalsService({
   }
 
   return {
-    id: 'signals',
+    id: SIGNALS_SERVICE_ID,
 
     /** Take the order service and trade monitor from the engine, and hear when automated orders settle. */
     start(/** @type {import('../host.js').PluginContext} */ ctx) {

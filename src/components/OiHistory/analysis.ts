@@ -1,8 +1,9 @@
-import type { RolloverPattern, StrikeBias, DailyBias, PriceTrendDirection, StrikeBiasDay, StrikeBiasSummary, PriceTrendSummary, TradeBiasSummary, TradeSetupStatus, ChecklistStatus, TradeSetupChecklistItem, TradeLevelRow, TradeLevelContext, TradeSetupSummary, SellingSetupType, SellingSetupSummary, StrikeHistoryEntry, PremiumDecaySide, PremiumDecaySummary, OptionMomentumSide, OptionMomentumSummary } from './types';
+import type { StrikeBias, DailyBias, PriceTrendDirection, StrikeBiasDay, StrikeBiasSummary, PriceTrendSummary, TradeBiasSummary, ChecklistStatus, TradeSetupChecklistItem, TradeLevelRow, TradeLevelContext, TradeSetupSummary, SellingSetupSummary, StrikeHistoryEntry, PremiumDecaySide, PremiumDecaySummary, OptionMomentumSide, OptionMomentumSummary } from './types';
 import { priceDirection, classifyOptionMove, patternBiasScore, pctChange, formatPct } from './helpers';
 import { formatCalendarDate, formatNumericDate } from '@/utils/marketStatus';
 import { OptionType, type OptionTypeId } from '../../../shared/tradeEnums.js';
 import { HealthStatus } from '../../../shared/appEnums.js';
+import { Bias, MoveDirection, RolloverPattern, SellingSetup, Strength, TradeSetupStatus, Trend, type MoveDirectionId, type RolloverPatternId, type SellingSetupId, type TradeSetupStatusId } from '../../../shared/analysisEnums.js';
 
 export function summarizePriceTrend(dates: string[], spotByDate: Map<string, number>): PriceTrendSummary {
   const values = dates
@@ -11,8 +12,8 @@ export function summarizePriceTrend(dates: string[], spotByDate: Map<string, num
 
   if (values.length < 2) {
     return {
-      direction: 'Unknown',
-      strength: 'Unknown',
+      direction: Trend.Unknown,
+      strength: Strength.Unknown,
       startPrice: values[0]?.price ?? null,
       endPrice: values[0]?.price ?? null,
       changePct: null,
@@ -31,26 +32,26 @@ export function summarizePriceTrend(dates: string[], spotByDate: Map<string, num
     : null;
   const absChange = Math.abs(changePct || 0);
   const direction: PriceTrendDirection = changePct === null
-    ? 'Unknown'
+    ? Trend.Unknown
     : changePct > 0.5
-      ? 'Upward'
+      ? Trend.Upward
       : changePct < -0.5
-        ? 'Downward'
-        : 'Sideways';
-  const strength = direction === 'Unknown'
-    ? 'Unknown'
-    : direction === 'Sideways'
-      ? 'Flat'
+        ? Trend.Downward
+        : Trend.Sideways;
+  const strength = direction === Trend.Unknown
+    ? Strength.Unknown
+    : direction === Trend.Sideways
+      ? Strength.Flat
       : absChange >= 2
-        ? 'Strong'
+        ? Strength.Strong
         : absChange >= 1
-          ? 'Moderate'
-          : 'Mild';
-  const reason = direction === 'Upward'
+          ? Strength.Moderate
+          : Strength.Mild;
+  const reason = direction === Trend.Upward
     ? `Underlying moved higher from ${startPrice.toFixed(2)} to ${endPrice.toFixed(2)}.`
-    : direction === 'Downward'
+    : direction === Trend.Downward
       ? `Underlying moved lower from ${startPrice.toFixed(2)} to ${endPrice.toFixed(2)}.`
-      : direction === 'Sideways'
+      : direction === Trend.Sideways
         ? `Underlying stayed rangebound from ${startPrice.toFixed(2)} to ${endPrice.toFixed(2)}.`
         : 'Price trend could not be determined.';
 
@@ -67,14 +68,14 @@ export function summarizePriceTrend(dates: string[], spotByDate: Map<string, num
 }
 
 export function summarizeTradeBias(priceTrend: PriceTrendSummary, optionFlow: StrikeBiasSummary): TradeBiasSummary {
-  const priceBullish = priceTrend.direction === 'Upward';
-  const priceBearish = priceTrend.direction === 'Downward';
-  const flowBullish = optionFlow.bias === 'Upward';
-  const flowBearish = optionFlow.bias === 'Downward';
+  const priceBullish = priceTrend.direction === Trend.Upward;
+  const priceBearish = priceTrend.direction === Trend.Downward;
+  const flowBullish = optionFlow.bias === Trend.Upward;
+  const flowBearish = optionFlow.bias === Trend.Downward;
 
   if (priceBullish && flowBullish) {
     return {
-      bias: 'Bullish',
+      bias: Bias.Bullish,
       title: 'Bullish - Price and OI agree',
       action: 'Long bias. Prefer buy/hold on pullbacks while price holds trend.',
       reason: `Price trend is ${priceTrend.strength.toLowerCase()} upward and option flow is ${optionFlow.strength.toLowerCase()} upward.`,
@@ -83,7 +84,7 @@ export function summarizeTradeBias(priceTrend: PriceTrendSummary, optionFlow: St
 
   if (priceBearish && flowBearish) {
     return {
-      bias: 'Bearish',
+      bias: Bias.Bearish,
       title: 'Bearish - Price and OI agree',
       action: 'Short/avoid-long bias. Prefer confirmation on failed bounces.',
       reason: `Price trend is ${priceTrend.strength.toLowerCase()} downward and option flow is ${optionFlow.strength.toLowerCase()} downward.`,
@@ -92,7 +93,7 @@ export function summarizeTradeBias(priceTrend: PriceTrendSummary, optionFlow: St
 
   if ((priceBullish && flowBearish) || (priceBearish && flowBullish)) {
     return {
-      bias: 'Conflict',
+      bias: Bias.Conflict,
       title: 'Conflict - Price and OI disagree',
       action: 'Avoid blind directional entry. Wait for price confirmation or reversal failure.',
       reason: `Price is ${priceTrend.direction.toLowerCase()}, but option flow is ${optionFlow.bias.toLowerCase()}.`,
@@ -101,7 +102,7 @@ export function summarizeTradeBias(priceTrend: PriceTrendSummary, optionFlow: St
 
   if (priceBullish) {
     return {
-      bias: 'Bullish',
+      bias: Bias.Bullish,
       title: 'Bullish price trend, OI neutral',
       action: 'Cautious long bias. Size smaller until option flow confirms.',
       reason: `Price trend is ${priceTrend.strength.toLowerCase()} upward while option flow is neutral.`,
@@ -110,7 +111,7 @@ export function summarizeTradeBias(priceTrend: PriceTrendSummary, optionFlow: St
 
   if (priceBearish) {
     return {
-      bias: 'Bearish',
+      bias: Bias.Bearish,
       title: 'Bearish price trend, OI neutral',
       action: 'Cautious short/avoid-long bias until option flow confirms.',
       reason: `Price trend is ${priceTrend.strength.toLowerCase()} downward while option flow is neutral.`,
@@ -118,7 +119,7 @@ export function summarizeTradeBias(priceTrend: PriceTrendSummary, optionFlow: St
   }
 
   return {
-    bias: 'Neutral',
+    bias: Bias.Neutral,
     title: 'Neutral - No clear trade edge',
     action: 'Wait. Price is not directional enough or option flow is mixed.',
     reason: `Price trend is ${priceTrend.direction.toLowerCase()} and option flow is ${optionFlow.bias.toLowerCase()}.`,
@@ -146,13 +147,13 @@ export function readinessScore(items: TradeSetupChecklistItem[]): number {
   return Math.round((score / items.length) * 100);
 }
 
-export function setupReadinessLabel(status: TradeSetupStatus, score: number): string {
-  if (status === 'Avoid') return 'No setup';
+export function setupReadinessLabel(status: TradeSetupStatusId, score: number): string {
+  if (status === TradeSetupStatus.Avoid) return 'No setup';
   return `${score}%`;
 }
 
-export function setupReadinessWidth(status: TradeSetupStatus, score: number): string {
-  if (status === 'Avoid') return '0%';
+export function setupReadinessWidth(status: TradeSetupStatusId, score: number): string {
+  if (status === TradeSetupStatus.Avoid) return '0%';
   return `${score}%`;
 }
 
@@ -250,9 +251,9 @@ export function summarizeOptionMomentum(
     const recentScore = recentMomentumPct !== null && recentMomentumPct >= 8 ? 2 : recentMomentumPct !== null && recentMomentumPct >= 4 ? 1 : 0;
     const oiScore = oiChangePct !== null && oiChangePct >= 8 ? 2 : oiChangePct !== null && oiChangePct >= 0 ? 1 : 0;
     const activityScore = latestVolume > 0 && averageVolume > 0 && latestVolume >= averageVolume * 0.6 ? 1 : 0;
-    const adverseTrend = (optionType === OptionType.CE && priceTrend.direction === 'Downward') ||
-      (optionType === OptionType.PE && priceTrend.direction === 'Upward');
-    const adversePenalty = adverseTrend && priceTrend.strength === 'Strong' ? 3 : adverseTrend ? 1 : 0;
+    const adverseTrend = (optionType === OptionType.CE && priceTrend.direction === Trend.Downward) ||
+      (optionType === OptionType.PE && priceTrend.direction === Trend.Upward);
+    const adversePenalty = adverseTrend && priceTrend.strength === Strength.Strong ? 3 : adverseTrend ? 1 : 0;
     const distanceScore = Math.abs(levels.selectedDistancePct ?? 999) <= 0.8 ? 1 : 0;
     const score = momentumScore + recentScore + oiScore + activityScore + distanceScore - adversePenalty;
     const reason = `${optionType} premium ${formatPct(momentumPct)} since ${formatNumericDate(first.date)}` +
@@ -271,36 +272,36 @@ export function summarizeTradeSetup(
   levels: TradeLevelContext,
   momentum: OptionMomentumSummary,
 ): TradeSetupSummary {
-  const flowBullish = optionFlow.bias === 'Upward';
-  const flowBearish = optionFlow.bias === 'Downward';
-  const priceBullish = priceTrend.direction === 'Upward';
-  const priceBearish = priceTrend.direction === 'Downward';
+  const flowBullish = optionFlow.bias === Trend.Upward;
+  const flowBearish = optionFlow.bias === Trend.Downward;
+  const priceBullish = priceTrend.direction === Trend.Upward;
+  const priceBearish = priceTrend.direction === Trend.Downward;
   const sideMomentumPass = (side: OptionMomentumSide | null) => Boolean(side && side.score >= 4 && side.momentumPct >= 5 &&
     (side.recentMomentumPct === null || side.recentMomentumPct >= 0));
   const sideMomentumWatch = (side: OptionMomentumSide | null) => Boolean(side && side.score >= 3 && side.momentumPct >= 3);
   const ceMomentumPass = sideMomentumPass(momentum.ce);
   const peMomentumPass = sideMomentumPass(momentum.pe);
-  const cePriceSupport = priceTrend.direction !== 'Downward';
-  const pePriceSupport = priceTrend.direction !== 'Upward';
+  const cePriceSupport = priceTrend.direction !== Trend.Downward;
+  const pePriceSupport = priceTrend.direction !== Trend.Upward;
   const expiryPassFor = (side: OptionMomentumSide | null) => side?.daysToExpiry === null || (side?.daysToExpiry !== undefined && side.daysToExpiry >= 3);
   const ceCandidate = Boolean(ceMomentumPass && cePriceSupport && expiryPassFor(momentum.ce) && levels.riskRewardStatus !== HealthStatus.Fail);
   const peCandidate = Boolean(peMomentumPass && pePriceSupport && expiryPassFor(momentum.pe) && levels.riskRewardStatus !== HealthStatus.Fail);
   const selectedSide = ceCandidate ? momentum.ce : peCandidate ? momentum.pe :
     (momentum.ce?.score ?? -Infinity) >= (momentum.pe?.score ?? -Infinity) ? momentum.ce : momentum.pe;
   const directionalFlow = ceCandidate || peCandidate || flowBullish || flowBearish;
-  const direction = ceCandidate ? 'Bullish' : peCandidate ? 'Bearish' : flowBullish ? 'Bullish' : flowBearish ? 'Bearish' : 'Neutral';
+  const direction: DailyBias = ceCandidate ? Bias.Bullish : peCandidate ? Bias.Bearish : flowBullish ? Bias.Bullish : flowBearish ? Bias.Bearish : Bias.Neutral;
   const priceAligned = ceCandidate ? priceBullish : peCandidate ? priceBearish : (flowBullish && priceBullish) || (flowBearish && priceBearish);
   const priceConflicts = ceCandidate ? priceBearish : peCandidate ? priceBullish : (flowBullish && priceBearish) || (flowBearish && priceBullish);
   const recentAligned = ceCandidate
     ? momentum.ce?.recentMomentumPct !== null && momentum.ce?.recentMomentumPct !== undefined && momentum.ce.recentMomentumPct >= 0
     : peCandidate
       ? momentum.pe?.recentMomentumPct !== null && momentum.pe?.recentMomentumPct !== undefined && momentum.pe.recentMomentumPct >= 0
-      : (flowBullish && optionFlow.recentBias === 'Bullish') || (flowBearish && optionFlow.recentBias === 'Bearish');
+      : (flowBullish && optionFlow.recentBias === Bias.Bullish) || (flowBearish && optionFlow.recentBias === Bias.Bearish);
   const recentConflicts = ceCandidate
     ? Boolean(momentum.ce?.recentMomentumPct !== null && momentum.ce?.recentMomentumPct !== undefined && momentum.ce.recentMomentumPct < 0)
     : peCandidate
       ? Boolean(momentum.pe?.recentMomentumPct !== null && momentum.pe?.recentMomentumPct !== undefined && momentum.pe.recentMomentumPct < 0)
-      : (flowBullish && optionFlow.recentBias === 'Bearish') || (flowBearish && optionFlow.recentBias === 'Bullish');
+      : (flowBullish && optionFlow.recentBias === Bias.Bearish) || (flowBearish && optionFlow.recentBias === Bias.Bullish);
   const momentumSide = selectedSide;
   const momentumAvailable = Boolean(momentumSide);
   const momentumPass = ceCandidate || peCandidate || sideMomentumPass(momentumSide);
@@ -314,10 +315,10 @@ export function summarizeTradeSetup(
   const flowStatus: ChecklistStatus = directionalFlow ? HealthStatus.Pass : HealthStatus.Fail;
   const ready = (ceCandidate || peCandidate) && priceAligned && momentumPass && !recentConflicts && levels.locationStatus !== HealthStatus.Fail && expiryPass;
   const watch = directionalFlow && !ready && !priceConflicts && momentumWatch && levels.locationStatus !== HealthStatus.Fail;
-  const status: TradeSetupStatus = ready ? 'Confirmed' : watch ? 'Watch' : 'Avoid';
+  const status: TradeSetupStatusId = ready ? TradeSetupStatus.Confirmed : watch ? TradeSetupStatus.Watch : TradeSetupStatus.Avoid;
   const strikeLabel = selectedStrike.toFixed(0);
-  const sideLabel = direction === 'Bullish' ? 'upside' : direction === 'Bearish' ? 'downside' : 'range';
-  const oppositeLabel = direction === 'Bullish' ? 'below' : direction === 'Bearish' ? 'above' : 'outside';
+  const sideLabel = direction === Bias.Bullish ? 'upside' : direction === Bias.Bearish ? 'downside' : 'range';
+  const oppositeLabel = direction === Bias.Bullish ? 'below' : direction === Bias.Bearish ? 'above' : 'outside';
 
   const checklist: TradeSetupChecklistItem[] = [
     {
@@ -388,29 +389,29 @@ export function summarizeTradeSetup(
     },
   ];
 
-  if (status === 'Confirmed') {
+  if (status === TradeSetupStatus.Confirmed) {
     return {
       status,
       direction,
       title: `${direction} setup confirmed`,
       action: `Option buying ${sideLabel} trade is allowed: nearest-expiry ${momentumSide?.reason ?? 'premium momentum is confirmed'}`,
-      strategy: direction === 'Bullish' ? 'Prefer call debit spread or long futures on pullback.' : 'Prefer put debit spread or short futures on failed bounce.',
-      trigger: direction === 'Bullish' ? `Enter only above/holding ${strikeLabel}; stronger if price clears CE wall ${levels.resistanceStrike ?? '-'}.` : `Enter only below/rejecting ${strikeLabel}; stronger if PE support ${levels.supportStrike ?? '-'} weakens.`,
+      strategy: direction === Bias.Bullish ? 'Prefer call debit spread or long futures on pullback.' : 'Prefer put debit spread or short futures on failed bounce.',
+      trigger: direction === Bias.Bullish ? `Enter only above/holding ${strikeLabel}; stronger if price clears CE wall ${levels.resistanceStrike ?? '-'}.` : `Enter only below/rejecting ${strikeLabel}; stronger if PE support ${levels.supportStrike ?? '-'} weakens.`,
       invalidation: `Exit if price closes back ${oppositeLabel} ${strikeLabel}; also respect VWAP/previous-day levels if live chart provides them.`,
-      target: direction === 'Bullish' ? `Book near next resistance/max-OI zone ${levels.resistanceStrike ?? levels.maxOiStrike ?? '-'}.` : `Book near next support/max-OI zone ${levels.supportStrike ?? levels.maxOiStrike ?? '-'}.`,
+      target: direction === Bias.Bullish ? `Book near next resistance/max-OI zone ${levels.resistanceStrike ?? levels.maxOiStrike ?? '-'}.` : `Book near next support/max-OI zone ${levels.supportStrike ?? levels.maxOiStrike ?? '-'}.`,
       sizing: 'Normal risk only. Keep max loss predefined before entry.',
       checklist,
     };
   }
 
-  if (status === 'Watch') {
+  if (status === TradeSetupStatus.Watch) {
     return {
       status,
       direction,
       title: `${direction} watchlist, not entry yet`,
       action: `Directional bias exists, but nearest-expiry premium momentum is not fully confirmed. Wait for continuation.`,
-      strategy: direction === 'Bullish' ? 'Wait for breakout/hold before call spread.' : 'Wait for breakdown/rejection before put spread.',
-      trigger: direction === 'Bullish' ? `Need price acceptance above ${strikeLabel}, VWAP, or CE resistance ${levels.resistanceStrike ?? '-'}.` : `Need price acceptance below ${strikeLabel}, VWAP, or failed bounce from CE resistance ${levels.resistanceStrike ?? '-'}.`,
+      strategy: direction === Bias.Bullish ? 'Wait for breakout/hold before call spread.' : 'Wait for breakdown/rejection before put spread.',
+      trigger: direction === Bias.Bullish ? `Need price acceptance above ${strikeLabel}, VWAP, or CE resistance ${levels.resistanceStrike ?? '-'}.` : `Need price acceptance below ${strikeLabel}, VWAP, or failed bounce from CE resistance ${levels.resistanceStrike ?? '-'}.`,
       invalidation: 'No trade until invalidation is close and obvious.',
       target: `Plan target around support/resistance/max-OI zones: ${levels.supportStrike ?? '-'} / ${levels.resistanceStrike ?? '-'} / ${levels.maxOiStrike ?? '-'}.`,
       sizing: 'Half size or no trade until confirmation improves.',
@@ -420,7 +421,7 @@ export function summarizeTradeSetup(
 
   return {
     status,
-    direction: 'Neutral',
+    direction: Bias.Neutral,
     title: 'No clean trade setup',
     action: 'Skip fresh option buying entry. Signals are neutral, weak, or conflicting.',
     strategy: 'Avoid naked option buying. If trading, use only clearly defined range strategies.',
@@ -486,9 +487,9 @@ export function summarizePremiumDecay(
     const timeStrength = daysToExpiry !== null && daysToExpiry <= 7 ? 2 : daysToExpiry !== null && daysToExpiry <= 14 ? 1 : 0;
     const activityStrength = latestVolume > 0 && averageVolume > 0 ? 1 : 0;
     const oiStrength = latestOi > 0 && (oiChangePct === null || oiChangePct >= -15) ? 1 : 0;
-    const adverseTrend = (optionType === OptionType.CE && priceTrend.direction === 'Upward') ||
-      (optionType === OptionType.PE && priceTrend.direction === 'Downward');
-    const adversePenalty = adverseTrend && priceTrend.strength === 'Strong' ? 3 : adverseTrend ? 1 : 0;
+    const adverseTrend = (optionType === OptionType.CE && priceTrend.direction === Trend.Upward) ||
+      (optionType === OptionType.PE && priceTrend.direction === Trend.Downward);
+    const adversePenalty = adverseTrend && priceTrend.strength === Strength.Strong ? 3 : adverseTrend ? 1 : 0;
     const distancePctFromSpot = Math.abs(levels.selectedDistancePct ?? 999);
     const distanceStrength = distancePctFromSpot <= 2.5 ? 1 : 0;
     const score = decayStrength + recentDecayStrength + timeStrength + activityStrength + oiStrength + distanceStrength - adversePenalty;
@@ -522,11 +523,11 @@ export function summarizeSellingSetup(
   levels: TradeLevelContext,
   decay: PremiumDecaySummary,
 ): SellingSetupSummary {
-  const flowBearish = optionFlow.bias === 'Downward';
-  const flowBullish = optionFlow.bias === 'Upward';
-  const priceBearish = priceTrend.direction === 'Downward';
-  const priceBullish = priceTrend.direction === 'Upward';
-  const priceSideways = priceTrend.direction === 'Sideways';
+  const flowBearish = optionFlow.bias === Trend.Downward;
+  const flowBullish = optionFlow.bias === Trend.Upward;
+  const priceBearish = priceTrend.direction === Trend.Downward;
+  const priceBullish = priceTrend.direction === Trend.Upward;
+  const priceSideways = priceTrend.direction === Trend.Sideways;
   const hasResistance = levels.resistanceStrike !== null;
   const hasSupport = levels.supportStrike !== null;
   const confidenceOk = optionFlow.confidence >= 55;
@@ -539,34 +540,34 @@ export function summarizeSellingSetup(
     .sort((a, b) => b.score - a.score || a.decayPct - b.decayPct)[0];
   const decayCandidate = decaySide && decaySide.score >= 4 && decaySide.decayPct <= -6 &&
     (decaySide.daysToExpiry === null || decaySide.daysToExpiry <= 21);
-  const type: SellingSetupType = callSellCandidate
-    ? 'Call Sell'
+  const type: SellingSetupId = callSellCandidate
+    ? SellingSetup.CallSell
     : putSellCandidate
-      ? 'Put Sell'
+      ? SellingSetup.PutSell
       : decayCandidate
-        ? decaySide.optionType === OptionType.CE ? 'Call Sell' : 'Put Sell'
+        ? decaySide.optionType === OptionType.CE ? SellingSetup.CallSell : SellingSetup.PutSell
       : rangeSellCandidate
-        ? 'Range Sell'
-        : 'No Sell';
+        ? SellingSetup.RangeSell
+        : SellingSetup.NoSell;
   const decayConfirmed = Boolean(decayCandidate && locationOk && (decaySide!.score >= 5 || levels.riskRewardStatus !== HealthStatus.Fail));
   const decayWatch = Boolean(decayCandidate && !decayConfirmed);
-  const status: TradeSetupStatus = ((callSellCandidate || putSellCandidate) && locationOk && levels.riskRewardStatus !== HealthStatus.Fail) || decayConfirmed
-    ? 'Confirmed'
-    : type !== 'No Sell' || decayWatch
-      ? 'Watch'
-      : 'Avoid';
+  const status: TradeSetupStatusId = ((callSellCandidate || putSellCandidate) && locationOk && levels.riskRewardStatus !== HealthStatus.Fail) || decayConfirmed
+    ? TradeSetupStatus.Confirmed
+    : type !== SellingSetup.NoSell || decayWatch
+      ? TradeSetupStatus.Watch
+      : TradeSetupStatus.Avoid;
   const strikeLabel = selectedStrike.toFixed(0);
   const checklist: TradeSetupChecklistItem[] = [
     {
       label: 'Selling bias',
-      status: type !== 'No Sell' ? HealthStatus.Pass : HealthStatus.Fail,
+      status: type !== SellingSetup.NoSell ? HealthStatus.Pass : HealthStatus.Fail,
       answer: decayCandidate
         ? `${decaySide!.optionType} premium-decay setup: ${decaySide!.reason}`
-        : type === 'Call Sell'
+        : type === SellingSetup.CallSell
         ? 'Bearish/sideways bias supports call selling'
-        : type === 'Put Sell'
+        : type === SellingSetup.PutSell
           ? 'Bullish/sideways bias supports put selling'
-          : type === 'Range Sell'
+          : type === SellingSetup.RangeSell
             ? 'Sideways action supports defined range selling'
             : 'No premium-selling edge detected',
     },
@@ -574,12 +575,12 @@ export function summarizeSellingSetup(
       label: 'OI wall / decay',
       status: decayCandidate
         ? (decaySide!.latestOi > 0 ? HealthStatus.Pass : HealthStatus.Warn)
-        : type === 'Call Sell' ? (hasResistance ? HealthStatus.Pass : HealthStatus.Fail) : type === 'Put Sell' ? (hasSupport ? HealthStatus.Pass : HealthStatus.Fail) : hasSupport && hasResistance ? HealthStatus.Pass : HealthStatus.Warn,
+        : type === SellingSetup.CallSell ? (hasResistance ? HealthStatus.Pass : HealthStatus.Fail) : type === SellingSetup.PutSell ? (hasSupport ? HealthStatus.Pass : HealthStatus.Fail) : hasSupport && hasResistance ? HealthStatus.Pass : HealthStatus.Warn,
       answer: `Support ${levels.supportStrike ?? '-'}, resistance ${levels.resistanceStrike ?? '-'}`,
     },
     {
       label: 'Trend risk',
-      status: (type === 'Call Sell' && priceBullish) || (type === 'Put Sell' && priceBearish) ? HealthStatus.Fail : priceSideways ? HealthStatus.Pass : HealthStatus.Warn,
+      status: (type === SellingSetup.CallSell && priceBullish) || (type === SellingSetup.PutSell && priceBearish) ? HealthStatus.Fail : priceSideways ? HealthStatus.Pass : HealthStatus.Warn,
       answer: `Price trend is ${priceTrend.direction.toLowerCase()}`,
     },
     {
@@ -596,19 +597,19 @@ export function summarizeSellingSetup(
     },
     {
       label: 'Defined risk',
-      status: type !== 'No Sell' ? HealthStatus.Warn : HealthStatus.Fail,
-      answer: type === 'No Sell' ? 'No selling structure suggested' : 'Prefer credit spread, not naked short option',
+      status: type !== SellingSetup.NoSell ? HealthStatus.Warn : HealthStatus.Fail,
+      answer: type === SellingSetup.NoSell ? 'No selling structure suggested' : 'Prefer credit spread, not naked short option',
     },
   ];
 
-  if (type === 'Call Sell') {
+  if (type === SellingSetup.CallSell) {
     const decaySell = decayCandidate && decaySide!.optionType === OptionType.CE;
     return {
       status,
       type,
       title: decaySell
-        ? (status === 'Confirmed' ? 'Call decay sell candidate' : 'Call decay sell watch')
-        : (status === 'Confirmed' ? 'Call sell candidate' : 'Call sell watch'),
+        ? (status === TradeSetupStatus.Confirmed ? 'Call decay sell candidate' : 'Call decay sell watch')
+        : (status === TradeSetupStatus.Confirmed ? 'Call sell candidate' : 'Call sell watch'),
       action: decaySell
         ? `Nearest-expiry CE premium has decayed ${formatPct(decaySide!.decayPct)}. Prefer a defined-risk call spread; do not treat decay as protection from a sudden rally.`
         : 'Selling calls can be considered only near resistance/rejection, not after a large breakdown chase.',
@@ -619,19 +620,19 @@ export function summarizeSellingSetup(
         ? `Exit if spot accepts above ${levels.resistanceStrike ?? strikeLabel}, CE premium reverses sharply, or volume expands with a breakout.`
         : `Exit if price accepts above ${levels.resistanceStrike ?? strikeLabel} or bullish flow expands.`,
       target: decaySell ? 'Cover after another 50-70% premium reduction or before the remaining risk becomes asymmetric.' : 'Cover at 50-70% premium decay or near support/max-OI magnet.',
-      sizing: status === 'Confirmed' ? 'Defined-risk small/normal size; expiry decay has gap risk.' : 'Small size or wait for rejection candle.',
+      sizing: status === TradeSetupStatus.Confirmed ? 'Defined-risk small/normal size; expiry decay has gap risk.' : 'Small size or wait for rejection candle.',
       checklist,
     };
   }
 
-  if (type === 'Put Sell') {
+  if (type === SellingSetup.PutSell) {
     const decaySell = decayCandidate && decaySide!.optionType === OptionType.PE;
     return {
       status,
       type,
       title: decaySell
-        ? (status === 'Confirmed' ? 'Put decay sell candidate' : 'Put decay sell watch')
-        : (status === 'Confirmed' ? 'Put sell candidate' : 'Put sell watch'),
+        ? (status === TradeSetupStatus.Confirmed ? 'Put decay sell candidate' : 'Put decay sell watch')
+        : (status === TradeSetupStatus.Confirmed ? 'Put sell candidate' : 'Put sell watch'),
       action: decaySell
         ? `Nearest-expiry PE premium has decayed ${formatPct(decaySide!.decayPct)}. Prefer a defined-risk put spread; a quiet market can still gap lower.`
         : 'Selling puts can be considered only near support/hold, not into a fresh breakdown.',
@@ -642,12 +643,12 @@ export function summarizeSellingSetup(
         ? `Exit if spot accepts below ${levels.supportStrike ?? strikeLabel}, PE premium reverses sharply, or volume expands with a breakdown.`
         : `Exit if price accepts below ${levels.supportStrike ?? strikeLabel} or bearish flow expands.`,
       target: decaySell ? 'Cover after another 50-70% premium reduction or before the remaining risk becomes asymmetric.' : 'Cover at 50-70% premium decay or near resistance/max-OI magnet.',
-      sizing: status === 'Confirmed' ? 'Defined-risk small/normal size; expiry decay has gap risk.' : 'Small size or wait for support hold.',
+      sizing: status === TradeSetupStatus.Confirmed ? 'Defined-risk small/normal size; expiry decay has gap risk.' : 'Small size or wait for support hold.',
       checklist,
     };
   }
 
-  if (type === 'Range Sell') {
+  if (type === SellingSetup.RangeSell) {
     return {
       status,
       type,
@@ -726,7 +727,7 @@ export function summarizeStrikeBias(
     const dayScore = patternBiasScore(cePattern, OptionType.CE) + patternBiasScore(pePattern, OptionType.PE);
     score += dayScore;
 
-    const dayBias: DailyBias = dayScore > 0 ? 'Bullish' : dayScore < 0 ? 'Bearish' : 'Neutral';
+    const dayBias: DailyBias = dayScore > 0 ? Bias.Bullish : dayScore < 0 ? Bias.Bearish : Bias.Neutral;
     if (dayScore > 0) bullishDays++;
     else if (dayScore < 0) bearishDays++;
     else neutralDays++;
@@ -748,11 +749,11 @@ export function summarizeStrikeBias(
   const totalSignalDays = bullishDays + bearishDays + neutralDays;
   const decisiveDays = bullishDays + bearishDays;
   const confidence = totalSignalDays > 0 ? Math.round((Math.max(bullishDays, bearishDays) / totalSignalDays) * 100) : 0;
-  const bias: StrikeBias = score > 1 ? 'Upward' : score < -1 ? 'Downward' : 'Neutral';
+  const bias: StrikeBias = score > 1 ? Trend.Upward : score < -1 ? Trend.Downward : Trend.Neutral;
   const absScore = Math.abs(score);
-  const strength = bias === 'Neutral'
-    ? decisiveDays > 0 ? 'Mixed' : 'Mild'
-    : absScore >= 8 ? 'Strong' : absScore >= 4 ? 'Moderate' : 'Mild';
+  const strength = bias === Trend.Neutral
+    ? decisiveDays > 0 ? Strength.Mixed : Strength.Mild
+    : absScore >= 8 ? Strength.Strong : absScore >= 4 ? Strength.Moderate : Strength.Mild;
   const ceOiChangePct = first && last ? pctChange(first.ceOi, last.ceOi) : null;
   const peOiChangePct = first && last ? pctChange(first.peOi, last.peOi) : null;
   const pcrStart = first && first.ceOi > 0 ? first.peOi / first.ceOi : null;
@@ -764,7 +765,7 @@ export function summarizeStrikeBias(
     : null;
   const recentDays = dailyBreakdown.slice(-3);
   const recentScore = recentDays.reduce((sum, day) => sum + day.score, 0);
-  const recentBias: DailyBias = recentScore > 1 ? 'Bullish' : recentScore < -1 ? 'Bearish' : 'Neutral';
+  const recentBias: DailyBias = recentScore > 1 ? Bias.Bullish : recentScore < -1 ? Bias.Bearish : Bias.Neutral;
   const driver = ceOiChangePct !== null && peOiChangePct !== null
     ? Math.abs(peOiChangePct) > Math.abs(ceOiChangePct)
       ? `PE OI moved more than CE OI (${formatPct(peOiChangePct)} vs ${formatPct(ceOiChangePct)}).`
@@ -772,19 +773,19 @@ export function summarizeStrikeBias(
         ? `CE OI moved more than PE OI (${formatPct(ceOiChangePct)} vs ${formatPct(peOiChangePct)}).`
         : 'CE and PE OI changed at a similar pace.'
     : 'OI change driver is limited because start OI is missing.';
-  const warning = bias === 'Upward' && recentBias === 'Bearish'
+  const warning = bias === Trend.Upward && recentBias === Bias.Bearish
     ? 'Overall bias is upward, but recent sessions show bearish pressure.'
-    : bias === 'Downward' && recentBias === 'Bullish'
+    : bias === Trend.Downward && recentBias === Bias.Bullish
       ? 'Overall bias is downward, but recent sessions show bullish recovery.'
-      : bias === 'Neutral' && recentBias !== 'Neutral'
+      : bias === Trend.Neutral && recentBias !== Bias.Neutral
         ? `Overall bias is neutral, but recent sessions lean ${recentBias.toLowerCase()}.`
         : null;
   const pcrDirection = pcrStart !== null && pcrEnd !== null
     ? pcrEnd > pcrStart ? 'rising strike PCR' : pcrEnd < pcrStart ? 'falling strike PCR' : 'flat strike PCR'
     : 'limited PCR data';
-  const reason = bias === 'Upward'
+  const reason = bias === Trend.Upward
     ? `Bullish days lead bearish days with ${pcrDirection}.`
-    : bias === 'Downward'
+    : bias === Trend.Downward
       ? `Bearish days lead bullish days with ${pcrDirection}.`
       : `Bullish and bearish activity is balanced with ${pcrDirection}.`;
 
@@ -811,11 +812,34 @@ export function summarizeStrikeBias(
   };
 }
 
+/** Each directional rollover pattern by the premiums' direction: rising (Long), falling (Short), or flat. */
+const ROLLING_OVER: Record<MoveDirectionId, RolloverPatternId> = {
+  [MoveDirection.Up]: RolloverPattern.RollingOverLong,
+  [MoveDirection.Down]: RolloverPattern.RollingOverShort,
+  [MoveDirection.Neutral]: RolloverPattern.RollingOver,
+};
+const FRESH_BUILD: Record<MoveDirectionId, RolloverPatternId> = {
+  [MoveDirection.Up]: RolloverPattern.FreshBuildLong,
+  [MoveDirection.Down]: RolloverPattern.FreshBuildShort,
+  [MoveDirection.Neutral]: RolloverPattern.FreshBuild,
+};
+const DOUBLING_DOWN: Record<MoveDirectionId, RolloverPatternId> = {
+  [MoveDirection.Up]: RolloverPattern.DoublingDownLong,
+  [MoveDirection.Down]: RolloverPattern.DoublingDownShort,
+  [MoveDirection.Neutral]: RolloverPattern.DoublingDown,
+};
+/** Exiting with falling premiums is longs unwinding; with rising ones, shorts covering. */
+const EXITING: Record<MoveDirectionId, RolloverPatternId> = {
+  [MoveDirection.Down]: RolloverPattern.ExitingLongUnwind,
+  [MoveDirection.Up]: RolloverPattern.ExitingShortCover,
+  [MoveDirection.Neutral]: RolloverPattern.Exiting,
+};
+
 /** Classify rollover pattern for a strike+optionType across expiries */
 export function classifyPattern(
   oiByExpiry: Map<string, { oi: number; prevOi: number | undefined; close: number; prevClose: number | undefined }>,
   expiries: string[],
-): RolloverPattern {
+): RolloverPatternId {
   // Single expiry (monthly scrips like BANKNIFTY): use OI + Price signal
   if (expiries.length < 2) {
     // Find the expiry with data
@@ -823,7 +847,7 @@ export function classifyPattern(
     for (const exp of expiries) {
       if (oiByExpiry.has(exp)) { entry = oiByExpiry.get(exp); break; }
     }
-    if (!entry) return '-';
+    if (!entry) return RolloverPattern.None;
     return classifyOptionMove(entry.oi, entry.prevOi, entry.close, entry.prevClose);
   }
 
@@ -832,7 +856,7 @@ export function classifyPattern(
   for (let i = 0; i < expiries.length; i++) {
     if (oiByExpiry.has(expiries[i])) { nearestIdx = i; break; }
   }
-  if (nearestIdx < 0) return '-';
+  if (nearestIdx < 0) return RolloverPattern.None;
 
   const nearest = oiByExpiry.get(expiries[nearestIdx])!;
   const nearestChg = nearest.prevOi !== undefined && nearest.prevOi > 0
@@ -858,40 +882,43 @@ export function classifyPattern(
   const nearFalling = nearestChg < -0.02;
   const nearRising = nearestChg > 0.02;
 
-  // Get price direction for context
+  // Premium direction: rising premiums mean longs, falling ones shorts (or, exiting, the side that is leaving)
   const pDir = priceDirection(oiByExpiry, expiries);
-  const longSuffix = pDir === 'up' ? ' (Long)' : pDir === 'down' ? ' (Short)' : '';
-  const exitSuffix = pDir === 'down' ? ' (Long Unwind)' : pDir === 'up' ? ' (Short Cover)' : '';
 
   // No data on further expiries
   if (farCount === 0) {
-    if (nearFalling) return `Exiting${exitSuffix}` as RolloverPattern;
-    if (nearRising) return `Fresh Build${longSuffix}` as RolloverPattern;
-    return 'Stable';
+    if (nearFalling) return EXITING[pDir];
+    if (nearRising) return FRESH_BUILD[pDir];
+    return RolloverPattern.Stable;
   }
 
   // Classification logic
-  if (nearFalling && anyRising) return `Rolling Over${longSuffix}` as RolloverPattern;
-  if (nearFalling && !anyRising && anyFalling) return 'Unwinding';
-  if (nearFalling && !anyRising) return `Exiting${exitSuffix}` as RolloverPattern;
-  if (nearRising && anyRising) return `Doubling Down${longSuffix}` as RolloverPattern;
-  if (!nearFalling && !nearRising && anyRising) return `Fresh Build${longSuffix}` as RolloverPattern;
-  if (!nearFalling && !nearRising && anyFalling) return 'Unwinding';
-  return 'Stable';
+  if (nearFalling && anyRising) return ROLLING_OVER[pDir];
+  if (nearFalling && !anyRising && anyFalling) return RolloverPattern.Unwinding;
+  if (nearFalling && !anyRising) return EXITING[pDir];
+  if (nearRising && anyRising) return DOUBLING_DOWN[pDir];
+  if (!nearFalling && !nearRising && anyRising) return FRESH_BUILD[pDir];
+  if (!nearFalling && !nearRising && anyFalling) return RolloverPattern.Unwinding;
+  return RolloverPattern.Stable;
 }
 
+/** Rollover patterns that read bullish for the option (green), bearish (red), or a roll (accent). */
+const GREEN_PATTERNS: RolloverPatternId[] = [
+  RolloverPattern.FreshBuildLong, RolloverPattern.FreshBuildShort, RolloverPattern.FreshBuild,
+  RolloverPattern.DoublingDownLong, RolloverPattern.DoublingDownShort, RolloverPattern.DoublingDown,
+  RolloverPattern.LongBuildup, RolloverPattern.ShortCovering,
+];
+const RED_PATTERNS: RolloverPatternId[] = [
+  RolloverPattern.ExitingLongUnwind, RolloverPattern.ExitingShortCover, RolloverPattern.Exiting,
+  RolloverPattern.ShortBuildup, RolloverPattern.LongUnwinding, RolloverPattern.Unwinding,
+];
+const ROLL_PATTERNS: RolloverPatternId[] = [RolloverPattern.RollingOverLong, RolloverPattern.RollingOverShort, RolloverPattern.RollingOver];
+
 /** Color for pattern label */
-export function patternColor(p: RolloverPattern): string {
-  if (p.startsWith('Rolling Over')) return 'var(--accent)';
-  if (p.startsWith('Exiting')) return '#ef4444';
-  if (p.startsWith('Fresh Build')) return '#22c55e';
-  if (p.startsWith('Doubling Down')) return '#22c55e';
-  if (p === 'Long Buildup') return '#22c55e';
-  if (p === 'Short Buildup') return '#ef4444';
-  if (p === 'Long Unwinding') return '#ef4444';
-  if (p === 'Short Covering') return '#22c55e';
-  if (p === 'Unwinding') return '#ef4444';
-  if (p === 'Stable') return 'var(--text-secondary)';
+export function patternColor(p: RolloverPatternId): string {
+  if (ROLL_PATTERNS.includes(p)) return 'var(--accent)';
+  if (RED_PATTERNS.includes(p)) return '#ef4444';
+  if (GREEN_PATTERNS.includes(p)) return '#22c55e';
   return 'var(--text-secondary)';
 }
 

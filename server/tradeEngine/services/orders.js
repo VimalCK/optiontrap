@@ -55,6 +55,9 @@ import { CANCELLED_AT_CLOSE, CANCELLED_BY_USER, canFill, parseOrder } from '../.
 import { quotedFillPrice } from '../fillPrice.js';
 import { OrderStatus, OrderType, Side, TradeSource, oppositeSide } from '../../../shared/tradeEnums.js';
 
+/** This trade engine service's id: its key in ctx.services and on Admin Services. */
+export const ORDERS_SERVICE_ID = 'orders';
+
 export const NO_PRICE = 'NO_PRICE';
 const NOT_OPEN_MESSAGE = 'Order not found or no longer open';
 /** How often, in market hours, the feed is started if orders wait and it isn't running (e.g. no admin login yet). */
@@ -292,7 +295,7 @@ export function createOrderService({
   }
 
   return {
-    id: 'orders',
+    id: ORDERS_SERVICE_ID,
 
     /** Run on the market clock: watch at each open, cancel the session's open orders after each close. */
     start(/** @type {import('../host.js').PluginContext} */ ctx) {

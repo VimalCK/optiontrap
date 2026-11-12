@@ -39,6 +39,7 @@ describe('labels', () => {
     expect(strategyName('option-analyzer-setups', TEST_STRATEGIES)).toBe('Option Analyzer setups');
     expect(strategyName('retired-strategy', TEST_STRATEGIES)).toBe('retired-strategy');
     expect(strategyName(null, TEST_STRATEGIES)).toBe('Unknown');
+    expect(setupName('WallDefense')).toBe('Wall Defense');
     expect(setupName('Bull put')).toBe('Bull put');
     expect(setupName(null)).toBe('Unknown');
   });

@@ -22,14 +22,18 @@
  * score reaches their Min score and its premium their Min premium, so a
  * setup with a tiny premium isn't taken.
  */
-import { atmStrikeOf, averageVolume, buildOptionChain, strikeWindow, upcomingExpiries } from '../../../shared/optionAnalysis/chain.js';
+import { atmStrikeOf, averageVolume, buildOptionChain, optionOf, strikeWindow, upcomingExpiries } from '../../../shared/optionAnalysis/chain.js';
 import { computeBuyRecommendations, computeSellRecommendations } from '../../../shared/optionAnalysis/setups.js';
 import { withSpot } from '../../../shared/optionAnalysis/velocityPattern.js';
 import { daysUntil, marketDate } from '../../../shared/marketTime.js';
 import { getLatestOiSnapshotTimestamp, getTodayOiSnapshots, getUnderlyings } from '../../db.js';
 import { findWorkingAdminSession } from '../../oiHistoryScheduler.js';
 import { getOrFetchInstruments } from '../../instruments.js';
-import { Exchange, InstrumentType, Side, isOptionType } from '../../../shared/tradeEnums.js';
+import { Exchange, InstrumentType, OptionType, ParamType, Side, isOptionType } from '../../../shared/tradeEnums.js';
+import { OptionSetup, setupPatternLabel } from '../../../shared/analysisEnums.js';
+
+/** This strategy's id: stored in users' settings and trade records, so it never changes. */
+export const OPTION_ANALYZER_SETUPS_STRATEGY_ID = 'option-analyzer-setups';
 
 /** How often, in market hours, it looks for a new OI snapshot. */
 const SNAPSHOT_CHECK_MS = 30 * 1000;
@@ -43,13 +47,13 @@ const SNAPSHOT_CHECK_MS = 30 * 1000;
 
 /**
  * The card's single-option setups, by side and option type; straddles and strangles have none.
- * @type {Record<string, { side: import('../../../shared/tradeEnums.js').SideId, optionType: 'ce' | 'pe' }>}
+ * @type {Partial<Record<import('../../../shared/analysisEnums.js').OptionSetupId, { side: import('../../../shared/tradeEnums.js').SideId, optionType: import('../../../shared/tradeEnums.js').OptionTypeId }>>}
  */
 const SINGLE_OPTION_SETUPS = {
-  'sell-ce': { side: Side.SELL, optionType: 'ce' },
-  'sell-pe': { side: Side.SELL, optionType: 'pe' },
-  'buy-ce': { side: Side.BUY, optionType: 'ce' },
-  'buy-pe': { side: Side.BUY, optionType: 'pe' },
+  [OptionSetup.SellCe]: { side: Side.SELL, optionType: OptionType.CE },
+  [OptionSetup.SellPe]: { side: Side.SELL, optionType: OptionType.PE },
+  [OptionSetup.BuyCe]: { side: Side.BUY, optionType: OptionType.CE },
+  [OptionSetup.BuyPe]: { side: Side.BUY, optionType: OptionType.PE },
 };
 
 /** A snapshot's token → number record as a map. */
@@ -84,7 +88,7 @@ export function underlyingSetups(underlying, options, { now, snapshots }) {
   const setups = [];
   for (const suggestion of suggested) {
     const single = SINGLE_OPTION_SETUPS[suggestion.type];
-    const option = single && rows.find((r) => r.strike === suggestion.strikes[0])?.[single.optionType];
+    const option = single && optionOf(rows.find((r) => r.strike === suggestion.strikes[0]), single.optionType);
     if (!option) continue;
     const pop = 'pop' in suggestion ? ` · POP ${Math.round(suggestion.pop)}%` : '';
     setups.push({
@@ -94,7 +98,7 @@ export function underlyingSetups(underlying, options, { now, snapshots }) {
       score: suggestion.score,
       premium: suggestion.premium,
       setup: suggestion.pattern,
-      reason: `${suggestion.pattern} · score ${Math.round(suggestion.score)}${pop} · premium ₹${suggestion.premium.toFixed(2)}`,
+      reason: `${setupPatternLabel(suggestion.pattern)} · score ${Math.round(suggestion.score)}${pop} · premium ₹${suggestion.premium.toFixed(2)}`,
     });
   }
   return setups.sort((a, b) => b.score - a.score);
@@ -117,12 +121,12 @@ export const createOptionAnalyzerSetups = ({
   loadInstruments = getOrFetchInstruments,
   clock = () => new Date(),
 } = {}) => ({
-  id: 'option-analyzer-setups',
+  id: OPTION_ANALYZER_SETUPS_STRATEGY_ID,
   label: 'Option Analyzer setups',
   description: 'Takes the Strategy card\'s best single-option setup for each snapshotted underlying (nearest expiry), after every OI snapshot (every 10 minutes): the highest score among the trades your General settings allow, if it reaches Min score and its premium reaches Min premium. Straddles and strangles are skipped.',
   params: [
-    { key: 'minScore', label: 'Min score (of 100)', type: 'count' },
-    { key: 'minPremium', label: 'Min premium (₹)', type: 'amount' },
+    { key: 'minScore', label: 'Min score (of 100)', type: ParamType.Count },
+    { key: 'minPremium', label: 'Min premium (₹)', type: ParamType.Amount },
   ],
 
   /** Every snapshotted underlying's setups, scored once per run for all users. */

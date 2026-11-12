@@ -25,6 +25,7 @@
 import type { OptionChainRow } from './optionChain';
 import { addDays, marketCloseTime, marketDate } from '../../shared/marketTime.js';
 import { OptionType, type OptionTypeId } from '../../shared/tradeEnums.js';
+import { ForwardSource, OiFlow, type ForwardSourceId, type OiFlowId } from '../../shared/analysisEnums.js';
 
 export const RISK_FREE_RATE = 0.065;
 
@@ -43,15 +44,6 @@ const MIN_OI_MOVE_PCT = 0.005;
 const MIN_HISTORY_CHANGES = 3;
 const HISTORY_WINDOW = 10;
 export const RECENT_SESSIONS = 3;
-
-export type FlowLabel =
-  | 'Buyers Adding'
-  | 'Writers Adding'
-  | 'Buyers Exiting'
-  | 'Writers Covering'
-  | 'Unclear'
-  | 'Stable'
-  | '-';
 
 export interface FlowInput {
   token: number;
@@ -74,7 +66,8 @@ export interface FlowInput {
 }
 
 export interface FlowReading {
-  label: FlowLabel;
+  /** Who moved the OI; OiFlow.None without a previous OI or IV to compare. */
+  flow: OiFlowId;
   iv: number | null;
   prevIv: number | null;
   /** Change in IV, as a decimal (0.01 = 1 vol point). */
@@ -130,8 +123,8 @@ export interface ParityLeg {
 
 export interface ForwardEstimate {
   forward: number;
-  /** 'parity' when implied from CE/PE prices, 'carry' when it fell back to spot × e^(rT). */
-  source: 'parity' | 'carry';
+  /** Parity when implied from CE/PE prices, Carry when it fell back to spot × e^(rT). */
+  source: ForwardSourceId;
   /**
    * Spot to give the Black-Scholes helpers so they price Black-76 on the forward:
    * forward × e^(−rT). It sits below spot by the value of dividends due before expiry.
@@ -147,7 +140,7 @@ export interface ForwardEstimate {
  */
 export function impliedForward(legs: ParityLeg[], spot: number, years: number): ForwardEstimate {
   const growth = Math.exp(RISK_FREE_RATE * years);
-  const carry = { forward: spot * growth, source: 'carry' as const, pricingSpot: spot };
+  const carry: ForwardEstimate = { forward: spot * growth, source: ForwardSource.Carry, pricingSpot: spot };
   if (!(years > 0) || !(spot > 0)) return carry;
 
   const byStrike = new Map<number, { CE?: number; PE?: number }>();
@@ -167,7 +160,7 @@ export function impliedForward(legs: ParityLeg[], spot: number, years: number): 
   const nearest = candidates.sort((x, y) => x.gap - y.gap).slice(0, PARITY_STRIKES).map((c) => c.forward);
   const forward = median(nearest)!;
   if (Math.abs(forward / carry.forward - 1) > MAX_FORWARD_GAP) return carry;
-  return { forward, source: 'parity', pricingSpot: forward / growth };
+  return { forward, source: ForwardSource.Parity, pricingSpot: forward / growth };
 }
 
 /** Standard normal CDF (Abramowitz & Stegun 7.1.26, error < 1.5e-7). */
@@ -239,12 +232,12 @@ function recentShare(oi: number, oiHistory: number[] | undefined): number | null
   return Math.min(1, (oi - base) / oi);
 }
 
-export function classifyFlow(oiMoved: boolean, oiChange: number, relIvChange: number | null): FlowLabel {
-  if (relIvChange === null) return '-';
-  if (!oiMoved) return 'Stable';
-  if (Math.abs(relIvChange) < IV_MOVE_THRESHOLD) return 'Unclear';
-  if (oiChange > 0) return relIvChange > 0 ? 'Buyers Adding' : 'Writers Adding';
-  return relIvChange < 0 ? 'Buyers Exiting' : 'Writers Covering';
+export function classifyFlow(oiMoved: boolean, oiChange: number, relIvChange: number | null): OiFlowId {
+  if (relIvChange === null) return OiFlow.None;
+  if (!oiMoved) return OiFlow.Stable;
+  if (Math.abs(relIvChange) < IV_MOVE_THRESHOLD) return OiFlow.Unclear;
+  if (oiChange > 0) return relIvChange > 0 ? OiFlow.BuyersAdding : OiFlow.WritersAdding;
+  return relIvChange < 0 ? OiFlow.BuyersExiting : OiFlow.WritersCovering;
 }
 
 /** ATM IV change per expiry: the average of the CE and PE nearest to spot that have an IV change. */
@@ -325,7 +318,7 @@ export function computeFlowReadings(inputs: FlowInput[]): Map<number, FlowReadin
     }
 
     readings.set(input.token, {
-      label: oiChange === null ? '-' : classifyFlow(oiMoved, oiChange, relIvChange),
+      flow: oiChange === null ? OiFlow.None : classifyFlow(oiMoved, oiChange, relIvChange),
       iv,
       prevIv,
       ivChange,
@@ -388,9 +381,9 @@ export function computeLiveFlow(
   return computeFlowReadings(inputs);
 }
 
-export function flowColor(label: FlowLabel): string {
-  if (label === 'Buyers Adding' || label === 'Writers Covering') return '#22c55e';
-  if (label === 'Writers Adding' || label === 'Buyers Exiting') return '#ef4444';
+export function flowColor(flow: OiFlowId): string {
+  if (flow === OiFlow.BuyersAdding || flow === OiFlow.WritersCovering) return '#22c55e';
+  if (flow === OiFlow.WritersAdding || flow === OiFlow.BuyersExiting) return '#ef4444';
   return 'var(--text-secondary)';
 }
 

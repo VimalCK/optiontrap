@@ -32,8 +32,8 @@ const row = (rows: ReturnType<typeof summarizeSignalBreakdown>, group: string, l
 
 describe('signalVerdict', () => {
   it('needs enough scored signals', () => {
-    expect(signalVerdict(MIN_SCORED_FOR_VERDICT - 1, 100, 50)).toBe('Too few');
-    expect(signalVerdict(10, null, null)).toBe('Too few');
+    expect(signalVerdict(MIN_SCORED_FOR_VERDICT - 1, 100, 50)).toBe('TooFew');
+    expect(signalVerdict(10, null, null)).toBe('TooFew');
   });
 
   it('grades by win rate and average return together', () => {
@@ -57,7 +57,7 @@ describe('summarizeSignalBreakdown', () => {
     expect(sell.winRate).toBeCloseTo(66.67, 2);
     expect(sell.averageReturn).toBeCloseTo(10);
     expect(sell.averageMaxAdverse).toBeCloseTo((-5 - 5 - 30) / 3);
-    expect(sell.verdict).toBe('Too few');
+    expect(sell.verdict).toBe('TooFew');
   });
 
   it('flags a consistently losing setup', () => {
@@ -88,8 +88,8 @@ describe('summarizeSignalBreakdown', () => {
 
   it('slices by recorded context and skips signals without it', () => {
     const rows = summarizeSignalBreakdown([
-      signal({ details: { priceTrend: { direction: 'Downward' }, decay: { daysToExpiry: 1 }, strikePattern: 'Short Buildup', flowBias: 'Downward', ivFlow: 'Writers Adding' } }),
-      signal({ details: { priceTrend: { direction: 'Upward' }, decay: { daysToExpiry: 5 }, ivFlow: 'Buyers Adding' } }),
+      signal({ details: { priceTrend: { direction: 'Downward' }, decay: { daysToExpiry: 1 }, strikePattern: 'ShortBuildup', flowBias: 'Downward', ivFlow: 'WritersAdding' } }),
+      signal({ details: { priceTrend: { direction: 'Upward' }, decay: { daysToExpiry: 5 }, ivFlow: 'BuyersAdding' } }),
       signal({ details: { decay: { daysToExpiry: 20 } } }),
       signal({ details: null }),
     ]);

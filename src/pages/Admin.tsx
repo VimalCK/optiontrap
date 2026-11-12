@@ -7,28 +7,24 @@ import TabBar from '@/components/TabBar/TabBar';
 import '@/styles/analytics.css'; // reuse the shared tab-bar CSS
 import '@/styles/admin.css';
 
-type AdminTab = 'feedback' | 'users' | 'diagnostics';
-
-const TABS: { id: AdminTab; label: string }[] = [
-  { id: 'feedback', label: 'Feedback' },
-  { id: 'users', label: 'Users' },
-  { id: 'diagnostics', label: 'Diagnostics' },
+const TABS: { id: AdminTabId; label: string }[] = [
+  { id: AdminTab.Feedback, label: 'Feedback' },
+  { id: AdminTab.Users, label: 'Users' },
+  { id: AdminTab.Diagnostics, label: 'Diagnostics' },
 ];
 
-const getTabFromParams = (searchParams: URLSearchParams): AdminTab => {
-  const tab = searchParams.get('tab');
-  return TABS.some((t) => t.id === tab) ? (tab as AdminTab) : 'feedback';
-};
+const getTabFromParams = (searchParams: URLSearchParams): AdminTabId =>
+  enumFromParam(AdminTab, searchParams.get('tab'), AdminTab.Feedback);
 
 const Admin: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [tab, setTab] = useState<AdminTab>(() => getTabFromParams(searchParams));
+  const [tab, setTab] = useState<AdminTabId>(() => getTabFromParams(searchParams));
 
   useEffect(() => {
     setTab(getTabFromParams(searchParams));
   }, [searchParams]);
 
-  const handleTabChange = (nextTab: AdminTab) => {
+  const handleTabChange = (nextTab: AdminTabId) => {
     setTab(nextTab);
     setSearchParams({ tab: nextTab });
   };
@@ -44,11 +40,13 @@ const Admin: React.FC = () => {
         ariaLabel="Admin sections"
       />
 
-      {tab === 'feedback' && <AdminFeedback />}
-      {tab === 'users' && <AdminUsers />}
-      {tab === 'diagnostics' && <Health />}
+      {tab === AdminTab.Feedback && <AdminFeedback />}
+      {tab === AdminTab.Users && <AdminUsers />}
+      {tab === AdminTab.Diagnostics && <Health />}
     </div>
   );
 };
 
 export default Admin;
+
+import { AdminTab, enumFromParam, type AdminTabId } from '@/utils/uiEnums';

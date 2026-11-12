@@ -1,35 +1,36 @@
 import React from 'react';
 import { InfoGuide, GuideGrid, GuideSection, GuideRows, GuideTerms, type GuideRow, type GuideTerm } from '@/components/InfoGuide/InfoGuide';
+import { GuideTone } from '@/utils/uiEnums';
 
 const STATES: GuideRow[] = [
-  { label: 'Falling', tone: 'bear', rule: 'New 20d low · or < 50d avg', meaning: 'Still going down. Don’t catch it: wait for it to stop.' },
-  { label: 'Stretched', tone: 'warn', rule: 'New low · 2+ ATR under 20d avg · or RSI < 30', meaning: 'Fell too far too fast. A bounce is likely, but the fall can resume.' },
-  { label: 'Turning', tone: 'accent', rule: 'Was falling · no new low · close > prev high', meaning: 'First sign the fall is pausing.' },
-  { label: 'Uptrend', tone: 'bull', rule: '> 50d avg · 20d avg > 50d avg', meaning: 'Healthy trend. Buy the dips to support.' },
-  { label: 'Sideways', tone: 'muted', rule: 'None of the above', meaning: 'No clear direction.' },
+  { label: 'Falling', tone: GuideTone.Bear, rule: 'New 20d low · or < 50d avg', meaning: 'Still going down. Don’t catch it: wait for it to stop.' },
+  { label: 'Stretched', tone: GuideTone.Warn, rule: 'New low · 2+ ATR under 20d avg · or RSI < 30', meaning: 'Fell too far too fast. A bounce is likely, but the fall can resume.' },
+  { label: 'Turning', tone: GuideTone.Accent, rule: 'Was falling · no new low · close > prev high', meaning: 'First sign the fall is pausing.' },
+  { label: 'Uptrend', tone: GuideTone.Bull, rule: '> 50d avg · 20d avg > 50d avg', meaning: 'Healthy trend. Buy the dips to support.' },
+  { label: 'Sideways', tone: GuideTone.Muted, rule: 'None of the above', meaning: 'No clear direction.' },
 ];
 
 const SETUPS: GuideRow[] = [
-  { label: 'Pullback', tone: 'bull', rule: '> 200d avg · dip into support · close in upper half', meaning: 'Buy: buyers defended support in an uptrend.' },
-  { label: 'Reversal', tone: 'bull', rule: 'Turning · recent low at support', meaning: 'Buy: a falling stock found a floor.' },
-  { label: 'Breakout', tone: 'bull', rule: 'Close above a zone · volume ≥ 1.5× avg', meaning: 'Buy: the ceiling gave way.' },
-  { label: 'Rejection', tone: 'bear', rule: '< 50d avg · into resistance · red candle', meaning: 'Exit: sellers pushed it back.' },
-  { label: 'Breakdown', tone: 'bear', rule: 'Close below a zone · volume ≥ 1.5× avg', meaning: 'Exit: the floor gave way.' },
+  { label: 'Pullback', tone: GuideTone.Bull, rule: '> 200d avg · dip into support · close in upper half', meaning: 'Buy: buyers defended support in an uptrend.' },
+  { label: 'Reversal', tone: GuideTone.Bull, rule: 'Turning · recent low at support', meaning: 'Buy: a falling stock found a floor.' },
+  { label: 'Breakout', tone: GuideTone.Bull, rule: 'Close above a zone · volume ≥ 1.5× avg', meaning: 'Buy: the ceiling gave way.' },
+  { label: 'Rejection', tone: GuideTone.Bear, rule: '< 50d avg · into resistance · red candle', meaning: 'Exit: sellers pushed it back.' },
+  { label: 'Breakdown', tone: GuideTone.Bear, rule: 'Close below a zone · volume ≥ 1.5× avg', meaning: 'Exit: the floor gave way.' },
 ];
 
 const MARKET: GuideRow[] = [
-  { label: 'Falling on its own', tone: 'bear', rule: 'Stock ≤ −3% · 3%+ worse than the index', meaning: 'Company-specific selling. Riskiest to buy.' },
-  { label: 'Falling with market', tone: 'warn', rule: 'Stock down · index ≤ −3%', meaning: 'Usually recovers when the market does.' },
-  { label: 'Stronger than market', tone: 'bull', rule: '3%+ better than the index', meaning: 'Relative strength: buyers favour it.' },
-  { label: 'In line', tone: 'muted', rule: 'Otherwise', meaning: 'Moving with the index.' },
+  { label: 'Falling on its own', tone: GuideTone.Bear, rule: 'Stock ≤ −3% · 3%+ worse than the index', meaning: 'Company-specific selling. Riskiest to buy.' },
+  { label: 'Falling with market', tone: GuideTone.Warn, rule: 'Stock down · index ≤ −3%', meaning: 'Usually recovers when the market does.' },
+  { label: 'Stronger than market', tone: GuideTone.Bull, rule: '3%+ better than the index', meaning: 'Relative strength: buyers favour it.' },
+  { label: 'In line', tone: GuideTone.Muted, rule: 'Otherwise', meaning: 'Moving with the index.' },
 ];
 
 const STRENGTH: GuideRow[] = [
-  { label: 'High-volume area', tone: 'violet', rule: '1.5 pts (top 3) · 1 pt', meaning: 'Where far more shares traded than usual in the last ~6 months. Holders defend their buy price.' },
-  { label: 'Swing low / high', tone: 'accent', rule: '1 pt (last 3 mo) · 0.7 pt', meaning: 'A day whose low (high) beat the 3 days on each side: a point where the price turned.' },
-  { label: '200-day average', tone: 'plain', rule: '1 pt', meaning: 'Long-term trend line (~10 months).' },
-  { label: '50-day average', tone: 'plain', rule: '0.75 pt', meaning: 'Medium-term trend line (~2½ months).' },
-  { label: 'Round number', tone: 'muted', rule: '0.5 pt', meaning: '₹300, ₹350, ₹700… where orders cluster. Never a zone on its own.' },
+  { label: 'High-volume area', tone: GuideTone.Violet, rule: '1.5 pts (top 3) · 1 pt', meaning: 'Where far more shares traded than usual in the last ~6 months. Holders defend their buy price.' },
+  { label: 'Swing low / high', tone: GuideTone.Accent, rule: '1 pt (last 3 mo) · 0.7 pt', meaning: 'A day whose low (high) beat the 3 days on each side: a point where the price turned.' },
+  { label: '200-day average', tone: GuideTone.Plain, rule: '1 pt', meaning: 'Long-term trend line (~10 months).' },
+  { label: '50-day average', tone: GuideTone.Plain, rule: '0.75 pt', meaning: 'Medium-term trend line (~2½ months).' },
+  { label: 'Round number', tone: GuideTone.Muted, rule: '0.5 pt', meaning: '₹300, ₹350, ₹700… where orders cluster. Never a zone on its own.' },
 ];
 
 const HISTORY: GuideTerm[] = [

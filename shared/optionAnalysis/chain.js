@@ -4,7 +4,7 @@
  * look at the same strikes: the chain of one expiry, ATM as the strike
  * closest to spot, and the ±15 strikes around it that the analyzer shows.
  */
-import { InstrumentType } from '../tradeEnums.js';
+import { InstrumentType, OptionType } from '../tradeEnums.js';
 
 /**
  * The fields of an option the analysis reads; the browser's and the
@@ -20,6 +20,15 @@ import { InstrumentType } from '../tradeEnums.js';
 
 /** Strikes shown either side of ATM in the analyzer. */
 export const STRIKES_EACH_SIDE = 15;
+
+/**
+ * A chain row's call or put, by option type.
+ * @template T
+ * @param {{ ce: T | null, pe: T | null } | undefined} row
+ * @param {import('../tradeEnums.js').OptionTypeId} optionType
+ * @returns {T | null | undefined}
+ */
+export const optionOf = (row, optionType) => (optionType === OptionType.CE ? row?.ce : row?.pe);
 
 /**
  * Expiries on or after `today` (YYYY-MM-DD, market date), soonest first.

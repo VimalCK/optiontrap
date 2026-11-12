@@ -5,6 +5,7 @@ import {
 } from '@/components/icons/Icons';
 import { formatCalendarDate, istDateString, istTimeLabel } from '@/utils/marketStatus';
 import { HealthStatus } from '../../shared/appEnums.js';
+import { HealthTone, type HealthToneId } from '@/utils/uiEnums';
 import '@/styles/admin.css';
 
 /** How long ago, roughly: "just now", "12m ago", "3h ago", "2d ago". */
@@ -26,10 +27,10 @@ const formatUptime = (seconds: number) => {
 };
 
 /** The badge look and word for each health check status. */
-const CHECK_BADGES: Record<HealthCheck['status'], { tone: string; label: string }> = {
-  [HealthStatus.Pass]: { tone: 'up', label: 'OK' },
-  [HealthStatus.Warn]: { tone: 'warn', label: 'Warning' },
-  [HealthStatus.Fail]: { tone: 'down', label: 'Failing' },
+const CHECK_BADGES: Record<HealthCheck['status'], { tone: HealthToneId; label: string }> = {
+  [HealthStatus.Pass]: { tone: HealthTone.Up, label: 'OK' },
+  [HealthStatus.Warn]: { tone: HealthTone.Warn, label: 'Warning' },
+  [HealthStatus.Fail]: { tone: HealthTone.Down, label: 'Failing' },
 };
 
 /** When a check was observed, in IST: the time today, with the date on other days. */
@@ -63,7 +64,7 @@ export const HealthCheckRow: React.FC<{ icon: React.ReactNode; name: string; che
         <strong>{name}</strong>
         <small>{check.time ? `${check.output} · ${checkTimeLabel(check.time)}` : check.output}</small>
       </div>
-      <span className={`hx-badge hx-badge--${badge.tone}`}><i />{badge.label}</span>
+      <span className={`hx-badge hx-badge--${badge.tone.toLowerCase()}`}><i />{badge.label}</span>
     </div>
   );
 };
@@ -112,7 +113,7 @@ const Health: React.FC = () => {
       {error && <div className="admin-error">{error}</div>}
 
       {/* Overall status hero */}
-      <div className={`hx-hero hx-hero--${healthy ? 'up' : 'down'}`}>
+      <div className={`hx-hero hx-hero--${(healthy ? HealthTone.Up : HealthTone.Down).toLowerCase()}`}>
         <div className="hx-hero__pulse"><span /></div>
         <div className="hx-hero__text">
           <h2>{healthy ? 'All systems operational' : 'Service disruption'}</h2>
@@ -139,7 +140,7 @@ const Health: React.FC = () => {
               <strong>Database</strong>
               <small>PostgreSQL connection</small>
             </div>
-            <span className={`hx-badge hx-badge--${health.db.connected ? 'up' : 'down'}`}>
+            <span className={`hx-badge hx-badge--${(health.db.connected ? HealthTone.Up : HealthTone.Down).toLowerCase()}`}>
               <i />{health.db.connected ? 'Connected' : 'Down'}
             </span>
           </div>
@@ -159,7 +160,7 @@ const Health: React.FC = () => {
               <strong>Kite Session</strong>
               <small>{health.kite.connected ? (health.kite.userName || health.kite.userId || 'Connected') : 'No live broker session'}</small>
             </div>
-            <span className={`hx-badge hx-badge--${health.kite.connected ? 'up' : 'idle'}`}>
+            <span className={`hx-badge hx-badge--${(health.kite.connected ? HealthTone.Up : HealthTone.Idle).toLowerCase()}`}>
               <i />{health.kite.connected ? 'Active' : 'Offline'}
             </span>
           </div>
@@ -170,7 +171,7 @@ const Health: React.FC = () => {
               <strong>OI Data Feed</strong>
               <small>{oiFeed.text}</small>
             </div>
-            <span className={`hx-badge hx-badge--${oiFeed.fresh ? 'up' : 'idle'}`}>
+            <span className={`hx-badge hx-badge--${(oiFeed.fresh ? HealthTone.Up : HealthTone.Idle).toLowerCase()}`}>
               <i />{oiFeed.fresh ? 'Fresh' : 'Idle'}
             </span>
           </div>

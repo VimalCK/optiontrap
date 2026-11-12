@@ -8,7 +8,7 @@
 import { LIFECYCLE_STAGES } from '../../../shared/automation.js';
 import { marketDate } from '../../../shared/marketTime.js';
 import { paperPnl } from '../../../shared/paperPnl.js';
-import type { BadgeTone } from '@/components/Badge/Badge';
+import { Tone, type ToneId } from '@/utils/uiEnums';
 import type { AutoTrade, AutoTradeEvent } from '@/services/automation';
 import type { StrategyInfo } from '@/services/strategies';
 import { formatAmount } from '@/utils/formatAmount';
@@ -17,18 +17,18 @@ import { LifecycleStage, Side } from '../../../shared/tradeEnums.js';
 type Stage = AutoTrade['stage'];
 
 /** Each stage's badge tone: in-progress stages in the accent, a rejection red, a finished trade grey. */
-const STAGE_TONES: Record<Stage, BadgeTone> = {
-  [LifecycleStage.Selected]: 'neutral',
-  [LifecycleStage.Validated]: 'accent',
-  [LifecycleStage.Executed]: 'accent',
-  [LifecycleStage.Rejected]: 'negative',
-  [LifecycleStage.Closed]: 'neutral',
+const STAGE_TONES: Record<Stage, ToneId> = {
+  [LifecycleStage.Selected]: Tone.Neutral,
+  [LifecycleStage.Validated]: Tone.Accent,
+  [LifecycleStage.Executed]: Tone.Accent,
+  [LifecycleStage.Rejected]: Tone.Negative,
+  [LifecycleStage.Closed]: Tone.Neutral,
 };
 
-export const stageTone = (stage: Stage): BadgeTone => STAGE_TONES[stage];
+export const stageTone = (stage: Stage): ToneId => STAGE_TONES[stage];
 
 /** A lifecycle step's tone in the timeline: every step green, a rejection red. */
-export const stepTone = (stage: Stage): BadgeTone => (stage === LifecycleStage.Rejected ? 'negative' : 'positive');
+export const stepTone = (stage: Stage): ToneId => (stage === LifecycleStage.Rejected ? Tone.Negative : Tone.Positive);
 
 /** An open position (executed, not yet closed) shows a live dot. */
 export const stageIsLive = (stage: Stage): boolean => stage === LifecycleStage.Executed;
@@ -38,7 +38,7 @@ export const stageLabel = (stage: string): string => LIFECYCLE_STAGES.find((s) =
 /** How long the trade is meant to be held, e.g. "Intraday" (shared/tradeEnums.js). */
 export { horizonLabel } from '../../../shared/tradeEnums.js';
 
-export const sideTone = (side: AutoTrade['side']): BadgeTone => (side === Side.BUY ? 'positive' : 'negative');
+export const sideTone = (side: AutoTrade['side']): ToneId => (side === Side.BUY ? Tone.Positive : Tone.Negative);
 
 /** A side's label, e.g. "Buy" (shared/tradeEnums.js). */
 export { sideLabel } from '../../../shared/tradeEnums.js';

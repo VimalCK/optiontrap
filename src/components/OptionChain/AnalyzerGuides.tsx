@@ -1,17 +1,19 @@
 import React from 'react';
 import { InfoGuide, GuideGrid, GuideSection, GuideRows, GuideTerms, GuideNote, type GuideRow, type GuideTerm } from '@/components/InfoGuide/InfoGuide';
 import { IV_FLOW_ROWS } from '@/components/OiHistory/PatternGuide';
+import { OiFlow, oiFlowLabel } from '../../../shared/analysisEnums.js';
+import { GuideTone } from '@/utils/uiEnums';
 
 const OI_PRICE_ROWS: GuideRow[] = [
-  { label: 'Long Buildup', tone: 'bull', rule: 'OI ↑ · Price ↑', meaning: 'New buyers entering (bullish for the option).' },
-  { label: 'Short Buildup', tone: 'bear', rule: 'OI ↑ · Price ↓', meaning: 'New sellers entering (bearish for the option).' },
-  { label: 'Long Unwinding', tone: 'bear', rule: 'OI ↓ · Price ↓', meaning: 'Buyers exiting, giving up.' },
-  { label: 'Short Covering', tone: 'bull', rule: 'OI ↓ · Price ↑', meaning: 'Sellers exiting, bears retreating.' },
+  { label: 'Long Buildup', tone: GuideTone.Bull, rule: 'OI ↑ · Price ↑', meaning: 'New buyers entering (bullish for the option).' },
+  { label: 'Short Buildup', tone: GuideTone.Bear, rule: 'OI ↑ · Price ↓', meaning: 'New sellers entering (bearish for the option).' },
+  { label: 'Long Unwinding', tone: GuideTone.Bear, rule: 'OI ↓ · Price ↓', meaning: 'Buyers exiting, giving up.' },
+  { label: 'Short Covering', tone: GuideTone.Bull, rule: 'OI ↓ · Price ↑', meaning: 'Sellers exiting, bears retreating.' },
 ];
 
 /** Live IV flow uses the flat 2% OI rule: there is no daily history on this screen. */
 const LIVE_IV_FLOW_ROWS: GuideRow[] = IV_FLOW_ROWS.map((row) =>
-  row.label === 'Stable' ? { ...row, meaning: 'OI change under 2% since yesterday’s close.' } : row,
+  row.label === oiFlowLabel(OiFlow.Stable) ? { ...row, meaning: 'OI change under 2% since yesterday’s close.' } : row,
 );
 
 const PRICE_CAVEAT = (
@@ -22,10 +24,10 @@ const PRICE_CAVEAT = (
 );
 
 const SCORE_SCALE: GuideRow[] = [
-  { label: '0–30', tone: 'bear', meaning: 'Weak' },
-  { label: '30–60', tone: 'warn', meaning: 'Moderate' },
-  { label: '60–80', tone: 'bull', meaning: 'Strong' },
-  { label: '80–100', tone: 'bull', meaning: 'Very strong' },
+  { label: '0–30', tone: GuideTone.Bear, meaning: 'Weak' },
+  { label: '30–60', tone: GuideTone.Warn, meaning: 'Moderate' },
+  { label: '60–80', tone: GuideTone.Bull, meaning: 'Strong' },
+  { label: '80–100', tone: GuideTone.Bull, meaning: 'Very strong' },
 ];
 
 /** ⓘ panel for the OI bar chart. */
@@ -40,11 +42,11 @@ export const OiChartGuide: React.FC = () => {
     { term: 'Shaded zone', meaning: 'Expected range from the ATM straddle; walls outside it are stronger' },
   ];
   const heatmap: GuideRow[] = [
-    { label: 'Bullish', tone: 'bull', meaning: 'CE buyers + PE sellers' },
-    { label: 'Bearish', tone: 'bear', meaning: 'CE sellers + PE buyers' },
-    { label: 'Pinning / Range', tone: 'warn', meaning: 'Sellers on both sides' },
-    { label: 'Volatility / Breakout', tone: 'violet', meaning: 'Buyers on both sides, or sellers exiting' },
-    { label: 'Mixed', tone: 'muted', meaning: 'De-risking or conflicting signals' },
+    { label: 'Bullish', tone: GuideTone.Bull, meaning: 'CE buyers + PE sellers' },
+    { label: 'Bearish', tone: GuideTone.Bear, meaning: 'CE sellers + PE buyers' },
+    { label: 'Pinning / Range', tone: GuideTone.Warn, meaning: 'Sellers on both sides' },
+    { label: 'Volatility / Breakout', tone: GuideTone.Violet, meaning: 'Buyers on both sides, or sellers exiting' },
+    { label: 'Mixed', tone: GuideTone.Muted, meaning: 'De-risking or conflicting signals' },
   ];
   const tooltip: GuideTerm[] = [
     { term: 'Header', meaning: 'Strike, ATM tag and the strike’s put/call ratio (PCR)' },
@@ -56,14 +58,14 @@ export const OiChartGuide: React.FC = () => {
     { term: 'Sell PE / Sell CE', meaning: 'Paper position at the current LTP' },
   ];
   const trends: GuideRow[] = [
-    { label: 'Accelerating Buildup', tone: 'bull', meaning: 'OI growing and speeding up' },
-    { label: 'Steady Buildup', tone: 'bull', meaning: 'OI growing at a steady pace' },
-    { label: 'Slowing Buildup', tone: 'bull', meaning: 'Still growing, momentum fading' },
-    { label: 'Accelerating Unwind', tone: 'bear', meaning: 'OI falling and speeding up' },
-    { label: 'Steady Unwind', tone: 'bear', meaning: 'OI falling at a steady pace' },
-    { label: 'Slowing Unwind', tone: 'bear', meaning: 'Falling, momentum fading (possible reversal)' },
-    { label: 'Volatile', tone: 'muted', meaning: 'OI alternating with no clear trend' },
-    { label: 'Stable', tone: 'muted', meaning: 'OI barely moved all day' },
+    { label: 'Accelerating Buildup', tone: GuideTone.Bull, meaning: 'OI growing and speeding up' },
+    { label: 'Steady Buildup', tone: GuideTone.Bull, meaning: 'OI growing at a steady pace' },
+    { label: 'Slowing Buildup', tone: GuideTone.Bull, meaning: 'Still growing, momentum fading' },
+    { label: 'Accelerating Unwind', tone: GuideTone.Bear, meaning: 'OI falling and speeding up' },
+    { label: 'Steady Unwind', tone: GuideTone.Bear, meaning: 'OI falling at a steady pace' },
+    { label: 'Slowing Unwind', tone: GuideTone.Bear, meaning: 'Falling, momentum fading (possible reversal)' },
+    { label: 'Volatile', tone: GuideTone.Muted, meaning: 'OI alternating with no clear trend' },
+    { label: 'Stable', tone: GuideTone.Muted, meaning: 'OI barely moved all day' },
   ];
   const takeaways: GuideTerm[] = [
     { term: 'Tallest CE bar', meaning: 'Strongest resistance: call writers defending it' },
@@ -111,11 +113,11 @@ export const SellStrategyGuide: React.FC = () => (
     <GuideGrid>
       <GuideSection title="Scoring factors" subtitle="Total 0–100" wide>
         <GuideRows rows={[
-          { label: 'Pinning', tone: 'plain', rule: '0–25', meaning: 'Spot near max pain with balanced PCR: sellers defend both sides.' },
-          { label: 'OI Wall', tone: 'plain', rule: '0–25', meaning: 'Heavy OI wall at the strike with fresh short buildup (OI + Price). Volume-backed walls score higher.' },
-          { label: 'Velocity', tone: 'plain', rule: '0–20', meaning: 'OI building through the day. Volume-confirmed buildup scores higher.' },
-          { label: 'PCR Extreme', tone: 'plain', rule: '0–15', meaning: 'Sustained extreme PCR on the sell side: low for calls, high for puts.' },
-          { label: 'Theta Decay', tone: 'plain', rule: '0–15', meaning: 'Closer to expiry, more decay working for sellers.' },
+          { label: 'Pinning', tone: GuideTone.Plain, rule: '0–25', meaning: 'Spot near max pain with balanced PCR: sellers defend both sides.' },
+          { label: 'OI Wall', tone: GuideTone.Plain, rule: '0–25', meaning: 'Heavy OI wall at the strike with fresh short buildup (OI + Price). Volume-backed walls score higher.' },
+          { label: 'Velocity', tone: GuideTone.Plain, rule: '0–20', meaning: 'OI building through the day. Volume-confirmed buildup scores higher.' },
+          { label: 'PCR Extreme', tone: GuideTone.Plain, rule: '0–15', meaning: 'Sustained extreme PCR on the sell side: low for calls, high for puts.' },
+          { label: 'Theta Decay', tone: GuideTone.Plain, rule: '0–15', meaning: 'Closer to expiry, more decay working for sellers.' },
         ]} />
       </GuideSection>
       <GuideSection title="Recommendations" subtitle="What gets suggested">
@@ -143,11 +145,11 @@ export const BuyStrategyGuide: React.FC = () => (
     <GuideGrid>
       <GuideSection title="Scoring factors" subtitle="Total 0–100" wide>
         <GuideRows rows={[
-          { label: 'Breakout', tone: 'plain', rule: '0–25', meaning: 'OI walls weakening. Breakouts on surging volume score higher; thin volume may be fake.' },
-          { label: 'Directional OI', tone: 'plain', rule: '0–25', meaning: 'Sustained Long Buildup (OI + Price) across nearby strikes.' },
-          { label: 'Momentum', tone: 'plain', rule: '0–20', meaning: 'Velocity accelerating on the buy side while the other side unwinds.' },
-          { label: 'PCR Shift', tone: 'plain', rule: '0–15', meaning: 'PCR trending your way: rising for CE, falling for PE.' },
-          { label: 'Risk / Reward', tone: 'plain', rule: '0–15', meaning: 'Distance vs expected move and premium. Near ATM with a low breakeven is best.' },
+          { label: 'Breakout', tone: GuideTone.Plain, rule: '0–25', meaning: 'OI walls weakening. Breakouts on surging volume score higher; thin volume may be fake.' },
+          { label: 'Directional OI', tone: GuideTone.Plain, rule: '0–25', meaning: 'Sustained Long Buildup (OI + Price) across nearby strikes.' },
+          { label: 'Momentum', tone: GuideTone.Plain, rule: '0–20', meaning: 'Velocity accelerating on the buy side while the other side unwinds.' },
+          { label: 'PCR Shift', tone: GuideTone.Plain, rule: '0–15', meaning: 'PCR trending your way: rising for CE, falling for PE.' },
+          { label: 'Risk / Reward', tone: GuideTone.Plain, rule: '0–15', meaning: 'Distance vs expected move and premium. Near ATM with a low breakeven is best.' },
         ]} />
       </GuideSection>
       <GuideSection title="Recommendations" subtitle="What gets suggested">
@@ -195,18 +197,18 @@ export const PositionAnalyzerGuide: React.FC = () => (
       </GuideSection>
       <GuideSection title="Trap score" subtitle="Points against your position (max 9)">
         <GuideRows rows={[
-          { label: 'Max Pain', tone: 'plain', rule: '+2', meaning: 'Strike on the wrong side of max pain' },
-          { label: 'OI Wall', tone: 'plain', rule: '+2', meaning: 'Heavy wall blocking your direction' },
-          { label: 'OI Signal', tone: 'plain', rule: '+2', meaning: 'Activity against your position' },
-          { label: 'PCR', tone: 'plain', rule: '+1', meaning: 'PCR skewed against you' },
-          { label: 'Time', tone: 'plain', rule: '+1 / +2', meaning: 'Within 3 days of expiry / expiry day' },
+          { label: 'Max Pain', tone: GuideTone.Plain, rule: '+2', meaning: 'Strike on the wrong side of max pain' },
+          { label: 'OI Wall', tone: GuideTone.Plain, rule: '+2', meaning: 'Heavy wall blocking your direction' },
+          { label: 'OI Signal', tone: GuideTone.Plain, rule: '+2', meaning: 'Activity against your position' },
+          { label: 'PCR', tone: GuideTone.Plain, rule: '+1', meaning: 'PCR skewed against you' },
+          { label: 'Time', tone: GuideTone.Plain, rule: '+1 / +2', meaning: 'Within 3 days of expiry / expiry day' },
         ]} />
       </GuideSection>
       <GuideSection title="Verdict" subtitle="From the trap score">
         <GuideRows rows={[
-          { label: 'Safe', tone: 'bull', rule: '0–1', meaning: 'Nothing significant against you' },
-          { label: 'Caution', tone: 'warn', rule: '2–3', meaning: 'Some risk, not conclusive' },
-          { label: 'Likely Trapped', tone: 'bear', rule: '4+', meaning: 'Several strong signals against you' },
+          { label: 'Safe', tone: GuideTone.Bull, rule: '0–1', meaning: 'Nothing significant against you' },
+          { label: 'Caution', tone: GuideTone.Warn, rule: '2–3', meaning: 'Some risk, not conclusive' },
+          { label: 'Likely Trapped', tone: GuideTone.Bear, rule: '4+', meaning: 'Several strong signals against you' },
         ]} />
       </GuideSection>
     </GuideGrid>

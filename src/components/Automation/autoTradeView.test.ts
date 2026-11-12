@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest';
 import type { AutoTrade } from '@/services/automation';
 import { TEST_STRATEGIES } from '@/services/strategies.fixture';
 import { closedPnl, eventSummary, horizonLabel, sideTone, stageIsLive, stageTone, stepTone, tradesByDay } from './autoTradeView';
-import { Horizon } from '../../../shared/tradeEnums.js';
+import { Horizon, LifecycleStage, Side } from '../../../shared/tradeEnums.js';
+import { Tone } from '@/utils/uiEnums';
 
 const at = '2026-11-06T07:00:29.000Z'; // Fri 12:30 IST
 const selected = { stage: 'Selected' as const, at, detail: { strategyId: 'option-analyzer-setups', reason: 'Wall Defense · score 62 · POP 54%' } };
@@ -46,21 +47,21 @@ describe('tradesByDay', () => {
 
 describe('tones', () => {
   it('shows buys green and sells red', () => {
-    expect(sideTone('BUY')).toBe('positive');
-    expect(sideTone('SELL')).toBe('negative');
+    expect(sideTone(Side.BUY)).toBe(Tone.Positive);
+    expect(sideTone(Side.SELL)).toBe(Tone.Negative);
   });
 
   it('shows rejections red, trades in progress in the accent, and only an open position as live', () => {
-    expect(stageTone('Rejected')).toBe('negative');
-    expect(stageTone('Executed')).toBe('accent');
-    expect(stageTone('Closed')).toBe('neutral');
+    expect(stageTone(LifecycleStage.Rejected)).toBe(Tone.Negative);
+    expect(stageTone(LifecycleStage.Executed)).toBe(Tone.Accent);
+    expect(stageTone(LifecycleStage.Closed)).toBe(Tone.Neutral);
     expect(stageIsLive('Executed')).toBe(true);
     expect(stageIsLive('Closed')).toBe(false);
   });
 
   it('shows every lifecycle step green in the timeline, and only a rejection red', () => {
-    expect(['Selected', 'Validated', 'Executed', 'Closed'].map((s) => stepTone(s as AutoTrade['stage']))).toEqual(['positive', 'positive', 'positive', 'positive']);
-    expect(stepTone('Rejected')).toBe('negative');
+    expect(['Selected', 'Validated', 'Executed', 'Closed'].map((s) => stepTone(s as AutoTrade['stage']))).toEqual([Tone.Positive, Tone.Positive, Tone.Positive, Tone.Positive]);
+    expect(stepTone(LifecycleStage.Rejected)).toBe(Tone.Negative);
   });
 });
 

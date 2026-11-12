@@ -9,6 +9,7 @@
 import { apiClient } from './apiClient';
 import { handleKiteAuthFailure } from './authSession';
 import { parseTicks, type Tick } from '../../shared/kiteTicks.js';
+import { TickerMode, type TickerModeId } from '../../shared/tradeEnums.js';
 
 /** Close code the server sends when Kite rejects the access token (see server/index.js). */
 const WS_SESSION_EXPIRED = 4001;
@@ -40,7 +41,7 @@ export class KiteTicker {
       // Use this.instrumentTokens (not the captured parameter) so tokens
       // updated via updateSubscriptions() during CONNECTING are picked up.
       this.subscribe(this.instrumentTokens);
-      this.setMode('full', this.instrumentTokens);
+      this.setMode(TickerMode.full, this.instrumentTokens);
     };
 
     this.ws.onmessage = (event) => {
@@ -114,7 +115,7 @@ export class KiteTicker {
       if (toRemove.length > 0) this.unsubscribe(toRemove);
       if (toAdd.length > 0) {
         this.subscribe(toAdd);
-        this.setMode('full', toAdd);
+        this.setMode(TickerMode.full, toAdd);
       }
     }
     // Always update stored tokens so reconnects/onopen use the latest set
@@ -140,7 +141,7 @@ export class KiteTicker {
     }
   }
 
-  private setMode(mode: 'ltp' | 'quote' | 'full', tokens: number[]): void {
+  private setMode(mode: TickerModeId, tokens: number[]): void {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ a: 'mode', v: [mode, tokens] }));
     }

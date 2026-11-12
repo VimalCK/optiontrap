@@ -33,7 +33,7 @@ import { Segment, TRADING_MODES, TradingMode, type SegmentId, type TradingModeId
 import { saveTradingMode, storedTradingMode } from '@/utils/tradingModeStorage';
 import '@/styles/tradejournal.css';
 
-type SegmentFilter = 'all' | SegmentId;
+type SegmentFilter = AnySegmentId | SegmentId;
 
 /** Wait after the last filter change before fetching, so typing a date fetches once. */
 const FETCH_DELAY_MS = 400;
@@ -53,7 +53,7 @@ interface DayTrades {
   error: string | null;
 }
 
-const segmentParam = (segment: SegmentFilter): SegmentId | undefined => (segment === 'all' ? undefined : segment);
+const segmentParam = (segment: SegmentFilter): SegmentId | undefined => (segment === AnySegment.All ? undefined : segment);
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Could not load trades');
 
@@ -63,7 +63,7 @@ const formatPnl = (pnl: number) =>
 const pnlClass = (pnl: number) => (pnl > 0 ? 'heatmap-positive' : pnl < 0 ? 'heatmap-negative' : '');
 
 const TradeJournal: React.FC<{
-  initialRange?: 'today';
+  initialRange?: JournalRangeId;
   initialMode?: TradingModeId;
   initialDate?: string;
   initialTradeId?: string;
@@ -76,7 +76,7 @@ const TradeJournal: React.FC<{
   const [mode, setMode] = useState<TradingModeId>(() =>
     initialMode || storedTradingMode()
   );
-  const [segment, setSegment] = useState<SegmentFilter>('all');
+  const [segment, setSegment] = useState<SegmentFilter>(AnySegment.All);
   const [rangeStart, setRangeStart] = useState<string>(() => subtractMonths(marketDate(), 12));
   const [rangeEnd, setRangeEnd] = useState<string>(() => marketDate());
 
@@ -144,7 +144,7 @@ const TradeJournal: React.FC<{
   useEffect(() => {
     const targetDate = isDateValue(initialDate)
       ? initialDate
-      : initialRange === 'today'
+      : initialRange === JournalRange.Today
         ? marketDate()
         : null;
 
@@ -202,7 +202,7 @@ const TradeJournal: React.FC<{
               className={`tj-mode-tab ${mode === m ? 'tj-mode-tab--active' : ''} ${m === TradingMode.Live ? 'tj-mode-tab--live' : ''}`}
               onClick={() => setMode(m)}
             >
-              <span className={`tj-mode-dot tj-mode-dot--${m}`} />
+              <span className={`tj-mode-dot tj-mode-dot--${m.toLowerCase()}`} />
               {m.charAt(0).toUpperCase() + m.slice(1)}
             </button>
           ))}
@@ -214,7 +214,7 @@ const TradeJournal: React.FC<{
               className="tj-segment-select"
               value={segment}
               options={[
-                { value: 'all', label: 'All Segments' },
+                { value: AnySegment.All, label: 'All Segments' },
                 { value: Segment.Options, label: 'Options' },
                 { value: Segment.Futures, label: 'Futures' },
                 { value: Segment.Stocks, label: 'Stocks' },
@@ -339,7 +339,7 @@ const TradeJournal: React.FC<{
                                 </div>
                               )}
                             </td>
-                            <td><span className={`tj-badge tj-badge--${t.segment}`}>{t.segment}</span></td>
+                            <td><span className={`tj-badge tj-badge--${t.segment.toLowerCase()}`}>{t.segment}</span></td>
                             <td><span className={`tj-side tj-side--${t.side.toLowerCase()}`}>{t.side}</span></td>
                             <td className="tj-num">{t.quantity}</td>
                             <td className="tj-num">{t.entryPrice.toFixed(2)}</td>
@@ -381,3 +381,5 @@ const TradeJournal: React.FC<{
 };
 
 export default TradeJournal;
+
+import { AnySegment, JournalRange, type AnySegmentId, type JournalRangeId } from '@/utils/uiEnums';

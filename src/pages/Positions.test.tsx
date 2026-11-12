@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { breakevenLabel, maxLossLabel, maxProfitLabel, paperTabs, RiskTable } from './Positions';
 import type { LegRisk, RiskGroup } from '@/services/positionRisk';
+import { PaperTab } from '@/utils/uiEnums';
 
 /** A short put spread on NIFTY for 26 Nov, with these changes. */
 const group = (changes: Partial<RiskGroup> = {}): RiskGroup => ({
@@ -23,9 +24,9 @@ const group = (changes: Partial<RiskGroup> = {}): RiskGroup => ({
 describe('paperTabs', () => {
   it('names the paper tabs, Open, Pending and Position Risk, with how many each holds', () => {
     expect(paperTabs(2, 1, 3)).toEqual([
-      { id: 'positions', label: 'Open (2)' },
-      { id: 'orders', label: 'Pending (1)' },
-      { id: 'risk', label: 'Position Risk (3)' },
+      { id: PaperTab.Positions, label: 'Open (2)' },
+      { id: PaperTab.Orders, label: 'Pending (1)' },
+      { id: PaperTab.Risk, label: 'Position Risk (3)' },
     ]);
   });
 });

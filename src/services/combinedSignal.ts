@@ -4,24 +4,21 @@
  * into a single market stance for the OI chart signal strip.
  */
 
-import { classifyOiSignal, OiSignal } from './trapAnalysis';
+import { classifyOiSignal } from './trapAnalysis';
+import { CombinedStance, Confidence, OiSignal, type CombinedStanceId, type ConfidenceId, type OiSignalId } from '../../shared/analysisEnums.js';
 import { OiSnapshot } from './oiSnapshots';
 import { OptionChainRow } from './optionChain';
 
-export type CombinedStance =
-  | 'strong-bullish' | 'bullish' | 'bullish-weak'
-  | 'strong-bearish' | 'bearish' | 'bearish-weak'
-  | 'pinning' | 'high-volatility' | 'breakout'
-  | 'de-risking' | 'transitional'
-  | 'fading-bull' | 'fading-bear'
-  | null;
+/** A strike's stance, or null when neither leg moved enough. */
+export type StrikeStance = CombinedStanceId | null;
 
-export type VolumeConfidence = 'high' | 'medium' | 'low' | null;
+/** How much volume backs a strike's signal, or null without volume data. */
+export type VolumeConfidence = ConfidenceId | null;
 
 export interface StrikeSignal {
-  stance: CombinedStance;
-  ceSignal: OiSignal;
-  peSignal: OiSignal;
+  stance: StrikeStance;
+  ceSignal: OiSignalId;
+  peSignal: OiSignalId;
   label: string;
   color: string;
   weak: boolean;  // true for single-leg (0.5 opacity) stances
@@ -32,7 +29,7 @@ const OI_THRESHOLD = 2;      // % minimum OI change to count as signal
 const PRICE_THRESHOLD = 0.5; // % minimum price change to count as signal
 
 interface StanceConfig {
-  stance: CombinedStance;
+  stance: StrikeStance;
   label: string;
   color: string;
   weak: boolean;
@@ -41,55 +38,55 @@ interface StanceConfig {
 /**
  * Look up the combined stance from CE + PE individual signals.
  */
-function combineSignals(ceSignal: OiSignal, peSignal: OiSignal): StanceConfig {
+function combineSignals(ceSignal: OiSignalId, peSignal: OiSignalId): StanceConfig {
   const key = `${ceSignal}|${peSignal}`;
 
   // Both-leg combinations (strong signals)
   const bothLeg: Record<string, StanceConfig> = {
-    'short-buildup|short-buildup':   { stance: 'pinning',          label: 'Pinning/Range',    color: '#f59e0b', weak: false },
-    'long-buildup|short-buildup':    { stance: 'bullish',          label: 'Bullish',          color: '#4ade80', weak: false },
-    'short-buildup|long-buildup':    { stance: 'bearish',          label: 'Bearish',          color: '#f87171', weak: false },
-    'long-buildup|long-buildup':     { stance: 'high-volatility',  label: 'High Volatility',  color: '#a78bfa', weak: false },
-    'short-covering|short-covering': { stance: 'breakout',         label: 'Breakout Setup',   color: '#a78bfa', weak: false },
-    'long-unwinding|long-unwinding': { stance: 'de-risking',       label: 'De-risking',       color: '#94a3b8', weak: false },
-    'long-buildup|short-covering':   { stance: 'strong-bullish',   label: 'Strong Bullish',   color: '#22c55e', weak: false },
-    'short-covering|long-buildup':   { stance: 'strong-bearish',   label: 'Strong Bearish',   color: '#ef4444', weak: false },
+    [`${OiSignal.ShortBuildup}|${OiSignal.ShortBuildup}`]:   { stance: CombinedStance.Pinning,        label: 'Pinning/Range',    color: '#f59e0b', weak: false },
+    [`${OiSignal.LongBuildup}|${OiSignal.ShortBuildup}`]:    { stance: CombinedStance.Bullish,        label: 'Bullish',          color: '#4ade80', weak: false },
+    [`${OiSignal.ShortBuildup}|${OiSignal.LongBuildup}`]:    { stance: CombinedStance.Bearish,        label: 'Bearish',          color: '#f87171', weak: false },
+    [`${OiSignal.LongBuildup}|${OiSignal.LongBuildup}`]:     { stance: CombinedStance.HighVolatility, label: 'High Volatility',  color: '#a78bfa', weak: false },
+    [`${OiSignal.ShortCovering}|${OiSignal.ShortCovering}`]: { stance: CombinedStance.Breakout,       label: 'Breakout Setup',   color: '#a78bfa', weak: false },
+    [`${OiSignal.LongUnwinding}|${OiSignal.LongUnwinding}`]: { stance: CombinedStance.DeRisking,      label: 'De-risking',       color: '#94a3b8', weak: false },
+    [`${OiSignal.LongBuildup}|${OiSignal.ShortCovering}`]:   { stance: CombinedStance.StrongBullish,  label: 'Strong Bullish',   color: '#22c55e', weak: false },
+    [`${OiSignal.ShortCovering}|${OiSignal.LongBuildup}`]:   { stance: CombinedStance.StrongBearish,  label: 'Strong Bearish',   color: '#ef4444', weak: false },
   };
 
   if (bothLeg[key]) return bothLeg[key];
 
   // Single-leg: CE active, PE neutral
-  if (peSignal === 'neutral') {
+  if (peSignal === OiSignal.Neutral) {
     switch (ceSignal) {
-      case 'long-buildup':   return { stance: 'bullish-weak',  label: 'Bullish (weak)',  color: '#4ade80', weak: true };
-      case 'short-buildup':  return { stance: 'bearish-weak',  label: 'Bearish (weak)',  color: '#f87171', weak: true };
-      case 'long-unwinding': return { stance: 'fading-bull',   label: 'Fading Bull',     color: '#94a3b8', weak: true };
-      case 'short-covering': return { stance: 'fading-bear',   label: 'Fading Bear',     color: '#94a3b8', weak: true };
+      case OiSignal.LongBuildup:   return { stance: CombinedStance.BullishWeak, label: 'Bullish (weak)',  color: '#4ade80', weak: true };
+      case OiSignal.ShortBuildup:  return { stance: CombinedStance.BearishWeak, label: 'Bearish (weak)',  color: '#f87171', weak: true };
+      case OiSignal.LongUnwinding: return { stance: CombinedStance.FadingBull,  label: 'Fading Bull',     color: '#94a3b8', weak: true };
+      case OiSignal.ShortCovering: return { stance: CombinedStance.FadingBear,  label: 'Fading Bear',     color: '#94a3b8', weak: true };
     }
   }
 
   // Single-leg: PE active, CE neutral
-  if (ceSignal === 'neutral') {
+  if (ceSignal === OiSignal.Neutral) {
     switch (peSignal) {
-      case 'long-buildup':   return { stance: 'bearish-weak',  label: 'Bearish (weak)',  color: '#f87171', weak: true };
-      case 'short-buildup':  return { stance: 'bullish-weak',  label: 'Bullish (weak)',  color: '#4ade80', weak: true };
-      case 'long-unwinding': return { stance: 'fading-bear',   label: 'Fading Bear',     color: '#94a3b8', weak: true };
-      case 'short-covering': return { stance: 'fading-bull',   label: 'Fading Bull',     color: '#94a3b8', weak: true };
+      case OiSignal.LongBuildup:   return { stance: CombinedStance.BearishWeak, label: 'Bearish (weak)',  color: '#f87171', weak: true };
+      case OiSignal.ShortBuildup:  return { stance: CombinedStance.BullishWeak, label: 'Bullish (weak)',  color: '#4ade80', weak: true };
+      case OiSignal.LongUnwinding: return { stance: CombinedStance.FadingBear,  label: 'Fading Bear',     color: '#94a3b8', weak: true };
+      case OiSignal.ShortCovering: return { stance: CombinedStance.FadingBull,  label: 'Fading Bull',     color: '#94a3b8', weak: true };
     }
   }
 
   // Both neutral
-  if (ceSignal === 'neutral' && peSignal === 'neutral') {
+  if (ceSignal === OiSignal.Neutral && peSignal === OiSignal.Neutral) {
     return { stance: null, label: '', color: 'transparent', weak: false };
   }
 
   // Mixed / transitional (all other combinations)
-  return { stance: 'transitional', label: 'Transitional', color: '#64748b', weak: false };
+  return { stance: CombinedStance.Transitional, label: 'Transitional', color: '#64748b', weak: false };
 }
 
 /**
  * Classify a single instrument's OI+Price change vs the last snapshot.
- * Returns 'neutral' if below thresholds.
+ * Returns OiSignal.Neutral if below thresholds.
  */
 function classifyInstrument(
   _token: number,
@@ -97,30 +94,30 @@ function classifyInstrument(
   currentPrice: number,
   snapshotOi: number,
   snapshotPrice: number,
-): OiSignal {
-  if (snapshotOi <= 0 || snapshotPrice <= 0) return 'neutral';
+): OiSignalId {
+  if (snapshotOi <= 0 || snapshotPrice <= 0) return OiSignal.Neutral;
 
   const oiChangePct = ((currentOi - snapshotOi) / snapshotOi) * 100;
   const priceChangePct = ((currentPrice - snapshotPrice) / snapshotPrice) * 100;
 
   // Filter noise
   if (Math.abs(oiChangePct) < OI_THRESHOLD && Math.abs(priceChangePct) < PRICE_THRESHOLD) {
-    return 'neutral';
+    return OiSignal.Neutral;
   }
   // If only one is below threshold, still classify but treat the below-threshold value as 0
   const effectiveOi = Math.abs(oiChangePct) >= OI_THRESHOLD ? oiChangePct : 0;
   const effectivePrice = Math.abs(priceChangePct) >= PRICE_THRESHOLD ? priceChangePct : 0;
 
-  if (effectiveOi === 0 && effectivePrice === 0) return 'neutral';
+  if (effectiveOi === 0 && effectivePrice === 0) return OiSignal.Neutral;
 
   return classifyOiSignal(effectiveOi, effectivePrice).signal;
 }
 
 /**
  * Compute volume confidence for a strike based on CE+PE volume vs average.
- * high: either leg > 1.5x avg volume (institutional activity)
- * medium: either leg > 0.8x avg volume (normal activity)
- * low: both legs < 0.5x avg volume (thin, unreliable)
+ * High: either leg > 1.5x avg volume (institutional activity)
+ * Medium: either leg > 0.8x avg volume (normal activity)
+ * Low: both legs below that but traded (thin, unreliable)
  * null: no volume data available
  */
 function computeVolumeConfidence(
@@ -135,9 +132,9 @@ function computeVolumeConfidence(
   const peVol = peToken ? (volumeData.get(peToken) || 0) : 0;
   const maxVol = Math.max(ceVol, peVol);
 
-  if (maxVol > avgVolume * 1.5) return 'high';
-  if (maxVol > avgVolume * 0.8) return 'medium';
-  if (maxVol > 0) return 'low';
+  if (maxVol > avgVolume * 1.5) return Confidence.High;
+  if (maxVol > avgVolume * 0.8) return Confidence.Medium;
+  if (maxVol > 0) return Confidence.Low;
   return null;
 }
 
@@ -177,7 +174,7 @@ export function computeStrikeSignals(
     const peToken = row.pe?.instrumentToken;
 
     // Classify CE
-    let ceSignal: OiSignal = 'neutral';
+    let ceSignal: OiSignalId = OiSignal.Neutral;
     if (ceToken) {
       const curOi = currentOi.get(ceToken) || 0;
       const curPrice = currentPrices.get(ceToken) || 0;
@@ -189,7 +186,7 @@ export function computeStrikeSignals(
     }
 
     // Classify PE
-    let peSignal: OiSignal = 'neutral';
+    let peSignal: OiSignalId = OiSignal.Neutral;
     if (peToken) {
       const curOi = currentOi.get(peToken) || 0;
       const curPrice = currentPrices.get(peToken) || 0;
@@ -211,7 +208,7 @@ export function computeStrikeSignals(
         peSignal,
         label: config.label,
         color: config.color,
-        weak: config.weak || confidence === 'low',
+        weak: config.weak || confidence === Confidence.Low,
         confidence,
       });
     }

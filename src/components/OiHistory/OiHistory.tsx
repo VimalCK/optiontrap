@@ -12,7 +12,7 @@ import TradeHorizonSelect from '@/components/TradeHorizonSelect/TradeHorizonSele
 import { getLotSize } from '@/services/optionChain';
 import { loadInstruments, getLotSizeByToken } from '@/services/instruments';
 import '@/styles/oihistory.css';
-import type { OiHistoryRow, FuturesHistoryRow, FetchProgress, SignalPerformanceSummary, TradeSetupStatus, StrikeHistoryEntry, OiCellData, OiTableRow, TradeSignalRow } from './types';
+import type { OiHistoryRow, FuturesHistoryRow, FetchProgress, SignalPerformanceSummary, StrikeHistoryEntry, OiCellData, OiTableRow, TradeSignalRow } from './types';
 import { MAX_RECENT_SCRIPS, loadRecentScrips, saveRecentScrips, currentMonthIST, todayIST, addMonths, formatMonthLabel, formatMonthShortLabel, formatFullDateLabel } from './helpers';
 import { summarizePriceTrend, summarizeTradeBias, summarizeTradeLevels, summarizeOptionMomentum, summarizeTradeSetup, summarizePremiumDecay, summarizeSellingSetup, summarizeStrikeBias, classifyPattern, expiryLabel, computeMonthlyExpiries } from './analysis';
 import { FuturesContext } from './FuturesContext';
@@ -25,7 +25,10 @@ import { useUnderlyings } from '@/hooks/useUnderlyings';
 import { computeFlowReadings, marketCloseIST, type FlowInput, type FlowReading } from '@/services/oiFlow';
 import { computeFairValues, realizedVol, volVerdict, REALIZED_WINDOW, type FairInput, type FairValueResult } from '@/services/fairValue';
 import { OptionType, Side, isOptionType, type OptionTypeId, type SideId } from '../../../shared/tradeEnums.js';
+import { Bias, OiFlow, RolloverPattern, SellingSetup, TradeSetupStatus, VolVerdict, volVerdictLabel, type TradeSetupStatusId } from '../../../shared/analysisEnums.js';
 import { SignalOutcome } from '../../../shared/appEnums.js';
+import { ToastColor, type ToastColorId } from '@/utils/uiEnums';
+import { OiHistoryTab, type OiHistoryTabId } from '@/utils/uiEnums';
 
 /** When a day's prices were taken: the close, or now for today's rows, which are a live snapshot until the close. */
 function snapshotTime(date: string): Date {
@@ -61,7 +64,7 @@ const OiHistory: React.FC = () => {
   const [futuresData, setFuturesData] = useState<FuturesHistoryRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [filterDate, setFilterDate] = useState('');
-  const [analysisTab, setAnalysisTab] = useState<'history' | 'setup'>('history');
+  const [analysisTab, setAnalysisTab] = useState<OiHistoryTabId>(OiHistoryTab.History);
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [signalPerformance, setSignalPerformance] = useState<SignalPerformanceSummary | null>(null);
   const [signalRows, setSignalRows] = useState<TradeSignalRow[]>([]);
@@ -429,9 +432,9 @@ const OiHistory: React.FC = () => {
   const [tradeHorizon, setTradeHorizon] = useTradeHorizon();
 
   // Toast notifications for trade feedback
-  const [toasts, setToasts] = useState<{ id: number; text: string; color: 'green' | 'red' }[]>([]);
+  const [toasts, setToasts] = useState<{ id: number; text: string; color: ToastColorId }[]>([]);
   const toastIdRef = useRef(0);
-  const showToast = useCallback((text: string, color: 'green' | 'red') => {
+  const showToast = useCallback((text: string, color: ToastColorId) => {
     const id = ++toastIdRef.current;
     setToasts((prev) => [...prev, { id, text, color }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 2000);
@@ -463,9 +466,9 @@ const OiHistory: React.FC = () => {
         expiry,
         horizon: tradeHorizon,
       });
-      showToast(placedOrderMessage(placed, `${side} ${strike}${optionType}`), placedOrderRefused(placed) ? 'red' : 'green');
+      showToast(placedOrderMessage(placed, `${side} ${strike}${optionType}`), placedOrderRefused(placed) ? ToastColor.Red : ToastColor.Green);
     } catch (err) {
-      showToast(tradeErrorMessage(err), 'red');
+      showToast(tradeErrorMessage(err), ToastColor.Red);
     }
   }, [showToast, tradeHorizon]);
 
@@ -861,14 +864,14 @@ const OiHistory: React.FC = () => {
         entry.ceVolume = r.volume;
         entry.ceFair = fair?.fairPrice ?? null;
         entry.ceRichPct = fair?.richPct ?? null;
-        entry.ceFairLabel = fair?.label ?? null;
+        entry.ceFairLabel = fair?.richness ?? null;
       } else {
         entry.peOi = r.oi;
         entry.peClose = r.close;
         entry.peVolume = r.volume;
         entry.peFair = fair?.fairPrice ?? null;
         entry.peRichPct = fair?.richPct ?? null;
-        entry.peFairLabel = fair?.label ?? null;
+        entry.peFairLabel = fair?.richness ?? null;
       }
     }
 
@@ -914,15 +917,15 @@ const OiHistory: React.FC = () => {
     const buying = chartData.tradeSetup;
     let action: SideId | null = null;
     let optionType: OptionTypeId | null = null;
-    let setupStatus: TradeSetupStatus = 'Avoid';
+    let setupStatus: TradeSetupStatusId = TradeSetupStatus.Avoid;
 
-    if ((selling.type === 'Call Sell' || selling.type === 'Put Sell') && selling.status !== 'Avoid') {
+    if ((selling.type === SellingSetup.CallSell || selling.type === SellingSetup.PutSell) && selling.status !== TradeSetupStatus.Avoid) {
       action = Side.SELL;
-      optionType = selling.type === 'Call Sell' ? OptionType.CE : OptionType.PE;
+      optionType = selling.type === SellingSetup.CallSell ? OptionType.CE : OptionType.PE;
       setupStatus = selling.status;
-    } else if ((buying.direction === 'Bullish' || buying.direction === 'Bearish') && buying.status !== 'Avoid') {
+    } else if ((buying.direction === Bias.Bullish || buying.direction === Bias.Bearish) && buying.status !== TradeSetupStatus.Avoid) {
       action = Side.BUY;
-      optionType = buying.direction === 'Bullish' ? OptionType.CE : OptionType.PE;
+      optionType = buying.direction === Bias.Bullish ? OptionType.CE : OptionType.PE;
       setupStatus = buying.status;
     }
     if (!action || !optionType) return;
@@ -958,7 +961,7 @@ const OiHistory: React.FC = () => {
     const strikePattern = strikeRow ? (optionType === OptionType.CE ? strikeRow.cePattern : strikeRow.pePattern) : null;
     const strikeCell = strikeRow?.cells.get(expiry);
     const flowToken = strikeCell ? (optionType === OptionType.CE ? strikeCell.ceToken : strikeCell.peToken) : undefined;
-    const ivFlow = flowToken !== undefined ? flowByToken.get(flowToken)?.label : undefined;
+    const ivFlow = flowToken !== undefined ? flowByToken.get(flowToken)?.flow : undefined;
     const fair = flowToken !== undefined ? fairToday.byToken.get(flowToken) : undefined;
 
     void apiClient.post('/api/oi-history/signals', {
@@ -980,9 +983,9 @@ const OiHistory: React.FC = () => {
           buyingMomentum: optionType === OptionType.CE ? chartData.optionMomentum.ce : chartData.optionMomentum.pe,
           decay: side ? { decayPct: side.decayPct, score: side.score, daysToExpiry: side.daysToExpiry, latestVolume: side.latestVolume } : null,
           flowBias: chartData.biasSummary.bias,
-          ...(strikePattern && strikePattern !== '-' ? { strikePattern } : {}),
-          ...(ivFlow && ivFlow !== '-' ? { ivFlow } : {}),
-          ...(fair?.label ? { fairValue: fair.label, fairRichPct: fair.richPct !== null ? Math.round(fair.richPct * 1000) / 10 : null } : {}),
+          ...(strikePattern && strikePattern !== RolloverPattern.None ? { strikePattern } : {}),
+          ...(ivFlow && ivFlow !== OiFlow.None ? { ivFlow } : {}),
+          ...(fair?.richness ? { fairValue: fair.richness, fairRichPct: fair.richPct !== null ? Math.round(fair.richPct * 1000) / 10 : null } : {}),
         },
       },
     ).catch(() => {
@@ -1059,7 +1062,7 @@ const OiHistory: React.FC = () => {
       setSignalRows((rows) => rows.filter((row) => row.id !== id));
       setSignalsVersion((version) => version + 1);
     } catch {
-      showToast('Failed to delete signal', 'red');
+      showToast('Failed to delete signal', ToastColor.Red);
     }
   }, [showToast]);
 
@@ -1077,15 +1080,15 @@ const OiHistory: React.FC = () => {
 
     let optionType: OptionTypeId | null = null;
     if (side === Side.BUY) {
-      if (tradeSetup.direction === 'Bullish') optionType = OptionType.CE;
-      else if (tradeSetup.direction === 'Bearish') optionType = OptionType.PE;
+      if (tradeSetup.direction === Bias.Bullish) optionType = OptionType.CE;
+      else if (tradeSetup.direction === Bias.Bearish) optionType = OptionType.PE;
     } else {
-      if (sellingSetup.type === 'Call Sell') optionType = OptionType.CE;
-      else if (sellingSetup.type === 'Put Sell') optionType = OptionType.PE;
+      if (sellingSetup.type === SellingSetup.CallSell) optionType = OptionType.CE;
+      else if (sellingSetup.type === SellingSetup.PutSell) optionType = OptionType.PE;
     }
 
     if (!optionType) {
-      showToast('No single-leg strike for this setup', 'red');
+      showToast('No single-leg strike for this setup', ToastColor.Red);
       return;
     }
 
@@ -1093,13 +1096,13 @@ const OiHistory: React.FC = () => {
     const keyLevel = optionType === OptionType.CE ? tradeLevels.resistanceStrike : tradeLevels.supportStrike;
     const targetStrike = keyLevel ?? atmStrike ?? tradeLevels.maxOiStrike;
     if (!targetStrike) {
-      showToast('No tradeable strike found', 'red');
+      showToast('No tradeable strike found', ToastColor.Red);
       return;
     }
 
     const row = tableData.find((r) => r.strike === targetStrike);
     if (!row) {
-      showToast(`Strike ${targetStrike} not in table`, 'red');
+      showToast(`Strike ${targetStrike} not in table`, ToastColor.Red);
       return;
     }
 
@@ -1120,7 +1123,7 @@ const OiHistory: React.FC = () => {
     }
 
     if (!chosenCell || !chosenExpiry) {
-      showToast(`No ${optionType} data at strike ${targetStrike}`, 'red');
+      showToast(`No ${optionType} data at strike ${targetStrike}`, ToastColor.Red);
       return;
     }
 
@@ -1167,7 +1170,7 @@ const OiHistory: React.FC = () => {
       {toasts.length > 0 && (
         <div className="oi-history__toast-stack">
           {toasts.map((t) => (
-            <div key={t.id} className={`oi-history__toast oi-history__toast--${t.color}`}>{t.text}</div>
+            <div key={t.id} className={`oi-history__toast oi-history__toast--${t.color.toLowerCase()}`}>{t.text}</div>
           ))}
         </div>
       )}
@@ -1409,18 +1412,18 @@ const OiHistory: React.FC = () => {
                 <button
                   type="button"
                   role="tab"
-                  aria-selected={analysisTab === 'history'}
-                  className={`oi-history__analysis-tab ${analysisTab === 'history' ? 'oi-history__analysis-tab--active' : ''}`}
-                  onClick={() => setAnalysisTab('history')}
+                  aria-selected={analysisTab === OiHistoryTab.History}
+                  className={`oi-history__analysis-tab ${analysisTab === OiHistoryTab.History ? 'oi-history__analysis-tab--active' : ''}`}
+                  onClick={() => setAnalysisTab(OiHistoryTab.History)}
                 >
                   OI Price History
                 </button>
                 <button
                   type="button"
                   role="tab"
-                  aria-selected={analysisTab === 'setup'}
-                  className={`oi-history__analysis-tab ${analysisTab === 'setup' ? 'oi-history__analysis-tab--active' : ''}`}
-                  onClick={() => setAnalysisTab('setup')}
+                  aria-selected={analysisTab === OiHistoryTab.Setup}
+                  className={`oi-history__analysis-tab ${analysisTab === OiHistoryTab.Setup ? 'oi-history__analysis-tab--active' : ''}`}
+                  onClick={() => setAnalysisTab(OiHistoryTab.Setup)}
                 >
                   Trade Setup
                 </button>
@@ -1428,7 +1431,7 @@ const OiHistory: React.FC = () => {
             </div>
           </div>
 
-          {analysisTab === 'history' && (
+          {analysisTab === OiHistoryTab.History && (
             <>
           <div className="oi-history__chart-pair">
             <StrikeOiChart optionType={OptionType.CE} dates={chartData.dates} dateMap={chartData.dateMap} maxOi={chartData.maxOi} maxPrice={chartData.maxCePrice} expiries={chartExpiries} expiryColors={expiryColors} showVolume={showVolume} showFair={chartFairExpiry !== null} />
@@ -1497,8 +1500,8 @@ const OiHistory: React.FC = () => {
                 <strong>{fairSummary.realized !== null ? `${(fairSummary.realized * 100).toFixed(1)}%` : '-'}</strong>
               </span>
               {fairSummary.verdict && (
-                <span className={`oi-history__fair-verdict oi-history__fair-verdict--${fairSummary.verdict === 'Options expensive' ? 'rich' : fairSummary.verdict === 'Options cheap' ? 'cheap' : 'fair'}`}>
-                  {fairSummary.verdict}
+                <span className={`oi-history__fair-verdict oi-history__fair-verdict--${fairSummary.verdict === VolVerdict.OptionsExpensive ? 'rich' : fairSummary.verdict === VolVerdict.OptionsCheap ? 'cheap' : 'fair'}`}>
+                  {volVerdictLabel(fairSummary.verdict)}
                 </span>
               )}
               <span className="oi-history__fair-stat">
@@ -1523,7 +1526,7 @@ const OiHistory: React.FC = () => {
             </>
           )}
 
-          {analysisTab === 'setup' && (
+          {analysisTab === OiHistoryTab.Setup && (
             <TradeSetupDashboard
               setup={chartData}
               selectedStrike={selectedStrike}

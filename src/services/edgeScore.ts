@@ -6,10 +6,12 @@
 
 import { OptionChainRow } from './optionChain';
 import { calculateMaxPain, findOiWalls } from './trapAnalysis';
+import { LevelSide } from '../../shared/analysisEnums.js';
+import { OptionType, type OptionTypeId } from '../../shared/tradeEnums.js';
 
 export interface StrikeEdge {
   strike: number;
-  type: 'ce' | 'pe';
+  type: OptionTypeId;
   premium: number;
   distanceFromSpot: number;
   distancePct: number; // % distance from spot
@@ -49,13 +51,13 @@ function calculatePOP(
   strike: number,
   spotPrice: number,
   expectedMove: number,
-  type: 'ce' | 'pe',
+  type: OptionTypeId,
 ): number {
   if (expectedMove <= 0) return 50;
 
   // Standard deviation ≈ expected move (1 SD covers ~68%)
   const sd = expectedMove;
-  const distance = type === 'ce' ? strike - spotPrice : spotPrice - strike;
+  const distance = type === OptionType.CE ? strike - spotPrice : spotPrice - strike;
 
   // Number of standard deviations away
   const zScore = distance / sd;
@@ -99,10 +101,10 @@ export function calculateEdgeScores(
 
       const distance = row.strike - spotPrice;
       const distancePct = (distance / spotPrice) * 100;
-      const pop = calculatePOP(row.strike, spotPrice, expectedMove, 'ce');
+      const pop = calculatePOP(row.strike, spotPrice, expectedMove, OptionType.CE);
 
       // OI wall strength at this strike (CE OI = resistance)
-      const wall = walls.find((w) => w.strike === row.strike && w.type === 'resistance');
+      const wall = walls.find((w) => w.strike === row.strike && w.type === LevelSide.Resistance);
       const oiWallStrength = wall ? wall.strength : 0;
 
       // Max pain alignment: selling CE above max pain is good (price gravitates down to max pain)
@@ -125,7 +127,7 @@ export function calculateEdgeScores(
 
       results.push({
         strike: row.strike,
-        type: 'ce',
+        type: OptionType.CE,
         premium,
         distanceFromSpot: distance,
         distancePct,
@@ -144,10 +146,10 @@ export function calculateEdgeScores(
 
       const distance = spotPrice - row.strike;
       const distancePct = (distance / spotPrice) * 100;
-      const pop = calculatePOP(row.strike, spotPrice, expectedMove, 'pe');
+      const pop = calculatePOP(row.strike, spotPrice, expectedMove, OptionType.PE);
 
       // OI wall strength at this strike (PE OI = support)
-      const wall = walls.find((w) => w.strike === row.strike && w.type === 'support');
+      const wall = walls.find((w) => w.strike === row.strike && w.type === LevelSide.Support);
       const oiWallStrength = wall ? wall.strength : 0;
 
       // Max pain alignment: selling PE below max pain is good (price gravitates up to max pain)
@@ -170,7 +172,7 @@ export function calculateEdgeScores(
 
       results.push({
         strike: row.strike,
-        type: 'pe',
+        type: OptionType.PE,
         premium,
         distanceFromSpot: distance,
         distancePct,

@@ -1,6 +1,7 @@
 /**
- * Guards for the enums in shared/tradeEnums.js and shared/appEnums.js (read
- * from those files, so a new enum is checked without touching this one):
+ * Guards for the enums in every shared/*Enums.js file (tradeEnums, appEnums,
+ * analysisEnums) and the browser's own in src/utils/uiEnums.ts; read from those
+ * files, so a new enum or shared enum file is checked without touching this one:
  *
  * 1. No enum value typed by hand: code names `OrderStatus.Open`, never `'Open'`,
  *    and SQL writes `${sqlEnum(OrderStatus.Open)}` (server/sql.js), never a
@@ -12,6 +13,11 @@
  *
  * 3. No enum value in a .sql file the app runs (the nightly jobs): plain SQL
  *    can't call sqlEnum, so SQL that names a value is a .js job.
+ * 4. Every CSS class modifier built from a value (`badge--${…}`) is lower-cased
+ *    with .toLowerCase(), since enum values are capitalised and the stylesheets
+ *    are not: `badge--${tone.toLowerCase()}`. A modifier that can only be a
+ *    lower-case quoted word (`${on ? 'up' : 'down'}`) is fine; a helper that
+ *    returns CSS words is listed in CSS_WORD_HELPERS with the reason.
  *
  * Checked: code in src, server and shared, outside comments, and every .sql
  * file outside server/migrations. Not checked: tests (they assert the stored
@@ -21,16 +27,19 @@
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import * as tradeEnums from './tradeEnums.js';
-import * as appEnums from './appEnums.js';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.git', 'migrations']);
-const ENUM_FILES = new Set([path.join('shared', 'tradeEnums.js'), path.join('shared', 'appEnums.js')]);
+const ENUM_FILE_NAME = /Enums\.js$/;
+const ENUM_FILES = new Set([
+  ...fs.readdirSync(path.join(root, 'shared')).filter((name) => ENUM_FILE_NAME.test(name)).map((name) => path.join('shared', name)),
+  path.join('src', 'utils', 'uiEnums.ts'),
+]);
+const enumModules = await Promise.all([...ENUM_FILES].map((file) => import(pathToFileURL(path.join(root, file)).href)));
 
 /** The enums: exported frozen objects (`Side`, `OrderStatus` …), by name. */
-const ENUMS = Object.entries({ ...tradeEnums, ...appEnums })
+const ENUMS = Object.entries(Object.assign({}, ...enumModules))
   .filter(([, value]) => value && typeof value === 'object' && !Array.isArray(value) && Object.isFrozen(value));
 
 const ENUM_VALUES = new Set(ENUMS.flatMap(([, members]) => Object.values(members)));
@@ -42,7 +51,7 @@ const QUOTED_WORD = /'([A-Za-z-]+)'/g;
  * label, title, hint or toggle text, or the label in a value → label map
  * (`[OrderStatus.Open]: 'Open'`). Matched against the code before the string.
  */
-const DISPLAY_TEXT = /(?:\b(?:label|title|text|hint|term|onText|offText)\s*[:=]\s*\{?\s*|\]\s*:\s*)$/;
+const DISPLAY_TEXT = /(?:\b(?:label|title|text|hint|term|meaning|column|group|onText|offText)\s*[:=]\s*\{?\s*|\]\s*:\s*)$/;
 
 /**
  * Words that equal an enum value only by chance, by file, with the reason.
@@ -53,13 +62,66 @@ const ALLOWED = new Map([
   [path.join('src', 'components', 'PaperOrders', 'PaperOrders.tsx'), [{ values: ['Cancelled', 'Market'], reason: "the order badge and price-column wording" }]],
   [path.join('src', 'components', 'Sidebar', 'Sidebar.tsx'), [{ values: ['Admin'], reason: "the collapsed nav item tooltip" }]],
   [path.join('src', 'components', 'StockSetups', 'StockSetupsPanel.tsx'), [{ values: ['Rejected'], reason: "a zone that turned the price away (Held / Rejected wording)" }]],
-  [path.join('src', 'pages', 'Health.tsx'), [{ values: ['Active'], reason: "the Kite connection wording (Active / Offline)" }]],
+  [path.join('src', 'components', 'WinLossPatterns', 'winLossStats.ts'), [{ values: ['Unknown'], reason: "the name shown for trades recorded without a strategy or setup" }]],
+  [path.join('src', 'pages', 'AdminUsers.tsx'), [{ values: ['Unknown'], reason: "the name shown for a user without one" }]],
+  [path.join('src', 'pages', 'Health.tsx'), [{ values: ['Active', 'Down', 'Idle'], reason: "the Kite connection wording (Active / Offline), the database's (Connected / Down) and the OI feed's (Fresh / Idle)" }]],
   [path.join('src', 'pages', 'Positions.tsx'), [{ values: ['Profit', 'Loss'], reason: "the payoff marker wording" }]],
   [path.join('src', 'pages', 'Profile.tsx'), [{ values: ['Inactive'], reason: "the subscription line shown when there is none" }]],
+  [path.join('src', 'pages', 'Settings.tsx'), [{ values: ['Orders'], reason: "the Trading Mode card's eyebrow heading" }]],
   [path.join('src', 'pages', 'Watchlist.tsx'), [{ values: ['Active', 'Triggered'], reason: "the alert status wording shown in the list" }]],
   [path.join('server', 'tradeEngine', 'positions.js'), [{ values: ['Exit'], reason: "the algo log source tag" }]],
   [path.join('shared', 'paperOrders.js'), [{ values: ['Cancelled'], reason: "the cancel reason wording stored in status_reason" }]],
 ]);
+
+/**
+ * Modifier expressions that return CSS words, not enum values, by file, with the reason.
+ * @type {Map<string, { expressions: string[], reason: string }[]>}
+ */
+const CSS_WORD_HELPERS = new Map([
+  [path.join('src', 'components', 'OptionChain', 'OptionChain.tsx'), [{ expressions: ['sideClass'], reason: "'ce' or 'pe', set just above" }]],
+  [path.join('src', 'components', 'SellStrategy', 'SellStrategy.tsx'), [
+    { expressions: ['colorClass'], reason: 'scoreColorClass returns a CSS word' },
+    { expressions: ['actionBtnClass(rec.type)'], reason: 'returns the lower-cased option type or a CSS word' },
+  ]],
+  [path.join('src', 'pages', 'Login.tsx'), [{ expressions: ['(i * 7) % 3'], reason: 'a number picking one of three decorative variants' }]],
+]);
+
+/** A quoted lower-case CSS word, e.g. 'rich'. */
+const CSS_WORD = /^'[a-z0-9-]*'$/;
+
+/**
+ * Whether a ternary's every result is a quoted lower-case word: the parts
+ * between ? / : that a : or the end follows (the others are conditions).
+ * @param {string} expression
+ */
+function onlyCssWords(expression) {
+  const parts = expression.split(/([?:])/);
+  if (parts.length < 5) return false;
+  const results = [];
+  for (let i = 2; i < parts.length; i += 2) {
+    const next = parts[i + 1];
+    if (next === ':' || next === undefined) results.push(parts[i].trim());
+  }
+  return results.length > 0 && results.every((result) => CSS_WORD.test(result));
+}
+
+/**
+ * CSS class modifiers (`--${…}`) in `source` built from a value that isn't
+ * lower-cased, with their line.
+ * @param {string} source
+ * @param {string[]} [helpers] expressions known to return CSS words
+ * @returns {{ line: number, expression: string }[]}
+ */
+export function unloweredClassModifiers(source, helpers = []) {
+  /** @type {{ line: number, expression: string }[]} */
+  const found = [];
+  for (const match of source.matchAll(/--\$\{([^}]*)\}/g)) {
+    const expression = match[1].trim();
+    if (expression.endsWith('.toLowerCase()') || onlyCssWords(expression) || helpers.includes(expression)) continue;
+    found.push({ line: source.slice(0, match.index).split('\n').length, expression });
+  }
+  return found;
+}
 
 /**
  * Every piece of string text in `source` outside comments: quoted strings, and
@@ -217,6 +279,23 @@ describe('sqlEnumLiterals', () => {
   });
 });
 
+describe('unloweredClassModifiers', () => {
+  it('finds a class modifier built from a value that is not lower-cased', () => {
+    expect(unloweredClassModifiers('<span className={`badge badge--${tone}`} />')).toEqual([{ line: 1, expression: 'tone' }]);
+    expect(unloweredClassModifiers('x\n<li className={`step--${stepTone(stage)}`} />')).toEqual([{ line: 2, expression: 'stepTone(stage)' }]);
+  });
+
+  it('allows lower-cased values, lower-case quoted words and listed helpers', () => {
+    const source = [
+      '<span className={`badge--${tone.toLowerCase()}`} />',
+      "<span className={`chip--${on ? 'up' : 'down'}`} />",
+      "<span className={`chip--${a === B.X ? 'rich' : a === B.Y ? 'cheap' : 'fair'}`} />",
+      '<span className={`chip--${sideClass}`} />',
+    ].join('\n');
+    expect(unloweredClassModifiers(source, ['sideClass'])).toEqual([]);
+  });
+});
+
 describe('the SQL files the app runs', () => {
   it('name no enum value (a job that needs one is a .js job using sqlEnum)', () => {
     expect(SQL_FILES.length).toBeGreaterThan(0);
@@ -230,6 +309,14 @@ describe('the code', () => {
     const offenders = CODE_FILES.flatMap((file) => rawEnumValues(read(file))
       .filter(({ value }) => !isAllowed(file, value))
       .map(({ line, value }) => `${file}:${line} '${value}'`));
+    expect(offenders).toEqual([]);
+  });
+
+  it('lower-cases every CSS class modifier built from a value', () => {
+    const offenders = CODE_FILES.flatMap((file) => {
+      const helpers = (CSS_WORD_HELPERS.get(file) ?? []).flatMap((entry) => entry.expressions);
+      return unloweredClassModifiers(read(file), helpers).map(({ line, expression }) => `${file}:${line} --\${${expression}}`);
+    });
     expect(offenders).toEqual([]);
   });
 

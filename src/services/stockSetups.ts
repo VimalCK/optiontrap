@@ -9,7 +9,8 @@ import { apiClient } from './apiClient';
 import { loadInstruments } from './instruments';
 import { fetchOptions } from './optionChain';
 import { fetchQuotes } from './kiteApi';
-import { isCashStock, parseKiteCandles, scanSummary, type Candle, type SetupType } from '../../shared/stockSetups.js';
+import { isCashStock, parseKiteCandles, scanSummary, type Candle } from '../../shared/stockSetups.js';
+import type { StockSetupTypeId } from '../../shared/analysisEnums.js';
 import { marketDate } from '../../shared/marketTime.js';
 import { Exchange, InstrumentType, type SideId } from '../../shared/tradeEnums.js';
 import { type SetupOutcomeStatusId } from '../../shared/appEnums.js';
@@ -28,7 +29,7 @@ export interface StockCandles {
 export type ScanSummary = ReturnType<typeof scanSummary>;
 
 export interface SetupStats {
-  setupType: SetupType;
+  setupType: StockSetupTypeId;
   direction: SideId;
   total: number;
   open: number;
@@ -44,7 +45,7 @@ export interface TrackedSetup {
   instrumentToken: number;
   tradingsymbol: string;
   signalDate: string;
-  setupType: SetupType;
+  setupType: StockSetupTypeId;
   direction: SideId;
   entry: number;
   stop: number;

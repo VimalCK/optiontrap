@@ -1,5 +1,6 @@
 import { Exchange, InstrumentType, Side } from './tradeEnums.js';
 import { SetupOutcomeStatus } from './appEnums.js';
+import { LevelKind, LevelSide, MarketRelation, StockSetupType, StockState } from './analysisEnums.js';
 // @ts-check
 /**
  * Stock entry and exit setups
@@ -23,17 +24,18 @@ import { SetupOutcomeStatus } from './appEnums.js';
 
 /**
  * @typedef {{ date: string, open: number, high: number, low: number, close: number, volume: number }} Candle
- * @typedef {'swing-low' | 'swing-high' | 'volume' | 'sma50' | 'sma200' | 'round'} LevelKind
- * @typedef {{ price: number, kind: LevelKind, weight: number }} Level
+ * @typedef {import('./analysisEnums.js').LevelKindId} LevelKindId
+ * @typedef {import('./analysisEnums.js').LevelSideId} LevelSideId
+ * @typedef {{ price: number, kind: LevelKindId, weight: number }} Level
  * @typedef {{ tests: number, held: number, failed: number, avgMovePct: number | null }} ZoneHistory
- * @typedef {{ low: number, high: number, mid: number, score: number, strength: 1 | 2 | 3, reasons: string[], side: 'support' | 'resistance', distancePct: number, history: ZoneHistory }} Zone
- * @typedef {'falling' | 'stretched' | 'turning' | 'uptrend' | 'sideways'} StockState
- * @typedef {'with-market' | 'alone' | 'stronger' | 'in-line'} MarketRelation
- * @typedef {{ stockPct: number, marketPct: number, relativePct: number, relation: MarketRelation }} MarketCheck
- * @typedef {'pullback' | 'reversal' | 'breakout' | 'rejection' | 'breakdown'} SetupType
- * @typedef {{ type: SetupType, direction: import('./tradeEnums.js').SideId, label: string, date: string, entry: number, stop: number, target: number, rewardRisk: number, zone: { low: number, high: number, mid: number }, note: string }} Setup
+ * @typedef {{ low: number, high: number, mid: number, score: number, strength: 1 | 2 | 3, reasons: string[], side: LevelSideId, distancePct: number, history: ZoneHistory }} Zone
+ * @typedef {import('./analysisEnums.js').StockStateId} StockStateId
+ * @typedef {import('./analysisEnums.js').MarketRelationId} MarketRelationId
+ * @typedef {{ stockPct: number, marketPct: number, relativePct: number, relation: MarketRelationId }} MarketCheck
+ * @typedef {import('./analysisEnums.js').StockSetupTypeId} StockSetupTypeId
+ * @typedef {{ type: StockSetupTypeId, direction: import('./tradeEnums.js').SideId, label: string, date: string, entry: number, stop: number, target: number, rewardRisk: number, zone: { low: number, high: number, mid: number }, note: string }} Setup
  * @typedef {{ sma20: number | null, sma50: number | null, sma200: number | null, atr: number | null, rsi: number | null, avgVolume20: number | null }} Indicators
- * @typedef {{ price: number, date: string, state: StockState, stateNote: string, indicators: Indicators, supports: Zone[], resistances: Zone[], market: MarketCheck | null, setups: Setup[], plan: string }} StockAnalysis
+ * @typedef {{ price: number, date: string, state: StockStateId, stateNote: string, indicators: Indicators, supports: Zone[], resistances: Zone[], market: MarketCheck | null, setups: Setup[], plan: string }} StockAnalysis
  * @typedef {{ status: import('./appEnums.js').SetupOutcomeStatusId, resolvedDate: string | null, sessionsHeld: number, maxFavorablePct: number | null, maxAdversePct: number | null }} SetupOutcome
  */
 
@@ -57,16 +59,16 @@ export const SETUP_BACKFILL_DAYS = 365;
 const BREAKOUT_VOLUME_RATIO = 1.5;
 const MIN_REWARD_RISK = 1;
 
-const SETUP_LABELS = /** @type {Record<SetupType, string>} */ ({
-  pullback: 'Pullback to support',
-  reversal: 'Reversal at support',
-  breakout: 'Breakout',
-  rejection: 'Rejected at resistance',
-  breakdown: 'Breakdown',
+const SETUP_LABELS = /** @type {Record<StockSetupTypeId, string>} */ ({
+  [StockSetupType.Pullback]: 'Pullback to support',
+  [StockSetupType.Reversal]: 'Reversal at support',
+  [StockSetupType.Breakout]: 'Breakout',
+  [StockSetupType.Rejection]: 'Rejected at resistance',
+  [StockSetupType.Breakdown]: 'Breakdown',
 });
 
 /** Human label for a setup type. */
-export function setupLabel(/** @type {SetupType} */ type) {
+export function setupLabel(/** @type {StockSetupTypeId} */ type) {
   return SETUP_LABELS[type];
 }
 
@@ -187,8 +189,8 @@ export function swingLevels(candles) {
       if (earlier ? candles[j].high >= candles[i].high : candles[j].high > candles[i].high) isHigh = false;
     }
     const weight = candles.length - i <= 60 ? 1 : 0.7;
-    if (isLow) levels.push({ price: candles[i].low, kind: 'swing-low', weight });
-    if (isHigh) levels.push({ price: candles[i].high, kind: 'swing-high', weight });
+    if (isLow) levels.push({ price: candles[i].low, kind: LevelKind.SwingLow, weight });
+    if (isHigh) levels.push({ price: candles[i].high, kind: LevelKind.SwingHigh, weight });
   }
   return levels;
 }
@@ -228,7 +230,7 @@ export function volumeLevels(candles, binWidth) {
   return nodes
     .sort((a, b) => b.volume - a.volume)
     .slice(0, 6)
-    .map((node, rank) => ({ price: node.price, kind: /** @type {const} */ ('volume'), weight: rank < 3 ? 1.5 : 1 }));
+    .map((node, rank) => ({ price: node.price, kind: LevelKind.Volume, weight: rank < 3 ? 1.5 : 1 }));
 }
 
 /** Step between "round" prices for a price level: 100 near ₹1,540, 500 near ₹8,000, 10 near ₹250. */
@@ -243,18 +245,18 @@ function roundLevels(/** @type {number} */ price) {
   /** @type {Level[]} */
   const levels = [];
   for (let p = Math.floor(price * 0.88 / step) * step; p <= price * 1.12; p += step) {
-    if (p > 0) levels.push({ price: p, kind: 'round', weight: 0.5 });
+    if (p > 0) levels.push({ price: p, kind: LevelKind.Round, weight: 0.5 });
   }
   return levels;
 }
 
-const REASON_TEXT = /** @type {Record<LevelKind, string>} */ ({
-  'swing-low': 'swing low',
-  'swing-high': 'swing high',
-  volume: 'high-volume area',
-  sma50: '50-day average',
-  sma200: '200-day average',
-  round: 'round number',
+const REASON_TEXT = /** @type {Record<LevelKindId, string>} */ ({
+  [LevelKind.SwingLow]: 'swing low',
+  [LevelKind.SwingHigh]: 'swing high',
+  [LevelKind.Volume]: 'high-volume area',
+  [LevelKind.Sma50]: '50-day average',
+  [LevelKind.Sma200]: '200-day average',
+  [LevelKind.Round]: 'round number',
 });
 
 /**
@@ -274,7 +276,7 @@ export function mergeLevels(levels, tolerance, atr) {
     else groups.push([level]);
   }
   return groups
-    .filter((group) => group.some((l) => l.kind !== 'round'))
+    .filter((group) => group.some((l) => l.kind !== LevelKind.Round))
     .map((group) => {
       let low = group[0].price;
       let high = group[group.length - 1].price;
@@ -283,7 +285,7 @@ export function mergeLevels(levels, tolerance, atr) {
         low -= pad;
         high += pad;
       }
-      /** @type {Map<LevelKind, number>} */
+      /** @type {Map<LevelKindId, number>} */
       const counts = new Map();
       for (const l of group) counts.set(l.kind, (counts.get(l.kind) ?? 0) + 1);
       // Repeated touches of the same kind add less than a new kind of evidence.
@@ -308,7 +310,7 @@ function strengthOf(score) {
  * rises `movePct` above the zone before closing `failPct` below it; resistance mirrors that.
  * @param {Candle[]} candles  all history before the latest session
  * @param {{ low: number, high: number, mid: number }} zone
- * @param {'support' | 'resistance'} side
+ * @param {LevelSideId} side
  * @param {number} movePct
  * @param {number} failPct
  * @returns {ZoneHistory}
@@ -319,7 +321,7 @@ export function zoneHistory(candles, zone, side, movePct, failPct) {
   let failed = 0;
   /** @type {number[]} */
   const moves = [];
-  const touches = (/** @type {Candle} */ c) => (side === 'support' ? c.low <= zone.high : c.high >= zone.low);
+  const touches = (/** @type {Candle} */ c) => (side === LevelSide.Support ? c.low <= zone.high : c.high >= zone.low);
   for (let i = 5; i < candles.length - 1; i++) {
     if (!touches(candles[i])) continue;
     let clear = true;
@@ -332,9 +334,9 @@ export function zoneHistory(candles, zone, side, movePct, failPct) {
     const end = Math.min(candles.length - 1, i + TEST_WINDOW);
     for (let j = i + 1; j <= end; j++) {
       const c = candles[j];
-      const move = side === 'support' ? c.high / zone.mid - 1 : 1 - c.low / zone.mid;
+      const move = side === LevelSide.Support ? c.high / zone.mid - 1 : 1 - c.low / zone.mid;
       best = Math.max(best, move);
-      const broke = side === 'support' ? c.close < zone.low * (1 - failPct) : c.close > zone.high * (1 + failPct);
+      const broke = side === LevelSide.Support ? c.close < zone.low * (1 - failPct) : c.close > zone.high * (1 + failPct);
       if (broke) { failed++; resolved = true; i = j; break; }
       if (move >= movePct) { held++; resolved = true; i = j; break; }
     }
@@ -368,18 +370,18 @@ export function marketCheck(stock, market) {
   const stockPct = (end.close / start.close - 1) * 100;
   const marketPct = (marketEnd / marketStart - 1) * 100;
   const relativePct = stockPct - marketPct;
-  /** @type {MarketRelation} */
-  let relation = 'in-line';
-  if (stockPct <= -3 && relativePct <= -3) relation = 'alone';
-  else if (stockPct < 0 && marketPct <= -3) relation = 'with-market';
-  else if (relativePct >= 3) relation = 'stronger';
+  /** @type {MarketRelationId} */
+  let relation = MarketRelation.InLine;
+  if (stockPct <= -3 && relativePct <= -3) relation = MarketRelation.Alone;
+  else if (stockPct < 0 && marketPct <= -3) relation = MarketRelation.WithMarket;
+  else if (relativePct >= 3) relation = MarketRelation.Stronger;
   return { stockPct, marketPct, relativePct, relation };
 }
 
 /**
  * @param {Candle[]} candles
  * @param {Indicators} ind
- * @returns {{ state: StockState, note: string }}
+ * @returns {{ state: StockStateId, note: string }}
  */
 export function stockState(candles, ind) {
   const last = candles[candles.length - 1];
@@ -393,22 +395,22 @@ export function stockState(candles, ind) {
 
   if (newLow) {
     if (stretch >= 2 || (ind.rsi !== null && ind.rsi < 30)) {
-      return { state: 'stretched', note: `Fell ${stretch.toFixed(1)} daily ranges below its 20-day average${ind.rsi !== null ? `, RSI ${ind.rsi.toFixed(0)}` : ''}. Bounces get likely, but the fall can continue.` };
+      return { state: StockState.Stretched, note: `Fell ${stretch.toFixed(1)} daily ranges below its 20-day average${ind.rsi !== null ? `, RSI ${ind.rsi.toFixed(0)}` : ''}. Bounces get likely, but the fall can continue.` };
     }
-    return { state: 'falling', note: 'Making new lows. Wait for it to stop before buying.' };
+    return { state: StockState.Falling, note: 'Making new lows. Wait for it to stop before buying.' };
   }
   if ((down || fell) && last.close > prev.high) {
-    return { state: 'turning', note: `Closed above the previous session's high (${prev.high.toFixed(2)}) without a new low: the first sign the fall is pausing.` };
+    return { state: StockState.Turning, note: `Closed above the previous session's high (${prev.high.toFixed(2)}) without a new low: the first sign the fall is pausing.` };
   }
   if (ind.sma50 !== null && last.close > ind.sma50 && ind.sma20 !== null && ind.sma20 > ind.sma50) {
-    return { state: 'uptrend', note: 'Above its rising 20- and 50-day averages. Dips to support are the entries.' };
+    return { state: StockState.Uptrend, note: 'Above its rising 20- and 50-day averages. Dips to support are the entries.' };
   }
-  if (down) return { state: 'falling', note: 'Below its 50-day average, though not at a new low.' };
-  return { state: 'sideways', note: 'No clear trend.' };
+  if (down) return { state: StockState.Falling, note: 'Below its 50-day average, though not at a new low.' };
+  return { state: StockState.Sideways, note: 'No clear trend.' };
 }
 
 /**
- * @param {SetupType} type
+ * @param {StockSetupTypeId} type
  * @param {Candle} last
  * @param {number} entry
  * @param {number} stop
@@ -418,7 +420,7 @@ export function stockState(candles, ind) {
  * @returns {Setup | null}
  */
 function makeSetup(type, last, entry, stop, target, zone, note) {
-  const direction = type === 'rejection' || type === 'breakdown' ? Side.SELL : Side.BUY;
+  const direction = type === StockSetupType.Rejection || type === StockSetupType.Breakdown ? Side.SELL : Side.BUY;
   const risk = direction === Side.BUY ? entry - stop : stop - entry;
   const reward = direction === Side.BUY ? target - entry : entry - target;
   if (!(risk > 0) || !(reward > 0)) return null;
@@ -432,7 +434,7 @@ function makeSetup(type, last, entry, stop, target, zone, note) {
  * reasons to avoid, since cash stocks can't be shorted overnight.
  * @param {Candle[]} candles
  * @param {Indicators} ind
- * @param {StockState} state
+ * @param {StockStateId} state
  * @param {Zone[]} supports  nearest first
  * @param {Zone[]} resistances  nearest first
  * @param {{ low: number, high: number, mid: number }[]} allZones  every zone, for breakouts and breakdowns
@@ -454,14 +456,14 @@ export function findSetups(candles, ind, state, supports, resistances, allZones)
   const longTrendUp = ind.sma200 !== null ? last.close > ind.sma200 : ind.sma50 !== null && last.close > ind.sma50;
   if (support && longTrendUp && last.low <= support.high && last.close >= support.low && last.close >= (last.high + last.low) / 2) {
     const stop = support.low - 0.5 * atr;
-    found.push(makeSetup('pullback', last, last.close, stop, upTarget(last.close, stop), support, 'Dipped into support in an uptrend and closed in the upper half of the day.'));
+    found.push(makeSetup(StockSetupType.Pullback, last, last.close, stop, upTarget(last.close, stop), support, 'Dipped into support in an uptrend and closed in the upper half of the day.'));
   }
 
-  if (state === 'turning' && support) {
+  if (state === StockState.Turning && support) {
     const recentLow = Math.min(...candles.slice(-5).map((c) => c.low));
     if (recentLow <= support.high + 0.25 * atr) {
       const stop = Math.min(recentLow, support.low) - 0.25 * atr;
-      found.push(makeSetup('reversal', last, last.close, stop, upTarget(last.close, stop), support, 'Held a support zone and closed above the previous high.'));
+      found.push(makeSetup(StockSetupType.Reversal, last, last.close, stop, upTarget(last.close, stop), support, 'Held a support zone and closed above the previous high.'));
     }
   }
 
@@ -469,7 +471,7 @@ export function findSetups(candles, ind, state, supports, resistances, allZones)
     if (heavyVolume && prev.close <= zone.high && last.close > zone.high) {
       const stop = zone.low - 0.25 * atr;
       const above = resistances.find((r) => r.low > last.close);
-      found.push(makeSetup('breakout', last, last.close, stop, above?.low ?? last.close + 2 * (last.close - stop), zone, 'Closed above a resistance zone on heavy volume.'));
+      found.push(makeSetup(StockSetupType.Breakout, last, last.close, stop, above?.low ?? last.close + 2 * (last.close - stop), zone, 'Closed above a resistance zone on heavy volume.'));
       break;
     }
   }
@@ -477,14 +479,14 @@ export function findSetups(candles, ind, state, supports, resistances, allZones)
     if (heavyVolume && prev.close >= zone.low && last.close < zone.low) {
       const stop = zone.high + 0.25 * atr;
       const below = supports.find((s) => s.high < last.close);
-      found.push(makeSetup('breakdown', last, last.close, stop, below?.high ?? last.close - 2 * (stop - last.close), zone, 'Closed below a support zone on heavy volume.'));
+      found.push(makeSetup(StockSetupType.Breakdown, last, last.close, stop, below?.high ?? last.close - 2 * (stop - last.close), zone, 'Closed below a support zone on heavy volume.'));
       break;
     }
   }
 
   if (resistance && last.high >= resistance.low && last.close < resistance.low && last.close < last.open && (ind.sma50 === null || last.close < ind.sma50)) {
     const stop = resistance.high + 0.5 * atr;
-    found.push(makeSetup('rejection', last, last.close, stop, downTarget(last.close, stop), resistance, 'Rallied into resistance in a downtrend and closed lower.'));
+    found.push(makeSetup(StockSetupType.Rejection, last, last.close, stop, downTarget(last.close, stop), resistance, 'Rallied into resistance in a downtrend and closed lower.'));
   }
 
   return /** @type {Setup[]} */ (found.filter(Boolean));
@@ -507,14 +509,14 @@ export function analyzeStock(candles, options = {}) {
 
   /** @type {Level[]} */
   const levels = [...swingLevels(candles), ...volumeLevels(candles, Math.max(0.5 * atr, 0.005 * price)), ...roundLevels(price)];
-  if (ind.sma50 !== null) levels.push({ price: ind.sma50, kind: 'sma50', weight: 0.75 });
-  if (ind.sma200 !== null) levels.push({ price: ind.sma200, kind: 'sma200', weight: 1 });
+  if (ind.sma50 !== null) levels.push({ price: ind.sma50, kind: LevelKind.Sma50, weight: 0.75 });
+  if (ind.sma200 !== null) levels.push({ price: ind.sma200, kind: LevelKind.Sma200, weight: 1 });
 
   const merged = mergeLevels(levels, tolerance, atr);
   const history = candles.slice(0, -1);
   const movePct = Math.max(0.03, (2 * atr) / price);
   const failPct = Math.max(0.02, atr / price);
-  /** @param {ReturnType<typeof mergeLevels>[number]} z @param {'support' | 'resistance'} side @returns {Zone} */
+  /** @param {ReturnType<typeof mergeLevels>[number]} z @param {LevelSideId} side @returns {Zone} */
   const toZone = (z, side) => ({
     ...z,
     strength: strengthOf(z.score),
@@ -524,13 +526,13 @@ export function analyzeStock(candles, options = {}) {
   });
 
   // A zone containing the price counts as support: it is where a buyer would act now.
-  const supports = merged.filter((z) => z.low <= price).sort((a, b) => b.mid - a.mid).slice(0, MAX_ZONES_PER_SIDE).map((z) => toZone(z, 'support'));
-  const resistances = merged.filter((z) => z.low > price).sort((a, b) => a.mid - b.mid).slice(0, MAX_ZONES_PER_SIDE).map((z) => toZone(z, 'resistance'));
+  const supports = merged.filter((z) => z.low <= price).sort((a, b) => b.mid - a.mid).slice(0, MAX_ZONES_PER_SIDE).map((z) => toZone(z, LevelSide.Support));
+  const resistances = merged.filter((z) => z.low > price).sort((a, b) => a.mid - b.mid).slice(0, MAX_ZONES_PER_SIDE).map((z) => toZone(z, LevelSide.Resistance));
 
   const { state, note } = stockState(candles, ind);
   // Setups use the last close's view of support and resistance, not the live price.
-  const closeSupports = price === last.close ? supports : merged.filter((z) => z.low <= last.close).sort((a, b) => b.mid - a.mid).slice(0, MAX_ZONES_PER_SIDE).map((z) => toZone(z, 'support'));
-  const closeResistances = price === last.close ? resistances : merged.filter((z) => z.low > last.close).sort((a, b) => a.mid - b.mid).slice(0, MAX_ZONES_PER_SIDE).map((z) => toZone(z, 'resistance'));
+  const closeSupports = price === last.close ? supports : merged.filter((z) => z.low <= last.close).sort((a, b) => b.mid - a.mid).slice(0, MAX_ZONES_PER_SIDE).map((z) => toZone(z, LevelSide.Support));
+  const closeResistances = price === last.close ? resistances : merged.filter((z) => z.low > last.close).sort((a, b) => a.mid - b.mid).slice(0, MAX_ZONES_PER_SIDE).map((z) => toZone(z, LevelSide.Resistance));
   const setups = findSetups(candles, ind, state, closeSupports, closeResistances, merged.filter((z) => z.score >= 1.75));
   const market = options.market ? marketCheck(candles, options.market) : null;
 
@@ -553,7 +555,7 @@ const rs = (/** @type {number} */ v) => `₹${v.toFixed(2)}`;
 
 /**
  * A one-paragraph plan for when there's no setup today.
- * @param {StockState} state
+ * @param {StockStateId} state
  * @param {number} price
  * @param {Zone[]} supports
  * @param {Zone[]} resistances
@@ -568,10 +570,10 @@ export function planText(state, price, supports, resistances, atr, last) {
   const where = zone.low <= price && price <= zone.high ? `Price is inside the ${rs(zone.low)}–${rs(zone.high)} zone` : `Next buy zone ${rs(zone.low)}–${rs(zone.high)} (${zone.distancePct.toFixed(1)}%)`;
   const held = zone.history.tests ? `, held ${zone.history.held} of ${zone.history.tests} past tests` : '';
   const exit = target ? ` First resistance ${rs(target.low)}.` : '';
-  if (state === 'falling' || state === 'stretched') {
+  if (state === StockState.Falling || state === StockState.Stretched) {
     return `${where}${held}. Wait: buy only after a daily close above the previous session's high near the zone; stop below ${rs(stop)}.${exit}`;
   }
-  if (state === 'turning') {
+  if (state === StockState.Turning) {
     return `${where}${held}. The fall is pausing: a buy above ${rs(last.high)} with a stop below ${rs(stop)} has a defined risk.${exit}`;
   }
   return `${where}${held}. Buy dips into the zone that close strong; stop below ${rs(stop)}.${exit}`;

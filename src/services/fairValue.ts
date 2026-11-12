@@ -26,6 +26,7 @@
 
 import { bsPrice, d1, impliedForward, impliedVol, normCdf, yearsToExpiry } from './oiFlow';
 import { OptionType, type OptionTypeId } from '../../shared/tradeEnums.js';
+import { Richness, VolVerdict, type ForwardSourceId, type RichnessId, type VolVerdictId } from '../../shared/analysisEnums.js';
 
 /** IV this far above or below the curve, as a decimal (0.01 = 1 vol point), marks a strike expensive or cheap. */
 export const RICH_IV_GAP = 0.01;
@@ -42,9 +43,6 @@ export const TRADING_DAYS = 252;
 /** ATM IV ÷ realised vol above / below these reads as options expensive / cheap overall. */
 export const IV_RV_RICH = 1.25;
 export const IV_RV_CHEAP = 0.9;
-
-export type Richness = 'Expensive' | 'Fair' | 'Cheap';
-export type VolVerdict = 'Options expensive' | 'Fairly priced' | 'Options cheap';
 
 export interface FairInput {
   token: number;
@@ -69,7 +67,8 @@ export interface FairReading {
   richPct: number | null;
   /** iv − curveIv. */
   ivGap: number | null;
-  label: Richness | null;
+  /** Rich or cheap against the fitted curve; null without an IV or curve. */
+  richness: RichnessId | null;
   /** Market-implied chance of finishing in the money. */
   itmProb: number | null;
   /** CE IV − PE IV at the same strike and expiry; near zero when put-call parity holds. */
@@ -86,8 +85,8 @@ export interface ExpiryStats {
   straddle: number | null;
   /** Forward price the expiry is priced on. */
   forward: number;
-  /** 'parity' when implied from CE/PE prices, 'carry' when it fell back to spot × e^(rT). */
-  forwardSource: 'parity' | 'carry';
+  /** Parity when implied from CE/PE prices, Carry when it fell back to spot × e^(rT). */
+  forwardSource: ForwardSourceId;
 }
 
 export interface FairValueResult {
@@ -306,7 +305,7 @@ export function computeFairValues(inputs: FairInput[]): FairValueResult {
       const fairPrice = curveIv !== null ? bsPrice(input.optionType, pricingSpot, input.strike, t, curveIv) : null;
       const richPct = fairPrice !== null && fairPrice > 0 ? (input.price - fairPrice) / fairPrice : null;
       const ivGap = iv !== null && curveIv !== null ? iv - curveIv : null;
-      const label: Richness | null = ivGap === null ? null : ivGap >= RICH_IV_GAP ? 'Expensive' : ivGap <= -RICH_IV_GAP ? 'Cheap' : 'Fair';
+      const richness: RichnessId | null = ivGap === null ? null : ivGap >= RICH_IV_GAP ? Richness.Expensive : ivGap <= -RICH_IV_GAP ? Richness.Cheap : Richness.Fair;
 
       let itmProb: number | null = null;
       if (iv !== null) {
@@ -325,7 +324,7 @@ export function computeFairValues(inputs: FairInput[]): FairValueResult {
         fairPrice,
         richPct,
         ivGap,
-        label,
+        richness,
         itmProb,
         pairIvGap: ceIv != null && peIv != null ? ceIv - peIv : null,
         moveMultiple: straddle ? Math.abs(input.strike - spot) / straddle : null,
@@ -347,20 +346,20 @@ export function realizedVol(closes: number[], window = REALIZED_WINDOW): number 
   return Math.sqrt(variance * TRADING_DAYS);
 }
 
-export function volVerdict(atmIv: number | null, realized: number | null): VolVerdict | null {
+export function volVerdict(atmIv: number | null, realized: number | null): VolVerdictId | null {
   if (atmIv === null || realized === null || realized <= 0) return null;
   const ratio = atmIv / realized;
-  if (ratio >= IV_RV_RICH) return 'Options expensive';
-  if (ratio <= IV_RV_CHEAP) return 'Options cheap';
-  return 'Fairly priced';
+  if (ratio >= IV_RV_RICH) return VolVerdict.OptionsExpensive;
+  if (ratio <= IV_RV_CHEAP) return VolVerdict.OptionsCheap;
+  return VolVerdict.FairlyPriced;
 }
 
 /** Colour of the fair-value line; a light grey kept clear of the expiry palette and the rich / cheap colours. */
 export const FAIR_LINE_COLOR = '#cbd5e1';
 
-export function richnessColor(label: Richness | null): string {
-  if (label === 'Expensive') return '#f59e0b';
-  if (label === 'Cheap') return '#38bdf8';
+export function richnessColor(richness: RichnessId | null): string {
+  if (richness === Richness.Expensive) return '#f59e0b';
+  if (richness === Richness.Cheap) return '#38bdf8';
   return 'var(--text-secondary)';
 }
 
@@ -373,7 +372,7 @@ export function describeFair(reading: FairReading): string[] {
   const lines: string[] = [];
   if (reading.fairPrice !== null && reading.curveIv !== null && reading.richPct !== null) {
     const pct = reading.richPct * 100;
-    lines.push(`Fair ${rupees(reading.fairPrice)} at curve IV ${(reading.curveIv * 100).toFixed(1)}% · market ${rupees(reading.price)} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%, ${reading.label})`);
+    lines.push(`Fair ${rupees(reading.fairPrice)} at curve IV ${(reading.curveIv * 100).toFixed(1)}% · market ${rupees(reading.price)} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%, ${reading.richness})`);
   } else {
     lines.push('Fair value unavailable (outside the fitted curve or no IV)');
   }

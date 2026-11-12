@@ -25,7 +25,7 @@
 import { tryHoldNamedAdvisoryLock } from '../db.js';
 import { algoLogger } from '../algoLog.js';
 import { createMarket } from './market.js';
-import { PluginState } from '../../shared/appEnums.js';
+import { PluginKind, PluginState } from '../../shared/appEnums.js';
 
 const LOCK_NAME = 'trade-engine';
 /** How often a standing-by server tries to take over the engine. */
@@ -34,8 +34,7 @@ const LOCK_RETRY_MS = 10_000;
 /**
  * @typedef {{ market: import('./market.js').PluginMarket, services: Record<string, any>, log: (event: string, details?: import('../algoLog.js').AlgoDetails) => void }} PluginContext
  * @typedef {{ id: string, start: (ctx: PluginContext) => unknown, stop?: () => unknown, status?: () => Record<string, unknown> }} Plugin
- * @typedef {'service' | 'strategy'} PluginKind
- * @typedef {{ plugin: Plugin, kind: PluginKind, state: import('../../shared/appEnums.js').PluginStateId, error: string | null, dispose: (() => void) | null }} PluginRun
+ * @typedef {{ plugin: Plugin, kind: import('../../shared/appEnums.js').PluginKindId, state: import('../../shared/appEnums.js').PluginStateId, error: string | null, dispose: (() => void) | null }} PluginRun
  * @typedef {{ release: () => Promise<void> }} HeldLock
  */
 
@@ -64,8 +63,8 @@ export function createTradeEngine({
   /** @type {Map<string, PluginRun>} */
   const runs = new Map();
   const add = (/** @type {Plugin} */ plugin, /** @type {PluginKind} */ kind) => runs.set(plugin.id, { plugin, kind, state: PluginState.Stopped, error: null, dispose: null });
-  services.forEach((plugin) => add(plugin, 'service'));
-  strategies.forEach((plugin) => add(plugin, 'strategy'));
+  services.forEach((plugin) => add(plugin, PluginKind.Service));
+  strategies.forEach((plugin) => add(plugin, PluginKind.Strategy));
   const servicesById = Object.fromEntries(services.map((s) => [s.id, s]));
 
   const marketClock = market ?? createMarket({ onError: (id, err) => failed(id, err, 'handler failed') });
@@ -110,8 +109,8 @@ export function createTradeEngine({
 
   /** Services first (strategies use them), then strategies, then the clock. */
   async function startPlugins() {
-    for (const run of runs.values()) if (run.kind === 'service') await startPlugin(run);
-    for (const run of runs.values()) if (run.kind === 'strategy') await startPlugin(run);
+    for (const run of runs.values()) if (run.kind === PluginKind.Service) await startPlugin(run);
+    for (const run of runs.values()) if (run.kind === PluginKind.Strategy) await startPlugin(run);
     marketClock.start();
     running = true;
     log('started', { services: services.length, strategies: strategies.length });

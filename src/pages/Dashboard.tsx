@@ -65,7 +65,7 @@ const formatCompactMoney = (value: number, signed = false) => {
   return formatMoney(value, signed);
 };
 
-const getTone = (value: number) => value > 0 ? 'positive' : value < 0 ? 'negative' : 'neutral';
+const getTone = (value: number): ToneId => value > 0 ? Tone.Positive : value < 0 ? Tone.Negative : Tone.Neutral;
 
 /** A paper position's booked P&L, after charges once it has closed (open ones count 0). */
 const getPaperPositionPnl = (position: Position) => {
@@ -80,14 +80,14 @@ const MetricCard: React.FC<{
   title: string;
   value: string;
   detail: string;
-  tone?: 'positive' | 'negative' | 'neutral' | 'accent';
+  tone?: ToneId;
   loading?: boolean;
   onClick?: () => void;
-}> = ({ title, value, detail, tone = 'neutral', loading = false, onClick }) => {
+}> = ({ title, value, detail, tone = Tone.Neutral, loading = false, onClick }) => {
   const content = (
     <>
       <span className="dashboard-metric__label">{title}</span>
-      <strong className={`dashboard-metric__value dashboard-tone--${tone}`}>{loading ? 'Loading...' : value}</strong>
+      <strong className={`dashboard-metric__value dashboard-tone--${tone.toLowerCase()}`}>{loading ? 'Loading...' : value}</strong>
       <span className="dashboard-metric__detail">{detail}</span>
     </>
   );
@@ -110,20 +110,20 @@ const MetricCard: React.FC<{
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
 
-  const goToHoldings = () => navigate('/portfolio?tab=holdings');
+  const goToHoldings = () => navigate(`/portfolio?tab=${PortfolioTab.Holdings}`);
   const goToPaperPositions = () => {
     saveTradingMode(TradingMode.Paper);
-    navigate(`/portfolio?tab=positions&mode=${TradingMode.Paper}`);
+    navigate(`/portfolio?tab=${PortfolioTab.Positions}&mode=${TradingMode.Paper}`);
   };
   const goToLivePositions = () => {
     saveTradingMode(TradingMode.Live);
-    navigate(`/portfolio?tab=positions&mode=${TradingMode.Live}`);
+    navigate(`/portfolio?tab=${PortfolioTab.Positions}&mode=${TradingMode.Live}`);
   };
-  const goToTodayTrades = () => navigate('/analytics?tab=journal&range=today');
+  const goToTodayTrades = () => navigate(`/analytics?tab=${AnalyticsTab.Journal}&range=${JournalRange.Today}`);
   const goToWatchlist = () => navigate('/watchlist');
   const goToJournalTrade = (trade: DashboardTradeEntry) => {
     saveTradingMode(trade.mode);
-    navigate(`/analytics?tab=journal&mode=${trade.mode}&date=${encodeURIComponent(trade.date)}&tradeId=${encodeURIComponent(trade.id)}`);
+    navigate(`/analytics?tab=${AnalyticsTab.Journal}&mode=${trade.mode}&date=${encodeURIComponent(trade.date)}&tradeId=${encodeURIComponent(trade.id)}`);
   };
 
   const [metrics, setMetrics] = useState<DashboardMetrics>(emptyMetrics);
@@ -243,15 +243,15 @@ const Dashboard: React.FC = () => {
           </button>
           <div className="dashboard-hero__icon"><DashboardIcon /></div>
           <span className="dashboard-hero__label">Total Net P&L</span>
-          <strong className={`dashboard-hero__value dashboard-tone--${getTone(totalPnl)}`}>
+          <strong className={`dashboard-hero__value dashboard-tone--${getTone(totalPnl).toLowerCase()}`}>
             {busy ? 'Loading...' : formatCompactMoney(totalPnl, true)}
           </strong>
           <p className="dashboard-hero__text">Includes holdings, open/closed paper positions, and live broker positions.</p>
         </div>
         <div className="dashboard-hero__side">
           <MetricCard title="Portfolio Value" value={formatCompactMoney(holdingsValue)} detail={`${portfolioReturn >= 0 ? '+' : ''}${portfolioReturn.toFixed(2)}% holdings return`} loading={busy} />
-          <MetricCard title="Open Risk" value={String(openPositions)} detail={`${metrics.openPaperPositions} paper / ${openLivePositions} live`} tone="accent" loading={loading || liveData.loading} />
-          <MetricCard title="Alert Coverage" value={String(metrics.activeAlerts)} detail={`${metrics.triggeredAlerts} triggered alerts retained`} tone="accent" loading={loading} />
+          <MetricCard title="Open Risk" value={String(openPositions)} detail={`${metrics.openPaperPositions} paper / ${openLivePositions} live`} tone={Tone.Accent} loading={loading || liveData.loading} />
+          <MetricCard title="Alert Coverage" value={String(metrics.activeAlerts)} detail={`${metrics.triggeredAlerts} triggered alerts retained`} tone={Tone.Accent} loading={loading} />
         </div>
       </section>
 
@@ -283,9 +283,9 @@ const Dashboard: React.FC = () => {
                 <div className="dashboard-breakdown__row" key={item.label}>
                   <span>{item.label}</span>
                   <div className="dashboard-breakdown__track">
-                    <div className={`dashboard-breakdown__bar dashboard-breakdown__bar--${getTone(item.value)}`} style={{ width: `${width}%` }} />
+                    <div className={`dashboard-breakdown__bar dashboard-breakdown__bar--${getTone(item.value).toLowerCase()}`} style={{ width: `${width}%` }} />
                   </div>
-                  <strong className={`dashboard-tone--${getTone(item.value)}`}>{formatCompactMoney(item.value, true)}</strong>
+                  <strong className={`dashboard-tone--${getTone(item.value).toLowerCase()}`}>{formatCompactMoney(item.value, true)}</strong>
                 </div>
               );
             })}
@@ -329,7 +329,7 @@ const Dashboard: React.FC = () => {
                 </div>
                 <div className="dashboard-list__right">
                   <strong>{formatCompactMoney(holding.value)}</strong>
-                  <span className={`dashboard-tone--${getTone(holding.pnl)}`}>{formatCompactMoney(holding.pnl, true)}</span>
+                  <span className={`dashboard-tone--${getTone(holding.pnl).toLowerCase()}`}>{formatCompactMoney(holding.pnl, true)}</span>
                 </div>
               </div>
             ))}
@@ -351,7 +351,7 @@ const Dashboard: React.FC = () => {
                   <strong>{trade.symbol}</strong>
                   <span>{trade.mode.toUpperCase()} | {trade.side} x {trade.quantity} | {formatNumericDate(trade.date)}</span>
                 </div>
-                <strong className={`dashboard-tone--${getTone(trade.pnl)}`}>{formatMoney(trade.pnl, true)}</strong>
+                <strong className={`dashboard-tone--${getTone(trade.pnl).toLowerCase()}`}>{formatMoney(trade.pnl, true)}</strong>
               </button>
             ))}
           </div>
@@ -363,3 +363,5 @@ const Dashboard: React.FC = () => {
 };
 
 export default Dashboard;
+
+import { AnalyticsTab, JournalRange, PortfolioTab, Tone, type ToneId } from '@/utils/uiEnums';

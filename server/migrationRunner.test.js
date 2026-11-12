@@ -10,12 +10,12 @@ const steps = (plan) => plan.map((step) => [step.action, step.file.name]);
 
 describe('planMigrations', () => {
   it('runs the base file and everything after it on a new database', () => {
-    expect(steps(planMigrations([BASE, NEXT], new Map()))).toEqual([['run', BASE.name], ['run', NEXT.name]]);
+    expect(steps(planMigrations([BASE, NEXT], new Map()))).toEqual([['Run', BASE.name], ['Run', NEXT.name]]);
   });
 
   it('only records the base file on a database that has the migration it replaces, then runs the next', () => {
     expect(steps(planMigrations([BASE, NEXT], applied(file('001_init.sql'), file('026_last.sql')))))
-      .toEqual([['record', BASE.name], ['run', NEXT.name]]);
+      .toEqual([['Record', BASE.name], ['Run', NEXT.name]]);
   });
 
   it('refuses a database behind the base file', () => {
@@ -24,14 +24,14 @@ describe('planMigrations', () => {
   });
 
   it('skips what is applied', () => {
-    expect(steps(planMigrations([BASE, NEXT], applied(BASE)))).toEqual([['run', NEXT.name]]);
+    expect(steps(planMigrations([BASE, NEXT], applied(BASE)))).toEqual([['Run', NEXT.name]]);
     expect(planMigrations([BASE, NEXT], applied(BASE, NEXT))).toEqual([]);
   });
 
   it('re-records a new squash on a database that has the migrations it folded in', () => {
     // A later squash: the base file now also holds 001_next.sql, whose file is deleted.
     const resquashed = base(NEXT.name, 'CREATE TABLE a (); CREATE TABLE b ();');
-    expect(steps(planMigrations([resquashed], applied(BASE, NEXT)))).toEqual([['record', BASE.name]]);
+    expect(steps(planMigrations([resquashed], applied(BASE, NEXT)))).toEqual([['Record', BASE.name]]);
   });
 
   it('refuses a base file edited without folding in more migrations', () => {

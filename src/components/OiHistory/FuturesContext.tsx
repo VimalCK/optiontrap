@@ -1,9 +1,11 @@
 import React, { useMemo, useState } from 'react';
 import type { FuturesHistoryRow } from './types';
+import { OiSignal, oiSignalLabel } from '../../../shared/analysisEnums.js';
 import { FUTURES_LINE_COLORS, buildFuturesSeries, formatMonthLabel, formatFullDateLabel, formatOiCompact } from './helpers';
 import { ChartXAxis } from './ChartXAxis';
 import IconButton from '@/components/IconButton/IconButton';
 import { InfoIcon } from '@/components/icons/Icons';
+import { FuturesView, type FuturesViewId } from '@/utils/uiEnums';
 
 interface FuturesContextProps {
   futuresData: FuturesHistoryRow[];
@@ -14,7 +16,7 @@ interface FuturesContextProps {
 /** Futures Context card: every month's contract on the selected date (table) or across dates (chart). */
 export const FuturesContext: React.FC<FuturesContextProps> = ({ futuresData, filterDate, scrip }) => {
   const [showFuturesInfo, setShowFuturesInfo] = useState(false);
-  const [futuresView, setFuturesView] = useState<'table' | 'chart'>('table');
+  const [futuresView, setFuturesView] = useState<FuturesViewId>(FuturesView.Table);
   const [futuresHover, setFuturesHover] = useState<{ date: string; x: number; oi: number; volume: number; closes: { label: string; color: string; close: number }[] } | null>(null);
 
   /** Futures contracts loaded for M-1 (if stored) and the current-through-selected month range, oldest first. */
@@ -101,7 +103,7 @@ export const FuturesContext: React.FC<FuturesContextProps> = ({ futuresData, fil
           <div>
             <div className="oi-history__table-title">Futures Context</div>
             <div className="oi-history__table-subtitle">
-              {futuresView === 'chart'
+              {futuresView === FuturesView.Chart
                 ? `${futuresContracts.length} month${futuresContracts.length === 1 ? '' : 's'} · Daily price, OI, and volume history`
                 : <>{filterDate ? formatFullDateLabel(filterDate) : 'Select a date'}<span>Daily price, OI, and volume confirmation</span></>}
             </div>
@@ -109,8 +111,8 @@ export const FuturesContext: React.FC<FuturesContextProps> = ({ futuresData, fil
         </div>
         <div className="oi-history__table-meta">
           <div className="oi-history__metric-toggle" role="group" aria-label="Futures view">
-            <button type="button" className={`oi-history__volume-toggle ${futuresView === 'table' ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setFuturesView('table')} aria-pressed={futuresView === 'table'}>Table</button>
-            <button type="button" className={`oi-history__volume-toggle ${futuresView === 'chart' ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setFuturesView('chart')} aria-pressed={futuresView === 'chart'}>Chart</button>
+            <button type="button" className={`oi-history__volume-toggle ${futuresView === FuturesView.Table ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setFuturesView(FuturesView.Table)} aria-pressed={futuresView === FuturesView.Table}>Table</button>
+            <button type="button" className={`oi-history__volume-toggle ${futuresView === FuturesView.Chart ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setFuturesView(FuturesView.Chart)} aria-pressed={futuresView === FuturesView.Chart}>Chart</button>
           </div>
           <IconButton
             icon={<InfoIcon />}
@@ -150,7 +152,7 @@ export const FuturesContext: React.FC<FuturesContextProps> = ({ futuresData, fil
           </div>
         </div>
       )}
-      {futuresView === 'chart' && futuresChart ? (
+      {futuresView === FuturesView.Chart && futuresChart ? (
         <div className="oi-history__chart-wrap oi-history__chart-wrap--futures">
           <div className="oi-history__chart-header">
             <div className="oi-history__chart-title">Futures Price History</div>
@@ -239,8 +241,8 @@ export const FuturesContext: React.FC<FuturesContextProps> = ({ futuresData, fil
                 <span className="oi-history__cell-primary">{row.oiChangePct === null ? '-' : `${row.oiChangePct >= 0 ? '+' : ''}${row.oiChangePct.toFixed(2)}%`}</span>
               </td>
               <td className="oi-history__futures-volume">{row.volume?.toLocaleString('en-IN') || '-'}</td>
-              <td className={`oi-history__futures-signal ${row.interpretation === 'Long buildup' || row.interpretation === 'Short covering' ? 'oi-history__futures-signal--bullish' : row.interpretation === 'Short buildup' || row.interpretation === 'Long unwinding' ? 'oi-history__futures-signal--bearish' : ''}`}>
-                {row.interpretation}{row.avgVolume && row.volume >= row.avgVolume ? ' · active volume' : ''}
+              <td className={`oi-history__futures-signal ${row.interpretation === OiSignal.LongBuildup || row.interpretation === OiSignal.ShortCovering ? 'oi-history__futures-signal--bullish' : row.interpretation === OiSignal.ShortBuildup || row.interpretation === OiSignal.LongUnwinding ? 'oi-history__futures-signal--bearish' : ''}`}>
+                {row.interpretation ? oiSignalLabel(row.interpretation) : 'New data'}{row.avgVolume && row.volume >= row.avgVolume ? ' · active volume' : ''}
               </td>
             </tr>
           ))}</tbody>

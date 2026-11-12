@@ -11,7 +11,8 @@
  * are in shared/paperOrders.js.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import Badge, { type BadgeTone } from '@/components/Badge/Badge';
+import Badge from '@/components/Badge/Badge';
+import { Tone, type ToneId } from '@/utils/uiEnums';
 import EmptyState from '@/components/EmptyState/EmptyState';
 import { PaperTradingIcon } from '@/components/icons/Icons';
 import PositionInstrument from '@/components/PositionInstrument/PositionInstrument';
@@ -26,10 +27,10 @@ import '@/styles/positions.css';
 const ORDER_REFRESH_MS = 5000;
 
 /** An order's status as a badge: open (waiting), filled at its price, or why it was cancelled. */
-export function orderStatus(order: PaperOrder): { tone: BadgeTone; text: string } {
-  if (order.status === OrderStatus.Open) return { tone: 'accent', text: 'Open' };
-  if (order.status === OrderStatus.Filled) return { tone: 'positive', text: `Filled @ ${(order.fillPrice ?? order.limitPrice ?? 0).toFixed(2)}` };
-  return { tone: 'neutral', text: order.statusReason ?? 'Cancelled' };
+export function orderStatus(order: PaperOrder): { tone: ToneId; text: string } {
+  if (order.status === OrderStatus.Open) return { tone: Tone.Accent, text: 'Open' };
+  if (order.status === OrderStatus.Filled) return { tone: Tone.Positive, text: `Filled @ ${(order.fillPrice ?? order.limitPrice ?? 0).toFixed(2)}` };
+  return { tone: Tone.Neutral, text: order.statusReason ?? 'Cancelled' };
 }
 
 /**

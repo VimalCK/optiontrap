@@ -4,11 +4,12 @@ import { defaultAutomationConfig } from '../../../shared/automation.js';
 import type { AutomationConfig } from '@/services/automation';
 import { TEST_STRATEGIES } from '@/services/strategies.fixture';
 import AutomationConfigForm, { type AutomationConfigFormProps } from './AutomationConfigForm';
+import { AutomationSettingsSection } from '@/utils/uiEnums';
 
 const noop = () => {};
 const form = (config: AutomationConfig, extra: Partial<AutomationConfigFormProps> = {}) =>
   renderToStaticMarkup(
-    <AutomationConfigForm config={config} strategies={TEST_STRATEGIES} section="general" onChange={noop} {...extra} />,
+    <AutomationConfigForm config={config} strategies={TEST_STRATEGIES} section={AutomationSettingsSection.General} onChange={noop} {...extra} />,
   );
 
 /** The tag of the toggle labelled `label`, as rendered. */
@@ -63,20 +64,20 @@ describe('AutomationConfigForm', () => {
     expect(general).toContain('Buy Stock');
     expect(general).not.toContain('Max lots per trade');
 
-    const entryRulesTab = form(defaultAutomationConfig(TEST_STRATEGIES), { section: 'entry-rules' });
+    const entryRulesTab = form(defaultAutomationConfig(TEST_STRATEGIES), { section: AutomationSettingsSection.EntryRules });
     expect(entryRulesTab).toContain('Max lots per trade');
     expect(entryRulesTab).not.toContain('Buy Stock');
     expect(entryRulesTab).not.toContain('aria-label="Algo Trading"');
     expect(entryRulesTab).not.toContain('Stop-loss');
 
-    const exitRulesTab = form(defaultAutomationConfig(TEST_STRATEGIES), { section: 'exit-rules' });
+    const exitRulesTab = form(defaultAutomationConfig(TEST_STRATEGIES), { section: AutomationSettingsSection.ExitRules });
     for (const label of ['Stop-loss', 'Target', 'Square off at']) expect(exitRulesTab).toContain(label);
     expect(exitRulesTab).not.toContain('Max lots per trade');
     expect(exitRulesTab).not.toContain('Buy Stock');
   });
 
   it('lists the strategies on the Strategies tab, with their minimums', () => {
-    const html = form(defaultAutomationConfig(TEST_STRATEGIES), { section: 'strategies' });
+    const html = form(defaultAutomationConfig(TEST_STRATEGIES), { section: AutomationSettingsSection.Strategies });
     for (const label of ['Option Analyzer setups', 'Min score (of 100)', 'Min premium (₹)']) expect(html).toContain(label);
     expect(html).not.toContain('No strategies yet');
     expect(html).not.toContain('Buy Stock');
@@ -84,6 +85,6 @@ describe('AutomationConfigForm', () => {
 
   it('has no Save or Cancel of its own: the settings page has one for every tab', () => {
     expect(form(defaultAutomationConfig(TEST_STRATEGIES))).not.toContain('>Save<');
-    expect(form(defaultAutomationConfig(TEST_STRATEGIES), { section: 'entry-rules' })).not.toContain('>Cancel<');
+    expect(form(defaultAutomationConfig(TEST_STRATEGIES), { section: AutomationSettingsSection.EntryRules })).not.toContain('>Cancel<');
   });
 });

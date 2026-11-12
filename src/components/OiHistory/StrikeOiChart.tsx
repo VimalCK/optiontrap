@@ -2,7 +2,8 @@ import React from 'react';
 import type { StrikeHistoryEntry } from './types';
 import { formatOiCompact } from './helpers';
 import { ChartXAxis } from './ChartXAxis';
-import { FAIR_LINE_COLOR, richnessColor, type Richness } from '@/services/fairValue';
+import { FAIR_LINE_COLOR, richnessColor } from '@/services/fairValue';
+import { Richness, type RichnessId } from '../../../shared/analysisEnums.js';
 import { OptionType, type OptionTypeId } from '../../../shared/tradeEnums.js';
 
 interface StrikeOiChartProps {
@@ -56,7 +57,7 @@ export const StrikeOiChart: React.FC<StrikeOiChartProps> = ({ optionType, dates,
 
   // Fair-value line per expiry
   const fairLines = showFair ? expiries.map((exp) => {
-    const pts: { x: number; y: number; priceY: number | null; pct: number | null; label: Richness | null }[] = [];
+    const pts: { x: number; y: number; priceY: number | null; pct: number | null; label: RichnessId | null }[] = [];
     dates.forEach((d, i) => {
       const entry = dateMap.get(d)?.get(exp);
       const fair = entry?.[fairKey];
@@ -71,7 +72,7 @@ export const StrikeOiChart: React.FC<StrikeOiChartProps> = ({ optionType, dates,
   // alone would flag noise on cheap far-OTM options, where a few ticks are a large share of the price.
   const richPoints = fairLines
     .flatMap((l) => l.pts)
-    .filter((p): p is typeof p & { pct: number } => p.pct !== null && (p.label === 'Expensive' || p.label === 'Cheap'))
+    .filter((p): p is typeof p & { pct: number } => p.pct !== null && (p.label === Richness.Expensive || p.label === Richness.Cheap))
     .map((p) => ({ ...p, color: richnessColor(p.label) }));
   const maxRichPct = Math.max(0.1, ...richPoints.map((p) => Math.abs(p.pct)));
 

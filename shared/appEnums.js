@@ -112,3 +112,61 @@ export const HealthStatus = Object.freeze({ Pass: 'Pass', Warn: 'Warn', Fail: 'F
 export const SignalOutcome = Object.freeze({ Open: 'Open', Profit: 'Profit', Loss: 'Loss' });
 
 /** @typedef {typeof SignalOutcome[keyof typeof SignalOutcome]} SignalOutcomeId */
+
+/** Which card the Option Analyzer's Strategy panel shows: sell setups, buy setups, or the trap analyzer. */
+export const StrategyMode = Object.freeze({ Sell: 'Sell', Buy: 'Buy', Analyzer: 'Analyzer' });
+
+/** @typedef {typeof StrategyMode[keyof typeof StrategyMode]} StrategyModeId */
+
+/** Every strategy mode with its label. */
+export const STRATEGY_MODES = /** @type {{ id: StrategyModeId, label: string }[]} */ ([
+  { id: StrategyMode.Sell, label: 'Sell' },
+  { id: StrategyMode.Buy, label: 'Buy' },
+  { id: StrategyMode.Analyzer, label: 'Analyzer' },
+]);
+
+/** A strategy mode's label (Sell, Buy, Analyzer). */
+export const strategyModeLabel = (/** @type {unknown} */ mode) => STRATEGY_MODES.find((m) => m.id === mode)?.label ?? String(mode);
+
+/** What an admin does to a user's subscription on Admin Users (POST /api/admin/users/:userId/subscription). */
+export const SubscriptionAction = Object.freeze({ Activate: 'Activate', Extend: 'Extend', Cancel: 'Cancel' });
+
+/** @typedef {typeof SubscriptionAction[keyof typeof SubscriptionAction]} SubscriptionActionId */
+
+/**
+ * Whether a value is a subscription action.
+ * @param {unknown} value
+ * @returns {value is SubscriptionActionId}
+ */
+export const isSubscriptionAction = (value) => Object.values(SubscriptionAction).some((action) => action === value);
+
+/** Why a request may not use a subscription feature (server/subscriptionAccess.js). */
+export const AccessDenial = Object.freeze({ Unauthenticated: 'Unauthenticated', SubscriptionRequired: 'SubscriptionRequired' });
+
+/** @typedef {typeof AccessDenial[keyof typeof AccessDenial]} AccessDenialId */
+
+/** The unit of a subscription plan's length (subscription_plans.duration_unit). */
+export const DurationUnit = Object.freeze({ Day: 'Day', Week: 'Week', Month: 'Month', Year: 'Year' });
+
+/** @typedef {typeof DurationUnit[keyof typeof DurationUnit]} DurationUnitId */
+
+/** Every duration unit with its label, as read in "6 months". */
+export const DURATION_UNITS = /** @type {{ id: DurationUnitId, label: string }[]} */ ([
+  { id: DurationUnit.Day, label: 'day' },
+  { id: DurationUnit.Week, label: 'week' },
+  { id: DurationUnit.Month, label: 'month' },
+  { id: DurationUnit.Year, label: 'year' },
+]);
+
+/** A duration unit's label (day, week, month, year), or the value itself when unknown. */
+export const durationUnitLabel = (/** @type {unknown} */ unit) => DURATION_UNITS.find((u) => u.id === unit)?.label ?? String(unit);
+
+/** What a trade engine plug-in is (server/tradeEngine/host.js): a service, or a strategy started after the services. */
+export const PluginKind = Object.freeze({ Service: 'Service', Strategy: 'Strategy' });
+
+/** @typedef {typeof PluginKind[keyof typeof PluginKind]} PluginKindId */
+
+/** What startup does with a migration file (server/migrationRunner.js): run its SQL, or only record it as applied. */
+export const MigrationAction = Object.freeze({ Run: 'Run', Record: 'Record' });
+
+/** @typedef {typeof MigrationAction[keyof typeof MigrationAction]} MigrationActionId */

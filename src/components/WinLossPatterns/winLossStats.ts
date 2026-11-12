@@ -12,6 +12,7 @@ import type { StrategyInfo } from '@/services/strategies';
 import type { ResultGroup } from '@/services/automation';
 import { formatCalendarDate } from '@/utils/marketStatus';
 import { type SideId } from '../../../shared/tradeEnums.js';
+import { setupPatternLabel } from '../../../shared/analysisEnums.js';
 
 /** Share of trades that made money, in %; null with no trades. */
 export const winRate = (g: ResultGroup<unknown>): number | null => (g.trades > 0 ? (g.wins / g.trades) * 100 : null);
@@ -38,7 +39,7 @@ export function exitRuleLabel(id: string | null): string {
 export const strategyName = (id: string | null, strategies: StrategyInfo[]): string => (id === null ? 'Unknown' : strategyLabel(id, strategies) ?? id);
 
 /** A setup (the strategy's pattern); trades recorded without one show "Unknown". */
-export const setupName = (setup: string | null): string => setup ?? 'Unknown';
+export const setupName = (setup: string | null): string => (setup === null ? 'Unknown' : setupPatternLabel(setup));
 
 const clock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
 

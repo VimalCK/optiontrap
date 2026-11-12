@@ -13,7 +13,7 @@
  */
 import { MARKET_TIME_ZONE, addDays, marketDateTime } from '../shared/marketTime.js';
 import { RESULTS_ENTRY_SLOT_MINUTES as SLOT } from '../shared/automation.js';
-import { LifecycleStage, Side } from '../shared/tradeEnums.js';
+import { LifecycleStage, ResultDimension, Side } from '../shared/tradeEnums.js';
 import { sqlEnum } from './sql.js';
 
 // $1 user, $2/$3 the range's ISO instants, $4 the market time zone.
@@ -27,14 +27,15 @@ const CLOSED_TRADES_SQL = `
   FROM algo_trades
   WHERE user_id = $1 AND stage = ${sqlEnum(LifecycleStage.Closed)} AND created_at >= $2 AND created_at < $3`;
 
-// Which column each GROUPING SETS row is grouped by ('all' is the summary).
+// Which column each GROUPING SETS row is grouped by (All is the summary).
 // Each row groups by one column at most, so COALESCE picks its value.
 export const RESULTS_SQL = `
   WITH closed AS (${CLOSED_TRADES_SQL})
   SELECT
-    CASE WHEN GROUPING(strategy_id) = 0 THEN 'strategy' WHEN GROUPING(setup) = 0 THEN 'setup'
-         WHEN GROUPING(exit_rule_id) = 0 THEN 'exitRule' WHEN GROUPING(slot) = 0 THEN 'entrySlot'
-         WHEN GROUPING(side) = 0 THEN 'side' WHEN GROUPING(day) = 0 THEN 'day' ELSE 'all' END AS dimension,
+    CASE WHEN GROUPING(strategy_id) = 0 THEN ${sqlEnum(ResultDimension.Strategy)} WHEN GROUPING(setup) = 0 THEN ${sqlEnum(ResultDimension.Setup)}
+         WHEN GROUPING(exit_rule_id) = 0 THEN ${sqlEnum(ResultDimension.ExitRule)} WHEN GROUPING(slot) = 0 THEN ${sqlEnum(ResultDimension.EntrySlot)}
+         WHEN GROUPING(side) = 0 THEN ${sqlEnum(ResultDimension.Side)} WHEN GROUPING(day) = 0 THEN ${sqlEnum(ResultDimension.Day)}
+         ELSE ${sqlEnum(ResultDimension.All)} END AS dimension,
     COALESCE(strategy_id, setup, exit_rule_id, slot::text, side, day) AS key,
     COUNT(*) AS trades,
     COUNT(*) FILTER (WHERE pnl > 0) AS wins,
@@ -66,13 +67,18 @@ export const MAX_DRAWDOWN_SQL = `
 
 /** Each GROUPING SETS dimension and the reply field it fills. */
 const DIMENSIONS = {
-  strategy: 'byStrategy', setup: 'bySetup', exitRule: 'byExitRule', entrySlot: 'byEntrySlot', side: 'bySide', day: 'byDay',
+  [ResultDimension.Strategy]: 'byStrategy',
+  [ResultDimension.Setup]: 'bySetup',
+  [ResultDimension.ExitRule]: 'byExitRule',
+  [ResultDimension.EntrySlot]: 'byEntrySlot',
+  [ResultDimension.Side]: 'bySide',
+  [ResultDimension.Day]: 'byDay',
 };
 
 /** @returns {ResultGroup} */
 function toGroup(row) {
   return {
-    key: row.dimension === 'entrySlot' ? Number(row.key) : row.key,
+    key: row.dimension === ResultDimension.EntrySlot ? Number(row.key) : row.key,
     trades: Number(row.trades),
     wins: Number(row.wins),
     losses: Number(row.losses),
@@ -85,7 +91,7 @@ function toGroup(row) {
   };
 }
 
-const EMPTY_SUMMARY = toGroup({ dimension: 'all', key: null, trades: 0, wins: 0, losses: 0, pnl: 0, gross_profit: 0, gross_loss: 0, charges: 0 });
+const EMPTY_SUMMARY = toGroup({ dimension: ResultDimension.All, key: null, trades: 0, wins: 0, losses: 0, pnl: 0, gross_profit: 0, gross_loss: 0, charges: 0 });
 
 /**
  * The reply from the two queries' rows: the summary, max drawdown, and each
@@ -96,7 +102,7 @@ export function toResults(groupRows, maxDrawdown) {
   const groups = Object.fromEntries(Object.values(DIMENSIONS).map((field) => [field, []]));
   let summary = EMPTY_SUMMARY;
   for (const row of groupRows) {
-    if (row.dimension === 'all') summary = toGroup(row);
+    if (row.dimension === ResultDimension.All) summary = toGroup(row);
     else groups[DIMENSIONS[row.dimension]].push(toGroup(row));
   }
   const byPnl = (/** @type {ResultGroup} */ a, /** @type {ResultGroup} */ b) => b.pnl - a.pnl;

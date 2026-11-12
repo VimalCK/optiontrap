@@ -1,7 +1,8 @@
-import type { FuturesHistoryRow, RolloverPattern } from './types';
+import type { FuturesHistoryRow } from './types';
 import { marketDate, marketMonth } from '../../../shared/marketTime.js';
 import { formatCalendarDate } from '@/utils/marketStatus';
 import { OptionType, type OptionTypeId } from '../../../shared/tradeEnums.js';
+import { MoveDirection, OiSignal, RolloverPattern, type MoveDirectionId, type OiSignalId, type RolloverPatternId } from '../../../shared/analysisEnums.js';
 
 export const RECENT_SCRIPS_KEY = 'optiontrap_oi_history_recent_scrips';
 export const MAX_RECENT_SCRIPS = 5;
@@ -73,12 +74,12 @@ export function buildFuturesSeries(contractRows: FuturesHistoryRow[]) {
     const oiChangePct = previous?.oi > 0 ? ((row.oi - previous.oi) / previous.oi) * 100 : null;
     const averageVolume = sorted.slice(Math.max(0, index - 5), index).map((item) => item.volume).filter((value) => value > 0);
     const avgVolume = averageVolume.length ? averageVolume.reduce((sum, value) => sum + value, 0) / averageVolume.length : null;
-    let interpretation = 'New data';
+    let interpretation: OiSignalId | null = null;
     if (priceChangePct !== null && oiChangePct !== null) {
-      if (priceChangePct >= 0 && oiChangePct >= 0) interpretation = 'Long buildup';
-      else if (priceChangePct < 0 && oiChangePct >= 0) interpretation = 'Short buildup';
-      else if (priceChangePct < 0 && oiChangePct < 0) interpretation = 'Long unwinding';
-      else interpretation = 'Short covering';
+      if (priceChangePct >= 0 && oiChangePct >= 0) interpretation = OiSignal.LongBuildup;
+      else if (priceChangePct < 0 && oiChangePct >= 0) interpretation = OiSignal.ShortBuildup;
+      else if (priceChangePct < 0 && oiChangePct < 0) interpretation = OiSignal.LongUnwinding;
+      else interpretation = OiSignal.ShortCovering;
     }
     return { ...row, priceChangePct, oiChangePct, avgVolume, interpretation };
   });
@@ -101,11 +102,11 @@ export function formatFullDateLabel(date: string): string {
   return formatCalendarDate(date, { weekday: 'short', day: 'numeric', month: 'short' });
 }
 
-/** Determine price direction: 'up' if price rose, 'down' if fell, null if unknown */
+/** Which way the premiums moved across the expiries: Up, Down, or Neutral when flat or unknown. */
 export function priceDirection(
   data: Map<string, { close: number; prevClose: number | undefined }>,
   expiries: string[],
-): 'up' | 'down' | null {
+): MoveDirectionId {
   // Use weighted average price change across expiries with data
   let totalChg = 0;
   let count = 0;
@@ -115,15 +116,15 @@ export function priceDirection(
     totalChg += (entry.close - entry.prevClose) / entry.prevClose;
     count++;
   }
-  if (count === 0) return null;
+  if (count === 0) return MoveDirection.Neutral;
   const avgChg = totalChg / count;
-  if (avgChg > 0.005) return 'up';   // >0.5% rise
-  if (avgChg < -0.005) return 'down'; // >0.5% fall
-  return null;
+  if (avgChg > 0.005) return MoveDirection.Up;     // >0.5% rise
+  if (avgChg < -0.005) return MoveDirection.Down;  // >0.5% fall
+  return MoveDirection.Neutral;
 }
 
-export function classifyOptionMove(oi: number, prevOi: number | undefined, close: number, prevClose: number | undefined): RolloverPattern {
-  if (prevOi === undefined || prevOi === 0) return '-';
+export function classifyOptionMove(oi: number, prevOi: number | undefined, close: number, prevClose: number | undefined): RolloverPatternId {
+  if (prevOi === undefined || prevOi === 0) return RolloverPattern.None;
 
   const oiChg = (oi - prevOi) / prevOi;
   const priceChg = prevClose !== undefined && prevClose > 0
@@ -135,26 +136,26 @@ export function classifyOptionMove(oi: number, prevOi: number | undefined, close
   const priceUp = priceChg > 0.005;
   const priceDown = priceChg < -0.005;
 
-  if (oiRising && priceUp) return 'Long Buildup';
-  if (oiRising && priceDown) return 'Short Buildup';
-  if (oiFalling && priceDown) return 'Long Unwinding';
-  if (oiFalling && priceUp) return 'Short Covering';
-  return 'Stable';
+  if (oiRising && priceUp) return RolloverPattern.LongBuildup;
+  if (oiRising && priceDown) return RolloverPattern.ShortBuildup;
+  if (oiFalling && priceDown) return RolloverPattern.LongUnwinding;
+  if (oiFalling && priceUp) return RolloverPattern.ShortCovering;
+  return RolloverPattern.Stable;
 }
 
-export function patternBiasScore(pattern: RolloverPattern, optionType: OptionTypeId): number {
+export function patternBiasScore(pattern: RolloverPatternId, optionType: OptionTypeId): number {
   if (optionType === OptionType.CE) {
-    if (pattern === 'Long Buildup') return 2;
-    if (pattern === 'Short Covering') return 1;
-    if (pattern === 'Short Buildup') return -2;
-    if (pattern === 'Long Unwinding') return -1;
+    if (pattern === RolloverPattern.LongBuildup) return 2;
+    if (pattern === RolloverPattern.ShortCovering) return 1;
+    if (pattern === RolloverPattern.ShortBuildup) return -2;
+    if (pattern === RolloverPattern.LongUnwinding) return -1;
     return 0;
   }
 
-  if (pattern === 'Short Buildup') return 2;
-  if (pattern === 'Long Unwinding') return 1;
-  if (pattern === 'Long Buildup') return -2;
-  if (pattern === 'Short Covering') return -1;
+  if (pattern === RolloverPattern.ShortBuildup) return 2;
+  if (pattern === RolloverPattern.LongUnwinding) return 1;
+  if (pattern === RolloverPattern.LongBuildup) return -2;
+  if (pattern === RolloverPattern.ShortCovering) return -1;
   return 0;
 }
 

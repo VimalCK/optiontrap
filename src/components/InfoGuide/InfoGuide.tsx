@@ -1,11 +1,10 @@
 import React from 'react';
 import '@/styles/infoguide.css';
-
-export type GuideTone = 'bull' | 'bear' | 'warn' | 'violet' | 'accent' | 'muted' | 'plain';
+import type { GuideToneId } from '@/utils/uiEnums';
 
 export interface GuideRow {
   label: string;
-  tone: GuideTone;
+  tone: GuideToneId;
   /** Short condition shown in monospace, e.g. "OI ↑ · Price ↑". */
   rule?: string;
   meaning: React.ReactNode;
@@ -50,7 +49,7 @@ export const GuideRows: React.FC<{ rows: GuideRow[]; twoCol?: boolean }> = ({ ro
     <ul className={`info-guide__rows ${hasRule ? '' : 'info-guide__rows--no-rule'} ${twoCol ? 'info-guide__rows--two-col' : ''}`}>
       {rows.map((row) => (
         <li key={row.label} className="info-guide__row">
-          <span className={`info-guide__chip info-guide__chip--${row.tone}`}>{row.label}</span>
+          <span className={`info-guide__chip info-guide__chip--${row.tone.toLowerCase()}`}>{row.label}</span>
           {hasRule && <span className="info-guide__rule">{row.rule ?? ''}</span>}
           <span className="info-guide__meaning">{row.meaning}</span>
         </li>

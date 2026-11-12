@@ -70,7 +70,7 @@ describe('computeFairValues', () => {
     const inputs = chain();
     const { byToken } = computeFairValues(inputs);
     const otmPut = byToken.get(tokenOf(inputs, 23400, 'PE'))!;
-    expect(otmPut.label).toBe('Fair');
+    expect(otmPut.richness).toBe('Fair');
     expect(Math.abs(otmPut.richPct!)).toBeLessThan(0.01);
     expect(otmPut.pairIvGap).toBeCloseTo(0, 4);
   });
@@ -80,10 +80,10 @@ describe('computeFairValues', () => {
     const { byToken } = computeFairValues(inputs);
     const rich = byToken.get(tokenOf(inputs, 24400, 'CE'))!;
     const cheap = byToken.get(tokenOf(inputs, 23600, 'PE'))!;
-    expect(rich.label).toBe('Expensive');
+    expect(rich.richness).toBe('Expensive');
     expect(rich.richPct!).toBeGreaterThan(0.1);
     expect(rich.ivGap!).toBeCloseTo(0.03, 2);
-    expect(cheap.label).toBe('Cheap');
+    expect(cheap.richness).toBe('Cheap');
     // Parity check: the mispriced call shows up as a CE − PE IV gap at its strike.
     expect(rich.pairIvGap!).toBeCloseTo(0.03, 2);
   });
@@ -103,7 +103,7 @@ describe('computeFairValues', () => {
 
   it('prices on the parity forward, which matches carry when there is no dividend', () => {
     const stats = computeFairValues(chain()).byExpiry.get(expiry)!;
-    expect(stats.forwardSource).toBe('parity');
+    expect(stats.forwardSource).toBe('Parity');
     expect(stats.forward).toBeCloseTo(forward, 6);
   });
 
@@ -118,7 +118,7 @@ describe('computeFairValues', () => {
       const call = byToken.get(tokenOf(inputs, strike, 'CE'))!;
       expect(call.iv!).toBeCloseTo(smile(strike), 4);
       expect(call.pairIvGap!).toBeCloseTo(0, 4);
-      expect(call.label).toBe('Fair');
+      expect(call.richness).toBe('Fair');
     }
   });
 
@@ -126,14 +126,14 @@ describe('computeFairValues', () => {
     // Only OTM legs: no strike has both a CE and a PE.
     const inputs = chain().filter((i) => (i.optionType === 'CE' ? i.strike > 24000 : i.strike < 24000));
     const stats = computeFairValues(inputs).byExpiry.get(expiry)!;
-    expect(stats.forwardSource).toBe('carry');
+    expect(stats.forwardSource).toBe('Carry');
     expect(stats.forward).toBeCloseTo(forward, 6);
   });
 
   it('ignores a parity forward implausibly far from carry', () => {
     // Prices consistent with spot 20% lower than reported: bad data, not a dividend.
     const stats = computeFairValues(chain({}, spot * 0.2)).byExpiry.get(expiry)!;
-    expect(stats.forwardSource).toBe('carry');
+    expect(stats.forwardSource).toBe('Carry');
   });
 });
 
@@ -147,9 +147,9 @@ describe('realizedVol', () => {
   });
 
   it('reads IV against realised vol', () => {
-    expect(volVerdict(0.15, 0.1)).toBe('Options expensive');
-    expect(volVerdict(0.1, 0.12)).toBe('Options cheap');
-    expect(volVerdict(0.12, 0.11)).toBe('Fairly priced');
+    expect(volVerdict(0.15, 0.1)).toBe('OptionsExpensive');
+    expect(volVerdict(0.1, 0.12)).toBe('OptionsCheap');
+    expect(volVerdict(0.12, 0.11)).toBe('FairlyPriced');
     expect(volVerdict(null, 0.1)).toBeNull();
   });
 });

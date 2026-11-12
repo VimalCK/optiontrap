@@ -146,7 +146,7 @@ const Settings: React.FC = () => {
                 type="button"
                 role="radio"
                 aria-checked={tradingMode === m.id}
-                className={`settings-toggle__option settings-toggle__option--${m.id}${tradingMode === m.id ? ' settings-toggle__option--active' : ''}`}
+                className={`settings-toggle__option settings-toggle__option--${m.id.toLowerCase()}${tradingMode === m.id ? ' settings-toggle__option--active' : ''}`}
                 onClick={() => handleTradingModeChange(m.id)}
               >
                 <span className="settings-toggle__dot" />
@@ -154,7 +154,7 @@ const Settings: React.FC = () => {
               </button>
             ))}
           </div>
-          <p className={`settings-hint settings-hint--${tradingMode}`}>{modeHint}</p>
+          <p className={`settings-hint settings-hint--${tradingMode.toLowerCase()}`}>{modeHint}</p>
         </SettingCard>
 
         <SettingCard

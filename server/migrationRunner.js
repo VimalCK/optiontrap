@@ -23,6 +23,7 @@
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import { MigrationAction } from '../shared/appEnums.js';
 
 /** The base schema's file name, fixed so the runner can tell it from the migrations after it. */
 export const BASE_SCHEMA_FILE = '000_base_schema.sql';
@@ -32,7 +33,7 @@ const REPLACES_LINE = /^-- replaces: (\S+\.sql)\s*$/m;
 
 /**
  * @typedef {{ name: string, sql: string, checksum: string }} MigrationFile
- * @typedef {{ action: 'run' | 'record', file: MigrationFile }} MigrationStep
+ * @typedef {{ action: import('../shared/appEnums.js').MigrationActionId, file: MigrationFile }} MigrationStep
  */
 
 /**
@@ -63,8 +64,8 @@ function planBaseSchema(base, applied) {
   const recorded = applied.get(base.name);
   if (recorded === base.checksum) return null;
   const replaces = replacedMigration(base);
-  if (applied.size === 0) return { action: 'run', file: base };
-  if (applied.has(replaces)) return { action: 'record', file: base };
+  if (applied.size === 0) return { action: MigrationAction.Run, file: base };
+  if (applied.has(replaces)) return { action: MigrationAction.Record, file: base };
   if (recorded !== undefined) {
     throw new Error(`${base.name} was modified after being applied without folding in more migrations: change its schema with a new migration, or update its "-- replaces:" line when squashing.`);
   }
@@ -90,7 +91,7 @@ export function planMigrations(files, applied) {
     }
     const checksum = applied.get(file.name);
     if (checksum === undefined) {
-      steps.push({ action: 'run', file });
+      steps.push({ action: MigrationAction.Run, file });
       continue;
     }
     if (checksum !== file.checksum) {
@@ -128,7 +129,7 @@ async function applyStep(pool, { action, file }, fileNames) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    if (action === 'run') await client.query(file.sql);
+    if (action === MigrationAction.Run) await client.query(file.sql);
     else await client.query('DELETE FROM schema_migrations WHERE NOT (name = ANY($1))', [fileNames]);
     await client.query(
       `INSERT INTO schema_migrations (name, checksum) VALUES ($1, $2)
@@ -136,7 +137,7 @@ async function applyStep(pool, { action, file }, fileNames) {
       [file.name, file.checksum],
     );
     await client.query('COMMIT');
-    console.log(action === 'run' ? `[DB] Applied migration ${file.name}` : `[DB] Recorded ${file.name} (the schema it builds is already here)`);
+    console.log(action === MigrationAction.Run ? `[DB] Applied migration ${file.name}` : `[DB] Recorded ${file.name} (the schema it builds is already here)`);
   } catch (err) {
     await client.query('ROLLBACK');
     throw new Error(`Migration ${file.name} failed: ${/** @type {Error} */ (err).message}`);

@@ -126,7 +126,8 @@ import { createConcurrencyLimit } from './concurrencyLimit.js';
 import { allowOnlyKnownKiteCalls } from './kiteProxyAllowlist.js';
 import { MAX_CLIENT_MESSAGE_BYTES, MAX_CONNECTIONS_PER_USER } from './wsLimits.js';
 import { Exchange, InstrumentType, OptionType, OrderStatus, Side, isOptionType, isSide } from '../shared/tradeEnums.js';
-import { FEEDBACK_STATUSES, PriceAlertStatus, SignalOutcome, SubscriptionProvider, isFeedbackStatus, isFeedbackType } from '../shared/appEnums.js';
+import { AccessDenial, FEEDBACK_STATUSES, PriceAlertStatus, SignalOutcome, SubscriptionAction, SubscriptionProvider, isFeedbackStatus, isFeedbackType } from '../shared/appEnums.js';
+import { TradeSetupStatus, isTradeSetupStatus } from '../shared/analysisEnums.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -473,7 +474,7 @@ const requireSubscription = async (req, res, next) => {
       return next();
     }
 
-    if (access.reason === 'unauthenticated') {
+    if (access.reason === AccessDenial.Unauthenticated) {
       return res.status(401).json({ status: 'error', message: 'Not authenticated' });
     }
 
@@ -681,16 +682,16 @@ app.post('/api/admin/users/:userId/subscription', requireAuth, requireAdmin, asy
 
   try {
     let subscription;
-    if (action === 'activate') {
+    if (action === SubscriptionAction.Activate) {
       if (!planId) return res.status(400).json({ status: 'error', message: 'planId is required' });
       subscription = await adminActivateSubscription(userId, planId);
-    } else if (action === 'extend') {
+    } else if (action === SubscriptionAction.Extend) {
       if (!planId) return res.status(400).json({ status: 'error', message: 'planId is required' });
       subscription = await adminExtendSubscription(userId, planId);
-    } else if (action === 'cancel') {
+    } else if (action === SubscriptionAction.Cancel) {
       subscription = await adminCancelSubscription(userId);
     } else {
-      return res.status(400).json({ status: 'error', message: 'action must be activate, extend or cancel' });
+      return res.status(400).json({ status: 'error', message: `action must be ${Object.values(SubscriptionAction).join(', ')}` });
     }
 
     res.json({ status: 'ok', data: subscription });
@@ -1254,12 +1255,12 @@ app.get('/api/stocks/:token/setups', requireAuth, requireSubscription, async (re
 app.post('/api/oi-history/signals', requireAuth, requireSubscription, async (req, res) => {
   try {
     const { scrip, signalDate, expiry, strike, optionType, action, status, entryPremium, spotPrice, details } = req.body || {};
-    if (!scrip || !signalDate || !Number.isFinite(Number(strike)) || !isOptionType(optionType) || !isSide(action)) {
+    if (!scrip || !signalDate || !Number.isFinite(Number(strike)) || !isOptionType(optionType) || !isSide(action) || (status && !isTradeSetupStatus(status))) {
       return res.status(400).json({ status: 'error', message: 'Invalid trade setup signal' });
     }
     const signal = await saveTradeSetupSignal(req.session.kiteSession.userId, {
       scrip, signalDate, expiry, strike: Number(strike), optionType, action,
-      status: status || 'Watch', entryPremium: Number(entryPremium) || null,
+      status: status || TradeSetupStatus.Watch, entryPremium: Number(entryPremium) || null,
       spotPrice: Number(spotPrice) || null, details,
     });
     res.status(201).json({ status: 'ok', data: signal });

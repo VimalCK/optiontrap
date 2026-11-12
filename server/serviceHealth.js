@@ -10,6 +10,7 @@
  * GET /api/admin/health and shown on the admin Services page.
  */
 import { HealthStatus, JobRunStatus, PluginState } from '../shared/appEnums.js';
+import { TRADE_MONITOR_SERVICE_ID } from './tradeEngine/services/tradeMonitor.js';
 
 /**
  * @typedef {{ status: import('../shared/appEnums.js').HealthStatusId, output: string, time: string | null }} HealthCheck
@@ -19,9 +20,6 @@ import { HealthStatus, JobRunStatus, PluginState } from '../shared/appEnums.js';
 
 const iso = (/** @type {number | null} */ ms) => (ms === null ? null : new Date(ms).toISOString());
 const count = (/** @type {number} */ n, /** @type {string} */ noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
-
-/** The id of the engine's trade monitor service, whose health is part of the engine's. */
-const TRADE_MONITOR_ID = 'tradeMonitor';
 
 /**
  * The signals service's last run: passes when it worked, warns when some
@@ -51,7 +49,7 @@ export function tradeEngineHealth({ running, plugins }) {
   if (!running) return { status: HealthStatus.Warn, output: 'Standing by · not holding the engine lock', time: null };
   const notStarted = plugins.find((plugin) => plugin.state === PluginState.Failed);
   if (notStarted) return { status: HealthStatus.Fail, output: `${notStarted.id} could not start · ${notStarted.error}`, time: null };
-  const monitor = tradeMonitorHealth(plugins.find((plugin) => plugin.id === TRADE_MONITOR_ID));
+  const monitor = tradeMonitorHealth(plugins.find((plugin) => plugin.id === TRADE_MONITOR_SERVICE_ID));
   if (monitor.status !== HealthStatus.Pass) return { ...monitor, output: `Trade monitor · ${monitor.output}` };
   const erred = plugins.find((plugin) => plugin.error !== null);
   if (erred) return { status: HealthStatus.Warn, output: `${erred.id} failed · ${erred.error}`, time: null };

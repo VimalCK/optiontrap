@@ -63,7 +63,7 @@ const TradeTimeline: React.FC<{ trade: AutoTrade }> = ({ trade }) => {
   return (
   <ol className="automation-timeline">
     {trade.events.map((event, i) => (
-      <li key={i} className={`automation-timeline__step automation-timeline__step--${stepTone(event.stage)}`}>
+      <li key={i} className={`automation-timeline__step automation-timeline__step--${stepTone(event.stage).toLowerCase()}`}>
         <span className="automation-timeline__marker" aria-hidden="true" />
         <div className="automation-timeline__body">
           <div className="automation-timeline__head">
@@ -255,7 +255,7 @@ const Automation: React.FC = () => {
             <IconButton
               icon={<AnalyticsIcon size={18} />}
               label="Win/Loss Patterns"
-              onClick={() => navigate('/analytics?tab=winloss')}
+              onClick={() => navigate(`/analytics?tab=${AnalyticsTab.WinLoss}`)}
             />
             <IconButton
               icon={<SettingsIcon size={18} />}
@@ -270,3 +270,5 @@ const Automation: React.FC = () => {
 };
 
 export default Automation;
+
+import { AnalyticsTab } from '@/utils/uiEnums';

@@ -112,15 +112,23 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
 
 ## Enums
 
-- Every fixed set of values (statuses, sides, modes, kinds, stages …) is an enum in `shared/tradeEnums.js` (trading) or
-  `shared/appEnums.js` (the rest): a frozen object whose **values equal the member names** (`OrderStatus.Open` is `'Open'`;
-  Kite's own codes keep Kite's spelling: `Side.BUY`, `Exchange.NFO`). The database stores and the API sends exactly that text.
+- Every fixed set of values (statuses, sides, modes, kinds, stages …) is an enum: a frozen object whose **values equal the
+  member names** (`OrderStatus.Open` is `'Open'`; Kite's own codes keep Kite's spelling: `Side.BUY`, `Exchange.NFO`).
+  The database stores and the API sends exactly that text, and every enum column has a CHECK listing its members.
+  - `shared/tradeEnums.js` (trading), `shared/analysisEnums.js` (option, OI and stock analysis: patterns, setups, flows,
+    each with an `{ id, label }` list and a `xLabel()` for display text), `shared/appEnums.js` (the rest).
+  - `src/utils/uiEnums.ts`: sets only the browser uses (tones, toasts, the accent theme, tabs and views). Read a URL
+    parameter with `enumFromParam`, which also accepts links saved in the old lower-case spelling.
+  - Plug-in ids (entry/exit rules, strategies, engine services) are not central enums: each plug-in exports its own id
+    constant (`TARGET_RULE_ID`), and callers import it. Stored rule and strategy ids never change.
+- **CSS classes stay lower-case:** a class modifier built from a value lower-cases it: `badge--${tone.toLowerCase()}`.
 - Code names the member, never the value: `OrderStatus.Open`, not `'Open'`. This holds everywhere the app runs:
   - SQL in JS: `${sqlEnum(OrderStatus.Open)}` (`server/sql.js`); Postgres still gets a literal, so partial indexes match.
   - Nightly jobs: SQL that names a value is a `.js` job using `runSql` + `sqlEnum`, not a `.sql` file.
   - Display text that happens to read like a value (`label: 'Open'`) is fine; it is text, not the value.
 - Migrations are the exception: a fixed, checksummed record, so they write the values they store as literals.
-- `shared/enumGuards.test.js` enforces this (typed values, members inside SQL strings, values in `.sql` job files).
+- `shared/enumGuards.test.js` enforces this (typed values, members inside SQL strings, values in `.sql` job files,
+  class modifiers that aren't lower-cased; it reads every `shared/*Enums.js` and `uiEnums.ts`).
   Words that equal a value only by chance go in its `ALLOWED` map with the reason; never use that to let a real value through.
 
 ## Database and migrations

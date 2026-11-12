@@ -1,33 +1,34 @@
 import React from 'react';
 import { InfoGuide, GuideGrid, GuideSection, GuideRows, GuideTerms, GuideNote, GuideFooter, type GuideRow, type GuideTerm } from '@/components/InfoGuide/InfoGuide';
+import { GuideTone } from '@/utils/uiEnums';
 
 const OI_PRICE: GuideRow[] = [
-  { label: 'Long Buildup', tone: 'bull', rule: 'OI ↑ · Price ↑', meaning: 'New buyers entering. Bullish for the option.' },
-  { label: 'Short Buildup', tone: 'bear', rule: 'OI ↑ · Price ↓', meaning: 'New sellers entering. Bearish for the option.' },
-  { label: 'Long Unwinding', tone: 'bear', rule: 'OI ↓ · Price ↓', meaning: 'Buyers exiting, giving up.' },
-  { label: 'Short Covering', tone: 'bull', rule: 'OI ↓ · Price ↑', meaning: 'Sellers exiting, bears retreating.' },
+  { label: 'Long Buildup', tone: GuideTone.Bull, rule: 'OI ↑ · Price ↑', meaning: 'New buyers entering. Bullish for the option.' },
+  { label: 'Short Buildup', tone: GuideTone.Bear, rule: 'OI ↑ · Price ↓', meaning: 'New sellers entering. Bearish for the option.' },
+  { label: 'Long Unwinding', tone: GuideTone.Bear, rule: 'OI ↓ · Price ↓', meaning: 'Buyers exiting, giving up.' },
+  { label: 'Short Covering', tone: GuideTone.Bull, rule: 'OI ↓ · Price ↑', meaning: 'Sellers exiting, bears retreating.' },
 ];
 
 export const IV_FLOW_ROWS: GuideRow[] = [
-  { label: 'Buyers Adding', tone: 'bull', rule: 'OI ↑ · IV ↑ vs ATM', meaning: 'Buyers are paying up for this strike.' },
-  { label: 'Writers Adding', tone: 'bear', rule: 'OI ↑ · IV ↓ vs ATM', meaning: 'Writers are pressing premiums down.' },
-  { label: 'Buyers Exiting', tone: 'bear', rule: 'OI ↓ · IV ↓ vs ATM', meaning: 'Longs closing out.' },
-  { label: 'Writers Covering', tone: 'bull', rule: 'OI ↓ · IV ↑ vs ATM', meaning: 'Shorts buying back.' },
-  { label: 'Unclear', tone: 'muted', rule: 'OI moved · IV flat', meaning: 'IV within 0.5 pts of ATM, so no side stands out.' },
-  { label: 'Stable', tone: 'muted', rule: 'OI normal', meaning: 'Under 1.5× the strike’s usual daily change (2% without history).' },
+  { label: 'Buyers Adding', tone: GuideTone.Bull, rule: 'OI ↑ · IV ↑ vs ATM', meaning: 'Buyers are paying up for this strike.' },
+  { label: 'Writers Adding', tone: GuideTone.Bear, rule: 'OI ↑ · IV ↓ vs ATM', meaning: 'Writers are pressing premiums down.' },
+  { label: 'Buyers Exiting', tone: GuideTone.Bear, rule: 'OI ↓ · IV ↓ vs ATM', meaning: 'Longs closing out.' },
+  { label: 'Writers Covering', tone: GuideTone.Bull, rule: 'OI ↓ · IV ↑ vs ATM', meaning: 'Shorts buying back.' },
+  { label: 'Unclear', tone: GuideTone.Muted, rule: 'OI moved · IV flat', meaning: 'IV within 0.5 pts of ATM, so no side stands out.' },
+  { label: 'Stable', tone: GuideTone.Muted, rule: 'OI normal', meaning: 'Under 1.5× the strike’s usual daily change (2% without history).' },
 ];
 
 const ROLLOVER: GuideRow[] = [
-  { label: 'Rolling Over (Short)', tone: 'accent', meaning: 'Writers moving to the next expiry. Strike is being defended.' },
-  { label: 'Rolling Over (Long)', tone: 'accent', meaning: 'Buyers moving to the next expiry. Conviction maintained.' },
-  { label: 'Fresh Build (Short)', tone: 'bull', meaning: 'New sellers at a far expiry. A new wall forming.' },
-  { label: 'Fresh Build (Long)', tone: 'bull', meaning: 'New buyers at a far expiry. A new directional bet.' },
-  { label: 'Doubling Down (Long)', tone: 'bull', meaning: 'OI rising across expiries with premium rising.' },
-  { label: 'Doubling Down (Short)', tone: 'bear', meaning: 'OI rising across expiries with premium falling.' },
-  { label: 'Exiting (Long Unwind)', tone: 'bear', meaning: 'Buyers closing out, nothing replacing them.' },
-  { label: 'Exiting (Short Cover)', tone: 'bear', meaning: 'Sellers closing out. The wall is being abandoned.' },
-  { label: 'Unwinding', tone: 'bear', meaning: 'OI falling across all expiries.' },
-  { label: 'Stable', tone: 'muted', meaning: 'No significant change (under 2%).' },
+  { label: 'Rolling Over (Short)', tone: GuideTone.Accent, meaning: 'Writers moving to the next expiry. Strike is being defended.' },
+  { label: 'Rolling Over (Long)', tone: GuideTone.Accent, meaning: 'Buyers moving to the next expiry. Conviction maintained.' },
+  { label: 'Fresh Build (Short)', tone: GuideTone.Bull, meaning: 'New sellers at a far expiry. A new wall forming.' },
+  { label: 'Fresh Build (Long)', tone: GuideTone.Bull, meaning: 'New buyers at a far expiry. A new directional bet.' },
+  { label: 'Doubling Down (Long)', tone: GuideTone.Bull, meaning: 'OI rising across expiries with premium rising.' },
+  { label: 'Doubling Down (Short)', tone: GuideTone.Bear, meaning: 'OI rising across expiries with premium falling.' },
+  { label: 'Exiting (Long Unwind)', tone: GuideTone.Bear, meaning: 'Buyers closing out, nothing replacing them.' },
+  { label: 'Exiting (Short Cover)', tone: GuideTone.Bear, meaning: 'Sellers closing out. The wall is being abandoned.' },
+  { label: 'Unwinding', tone: GuideTone.Bear, meaning: 'OI falling across all expiries.' },
+  { label: 'Stable', tone: GuideTone.Muted, meaning: 'No significant change (under 2%).' },
 ];
 
 const HOVER_MEASURES: GuideTerm[] = [

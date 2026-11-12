@@ -12,7 +12,6 @@ import { formatAmount, formatSignedAmount } from '@/utils/formatAmount';
 import { MarketStatus } from '../../shared/tradeEnums.js';
 import '@/styles/holdings.css';
 
-type AllocationView = 'bar' | 'treemap';
 
 interface AllocationItem {
   symbol: string;
@@ -27,7 +26,7 @@ interface AllocationItem {
 
 const HoldingsView: React.FC = () => {
   const { holdings, totals, loading, error, reload, marketStatus } = useHoldings();
-  const [allocationView, setAllocationView] = useState<AllocationView>('bar');
+  const [allocationView, setAllocationView] = useState<AllocationViewId>(AllocationView.Bar);
   const [expandedStock, setExpandedStock] = useState<string | null>(null);
   const [privacyMode, setPrivacyMode] = useState(() =>
     localStorage.getItem('optiontrap_privacy_mode') === 'true'
@@ -140,16 +139,16 @@ const HoldingsView: React.FC = () => {
                 </div>
               </div>
               <div className="allocation-toggle">
-                <button className={`allocation-toggle__btn ${allocationView === 'bar' ? 'active' : ''}`} onClick={() => setAllocationView('bar')} title="Bar view">
+                <button className={`allocation-toggle__btn ${allocationView === AllocationView.Bar ? 'active' : ''}`} onClick={() => setAllocationView(AllocationView.Bar)} title="Bar view">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18" /><path d="M7 16h3" /><path d="M7 12h7" /><path d="M7 8h11" /></svg>
                 </button>
-                <button className={`allocation-toggle__btn ${allocationView === 'treemap' ? 'active' : ''}`} onClick={() => setAllocationView('treemap')} title="Treemap view">
+                <button className={`allocation-toggle__btn ${allocationView === AllocationView.Treemap ? 'active' : ''}`} onClick={() => setAllocationView(AllocationView.Treemap)} title="Treemap view">
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="9" /><rect x="14" y="3" width="7" height="5" /><rect x="14" y="12" width="7" height="9" /><rect x="3" y="16" width="7" height="5" /></svg>
                 </button>
               </div>
             </div>
 
-            {allocationView === 'bar' ? (
+            {allocationView === AllocationView.Bar ? (
               <div className="allocation-list">
                 {allocation.map((item) => {
                   const key = `${item.exchange}:${item.symbol}`;
@@ -327,3 +326,5 @@ const Treemap: React.FC<{ data: AllocationItem[] }> = ({ data }) => {
 };
 
 export default HoldingsView;
+
+import { AllocationView, type AllocationViewId } from '@/utils/uiEnums';

@@ -28,8 +28,8 @@ describe('RuleSettingsForm', () => {
 
   it('hides a value label the rule name already gives, keeping it as the input name, and shows the others', () => {
     const rules: RuleInfo[] = [
-      { id: 'max', label: 'Maximum size', description: '', params: [{ key: 'max', label: 'Size', type: 'count', hideLabel: true }] },
-      { id: 'loss', label: 'Loss', description: '', params: [{ key: 'amount', label: 'Loss (₹)', type: 'amount' }] },
+      { id: 'max', label: 'Maximum size', description: '', params: [{ key: 'max', label: 'Size', type: 'Count', hideLabel: true }] },
+      { id: 'loss', label: 'Loss', description: '', params: [{ key: 'amount', label: 'Loss (₹)', type: 'Amount' }] },
     ];
     const html = form(rules);
     const [size, loss] = [...html.matchAll(/<label class="automation-rule__param">(.*?)<input([^>]*)>/g)];
@@ -67,10 +67,10 @@ describe('RuleSettingsForm', () => {
 
 describe('paramValueFromInput', () => {
   it('keeps what was typed: empty is not set, numbers as numbers, times as text', () => {
-    expect(paramValueFromInput('count', '')).toBeNull();
-    expect(paramValueFromInput('count', '1.5')).toBe(1.5);
-    expect(paramValueFromInput('amount', '2500')).toBe(2500);
-    expect(paramValueFromInput('time', '15:00')).toBe('15:00');
-    expect(paramValueFromInput('time', '')).toBeNull();
+    expect(paramValueFromInput('Count', '')).toBeNull();
+    expect(paramValueFromInput('Count', '1.5')).toBe(1.5);
+    expect(paramValueFromInput('Amount', '2500')).toBe(2500);
+    expect(paramValueFromInput('Time', '15:00')).toBe('15:00');
+    expect(paramValueFromInput('Time', '')).toBeNull();
   });
 });

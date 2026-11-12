@@ -31,16 +31,16 @@ const DEFAULT_FEATURES = ['Full access to all analytics', 'Paper trading + journ
 
 // Shown until the live plans load (or if the request fails).
 const FALLBACK_PLANS: SubscriptionPlan[] = [
-  { id: 'one_month', name: '1 Month', description: null, currency: 'INR', price: 199, durationCount: 1, durationUnit: 'month', isActive: true },
-  { id: 'six_months', name: '6 Months', description: null, currency: 'INR', price: 999, durationCount: 6, durationUnit: 'month', isActive: true },
-  { id: 'twelve_months', name: '12 Months', description: null, currency: 'INR', price: 1799, durationCount: 12, durationUnit: 'month', isActive: true },
+  { id: 'one_month', name: '1 Month', description: null, currency: 'INR', price: 199, durationCount: 1, durationUnit: DurationUnit.Month, isActive: true },
+  { id: 'six_months', name: '6 Months', description: null, currency: 'INR', price: 999, durationCount: 6, durationUnit: DurationUnit.Month, isActive: true },
+  { id: 'twelve_months', name: '12 Months', description: null, currency: 'INR', price: 1799, durationCount: 12, durationUnit: DurationUnit.Month, isActive: true },
 ];
 
 const monthsOf = (p: SubscriptionPlan): number => {
   switch (p.durationUnit) {
-    case 'year': return p.durationCount * 12;
-    case 'week': return (p.durationCount * 7) / 30;
-    case 'day': return p.durationCount / 30;
+    case DurationUnit.Year: return p.durationCount * 12;
+    case DurationUnit.Week: return (p.durationCount * 7) / 30;
+    case DurationUnit.Day: return p.durationCount / 30;
     default: return p.durationCount;
   }
 };
@@ -475,3 +475,5 @@ const Login: React.FC = () => {
 };
 
 export default Login;
+
+import { DurationUnit } from '../../shared/appEnums.js';

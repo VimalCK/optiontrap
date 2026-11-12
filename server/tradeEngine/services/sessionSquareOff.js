@@ -24,6 +24,9 @@ import { lastSessionEnd } from '../../../shared/marketTime.js';
 import { NOT_FOUND, SESSION_SQUARE_OFF } from '../positions.js';
 import { TradeSource } from '../../../shared/tradeEnums.js';
 
+/** This trade engine service's id: its key in ctx.services and on Admin Services. */
+export const SESSION_SQUARE_OFF_SERVICE_ID = 'sessionSquareOff';
+
 /** How often, in market hours, positions left from an earlier session are looked for (first at the open). */
 const LEFTOVER_CHECK_MS = 60_000;
 
@@ -122,7 +125,7 @@ export function createSessionSquareOff({
   }
 
   return {
-    id: 'sessionSquareOff',
+    id: SESSION_SQUARE_OFF_SERVICE_ID,
 
     /** Run on the market clock: square off after each close, and pick up leftovers while the market is open. */
     start(/** @type {import('../host.js').PluginContext} */ ctx) {

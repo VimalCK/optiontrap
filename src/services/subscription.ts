@@ -1,13 +1,15 @@
 import { SubscriptionPlan, SubscriptionStatus } from './kiteAuth';
 import { apiClient } from './apiClient';
+import { durationUnitLabel } from '../../shared/appEnums.js';
 
 /**
  * Human-readable duration label from the generic count + unit model.
- * e.g. (1, 'month') -> "month", (6, 'month') -> "6 months", (7, 'day') -> "7 days".
+ * e.g. (1, Month) -> "month", (6, Month) -> "6 months", (7, Day) -> "7 days".
  */
 export function formatDuration(count: number, unit: string): string {
   const n = count || 1;
-  return n === 1 ? unit : `${n} ${unit}s`;
+  const label = durationUnitLabel(unit);
+  return n === 1 ? label : `${n} ${label}s`;
 }
 
 export async function getSubscriptionPlans(): Promise<SubscriptionPlan[]> {

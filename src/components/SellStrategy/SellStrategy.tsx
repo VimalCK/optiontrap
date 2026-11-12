@@ -16,9 +16,10 @@ import { placeMarketTrade, placedOrderMessage, placedOrderRefused, type PaperOrd
 import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
 import type { FlowReading } from '@/services/oiFlow';
 import '@/styles/sellstrategy.css';
-import { OptionType, OrderStatus, Side, TradingMode, type HorizonId, type TradingModeId } from '../../../shared/tradeEnums.js';
-
-export type StrategyMode = 'sell' | 'buy' | 'analyzer';
+import { OptionType, OrderStatus, Side, TradingMode, type HorizonId, type OptionTypeId, type TradingModeId } from '../../../shared/tradeEnums.js';
+import { OptionSetup, optionSetupLabel, setupPatternLabel, type OptionSetupId } from '../../../shared/analysisEnums.js';
+import { STRATEGY_MODES, StrategyMode, strategyModeLabel, type StrategyModeId } from '../../../shared/appEnums.js';
+import { ToastColor, type ToastColorId } from '@/utils/uiEnums';
 
 interface SellStrategyProps {
   chain: OptionChainRow[];
@@ -34,9 +35,9 @@ interface SellStrategyProps {
   /** Intraday or positional: the trade type the Option Chain has chosen (useTradeHorizon). */
   horizon: HorizonId;
   expiry: string;
-  onToast: (text: string, color: 'green' | 'red') => void;
-  mode: StrategyMode;
-  onModeChange: (mode: StrategyMode) => void;
+  onToast: (text: string, color: ToastColorId) => void;
+  mode: StrategyModeId;
+  onModeChange: (mode: StrategyModeId) => void;
   volumeData: Map<number, number>;
   avgVolume: number;
   /** IV-based flow per option token, shown in the trap analyzer. */
@@ -50,51 +51,53 @@ function scoreColorClass(score: number): string {
   return 'low';
 }
 
-function sellBadgeLabel(type: SellRecommendation['type']): string {
-  switch (type) {
-    case 'sell-ce': return 'Sell CE';
-    case 'sell-pe': return 'Sell PE';
-    case 'sell-straddle': return 'Straddle';
-    case 'sell-strangle': return 'Strangle';
-  }
-}
+/** The option a single-option setup trades. */
+const SINGLE_OPTION_SETUPS: Partial<Record<OptionSetupId, OptionTypeId>> = {
+  [OptionSetup.SellCe]: OptionType.CE,
+  [OptionSetup.BuyCe]: OptionType.CE,
+  [OptionSetup.SellPe]: OptionType.PE,
+  [OptionSetup.BuyPe]: OptionType.PE,
+};
 
-function buyBadgeLabel(type: BuyRecommendation['type']): string {
-  switch (type) {
-    case 'buy-ce': return 'Buy CE';
-    case 'buy-pe': return 'Buy PE';
-    case 'buy-straddle': return 'Straddle';
-    case 'buy-strangle': return 'Strangle';
-  }
-}
+/** Setups that trade a CE and a PE at one strike. */
+const STRADDLE_SETUPS: OptionSetupId[] = [OptionSetup.SellStraddle, OptionSetup.BuyStraddle];
+
+/** Setups that trade a CE and a PE at two strikes. */
+const STRANGLE_SETUPS: OptionSetupId[] = [OptionSetup.SellStrangle, OptionSetup.BuyStrangle];
 
 function strikeLabel(strikes: number[]): string {
   if (strikes.length === 2) return `${strikes[0]} / ${strikes[1]}`;
   return String(strikes[0]);
 }
 
-function actionBtnClass(type: string): string {
-  if (type.includes('ce') || type === 'sell-ce' || type === 'buy-ce') return 'ce';
-  if (type.includes('pe') || type === 'sell-pe' || type === 'buy-pe') return 'pe';
-  if (type.includes('straddle')) return 'straddle';
-  if (type.includes('strangle')) return 'strangle';
-  return 'ce';
+/** The trade button's colour class for a setup: its option, or straddle / strangle. */
+function actionBtnClass(type: OptionSetupId): string {
+  const optionType = SINGLE_OPTION_SETUPS[type];
+  if (optionType) return optionType.toLowerCase();
+  return STRADDLE_SETUPS.includes(type) ? 'straddle' : 'strangle';
 }
 
-const SELL_BREAKDOWN_LABELS: [string, keyof ScoreBreakdown, number][] = [
-  ['Pinning', 'pinning', 25],
-  ['OI Wall', 'oiWall', 25],
-  ['Velocity', 'velocity', 20],
-  ['PCR', 'pcrExtreme', 15],
-  ['Theta', 'timeDecay', 15],
+/** A score breakdown item: its label, its key in the breakdown, and its maximum points. */
+interface BreakdownItem<Breakdown> {
+  label: string;
+  key: keyof Breakdown;
+  max: number;
+}
+
+const SELL_BREAKDOWN_LABELS: BreakdownItem<ScoreBreakdown>[] = [
+  { label: 'Pinning', key: 'pinning', max: 25 },
+  { label: 'OI Wall', key: 'oiWall', max: 25 },
+  { label: 'Velocity', key: 'velocity', max: 20 },
+  { label: 'PCR', key: 'pcrExtreme', max: 15 },
+  { label: 'Theta', key: 'timeDecay', max: 15 },
 ];
 
-const BUY_BREAKDOWN_LABELS: [string, keyof BuyScoreBreakdown, number][] = [
-  ['Breakout', 'breakout', 25],
-  ['Direction', 'directionalOi', 25],
-  ['Momentum', 'momentum', 20],
-  ['PCR Shift', 'pcrShift', 15],
-  ['Risk/Rwd', 'riskReward', 15],
+const BUY_BREAKDOWN_LABELS: BreakdownItem<BuyScoreBreakdown>[] = [
+  { label: 'Breakout', key: 'breakout', max: 25 },
+  { label: 'Direction', key: 'directionalOi', max: 25 },
+  { label: 'Momentum', key: 'momentum', max: 20 },
+  { label: 'PCR Shift', key: 'pcrShift', max: 15 },
+  { label: 'Risk/Rwd', key: 'riskReward', max: 15 },
 ];
 
 const SellStrategy: React.FC<SellStrategyProps> = ({
@@ -161,23 +164,23 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
     const refused = legs.some(([placed]) => placedOrderRefused(placed));
     const allFilled = legs.every(([placed]) => placed.status === OrderStatus.Filled);
     const text = allFilled ? filledTitle : legs.map(([placed, label]) => placedOrderMessage(placed, label)).join(' · ');
-    onToast(text, refused ? 'red' : 'green');
+    onToast(text, refused ? ToastColor.Red : ToastColor.Green);
   }, [onToast]);
 
   const handleTrade = useCallback(async (rec: SellRecommendation | BuyRecommendation) => {
     if (orderMode !== TradingMode.Paper || !expiry) return;
 
-    const side = mode === 'sell' ? Side.SELL : Side.BUY;
-    const verb = mode === 'sell' ? Side.SELL : Side.BUY;
+    const side = mode === StrategyMode.Sell ? Side.SELL : Side.BUY;
+    const verb = side;
     const note = rec.reasons.slice(0, 3).join(' | ');
     const confidence = Math.max(0, Math.min(100, Math.round(rec.score)));
 
     try {
       const type = rec.type;
-      if (type === 'sell-ce' || type === 'sell-pe' || type === 'buy-ce' || type === 'buy-pe') {
-        const optionType = type.includes('ce') ? OptionType.CE : OptionType.PE;
+      const optionType = SINGLE_OPTION_SETUPS[type];
+      if (optionType) {
         const row = chain.find((r) => r.strike === rec.strikes[0]);
-        const instrument = type.includes('ce') ? row?.ce : row?.pe;
+        const instrument = optionType === OptionType.CE ? row?.ce : row?.pe;
         if (!instrument) return;
         const placed = await placeMarketTrade({
           tradingsymbol: instrument.tradingsymbol,
@@ -191,8 +194,8 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           note,
           confidence,
         });
-        onToast(placedOrderMessage(placed, `${verb} ${rec.strikes[0]}${optionType}`), placedOrderRefused(placed) ? 'red' : 'green');
-      } else if (type === 'sell-straddle' || type === 'buy-straddle') {
+        onToast(placedOrderMessage(placed, `${verb} ${rec.strikes[0]}${optionType}`), placedOrderRefused(placed) ? ToastColor.Red : ToastColor.Green);
+      } else if (STRADDLE_SETUPS.includes(type)) {
         const row = chain.find((r) => r.strike === rec.strikes[0]);
         if (!row?.ce || !row?.pe) return;
         const ceLtp = effectivePrices.get(row.ce.instrumentToken) ?? 0;
@@ -225,7 +228,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           [ceLeg, `${verb} ${rec.strikes[0]}CE`],
           [peLeg, `${verb} ${rec.strikes[0]}PE`],
         ]);
-      } else if (type === 'sell-strangle' || type === 'buy-strangle') {
+      } else if (STRANGLE_SETUPS.includes(type)) {
         const ceRow = chain.find((r) => r.strike === rec.strikes[0]);
         const peRow = chain.find((r) => r.strike === rec.strikes[1]);
         if (!ceRow?.ce || !peRow?.pe) return;
@@ -261,18 +264,18 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
         ]);
       }
     } catch (err) {
-      onToast(tradeErrorMessage(err), 'red');
+      onToast(tradeErrorMessage(err), ToastColor.Red);
     }
   }, [chain, effectivePrices, orderMode, expiry, onToast, mode, horizon, showLegs]);
 
   // Reset expanded row when switching modes
-  const handleModeChange = useCallback((newMode: StrategyMode) => {
+  const handleModeChange = useCallback((newMode: StrategyModeId) => {
     onModeChange(newMode);
     setExpandedIdx(null);
   }, [onModeChange]);
 
-  const recommendations = mode === 'sell' ? sellRecs : buyRecs;
-  const breakdownLabels = mode === 'sell' ? SELL_BREAKDOWN_LABELS : BUY_BREAKDOWN_LABELS;
+  const recommendations: (SellRecommendation | BuyRecommendation)[] = mode === StrategyMode.Sell ? sellRecs : buyRecs;
+  const breakdownLabels = mode === StrategyMode.Sell ? SELL_BREAKDOWN_LABELS : BUY_BREAKDOWN_LABELS;
 
   const renderSummaryBar = () => (
     <div className="trap-summary">
@@ -299,9 +302,16 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
 
   const renderToggle = () => (
     <div className="sell-strategy__toggle">
-      <button className={`sell-strategy__toggle-btn ${mode === 'sell' ? 'sell-strategy__toggle-btn--active-sell' : ''}`} onClick={() => handleModeChange('sell')}>Sell</button>
-      <button className={`sell-strategy__toggle-btn ${mode === 'buy' ? 'sell-strategy__toggle-btn--active-buy' : ''}`} onClick={() => handleModeChange('buy')}>Buy</button>
-      <button className={`sell-strategy__toggle-btn ${mode === 'analyzer' ? 'sell-strategy__toggle-btn--active-analyzer' : ''}`} onClick={() => handleModeChange('analyzer')}>Analyzer</button>
+      {STRATEGY_MODES.map(({ id, label }) => (
+        <button
+          key={id}
+          type="button"
+          className={`sell-strategy__toggle-btn ${mode === id ? `sell-strategy__toggle-btn--active-${id.toLowerCase()}` : ''}`}
+          onClick={() => handleModeChange(id)}
+        >
+          {label}
+        </button>
+      ))}
     </div>
   );
 
@@ -310,7 +320,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
       <div className="sell-strategy">
         {renderSummaryBar()}
         {renderToggle()}
-        {mode === 'analyzer' ? (
+        {mode === StrategyMode.Analyzer ? (
           <TrapAnalyzer
             chain={chain}
             oiData={effectiveOi}
@@ -338,7 +348,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
       {renderSummaryBar()}
       {renderToggle()}
 
-      {mode === 'analyzer' ? (
+      {mode === StrategyMode.Analyzer ? (
         <TrapAnalyzer
           chain={chain}
           oiData={effectiveOi}
@@ -354,16 +364,13 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
         />
       ) : recommendations.length === 0 ? (
         <div className="sell-strategy__empty">
-          No {mode} opportunities detected — all strikes scored below threshold.
+          No {mode.toLowerCase()} opportunities detected — all strikes scored below threshold.
         </div>
       ) : (
         <div className="sell-strategy__list">
           {recommendations.map((rec, idx) => {
             const isExpanded = expandedIdx === idx;
             const colorClass = scoreColorClass(rec.score);
-            const badge = mode === 'sell'
-              ? sellBadgeLabel((rec as SellRecommendation).type)
-              : buyBadgeLabel((rec as BuyRecommendation).type);
 
             return (
               <div key={`${rec.type}-${rec.strikes.join('-')}`} className="sell-strategy__row">
@@ -371,8 +378,8 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
                   className="sell-strategy__row-main"
                   onClick={() => setExpandedIdx(isExpanded ? null : idx)}
                 >
-                  <span className={`sell-strategy__badge sell-strategy__badge--${rec.type}`}>
-                    {badge}
+                  <span className={`sell-strategy__badge sell-strategy__badge--${rec.type.toLowerCase()}`}>
+                    {optionSetupLabel(rec.type)}
                   </span>
                   <span className="sell-strategy__strike">{strikeLabel(rec.strikes)}</span>
 
@@ -388,7 +395,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
                     </span>
                   </div>
 
-                  {mode === 'sell' && (
+                  {mode === StrategyMode.Sell && (
                     <span className="sell-strategy__pop">
                       <span className="sell-strategy__pop-label">POP</span>
                       <span className={`sell-strategy__pop-value ${(rec as SellRecommendation).pop >= 70 ? 'positive' : (rec as SellRecommendation).pop >= 50 ? '' : 'negative'}`}>
@@ -397,7 +404,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
                     </span>
                   )}
                   <span className="sell-strategy__premium">₹{rec.premium.toFixed(1)}</span>
-                  <span className="sell-strategy__pattern">{rec.pattern}</span>
+                  <span className="sell-strategy__pattern">{setupPatternLabel(rec.pattern)}</span>
 
                   {orderMode === TradingMode.Paper && (
                     <button
@@ -405,7 +412,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
                       onClick={(e) => { e.stopPropagation(); handleTrade(rec); }}
                       disabled={!expiry}
                     >
-                      {mode === 'sell' ? 'Sell' : 'Buy'}
+                      {strategyModeLabel(mode)}
                     </button>
                   )}
 
@@ -417,7 +424,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
                 {isExpanded && (
                   <div className="sell-strategy__details">
                     <div className="sell-strategy__breakdown">
-                      {breakdownLabels.map(([label, key, max]) => {
+                      {breakdownLabels.map(({ label, key, max }) => {
                         const value = (rec.breakdown as unknown as Record<string, number>)[key] ?? 0;
                         return (
                           <div key={label} className="sell-strategy__breakdown-item">

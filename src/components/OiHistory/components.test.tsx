@@ -51,8 +51,8 @@ describe('FuturesContext', () => {
     expect(html).toContain('Futures Context');
     expect(html).toContain('October 2026');
     expect(html).toContain('November 2026');
-    expect(html).toContain('Long buildup');
-    expect(html).toContain('Short buildup');
+    expect(html).toContain('Long Buildup');
+    expect(html).toContain('Short Buildup');
   });
 });
 
@@ -61,7 +61,7 @@ describe('OiSnapshotTable', () => {
     {
       strike: 22500,
       cells: new Map([['2026-10-27', cell({ ceOi: 1_900_000, cePrevOi: 1_000_000, ceClose: 120, ceToken: 11, peOi: 500_000, peClose: 80, peToken: 12 })]]),
-      cePattern: 'Long Buildup',
+      cePattern: 'LongBuildup',
       pePattern: 'Stable',
       ceConsolidatedOi: 1_900_000,
       peConsolidatedOi: 500_000,
@@ -97,7 +97,7 @@ describe('OiSnapshotTable', () => {
 
   it('shows the IV flow under the pattern with its details on hover', () => {
     const flowByToken = new Map([[11, {
-      label: 'Writers Adding' as const,
+      flow: 'WritersAdding' as const,
       iv: 0.14, prevIv: 0.16, ivChange: -0.02, atmIvChange: -0.005, relIvChange: -0.015,
       delta: 0.45, oiChange: 900_000, deltaOiChange: 405_000, churn: 0.6, unusual: 3.2, recentShare: 0.55,
     }]]);
@@ -314,11 +314,11 @@ describe('SignalBreakdownTable', () => {
 
   it('includes the OI pattern slice once signals carry it', () => {
     const html = renderToStaticMarkup(
-      <SignalBreakdownTable signals={[scored(1, 10, { details: { strikePattern: 'Short Buildup', flowBias: 'Downward' } })]} />,
+      <SignalBreakdownTable signals={[scored(1, 10, { details: { strikePattern: 'ShortBuildup', flowBias: 'Downward' } })]} />,
     );
     expect(html).toContain('OI pattern');
     expect(html).toContain('Short Buildup');
-    expect(html).toContain('oi-history__signal-verdict--too-few');
+    expect(html).toContain('oi-history__signal-verdict--toofew');
     expect(html).not.toContain('recorded on new signals');
   });
 });

@@ -29,17 +29,17 @@ describe('checkSubscriptionAccess', () => {
 
   it('rejects a non-admin with no subscription', async () => {
     await expect(checkSubscriptionAccess('AB1234', deps()))
-      .resolves.toEqual({ allowed: false, reason: 'subscription_required', subscription: inactiveSubscription });
+      .resolves.toEqual({ allowed: false, reason: 'SubscriptionRequired', subscription: inactiveSubscription });
   });
 
   it('rejects a non-admin with an expired subscription', async () => {
     await expect(checkSubscriptionAccess('AB1234', deps({ subscription: expiredSubscription })))
-      .resolves.toEqual({ allowed: false, reason: 'subscription_required', subscription: expiredSubscription });
+      .resolves.toEqual({ allowed: false, reason: 'SubscriptionRequired', subscription: expiredSubscription });
   });
 
   it('rejects a missing user without touching the DB', async () => {
     const d = deps({ admin: true });
-    await expect(checkSubscriptionAccess(undefined, d)).resolves.toEqual({ allowed: false, reason: 'unauthenticated' });
+    await expect(checkSubscriptionAccess(undefined, d)).resolves.toEqual({ allowed: false, reason: 'Unauthenticated' });
     expect(d.getUserSubscription).not.toHaveBeenCalled();
     expect(d.isUserAdmin).not.toHaveBeenCalled();
   });

@@ -13,10 +13,8 @@ import { isTradingMode, type TradingModeId } from '../../shared/tradeEnums.js';
 import '@/styles/analytics.css'; // reuse same tab-bar CSS
 import '@/styles/portfolio.css';
 
-type Tab = 'holdings' | 'positions';
-
-const getTabFromParams = (searchParams: URLSearchParams): Tab =>
-  searchParams.get('tab') === 'positions' ? 'positions' : 'holdings';
+const getTabFromParams = (searchParams: URLSearchParams): PortfolioTabId =>
+  enumFromParam(PortfolioTab, searchParams.get('tab'), PortfolioTab.Holdings);
 
 const getModeFromParams = (searchParams: URLSearchParams): TradingModeId | undefined => {
   const mode = searchParams.get('mode');
@@ -25,17 +23,17 @@ const getModeFromParams = (searchParams: URLSearchParams): TradingModeId | undef
 
 const Holdings: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [tab, setTab] = useState<Tab>(() => getTabFromParams(searchParams));
+  const [tab, setTab] = useState<PortfolioTabId>(() => getTabFromParams(searchParams));
   const positionsMode = getModeFromParams(searchParams);
 
   useEffect(() => {
     setTab(getTabFromParams(searchParams));
   }, [searchParams]);
 
-  const handleTabChange = (nextTab: Tab) => {
+  const handleTabChange = (nextTab: PortfolioTabId) => {
     setTab(nextTab);
 
-    if (nextTab === 'positions') {
+    if (nextTab === PortfolioTab.Positions) {
       setSearchParams(positionsMode ? { tab: nextTab, mode: positionsMode } : { tab: nextTab });
       return;
     }
@@ -43,9 +41,9 @@ const Holdings: React.FC = () => {
     setSearchParams({ tab: nextTab });
   };
 
-  const TABS: { id: Tab; label: string }[] = [
-    { id: 'holdings',  label: 'Holdings'  },
-    { id: 'positions', label: 'Positions' },
+  const TABS: { id: PortfolioTabId; label: string }[] = [
+    { id: PortfolioTab.Holdings,  label: 'Holdings'  },
+    { id: PortfolioTab.Positions, label: 'Positions' },
   ];
 
   return (
@@ -60,11 +58,13 @@ const Holdings: React.FC = () => {
       />
 
       <div className="portfolio-content">
-        {tab === 'holdings'  && <HoldingsView />}
-        {tab === 'positions' && <PositionsView hideHeader initialMode={positionsMode} />}
+        {tab === PortfolioTab.Holdings  && <HoldingsView />}
+        {tab === PortfolioTab.Positions && <PositionsView hideHeader initialMode={positionsMode} />}
       </div>
     </div>
   );
 };
 
 export default Holdings;
+
+import { PortfolioTab, enumFromParam, type PortfolioTabId } from '@/utils/uiEnums';

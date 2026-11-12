@@ -85,7 +85,7 @@ describe('the trade engine host', () => {
   it("shows each running plug-in's own status", async () => {
     const { engine } = setup();
     await engine.start();
-    expect(engine.status().plugins[0]).toEqual({ id: 'orders', kind: 'service', state: 'Running', error: null, beats: 1 });
+    expect(engine.status().plugins[0]).toEqual({ id: 'orders', kind: 'Service', state: 'Running', error: null, beats: 1 });
   });
 
   it('stands by when another server holds the lock, and starts once it can take it', async () => {

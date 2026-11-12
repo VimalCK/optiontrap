@@ -20,22 +20,23 @@ import { ENTRY_RULES } from '../../../shared/entryRules/index.js';
 import { EXIT_RULES } from '../../../shared/exitRules/index.js';
 import RuleSettingsForm from './RuleSettingsForm';
 import { Horizon, SIDES, type SideId } from '../../../shared/tradeEnums.js';
+import { AutomationSettingsSection, type AutomationSettingsSectionId } from '@/utils/uiEnums';
 
-export type AutomationSettingsSection = 'general' | 'strategies' | 'entry-rules' | 'exit-rules';
+
 
 /** The settings sections, in tab order. */
-export const AUTOMATION_SETTINGS_SECTIONS: { id: AutomationSettingsSection; label: string }[] = [
-  { id: 'general', label: 'General' },
-  { id: 'strategies', label: 'Strategies' },
-  { id: 'entry-rules', label: 'Entry rules' },
-  { id: 'exit-rules', label: 'Exit rules' },
+export const AUTOMATION_SETTINGS_SECTIONS: { id: AutomationSettingsSectionId; label: string }[] = [
+  { id: AutomationSettingsSection.General, label: 'General' },
+  { id: AutomationSettingsSection.Strategies, label: 'Strategies' },
+  { id: AutomationSettingsSection.EntryRules, label: 'Entry rules' },
+  { id: AutomationSettingsSection.ExitRules, label: 'Exit rules' },
 ];
 
 export interface AutomationConfigFormProps {
   config: AutomationConfig;
   /** The trade engine's strategies, for the Strategies section. */
   strategies: StrategyInfo[];
-  section: AutomationSettingsSection;
+  section: AutomationSettingsSectionId;
   onChange: (config: AutomationConfig) => void;
 }
 
@@ -156,14 +157,14 @@ const ExitRuleSettings: React.FC<SectionProps> = ({ config, onChange }) => (
   />
 );
 
-const SECTION_VIEWS: Record<AutomationSettingsSection, React.FC<SectionProps>> = {
-  general: GeneralSettings,
-  strategies: StrategySettings,
-  'entry-rules': EntryRuleSettings,
-  'exit-rules': ExitRuleSettings,
+const SECTION_VIEWS: Record<AutomationSettingsSectionId, React.FC<SectionProps>> = {
+  [AutomationSettingsSection.General]: GeneralSettings,
+  [AutomationSettingsSection.Strategies]: StrategySettings,
+  [AutomationSettingsSection.EntryRules]: EntryRuleSettings,
+  [AutomationSettingsSection.ExitRules]: ExitRuleSettings,
 };
 
-const sectionLabel = (id: AutomationSettingsSection) => AUTOMATION_SETTINGS_SECTIONS.find((s) => s.id === id)?.label ?? id;
+const sectionLabel = (id: AutomationSettingsSectionId) => AUTOMATION_SETTINGS_SECTIONS.find((s) => s.id === id)?.label ?? id;
 
 const AutomationConfigForm: React.FC<AutomationConfigFormProps> = ({ config, strategies, section, onChange }) => {
   const Section = SECTION_VIEWS[section];

@@ -4,6 +4,7 @@
  * (browser) and the Option Analyzer setups strategy (server).
  */
 import { marketTimeLabel } from '../marketTime.js';
+import { MoveDirection, VelocityTrend } from '../analysisEnums.js';
 
 /**
  * @typedef {object} OiSnapshot
@@ -30,8 +31,8 @@ export function withSpot(snapshots, spotToken) {
 
 /**
  * @typedef {object} VelocityPattern
- * @property {string} label
- * @property {'up' | 'down' | 'neutral'} direction
+ * @property {import('../analysisEnums.js').VelocityTrendId} trend
+ * @property {import('../analysisEnums.js').MoveDirectionId} direction
  * @property {number[]} series Normalized OI values (0–1) across snapshots, newest last, for sparkline rendering
  * @property {number[]} rawSeries Raw OI values at each snapshot time
  * @property {string[]} timeLabels Time labels for each point in the series
@@ -101,15 +102,15 @@ export function analyzeVelocityPattern(
   const isVolatile = positiveDeltas.length > 0 && negativeDeltas.length > 0
     && Math.abs(positiveDeltas.length - negativeDeltas.length) <= 1;
 
-  /** @type {string} */ let label;
-  /** @type {'up' | 'down' | 'neutral'} */ let direction;
+  /** @type {import('../analysisEnums.js').VelocityTrendId} */ let trend;
+  /** @type {import('../analysisEnums.js').MoveDirectionId} */ let direction;
 
   if (isVolatile && deltas.length >= 3) {
-    label = 'Volatile';
-    direction = totalPct > STABLE_THRESHOLD ? 'up' : totalPct < -STABLE_THRESHOLD ? 'down' : 'neutral';
+    trend = VelocityTrend.Volatile;
+    direction = movedDirection(totalPct, STABLE_THRESHOLD);
   } else if (Math.abs(totalPct) <= STABLE_THRESHOLD && neutralDeltas.length >= deltas.length * 0.7) {
-    label = 'Stable';
-    direction = 'neutral';
+    trend = VelocityTrend.Stable;
+    direction = MoveDirection.Neutral;
   } else if (isMostlyUp) {
     // Check acceleration: are the deltas growing or shrinking?
     if (deltas.length >= 3) {
@@ -117,31 +118,42 @@ export function analyzeVelocityPattern(
       const secondHalf = deltas.slice(Math.floor(deltas.length / 2));
       const firstAvg = firstHalf.reduce((s, d) => s + d, 0) / firstHalf.length;
       const secondAvg = secondHalf.reduce((s, d) => s + d, 0) / secondHalf.length;
-      if (secondAvg > firstAvg + 1) label = 'Accelerating Buildup';
-      else if (secondAvg < firstAvg - 1) label = 'Slowing Buildup';
-      else label = 'Steady Buildup';
+      if (secondAvg > firstAvg + 1) trend = VelocityTrend.AcceleratingBuildup;
+      else if (secondAvg < firstAvg - 1) trend = VelocityTrend.SlowingBuildup;
+      else trend = VelocityTrend.SteadyBuildup;
     } else {
-      label = 'Buildup';
+      trend = VelocityTrend.Buildup;
     }
-    direction = 'up';
+    direction = MoveDirection.Up;
   } else if (isMostlyDown) {
     if (deltas.length >= 3) {
       const firstHalf = deltas.slice(0, Math.floor(deltas.length / 2));
       const secondHalf = deltas.slice(Math.floor(deltas.length / 2));
       const firstAvg = firstHalf.reduce((s, d) => s + d, 0) / firstHalf.length;
       const secondAvg = secondHalf.reduce((s, d) => s + d, 0) / secondHalf.length;
-      if (secondAvg < firstAvg - 1) label = 'Accelerating Unwind';
-      else if (secondAvg > firstAvg + 1) label = 'Slowing Unwind';
-      else label = 'Steady Unwind';
+      if (secondAvg < firstAvg - 1) trend = VelocityTrend.AcceleratingUnwind;
+      else if (secondAvg > firstAvg + 1) trend = VelocityTrend.SlowingUnwind;
+      else trend = VelocityTrend.SteadyUnwind;
     } else {
-      label = 'Unwinding';
+      trend = VelocityTrend.Unwinding;
     }
-    direction = 'down';
+    direction = MoveDirection.Down;
   } else {
     // Leaning mixed
-    label = totalPct > STABLE_THRESHOLD ? 'Mild Buildup' : totalPct < -STABLE_THRESHOLD ? 'Mild Unwind' : 'Stable';
-    direction = totalPct > STABLE_THRESHOLD ? 'up' : totalPct < -STABLE_THRESHOLD ? 'down' : 'neutral';
+    trend = totalPct > STABLE_THRESHOLD ? VelocityTrend.MildBuildup : totalPct < -STABLE_THRESHOLD ? VelocityTrend.MildUnwind : VelocityTrend.Stable;
+    direction = movedDirection(totalPct, STABLE_THRESHOLD);
   }
 
-  return { label, direction, series, rawSeries, timeLabels };
+  return { trend, direction, series, rawSeries, timeLabels };
+}
+
+/**
+ * Up or down when `changePct` moved past `threshold` either way, else neutral.
+ * @param {number} changePct
+ * @param {number} threshold
+ * @returns {import('../analysisEnums.js').MoveDirectionId}
+ */
+function movedDirection(changePct, threshold) {
+  if (changePct > threshold) return MoveDirection.Up;
+  return changePct < -threshold ? MoveDirection.Down : MoveDirection.Neutral;
 }

@@ -1298,7 +1298,7 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
 .wl-sz-stat--wide > span { color: var(--text-primary); font-size: 11px; }
 .wl-sz-market--alone { border-color: rgba(239, 68, 68, 0.3); background: rgba(239, 68, 68, 0.06); }
 .wl-sz-market--alone > span { color: var(--sz-sell); }
-.wl-sz-market--with-market > span { color: var(--sz-warn); }
+.wl-sz-market--withmarket > span { color: var(--sz-warn); }
 .wl-sz-market--stronger { border-color: rgba(34, 197, 94, 0.3); background: rgba(34, 197, 94, 0.06); }
 .wl-sz-market--stronger > span { color: var(--sz-buy); }
 

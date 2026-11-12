@@ -10,23 +10,19 @@ const OiHistory = lazy(() => import('@/components/OiHistory/OiHistory'));
 const WinLossPatterns = lazy(() => import('@/components/WinLossPatterns/WinLossPatterns'));
 import '@/styles/analytics.css';
 
-type AnalyticsTab = 'analyzer' | 'journal' | 'winloss' | 'history';
-
-const TABS: { id: AnalyticsTab; label: string }[] = [
-  { id: 'history',  label: 'OI History'       },
-  { id: 'analyzer', label: 'Option Analyzer' },
-  { id: 'journal',  label: 'Trade Journal'   },
-  { id: 'winloss',  label: 'Win/Loss Patterns'},
+const TABS: { id: AnalyticsTabId; label: string }[] = [
+  { id: AnalyticsTab.History,  label: 'OI History'       },
+  { id: AnalyticsTab.Analyzer, label: 'Option Analyzer' },
+  { id: AnalyticsTab.Journal,  label: 'Trade Journal'   },
+  { id: AnalyticsTab.WinLoss,  label: 'Win/Loss Patterns'},
 ];
 
-const getTabFromParams = (searchParams: URLSearchParams): AnalyticsTab => {
-  const tab = searchParams.get('tab');
-  return TABS.some((item) => item.id === tab) ? tab as AnalyticsTab : 'history';
-};
+const getTabFromParams = (searchParams: URLSearchParams): AnalyticsTabId =>
+  enumFromParam(AnalyticsTab, searchParams.get('tab'), AnalyticsTab.History);
 
 const Analytics: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
-  const [tab, setTab] = useState<AnalyticsTab>(() => getTabFromParams(searchParams));
+  const [tab, setTab] = useState<AnalyticsTabId>(() => getTabFromParams(searchParams));
   const range = searchParams.get('range');
   const mode = searchParams.get('mode');
   const date = searchParams.get('date');
@@ -36,7 +32,7 @@ const Analytics: React.FC = () => {
     setTab(getTabFromParams(searchParams));
   }, [searchParams]);
 
-  const handleTabChange = (nextTab: AnalyticsTab) => {
+  const handleTabChange = (nextTab: AnalyticsTabId) => {
     setTab(nextTab);
     setSearchParams({ tab: nextTab });
   };
@@ -54,17 +50,17 @@ const Analytics: React.FC = () => {
 
       <div className="analytics-content">
         <Suspense fallback={null}>
-        {tab === 'analyzer' && <OptionChain />}
-        {tab === 'journal'  && (
+        {tab === AnalyticsTab.Analyzer && <OptionChain />}
+        {tab === AnalyticsTab.Journal && (
           <TradeJournal
-            initialRange={range === 'today' ? 'today' : undefined}
+            initialRange={enumFromParam(JournalRange, range, undefined)}
             initialMode={isTradingMode(mode) ? mode : undefined}
             initialDate={date ?? undefined}
             initialTradeId={tradeId ?? undefined}
           />
         )}
-        {tab === 'winloss'  && <WinLossPatterns />}
-        {tab === 'history' && <OiHistory />}
+        {tab === AnalyticsTab.WinLoss && <WinLossPatterns />}
+        {tab === AnalyticsTab.History && <OiHistory />}
         </Suspense>
       </div>
     </div>
@@ -72,3 +68,5 @@ const Analytics: React.FC = () => {
 };
 
 export default Analytics;
+
+import { AnalyticsTab, JournalRange, enumFromParam, type AnalyticsTabId } from '@/utils/uiEnums';

@@ -11,6 +11,13 @@
  */
 
 import { analyzeVelocityPattern } from './velocityPattern.js';
+import { OptionType } from '../tradeEnums.js';
+import { LevelSide, OiSignal, OptionSetup, SetupPattern, VelocityTrend } from '../analysisEnums.js';
+
+/** OI unwinding through the day: no reason to sell. */
+const UNWIND_TRENDS = /** @type {import('../analysisEnums.js').VelocityTrendId[]} */ ([
+  VelocityTrend.AcceleratingUnwind, VelocityTrend.SteadyUnwind, VelocityTrend.SlowingUnwind, VelocityTrend.Unwinding, VelocityTrend.MildUnwind,
+]);
 import { calculateMaxPain, calculatePCR, findOiWalls, classifyOiSignal } from './oiLevels.js';
 
 /**
@@ -21,10 +28,10 @@ import { calculateMaxPain, calculatePCR, findOiWalls, classifyOiSignal } from '.
 // ── Types ──
 
 /**
- * @typedef {'sell-ce' | 'sell-pe' | 'sell-straddle' | 'sell-strangle'} SellType
+ * @typedef {typeof OptionSetup.SellCe | typeof OptionSetup.SellPe | typeof OptionSetup.SellStraddle | typeof OptionSetup.SellStrangle} SellType
  */
 /**
- * @typedef {'buy-ce' | 'buy-pe' | 'buy-straddle' | 'buy-strangle'} BuyType
+ * @typedef {typeof OptionSetup.BuyCe | typeof OptionSetup.BuyPe | typeof OptionSetup.BuyStraddle | typeof OptionSetup.BuyStrangle} BuyType
  */
 
 /**
@@ -41,7 +48,7 @@ import { calculateMaxPain, calculatePCR, findOiWalls, classifyOiSignal } from '.
  * @property {SellType} type
  * @property {number[]} strikes 1 for CE/PE, 1 for straddle, 2 for strangle [CE, PE]
  * @property {number} score 0–100
- * @property {string} pattern dominant pattern name
+ * @property {import('../analysisEnums.js').SetupPatternId} pattern dominant pattern
  * @property {string[]} reasons
  * @property {ScoreBreakdown} breakdown
  * @property {number} pop Probability of Profit (0–99)
@@ -62,7 +69,7 @@ import { calculateMaxPain, calculatePCR, findOiWalls, classifyOiSignal } from '.
  * @property {BuyType} type
  * @property {number[]} strikes
  * @property {number} score
- * @property {string} pattern
+ * @property {import('../analysisEnums.js').SetupPatternId} pattern
  * @property {string[]} reasons
  * @property {BuyScoreBreakdown} breakdown
  * @property {number} premium
@@ -181,7 +188,7 @@ function scorePinning(
  * Score 2: OI Wall Strength (0–25)
  * Checks if the target strike has an OI wall with fresh short buildup.
  * @param {number} strike
- * @param {'ce' | 'pe'} type
+ * @param {import('../tradeEnums.js').OptionTypeId} type
  * @param {ChainRow[]} chain
  * @param {Map<number, number>} oiData
  * @param {OiSnapshot[]} snapshots
@@ -204,7 +211,7 @@ function scoreOiWall(
   let score = 0;
 
   const walls = findOiWalls(chain, oiData, 1.3);
-  const wallType = type === 'ce' ? 'resistance' : 'support';
+  const wallType = type === OptionType.CE ? LevelSide.Resistance : LevelSide.Support;
 
   // Find wall at or near the strike (within 100pts)
   const relevantWalls = walls.filter(
@@ -221,7 +228,7 @@ function scoreOiWall(
     reasons.push(`Strong ${wallType} wall at ${bestWall.strike} (${bestWall.strength.toFixed(1)}x avg OI)`);
   } else if (bestWall.strength >= 1.5) {
     score += 10;
-    reasons.push(`${wallType === 'resistance' ? 'Resistance' : 'Support'} wall at ${bestWall.strike} (${bestWall.strength.toFixed(1)}x avg OI)`);
+    reasons.push(`${wallType} wall at ${bestWall.strike} (${bestWall.strength.toFixed(1)}x avg OI)`);
   } else {
     score += 5;
     reasons.push(`Mild ${wallType} at ${bestWall.strike} (${bestWall.strength.toFixed(1)}x avg OI)`);
@@ -230,7 +237,7 @@ function scoreOiWall(
   // Volume confirmation on the wall
   {
     const wallRow = chain.find((r) => r.strike === bestWall.strike);
-    const wallToken = type === 'ce' ? wallRow?.ce?.instrumentToken : wallRow?.pe?.instrumentToken;
+    const wallToken = type === OptionType.CE ? wallRow?.ce?.instrumentToken : wallRow?.pe?.instrumentToken;
     const volMul = volumeMultiplier(wallToken, volumeData, avgVolume);
     if (volMul >= 1.3) {
       reasons.push('Wall built on high volume — strong institutional defense');
@@ -244,7 +251,7 @@ function scoreOiWall(
   if (snapshots.length > 0) {
     const firstSnap = snapshots[0];
     const row = chain.find((r) => r.strike === bestWall.strike);
-    const token = type === 'ce' ? row?.ce?.instrumentToken : row?.pe?.instrumentToken;
+    const token = type === OptionType.CE ? row?.ce?.instrumentToken : row?.pe?.instrumentToken;
 
     if (token) {
       const snapOi = Number(firstSnap.data[String(token)] || 0);
@@ -259,10 +266,10 @@ function scoreOiWall(
           : 0;
 
         const signal = classifyOiSignal(oiChangePct, priceChangePct);
-        if (signal.signal === 'short-buildup') {
+        if (signal.signal === OiSignal.ShortBuildup) {
           score += 10;
           reasons.push(`Short buildup confirmed at wall — new sellers entering (OI +${oiChangePct.toFixed(1)}%)`);
-        } else if (signal.signal === 'long-buildup') {
+        } else if (signal.signal === OiSignal.LongBuildup) {
           score += 5;
           reasons.push(`Fresh positions building at wall (OI +${oiChangePct.toFixed(1)}%)`);
         }
@@ -301,24 +308,24 @@ function scoreVelocity(
   if (!pattern) return { score: 0, reasons };
 
   let score = 0;
-  const label = pattern.label;
+  const { trend } = pattern;
 
-  if (label === 'Accelerating Buildup') {
+  if (trend === VelocityTrend.AcceleratingBuildup) {
     score = 20;
     reasons.push('Accelerating OI buildup — sellers adding aggressively');
-  } else if (label === 'Steady Buildup') {
+  } else if (trend === VelocityTrend.SteadyBuildup) {
     score = 15;
     reasons.push('Steady OI buildup — consistent seller positioning');
-  } else if (label === 'Buildup' || label === 'Mild Buildup') {
+  } else if (trend === VelocityTrend.Buildup || trend === VelocityTrend.MildBuildup) {
     score = 10;
     reasons.push('OI buildup detected — sellers are positioning');
-  } else if (label === 'Stable') {
+  } else if (trend === VelocityTrend.Stable) {
     score = 5;
     reasons.push('OI stable — no exit pressure from sellers');
-  } else if (label.includes('Unwind') || label === 'Short Covering') {
+  } else if (UNWIND_TRENDS.includes(trend)) {
     score = 0;
     // No reason added — negative signal shouldn't be shown as a reason TO sell
-  } else if (label === 'Volatile') {
+  } else if (trend === VelocityTrend.Volatile) {
     score = 2;
   }
 
@@ -342,7 +349,7 @@ function scoreVelocity(
  * @param {OiSnapshot[]} snapshots
  * @param {ChainRow[]} chain
  * @param {Map<number, number>} oiData
- * @param {'ce' | 'pe'} type
+ * @param {import('../tradeEnums.js').OptionTypeId} type
  * @returns {{ score: number, reasons: string[] }}
  */
 function scorePcrExtreme(
@@ -373,8 +380,8 @@ function scorePcrExtreme(
 
   // For sell-ce: low PCR is favourable (bearish bias, calls decay)
   // For sell-pe: high PCR is favourable (bullish bias, puts decay)
-  const threshold = type === 'ce' ? 0.6 : 1.8;
-  const isFavourable = type === 'ce'
+  const threshold = type === OptionType.CE ? 0.6 : 1.8;
+  const isFavourable = type === OptionType.CE
     ? (/** @type {number} */ pcr) => pcr < threshold
     : (/** @type {number} */ pcr) => pcr > threshold;
 
@@ -388,13 +395,13 @@ function scorePcrExtreme(
   let score = 0;
   if (consecutive >= 3) {
     score = 15;
-    reasons.push(`PCR extreme (${currentPcr.toFixed(2)}) sustained for ${consecutive * 10}+ min — strong ${type === 'ce' ? 'bearish' : 'bullish'} bias`);
+    reasons.push(`PCR extreme (${currentPcr.toFixed(2)}) sustained for ${consecutive * 10}+ min — strong ${type === OptionType.CE ? 'bearish' : 'bullish'} bias`);
   } else if (consecutive >= 2) {
     score = 10;
-    reasons.push(`PCR extreme (${currentPcr.toFixed(2)}) for ${consecutive * 10}+ min — ${type === 'ce' ? 'bearish' : 'bullish'} bias building`);
+    reasons.push(`PCR extreme (${currentPcr.toFixed(2)}) for ${consecutive * 10}+ min — ${type === OptionType.CE ? 'bearish' : 'bullish'} bias building`);
   } else if (consecutive >= 1) {
     score = 5;
-    reasons.push(`PCR trending ${type === 'ce' ? 'low' : 'high'} (${currentPcr.toFixed(2)}) — early ${type === 'ce' ? 'bearish' : 'bullish'} signal`);
+    reasons.push(`PCR trending ${type === OptionType.CE ? 'low' : 'high'} (${currentPcr.toFixed(2)}) — early ${type === OptionType.CE ? 'bearish' : 'bullish'} signal`);
   }
 
   return { score: Math.min(15, score), reasons };
@@ -434,9 +441,9 @@ function scoreTimeDecay(daysToExpiry) {
 /**
  * @typedef {object} StrikeScore
  * @property {number} strike
- * @property {'ce' | 'pe'} type
+ * @property {import('../tradeEnums.js').OptionTypeId} type
  * @property {number} score
- * @property {string} pattern
+ * @property {import('../analysisEnums.js').SetupPatternId} pattern
  * @property {string[]} reasons
  * @property {ScoreBreakdown} breakdown
  * @property {number} pop
@@ -449,13 +456,13 @@ function scoreTimeDecay(daysToExpiry) {
  * @param {number} strike
  * @param {number} spotPrice
  * @param {number} expectedMove
- * @param {'ce' | 'pe'} type
+ * @param {import('../tradeEnums.js').OptionTypeId} type
  * @returns {number}
  */
 function calculatePOP(strike, spotPrice, expectedMove, type) {
   if (expectedMove <= 0) return 50;
   const sd = expectedMove;
-  const distance = type === 'ce' ? strike - spotPrice : spotPrice - strike;
+  const distance = type === OptionType.CE ? strike - spotPrice : spotPrice - strike;
   const zScore = distance / sd;
   const pop = 100 / (1 + Math.exp(-1.7 * zScore));
   return Math.min(99, Math.max(1, pop));
@@ -520,9 +527,9 @@ export function computeSellRecommendations(
       const premium = livePrices.get(ceToken) || 0;
       if (premium <= 0 || currentOi <= 0) continue;
 
-      const wallResult = scoreOiWall(row.strike, 'ce', chain, oiData, snapshots, livePrices, volumeData, avgVolume);
+      const wallResult = scoreOiWall(row.strike, OptionType.CE, chain, oiData, snapshots, livePrices, volumeData, avgVolume);
       const velocityResult = scoreVelocity(ceToken, currentOi, snapshots, volumeData, avgVolume);
-      const pcrResult = scorePcrExtreme(snapshots, chain, oiData, 'ce');
+      const pcrResult = scorePcrExtreme(snapshots, chain, oiData, OptionType.CE);
 
       /** @type {ScoreBreakdown} */ const breakdown = {
         pinning: pinningResult.score,
@@ -536,9 +543,9 @@ export function computeSellRecommendations(
       const reasons = [...pinningResult.reasons, ...wallResult.reasons, ...velocityResult.reasons, ...pcrResult.reasons, ...timeDecayResult.reasons];
 
       const pattern = getDominantPattern(breakdown);
-      const pop = calculatePOP(row.strike, spotPrice, expectedMove, 'ce');
+      const pop = calculatePOP(row.strike, spotPrice, expectedMove, OptionType.CE);
 
-      strikeScores.push({ strike: row.strike, type: 'ce', score: totalScore, pattern, reasons, breakdown, pop, premium });
+      strikeScores.push({ strike: row.strike, type: OptionType.CE, score: totalScore, pattern, reasons, breakdown, pop, premium });
     }
 
     // PE selling: strikes below spot (OTM puts)
@@ -548,9 +555,9 @@ export function computeSellRecommendations(
       const premium = livePrices.get(peToken) || 0;
       if (premium <= 0 || currentOi <= 0) continue;
 
-      const wallResult = scoreOiWall(row.strike, 'pe', chain, oiData, snapshots, livePrices, volumeData, avgVolume);
+      const wallResult = scoreOiWall(row.strike, OptionType.PE, chain, oiData, snapshots, livePrices, volumeData, avgVolume);
       const velocityResult = scoreVelocity(peToken, currentOi, snapshots, volumeData, avgVolume);
-      const pcrResult = scorePcrExtreme(snapshots, chain, oiData, 'pe');
+      const pcrResult = scorePcrExtreme(snapshots, chain, oiData, OptionType.PE);
 
       /** @type {ScoreBreakdown} */ const breakdown = {
         pinning: pinningResult.score,
@@ -564,9 +571,9 @@ export function computeSellRecommendations(
       const reasons = [...pinningResult.reasons, ...wallResult.reasons, ...velocityResult.reasons, ...pcrResult.reasons, ...timeDecayResult.reasons];
 
       const pattern = getDominantPattern(breakdown);
-      const pop = calculatePOP(row.strike, spotPrice, expectedMove, 'pe');
+      const pop = calculatePOP(row.strike, spotPrice, expectedMove, OptionType.PE);
 
-      strikeScores.push({ strike: row.strike, type: 'pe', score: totalScore, pattern, reasons, breakdown, pop, premium });
+      strikeScores.push({ strike: row.strike, type: OptionType.PE, score: totalScore, pattern, reasons, breakdown, pop, premium });
     }
   }
 
@@ -577,7 +584,7 @@ export function computeSellRecommendations(
   for (const ss of strikeScores) {
     if (ss.score >= 30) {
       recommendations.push({
-        type: ss.type === 'ce' ? 'sell-ce' : 'sell-pe',
+        type: ss.type === OptionType.CE ? OptionSetup.SellCe : OptionSetup.SellPe,
         strikes: [ss.strike],
         score: ss.score,
         pattern: ss.pattern,
@@ -590,8 +597,8 @@ export function computeSellRecommendations(
   }
 
   // Straddle: same strike, both CE and PE (near ATM, within 100pts)
-  const ceScores = strikeScores.filter((s) => s.type === 'ce');
-  const peScores = strikeScores.filter((s) => s.type === 'pe');
+  const ceScores = strikeScores.filter((s) => s.type === OptionType.CE);
+  const peScores = strikeScores.filter((s) => s.type === OptionType.PE);
 
   for (const ce of ceScores) {
     const pe = peScores.find((p) => p.strike === ce.strike);
@@ -606,7 +613,7 @@ export function computeSellRecommendations(
           timeDecay: ce.breakdown.timeDecay,
         };
         recommendations.push({
-          type: 'sell-straddle',
+          type: OptionSetup.SellStraddle,
           strikes: [ce.strike],
           score: straddleScore,
           pattern: getDominantPattern(mergedBreakdown),
@@ -634,7 +641,7 @@ export function computeSellRecommendations(
         timeDecay: topCe.breakdown.timeDecay,
       };
       recommendations.push({
-        type: 'sell-strangle',
+        type: OptionSetup.SellStrangle,
         strikes: [topCe.strike, topPe.strike],
         score: strangleScore,
         pattern: getDominantPattern(mergedBreakdown),
@@ -653,19 +660,19 @@ export function computeSellRecommendations(
 /**
  * Determine the dominant pattern from the score breakdown.
  * @param {ScoreBreakdown} breakdown
- * @returns {string}
+ * @returns {import('../analysisEnums.js').SetupPatternId}
  */
 function getDominantPattern(breakdown) {
-  /** @type {[string, number][]} */ const entries = [
-    ['Pinning', breakdown.pinning],
-    ['Wall Defense', breakdown.oiWall],
-    ['Velocity Confirmed', breakdown.velocity],
-    ['PCR Extreme', breakdown.pcrExtreme],
-    ['Theta Decay', breakdown.timeDecay],
+  /** @type {[import('../analysisEnums.js').SetupPatternId, number][]} */ const entries = [
+    [SetupPattern.Pinning, breakdown.pinning],
+    [SetupPattern.WallDefense, breakdown.oiWall],
+    [SetupPattern.VelocityConfirmed, breakdown.velocity],
+    [SetupPattern.PcrExtreme, breakdown.pcrExtreme],
+    [SetupPattern.ThetaDecay, breakdown.timeDecay],
   ];
 
   entries.sort((a, b) => b[1] - a[1]);
-  return entries[0][1] > 0 ? entries[0][0] : 'Mixed';
+  return entries[0][1] > 0 ? entries[0][0] : SetupPattern.Mixed;
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -677,7 +684,7 @@ function getDominantPattern(breakdown) {
  * Detects OI walls weakening/unwinding — resistance or support breaking.
  * For buy-ce: CE resistance walls cracking (short covering on CE).
  * For buy-pe: PE support walls cracking (long unwinding on PE).
- * @param {'ce' | 'pe'} type
+ * @param {import('../tradeEnums.js').OptionTypeId} type
  * @param {ChainRow[]} chain
  * @param {Map<number, number>} oiData
  * @param {OiSnapshot[]} snapshots
@@ -703,10 +710,10 @@ function scoreBreakout(
   const walls = findOiWalls(chain, oiData, 1.3);
   // For buy CE: look for CE resistance walls weakening above spot
   // For buy PE: look for PE support walls weakening below spot
-  const wallType = type === 'ce' ? 'resistance' : 'support';
+  const wallType = type === OptionType.CE ? LevelSide.Resistance : LevelSide.Support;
   const nearbyWalls = walls.filter(
     (w) => w.type === wallType &&
-      (type === 'ce' ? w.strike > spotPrice && w.strike <= spotPrice + 300 : w.strike < spotPrice && w.strike >= spotPrice - 300),
+      (type === OptionType.CE ? w.strike > spotPrice && w.strike <= spotPrice + 300 : w.strike < spotPrice && w.strike >= spotPrice - 300),
   );
 
   if (nearbyWalls.length === 0 || snapshots.length === 0) return { score: 0, reasons };
@@ -715,7 +722,7 @@ function scoreBreakout(
 
   for (const wall of nearbyWalls) {
     const row = chain.find((r) => r.strike === wall.strike);
-    const token = type === 'ce' ? row?.ce?.instrumentToken : row?.pe?.instrumentToken;
+    const token = type === OptionType.CE ? row?.ce?.instrumentToken : row?.pe?.instrumentToken;
     if (!token) continue;
 
     const snapOi = Number(firstSnap.data[String(token)] || 0);
@@ -741,10 +748,10 @@ function scoreBreakout(
     }
 
     // Short covering confirmation at the wall
-    if (signal.signal === 'short-covering') {
+    if (signal.signal === OiSignal.ShortCovering) {
       score += 10;
-      reasons.push(`Short covering at ${wall.strike} — sellers exiting, ${type === 'ce' ? 'upside' : 'downside'} opening`);
-    } else if (signal.signal === 'long-unwinding') {
+      reasons.push(`Short covering at ${wall.strike} — sellers exiting, ${type === OptionType.CE ? 'upside' : 'downside'} opening`);
+    } else if (signal.signal === OiSignal.LongUnwinding) {
       score += 5;
       reasons.push(`Long unwinding at ${wall.strike} — ${wallType} weakening`);
     }
@@ -770,7 +777,7 @@ function scoreBreakout(
  * Checks for sustained Long Buildup (OI↑ + Price↑) on the option type being bought.
  * For buy-ce: Long Buildup on CE across snapshots = buyers entering calls = bullish.
  * For buy-pe: Long Buildup on PE across snapshots = buyers entering puts = bearish.
- * @param {'ce' | 'pe'} type
+ * @param {import('../tradeEnums.js').OptionTypeId} type
  * @param {ChainRow[]} chain
  * @param {Map<number, number>} oiData
  * @param {Map<number, number>} livePrices
@@ -799,7 +806,7 @@ function scoreDirectionalOi(
   const firstSnap = snapshots[0];
 
   for (const row of nearStrikes) {
-    const token = type === 'ce' ? row.ce?.instrumentToken : row.pe?.instrumentToken;
+    const token = type === OptionType.CE ? row.ce?.instrumentToken : row.pe?.instrumentToken;
     if (!token) continue;
 
     const snapOi = Number(firstSnap.data[String(token)] || 0);
@@ -816,7 +823,7 @@ function scoreDirectionalOi(
     const signal = classifyOiSignal(oiChangePct, priceChangePct);
     totalChecked++;
 
-    if (signal.signal === 'long-buildup') longBuildupCount++;
+    if (signal.signal === OiSignal.LongBuildup) longBuildupCount++;
   }
 
   if (totalChecked === 0) return { score: 0, reasons };
@@ -825,13 +832,13 @@ function scoreDirectionalOi(
 
   if (ratio >= 0.6) {
     score = 25;
-    reasons.push(`Strong ${type.toUpperCase()} Long Buildup across ${longBuildupCount}/${totalChecked} strikes — buyers entering aggressively`);
+    reasons.push(`Strong ${type} Long Buildup across ${longBuildupCount}/${totalChecked} strikes — buyers entering aggressively`);
   } else if (ratio >= 0.4) {
     score = 18;
-    reasons.push(`${type.toUpperCase()} Long Buildup on ${longBuildupCount}/${totalChecked} strikes — buyer conviction building`);
+    reasons.push(`${type} Long Buildup on ${longBuildupCount}/${totalChecked} strikes — buyer conviction building`);
   } else if (ratio >= 0.2) {
     score = 10;
-    reasons.push(`Early ${type.toUpperCase()} Long Buildup signal on ${longBuildupCount} strikes`);
+    reasons.push(`Early ${type} Long Buildup signal on ${longBuildupCount} strikes`);
   }
 
   return { score: Math.min(25, score), reasons };
@@ -841,7 +848,7 @@ function scoreDirectionalOi(
  * Buy Score 3: Momentum Confirmation (0–20)
  * Checks for velocity acceleration on the buy side
  * AND short covering / unwinding on the opposite side.
- * @param {'ce' | 'pe'} type
+ * @param {import('../tradeEnums.js').OptionTypeId} type
  * @param {ChainRow[]} chain
  * @param {Map<number, number>} oiData
  * @param {Map<number, number>} livePrices
@@ -863,27 +870,27 @@ function scoreBuyMomentum(
   if (snapshots.length < 2) return { score: 0, reasons };
 
   const firstSnap = snapshots[0];
-  const oppType = type === 'ce' ? 'pe' : 'ce';
+  const oppType = type === OptionType.CE ? OptionType.PE : OptionType.CE;
 
   // Check velocity on the buy side (near ATM)
   const gap = strikeGap(chain);
   const atmRow = chain.find((r) => Math.abs(r.strike - spotPrice) <= gap);
   if (atmRow) {
-    const buyToken = type === 'ce' ? atmRow.ce?.instrumentToken : atmRow.pe?.instrumentToken;
+    const buyToken = type === OptionType.CE ? atmRow.ce?.instrumentToken : atmRow.pe?.instrumentToken;
     if (buyToken) {
       const currentOi = oiData.get(buyToken) || 0;
       if (currentOi > 0) {
         const pattern = analyzeVelocityPattern(buyToken, currentOi, snapshots);
         if (pattern) {
-          if (pattern.label === 'Accelerating Buildup') {
+          if (pattern.trend === VelocityTrend.AcceleratingBuildup) {
             score += 12;
-            reasons.push(`Accelerating ${type.toUpperCase()} buildup at ATM — momentum surging`);
-          } else if (pattern.label === 'Steady Buildup') {
+            reasons.push(`Accelerating ${type} buildup at ATM — momentum surging`);
+          } else if (pattern.trend === VelocityTrend.SteadyBuildup) {
             score += 8;
-            reasons.push(`Steady ${type.toUpperCase()} buildup at ATM — sustained buying pressure`);
-          } else if (pattern.label === 'Buildup' || pattern.label === 'Mild Buildup') {
+            reasons.push(`Steady ${type} buildup at ATM — sustained buying pressure`);
+          } else if (pattern.trend === VelocityTrend.Buildup || pattern.trend === VelocityTrend.MildBuildup) {
             score += 5;
-            reasons.push(`${type.toUpperCase()} buildup at ATM — buyers active`);
+            reasons.push(`${type} buildup at ATM — buyers active`);
           }
         }
       }
@@ -896,7 +903,7 @@ function scoreBuyMomentum(
   const nearStrikes = chain.filter((r) => Math.abs(r.strike - spotPrice) <= 200);
 
   for (const row of nearStrikes) {
-    const token = oppType === 'ce' ? row.ce?.instrumentToken : row.pe?.instrumentToken;
+    const token = oppType === OptionType.CE ? row.ce?.instrumentToken : row.pe?.instrumentToken;
     if (!token) continue;
 
     const snapOi = Number(firstSnap.data[String(token)] || 0);
@@ -912,7 +919,7 @@ function scoreBuyMomentum(
 
     const signal = classifyOiSignal(oiChangePct, priceChangePct);
     oppChecked++;
-    if (signal.signal === 'short-covering' || signal.signal === 'long-unwinding') oppUnwindCount++;
+    if (signal.signal === OiSignal.ShortCovering || signal.signal === OiSignal.LongUnwinding) oppUnwindCount++;
   }
 
   if (oppChecked > 0 && oppUnwindCount / oppChecked >= 0.3) {
@@ -928,7 +935,7 @@ function scoreBuyMomentum(
  * Checks if PCR is trending in a direction that favours the buy.
  * For buy-ce: rising PCR = bullish (PE sellers > CE sellers).
  * For buy-pe: falling PCR = bearish (CE sellers > PE sellers).
- * @param {'ce' | 'pe'} type
+ * @param {import('../tradeEnums.js').OptionTypeId} type
  * @param {ChainRow[]} chain
  * @param {Map<number, number>} oiData
  * @param {OiSnapshot[]} snapshots
@@ -964,13 +971,13 @@ function scorePcrShift(
   let trendingCount = 0;
   for (let i = 1; i < pcrHistory.length; i++) {
     const delta = pcrHistory[i] - pcrHistory[i - 1];
-    if (type === 'ce' && delta > 0.02) trendingCount++;
-    if (type === 'pe' && delta < -0.02) trendingCount++;
+    if (type === OptionType.CE && delta > 0.02) trendingCount++;
+    if (type === OptionType.PE && delta < -0.02) trendingCount++;
   }
 
   let score = 0;
-  const direction = type === 'ce' ? 'rising' : 'falling';
-  const bias = type === 'ce' ? 'bullish' : 'bearish';
+  const direction = type === OptionType.CE ? 'rising' : 'falling';
+  const bias = type === OptionType.CE ? 'bullish' : 'bearish';
 
   if (trendingCount >= 3) {
     score = 15;
@@ -980,7 +987,7 @@ function scorePcrShift(
     reasons.push(`PCR ${direction} (${currentPcr.toFixed(2)}) — ${bias} momentum building`);
   } else if (trendingCount >= 1) {
     score = 5;
-    reasons.push(`PCR starting to ${type === 'ce' ? 'rise' : 'fall'} (${currentPcr.toFixed(2)}) — early ${bias} signal`);
+    reasons.push(`PCR starting to ${type === OptionType.CE ? 'rise' : 'fall'} (${currentPcr.toFixed(2)}) — early ${bias} signal`);
   }
 
   return { score: Math.min(15, score), reasons };
@@ -993,7 +1000,7 @@ function scorePcrShift(
  * @param {number} strike
  * @param {number} spotPrice
  * @param {number} expectedMove
- * @param {'ce' | 'pe'} type
+ * @param {import('../tradeEnums.js').OptionTypeId} type
  * @param {number} premium
  * @returns {{ score: number, reasons: string[] }}
  */
@@ -1010,7 +1017,7 @@ function scoreRiskReward(
   if (expectedMove <= 0 || premium <= 0) return { score: 0, reasons };
 
   // Distance from ATM as fraction of expected move
-  const distance = type === 'ce' ? strike - spotPrice : spotPrice - strike;
+  const distance = type === OptionType.CE ? strike - spotPrice : spotPrice - strike;
   const distanceFraction = distance / expectedMove;
 
   // ATM or slightly OTM (0-0.5 SD) is best for buying
@@ -1041,27 +1048,27 @@ function scoreRiskReward(
 /**
  * Determine the dominant buy pattern from the buy score breakdown.
  * @param {BuyScoreBreakdown} breakdown
- * @returns {string}
+ * @returns {import('../analysisEnums.js').SetupPatternId}
  */
 function getBuyDominantPattern(breakdown) {
-  /** @type {[string, number][]} */ const entries = [
-    ['Breakout', breakdown.breakout],
-    ['Directional OI', breakdown.directionalOi],
-    ['Momentum', breakdown.momentum],
-    ['PCR Shift', breakdown.pcrShift],
-    ['Risk/Reward', breakdown.riskReward],
+  /** @type {[import('../analysisEnums.js').SetupPatternId, number][]} */ const entries = [
+    [SetupPattern.Breakout, breakdown.breakout],
+    [SetupPattern.DirectionalOi, breakdown.directionalOi],
+    [SetupPattern.Momentum, breakdown.momentum],
+    [SetupPattern.PcrShift, breakdown.pcrShift],
+    [SetupPattern.RiskReward, breakdown.riskReward],
   ];
 
   entries.sort((a, b) => b[1] - a[1]);
-  return entries[0][1] > 0 ? entries[0][0] : 'Mixed';
+  return entries[0][1] > 0 ? entries[0][0] : SetupPattern.Mixed;
 }
 
 /**
  * @typedef {object} BuyStrikeScore
  * @property {number} strike
- * @property {'ce' | 'pe'} type
+ * @property {import('../tradeEnums.js').OptionTypeId} type
  * @property {number} score
- * @property {string} pattern
+ * @property {import('../analysisEnums.js').SetupPatternId} pattern
  * @property {string[]} reasons
  * @property {BuyScoreBreakdown} breakdown
  * @property {number} premium
@@ -1123,11 +1130,11 @@ export function computeBuyRecommendations(
       const premium = livePrices.get(ceToken) || 0;
       if (premium <= 0) continue;
 
-      const breakoutResult = scoreBreakout('ce', chain, oiData, snapshots, livePrices, spotPrice, volumeData, avgVolume);
-      const directionalResult = scoreDirectionalOi('ce', chain, oiData, livePrices, snapshots, spotPrice);
-      const momentumResult = scoreBuyMomentum('ce', chain, oiData, livePrices, snapshots, spotPrice);
-      const pcrResult = scorePcrShift('ce', chain, oiData, snapshots);
-      const rrResult = scoreRiskReward(row.strike, spotPrice, expectedMove, 'ce', premium);
+      const breakoutResult = scoreBreakout(OptionType.CE, chain, oiData, snapshots, livePrices, spotPrice, volumeData, avgVolume);
+      const directionalResult = scoreDirectionalOi(OptionType.CE, chain, oiData, livePrices, snapshots, spotPrice);
+      const momentumResult = scoreBuyMomentum(OptionType.CE, chain, oiData, livePrices, snapshots, spotPrice);
+      const pcrResult = scorePcrShift(OptionType.CE, chain, oiData, snapshots);
+      const rrResult = scoreRiskReward(row.strike, spotPrice, expectedMove, OptionType.CE, premium);
 
       /** @type {BuyScoreBreakdown} */ const breakdown = {
         breakout: breakoutResult.score,
@@ -1142,7 +1149,7 @@ export function computeBuyRecommendations(
 
       strikeScores.push({
         strike: row.strike,
-        type: 'ce',
+        type: OptionType.CE,
         score: totalScore,
         pattern: getBuyDominantPattern(breakdown),
         reasons,
@@ -1158,11 +1165,11 @@ export function computeBuyRecommendations(
       const premium = livePrices.get(peToken) || 0;
       if (premium <= 0) continue;
 
-      const breakoutResult = scoreBreakout('pe', chain, oiData, snapshots, livePrices, spotPrice, volumeData, avgVolume);
-      const directionalResult = scoreDirectionalOi('pe', chain, oiData, livePrices, snapshots, spotPrice);
-      const momentumResult = scoreBuyMomentum('pe', chain, oiData, livePrices, snapshots, spotPrice);
-      const pcrResult = scorePcrShift('pe', chain, oiData, snapshots);
-      const rrResult = scoreRiskReward(row.strike, spotPrice, expectedMove, 'pe', premium);
+      const breakoutResult = scoreBreakout(OptionType.PE, chain, oiData, snapshots, livePrices, spotPrice, volumeData, avgVolume);
+      const directionalResult = scoreDirectionalOi(OptionType.PE, chain, oiData, livePrices, snapshots, spotPrice);
+      const momentumResult = scoreBuyMomentum(OptionType.PE, chain, oiData, livePrices, snapshots, spotPrice);
+      const pcrResult = scorePcrShift(OptionType.PE, chain, oiData, snapshots);
+      const rrResult = scoreRiskReward(row.strike, spotPrice, expectedMove, OptionType.PE, premium);
 
       /** @type {BuyScoreBreakdown} */ const breakdown = {
         breakout: breakoutResult.score,
@@ -1177,7 +1184,7 @@ export function computeBuyRecommendations(
 
       strikeScores.push({
         strike: row.strike,
-        type: 'pe',
+        type: OptionType.PE,
         score: totalScore,
         pattern: getBuyDominantPattern(breakdown),
         reasons,
@@ -1194,7 +1201,7 @@ export function computeBuyRecommendations(
   for (const ss of strikeScores) {
     if (ss.score >= 30) {
       recommendations.push({
-        type: ss.type === 'ce' ? 'buy-ce' : 'buy-pe',
+        type: ss.type === OptionType.CE ? OptionSetup.BuyCe : OptionSetup.BuyPe,
         strikes: [ss.strike],
         score: ss.score,
         pattern: ss.pattern,
@@ -1206,8 +1213,8 @@ export function computeBuyRecommendations(
   }
 
   // Straddle: same strike, both CE and PE (ATM, within one strike of spot)
-  const ceScores = strikeScores.filter((s) => s.type === 'ce');
-  const peScores = strikeScores.filter((s) => s.type === 'pe');
+  const ceScores = strikeScores.filter((s) => s.type === OptionType.CE);
+  const peScores = strikeScores.filter((s) => s.type === OptionType.PE);
   const gap = strikeGap(chain);
 
   for (const ce of ceScores) {
@@ -1223,7 +1230,7 @@ export function computeBuyRecommendations(
           riskReward: Math.round((ce.breakdown.riskReward + pe.breakdown.riskReward) / 2),
         };
         recommendations.push({
-          type: 'buy-straddle',
+          type: OptionSetup.BuyStraddle,
           strikes: [ce.strike],
           score: straddleScore,
           pattern: getBuyDominantPattern(mergedBreakdown),
@@ -1250,7 +1257,7 @@ export function computeBuyRecommendations(
         riskReward: Math.round((topCe.breakdown.riskReward + topPe.breakdown.riskReward) / 2),
       };
       recommendations.push({
-        type: 'buy-strangle',
+        type: OptionSetup.BuyStrangle,
         strikes: [topCe.strike, topPe.strike],
         score: strangleScore,
         pattern: getBuyDominantPattern(mergedBreakdown),

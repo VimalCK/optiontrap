@@ -1,9 +1,10 @@
 import React, { useState, useMemo } from 'react';
 import { OptionChainRow } from '@/services/optionChain';
-import { analyzeTrap, buildTrapContext, TrapAnalysis } from '@/services/trapAnalysis';
+import { analyzeTrap, buildTrapContext, trapPositionOf, TrapAnalysis } from '@/services/trapAnalysis';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { describeFlow, flowColor, type FlowReading } from '@/services/oiFlow';
 import { OptionType, SIDES, Side, type OptionTypeId, type SideId } from '../../../shared/tradeEnums.js';
+import { OiFlow, TrapVerdict, oiFlowLabel } from '../../../shared/analysisEnums.js';
 import '@/styles/trapanalyzer.css';
 
 interface TrapAnalyzerProps {
@@ -21,10 +22,7 @@ interface TrapAnalyzerProps {
   flowByToken?: Map<number, FlowReading>;
 }
 
-type AnalyzerView = 'single' | 'map';
 
-/** The position analyzeTrap reads: the chosen side on a call or a put, e.g. 'sell-ce'. */
-const trapPosition = (side: SideId, option: 'ce' | 'pe') => `${side.toLowerCase()}-${option}` as `${Lowercase<SideId>}-${'ce' | 'pe'}`;
 
 const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   chain,
@@ -41,7 +39,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
 }) => {
   const [positionSide, setPositionSide] = useState<SideId>(Side.SELL);
   const [selectedStrike, setSelectedStrike] = useState<number>(atmStrike);
-  const [view, setView] = useState<AnalyzerView>('map');
+  const [view, setView] = useState<AnalyzerViewId>(AnalyzerView.Map);
   const [hoveredStrike, setHoveredStrike] = useState<number | null>(null);
 
   // Update selected strike when ATM changes
@@ -63,12 +61,12 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   // Run analysis for single view — both CE and PE
   const analysisCe: TrapAnalysis | null = useMemo(() => {
     if (!trapCtx) return null;
-    return analyzeTrap(trapPosition(positionSide, 'ce'), selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
+    return analyzeTrap(trapPositionOf(positionSide, OptionType.CE), selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
   }, [positionSide, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx]);
 
   const analysisPe: TrapAnalysis | null = useMemo(() => {
     if (!trapCtx) return null;
-    return analyzeTrap(trapPosition(positionSide, 'pe'), selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
+    return analyzeTrap(trapPositionOf(positionSide, OptionType.PE), selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
   }, [positionSide, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx]);
 
   // Run analysis for all strikes (map view) — both CE and PE.
@@ -76,7 +74,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   const mapDataCe = useMemo(() => {
     if (!trapCtx) return [];
     return chain.map((row) => {
-      const result = analyzeTrap(trapPosition(positionSide, 'ce'), row.strike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
+      const result = analyzeTrap(trapPositionOf(positionSide, OptionType.CE), row.strike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
       return { strike: row.strike, ...result };
     });
   }, [positionSide, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx]);
@@ -84,18 +82,18 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   const mapDataPe = useMemo(() => {
     if (!trapCtx) return [];
     return chain.map((row) => {
-      const result = analyzeTrap(trapPosition(positionSide, 'pe'), row.strike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
+      const result = analyzeTrap(trapPositionOf(positionSide, OptionType.PE), row.strike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
       return { strike: row.strike, ...result };
     });
   }, [positionSide, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx]);
 
   const handleMapBarClick = (strike: number) => {
     setSelectedStrike(strike);
-    setView('single');
+    setView(AnalyzerView.Single);
   };
 
   const renderVerdict = (analysis: TrapAnalysis, label: OptionTypeId) => {
-    const verdictClass = `trap-verdict--${analysis.verdict}`;
+    const verdictClass = `trap-verdict--${analysis.verdict.toLowerCase()}`;
     const row = chain.find((r) => r.strike === selectedStrike);
     const option = label === OptionType.CE ? row?.ce : row?.pe;
     const flow = option ? flowByToken?.get(option.instrumentToken) : undefined;
@@ -103,9 +101,9 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
       <div className={`trap-verdict ${verdictClass}`}>
         <div className="trap-verdict__header">
           <span className="trap-verdict__icon">
-            {analysis.verdict === 'safe' && '✓'}
-            {analysis.verdict === 'caution' && '⚠'}
-            {analysis.verdict === 'likely-trapped' && '✕'}
+            {analysis.verdict === TrapVerdict.Safe && '✓'}
+            {analysis.verdict === TrapVerdict.Caution && '⚠'}
+            {analysis.verdict === TrapVerdict.LikelyTrapped && '✕'}
           </span>
           <span className="trap-verdict__label">{label}: {analysis.verdictLabel}</span>
         </div>
@@ -113,15 +111,15 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
         <div className="trap-verdict__details">
           <div className="trap-detail">
             <span className="trap-detail__label">OI Signal</span>
-            <span className={`trap-detail__value trap-detail__value--${analysis.oiSignal.sentiment}`}>
+            <span className={`trap-detail__value trap-detail__value--${analysis.oiSignal.sentiment.toLowerCase()}`}>
               {analysis.oiSignal.label}
             </span>
           </div>
-          {flow && flow.label !== '-' && (
+          {flow && flow.flow !== OiFlow.None && (
             <div className="trap-detail" title={describeFlow(flow).join('\n')}>
               <span className="trap-detail__label">IV Flow</span>
-              <span className="trap-detail__value" style={{ color: flowColor(flow.label) }}>
-                {flow.label}
+              <span className="trap-detail__value" style={{ color: flowColor(flow.flow) }}>
+                {oiFlowLabel(flow.flow)}
                 {flow.relIvChange !== null && ` (${flow.relIvChange >= 0 ? '+' : ''}${(flow.relIvChange * 100).toFixed(1)} IV vs ATM)`}
               </span>
             </div>
@@ -196,8 +194,8 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
                 const prevItem = mapDataCe[idx - 1];
                 const isRangeStart = inExpectedRange && (!prevItem || prevItem.strike < (spotPrice - expectedMove));
                 const isRangeEnd = inExpectedRange && (!nextItem || nextItem.strike > (spotPrice + expectedMove));
-                const barColor = item.verdict === 'likely-trapped' ? 'var(--trap-red)' :
-                  item.verdict === 'caution' ? 'var(--trap-yellow)' : 'var(--trap-green)';
+                const barColor = item.verdict === TrapVerdict.LikelyTrapped ? 'var(--trap-red)' :
+                  item.verdict === TrapVerdict.Caution ? 'var(--trap-yellow)' : 'var(--trap-green)';
                 return (
                   <div
                     key={item.strike}
@@ -233,8 +231,8 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
                 const prevItem = mapDataPe[idx - 1];
                 const isRangeStart = inExpectedRange && (!prevItem || prevItem.strike < (spotPrice - expectedMove));
                 const isRangeEnd = inExpectedRange && (!nextItem || nextItem.strike > (spotPrice + expectedMove));
-                const barColor = item.verdict === 'likely-trapped' ? 'var(--trap-red)' :
-                  item.verdict === 'caution' ? 'var(--trap-yellow)' : 'var(--trap-green)';
+                const barColor = item.verdict === TrapVerdict.LikelyTrapped ? 'var(--trap-red)' :
+                  item.verdict === TrapVerdict.Caution ? 'var(--trap-yellow)' : 'var(--trap-green)';
                 return (
                   <div
                     key={item.strike}
@@ -281,7 +279,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
               onChange={(v) => setPositionSide(v as SideId)}
             />
           </div>
-          {view === 'single' && (
+          {view === AnalyzerView.Single && (
             <div className="trap-input__group">
               <label className="trap-input__label">Strike</label>
               <AppSelect
@@ -295,14 +293,14 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
             <label className="trap-input__label">View</label>
             <div className="trap-view-toggle">
               <button
-                className={`trap-view-toggle__btn ${view === 'map' ? 'active' : ''}`}
-                onClick={() => setView('map')}
+                className={`trap-view-toggle__btn ${view === AnalyzerView.Map ? 'active' : ''}`}
+                onClick={() => setView(AnalyzerView.Map)}
               >
                 Map
               </button>
               <button
-                className={`trap-view-toggle__btn ${view === 'single' ? 'active' : ''}`}
-                onClick={() => setView('single')}
+                className={`trap-view-toggle__btn ${view === AnalyzerView.Single ? 'active' : ''}`}
+                onClick={() => setView(AnalyzerView.Single)}
               >
                 Single
               </button>
@@ -312,7 +310,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
       </div>
 
       {/* Single View - CE and PE side by side */}
-      {view === 'single' && analysisCe && analysisPe && (
+      {view === AnalyzerView.Single && analysisCe && analysisPe && (
         <div className="trap-verdict-grid">
           {renderVerdict(analysisCe, OptionType.CE)}
           {renderVerdict(analysisPe, OptionType.PE)}
@@ -320,7 +318,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
       )}
 
       {/* Map View - CE and PE bars in same chart */}
-      {view === 'map' && mapDataCe.length > 0 && (
+      {view === AnalyzerView.Map && mapDataCe.length > 0 && (
         <div className="trap-map">
           {renderMapChart()}
           <div className="trap-map__legend">
@@ -339,3 +337,5 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
 };
 
 export default TrapAnalyzer;
+
+import { AnalyzerView, type AnalyzerViewId } from '@/utils/uiEnums';

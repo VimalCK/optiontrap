@@ -1,7 +1,7 @@
 // Shared access rule for paid features, used by both the HTTP
 // requireSubscription middleware and the /ws live-tick upgrade handler so the
 // two gates cannot drift apart. DB lookups are injected to keep this testable.
-import { SubscriptionState } from '../shared/appEnums.js';
+import { AccessDenial, SubscriptionState } from '../shared/appEnums.js';
 
 export const inactiveSubscription = {
   status: SubscriptionState.Inactive,
@@ -21,10 +21,10 @@ export const adminSubscription = {
  * Active subscribers pass; admins pass without a subscription.
  *
  * @returns {Promise<{ allowed: true, subscription: object }
- *   | { allowed: false, reason: 'unauthenticated' | 'subscription_required', subscription?: object }>}
+ *   | { allowed: false, reason: import('../shared/appEnums.js').AccessDenialId, subscription?: object }>}
  */
 export async function checkSubscriptionAccess(userId, { getUserSubscription, isUserAdmin }) {
-  if (!userId) return { allowed: false, reason: 'unauthenticated' };
+  if (!userId) return { allowed: false, reason: AccessDenial.Unauthenticated };
 
   const subscription = (await getUserSubscription(userId)) || inactiveSubscription;
 
@@ -34,5 +34,5 @@ export async function checkSubscriptionAccess(userId, { getUserSubscription, isU
   // No active subscription — admins are the ultimate role and pass anyway.
   if (await isUserAdmin(userId)) return { allowed: true, subscription: adminSubscription };
 
-  return { allowed: false, reason: 'subscription_required', subscription };
+  return { allowed: false, reason: AccessDenial.SubscriptionRequired, subscription };
 }

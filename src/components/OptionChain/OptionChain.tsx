@@ -19,6 +19,13 @@ const ORDER_MODE_OPTIONS: { value: TradingModeId; label: string }[] = [{ value: 
 /** Market fills at once at the bid / ask; limit waits for the price (shared/paperOrders.js). */
 const ORDER_TYPE_OPTIONS: { value: OrderTypeId; label: string }[] = [{ value: OrderType.Market, label: 'Market' }, { value: OrderType.Limit, label: 'Limit' }];
 /** Intraday or positional (shared/tradeEnums.js): every trade placed here uses the one chosen (useTradeHorizon). */
+/** How the strike tooltip words a signal's volume confidence. */
+const VOLUME_CONFIDENCE_LABELS: Record<ConfidenceId, string> = {
+  [Confidence.High]: 'Confirmed',
+  [Confidence.Medium]: 'Normal',
+  [Confidence.Low]: 'Low Vol',
+};
+
 const ORDER_HORIZON_OPTIONS: { value: HorizonId; label: string }[] = HORIZONS.map((h) => ({ value: h.id, label: h.label }));
 
 import { fetchQuotes, fetchPreviousDayOI } from '@/services/kiteApi';
@@ -36,6 +43,8 @@ import { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe, tickerUpdateTokens } from '@/services/tickerSingleton';
 import { formatCalendarDate, isMarketLive, istDaysUntil } from '@/utils/marketStatus';
 import { HORIZONS, OptionType, type HorizonId, OrderType, Side, TradingMode, type OptionTypeId, type OrderTypeId, type SideId, type TradingModeId } from '../../../shared/tradeEnums.js';
+import { Confidence, MoveDirection, OiFlow, oiFlowLabel, velocityTrendLabel, type ConfidenceId } from '../../../shared/analysisEnums.js';
+import { StrategyMode, type StrategyModeId } from '../../../shared/appEnums.js';
 import { saveTradingMode, storedTradingMode } from '@/utils/tradingModeStorage';
 import '@/styles/optionchain.css';
 
@@ -85,7 +94,7 @@ const OptionChain: React.FC = () => {
   const [selectedChartStrike, setSelectedChartStrike] = useState<number | null>(null);
   const [showOiChartInfo, setShowOiChartInfo] = useState(false);
   const [showSellStrategyInfo, setShowSellStrategyInfo] = useState(false);
-  const [strategyMode, setStrategyMode] = useState<'sell' | 'buy' | 'analyzer'>('sell');
+  const [strategyMode, setStrategyMode] = useState<StrategyModeId>(StrategyMode.Sell);
 
   const [orderForm, setOrderForm] = useState<{ strike: number; optionType: OptionTypeId } | null>(null);
   const [orderQty, setOrderQty] = useState(50);
@@ -102,7 +111,7 @@ const OptionChain: React.FC = () => {
   const [oiVelocity, setOiVelocity] = useState<Map<number, OiVelocity>>(new Map());
   const [allSnapshots, setSnapshots] = useState<OiSnapshot[]>([]);
   const snapshots = useMemo(() => withSpot(allSnapshots, spotToken), [allSnapshots, spotToken]);
-  const [toasts, setToasts] = useState<{ id: number; text: string; color: 'green' | 'red' }[]>([]);
+  const [toasts, setToasts] = useState<{ id: number; text: string; color: ToastColorId }[]>([]);
   const subscribedTokensRef = useRef<number[]>([]);
   const toastIdRef = useRef(0);
   const chainCardRef = useRef<HTMLDivElement>(null);
@@ -138,7 +147,7 @@ const OptionChain: React.FC = () => {
       .map((value) => ({ value, label: labels.get(value) || value }));
   }, [recentSymbols, selectedSymbol, symbolOptions]);
 
-  const showToast = useCallback((text: string, color: 'green' | 'red') => {
+  const showToast = useCallback((text: string, color: ToastColorId) => {
     const id = ++toastIdRef.current;
     setToasts((prev) => [...prev, { id, text, color }]);
     setTimeout(() => setToasts((prev) => prev.filter((t) => t.id !== id)), 2000);
@@ -195,7 +204,7 @@ const OptionChain: React.FC = () => {
       stopLossPrice,
       confidence,
     });
-    showToast(placedOrderMessage(placed, `${side} ${strike}${optionType}`), placedOrderRefused(placed) ? 'red' : 'green');
+    showToast(placedOrderMessage(placed, `${side} ${strike}${optionType}`), placedOrderRefused(placed) ? ToastColor.Red : ToastColor.Green);
   }, [selectedExpiry, showToast]);
 
   /** Place a paper limit order; the toast says whether it filled at once, waits, or was refused. */
@@ -212,7 +221,7 @@ const OptionChain: React.FC = () => {
       limitPrice,
       expiry: selectedExpiry,
     });
-    showToast(placedOrderMessage(placed, `${order.side} ${order.strike}${order.optionType}`), placedOrderRefused(placed) ? 'red' : 'green');
+    showToast(placedOrderMessage(placed, `${order.side} ${order.strike}${order.optionType}`), placedOrderRefused(placed) ? ToastColor.Red : ToastColor.Green);
   }, [selectedExpiry, showToast]);
 
   const chooseOrderMode = useCallback((mode: TradingModeId) => {
@@ -603,11 +612,11 @@ const OptionChain: React.FC = () => {
             <span className={chgPct >= 0 ? 'positive' : 'negative'}>{chgPct >= 0 ? '+' : ''}{chgPct.toFixed(2)}%</span>
           </div>
         )}
-        {flow && flow.label !== '-' && (
+        {flow && flow.flow !== OiFlow.None && (
           <div className="oc-tip__row oc-tip__row--flow" title={describeFlow(flow).join('\n')}>
             <span>IV flow</span>
             <span className="oc-tip__flow">
-              <span style={{ color: flowColor(flow.label) }}>{flow.label}</span>
+              <span style={{ color: flowColor(flow.flow) }}>{oiFlowLabel(flow.flow)}</span>
               {flow.relIvChange !== null && (
                 <span className="oc-tip__sub">{flow.relIvChange >= 0 ? '+' : ''}{(flow.relIvChange * 100).toFixed(1)} IV vs ATM</span>
               )}
@@ -626,13 +635,13 @@ const OptionChain: React.FC = () => {
               <polyline
                 points={pattern.series.map((v, i) => `${(i / (pattern.series.length - 1)) * 60},${(1 - v) * 20}`).join(' ')}
                 fill="none"
-                stroke={pattern.direction === 'up' ? '#4ade80' : pattern.direction === 'down' ? '#f87171' : '#94a3b8'}
+                stroke={pattern.direction === MoveDirection.Up ? '#4ade80' : pattern.direction === MoveDirection.Down ? '#f87171' : '#94a3b8'}
                 strokeWidth="1.5"
                 strokeLinejoin="round"
                 strokeLinecap="round"
               />
             </svg>
-            <span className={`oc-chart__pattern-label oc-chart__pattern-label--${pattern.direction}`}>{pattern.label}</span>
+            <span className={`oc-chart__pattern-label oc-chart__pattern-label--${pattern.direction.toLowerCase()}`}>{velocityTrendLabel(pattern.trend)}</span>
           </div>
         )}
       </div>
@@ -648,7 +657,7 @@ const OptionChain: React.FC = () => {
       {toasts.length > 0 && (
         <div className="oc-toast-stack">
           {toasts.map((t) => (
-            <div key={t.id} className={`oc-toast oc-toast--${t.color}`}>{t.text}</div>
+            <div key={t.id} className={`oc-toast oc-toast--${t.color.toLowerCase()}`}>{t.text}</div>
           ))}
         </div>
       )}
@@ -769,12 +778,12 @@ const OptionChain: React.FC = () => {
                         </span>
                       </td>
                       <td className={`oc-cell-ltp oc-cell-ltp--clickable oc-cell-ltp--hover-btns ${ceItm ? 'oc-cell--itm-ce' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === OptionType.CE ? null : { strike: row.strike, optionType: OptionType.CE }); if (cePrice) setOrderPrice(cePrice); if (row.ce) setOrderQty(row.ce.lotSize); if (!(isOrderOpen && orderForm?.optionType === OptionType.CE)) resetOrderMeta(); }}>
-                        <button className="oc-ltp-action-btn oc-ltp-action-btn--buy" onClick={async (e) => { e.stopPropagation(); if (!row.ce || cePrice === null || orderMode !== TradingMode.Paper) return; try { await placePaperTrade({ instrument: row.ce, strike: row.strike, optionType: OptionType.CE, side: Side.BUY, quantity: row.ce.lotSize, horizon: tradeHorizon }); } catch (err) { showToast(tradeErrorMessage(err), 'red'); } }}>B</button>
+                        <button className="oc-ltp-action-btn oc-ltp-action-btn--buy" onClick={async (e) => { e.stopPropagation(); if (!row.ce || cePrice === null || orderMode !== TradingMode.Paper) return; try { await placePaperTrade({ instrument: row.ce, strike: row.strike, optionType: OptionType.CE, side: Side.BUY, quantity: row.ce.lotSize, horizon: tradeHorizon }); } catch (err) { showToast(tradeErrorMessage(err), ToastColor.Red); } }}>B</button>
                         <span className="oc-ltp-price">
                           {cePrice !== null ? cePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                           {ceChg && <span className={`oc-cell-chg ${ceChg.color}`}>{ceChg.pct >= 0 ? '+' : ''}{ceChg.pct.toFixed(2)}%</span>}
                         </span>
-                        <button className="oc-ltp-action-btn oc-ltp-action-btn--sell" onClick={async (e) => { e.stopPropagation(); if (!row.ce || cePrice === null || orderMode !== TradingMode.Paper) return; try { await placePaperTrade({ instrument: row.ce, strike: row.strike, optionType: OptionType.CE, side: Side.SELL, quantity: row.ce.lotSize, horizon: tradeHorizon }); } catch (err) { showToast(tradeErrorMessage(err), 'red'); } }}>S</button>
+                        <button className="oc-ltp-action-btn oc-ltp-action-btn--sell" onClick={async (e) => { e.stopPropagation(); if (!row.ce || cePrice === null || orderMode !== TradingMode.Paper) return; try { await placePaperTrade({ instrument: row.ce, strike: row.strike, optionType: OptionType.CE, side: Side.SELL, quantity: row.ce.lotSize, horizon: tradeHorizon }); } catch (err) { showToast(tradeErrorMessage(err), ToastColor.Red); } }}>S</button>
                       </td>
                       <td className="oc-cell-strike">
                         <div className="oc-strike-bars">
@@ -784,12 +793,12 @@ const OptionChain: React.FC = () => {
                         {row.strike}
                       </td>
                       <td className={`oc-cell-ltp oc-cell-ltp--clickable oc-cell-ltp--hover-btns ${peItm ? 'oc-cell--itm-pe' : ''}`} onClick={() => { setOrderForm(isOrderOpen && orderForm?.optionType === OptionType.PE ? null : { strike: row.strike, optionType: OptionType.PE }); if (pePrice) setOrderPrice(pePrice); if (row.pe) setOrderQty(row.pe.lotSize); if (!(isOrderOpen && orderForm?.optionType === OptionType.PE)) resetOrderMeta(); }}>
-                        <button className="oc-ltp-action-btn oc-ltp-action-btn--buy" onClick={async (e) => { e.stopPropagation(); if (!row.pe || pePrice === null || orderMode !== TradingMode.Paper) return; try { await placePaperTrade({ instrument: row.pe, strike: row.strike, optionType: OptionType.PE, side: Side.BUY, quantity: row.pe.lotSize, horizon: tradeHorizon }); } catch (err) { showToast(tradeErrorMessage(err), 'red'); } }}>B</button>
+                        <button className="oc-ltp-action-btn oc-ltp-action-btn--buy" onClick={async (e) => { e.stopPropagation(); if (!row.pe || pePrice === null || orderMode !== TradingMode.Paper) return; try { await placePaperTrade({ instrument: row.pe, strike: row.strike, optionType: OptionType.PE, side: Side.BUY, quantity: row.pe.lotSize, horizon: tradeHorizon }); } catch (err) { showToast(tradeErrorMessage(err), ToastColor.Red); } }}>B</button>
                         <span className="oc-ltp-price">
                           {pePrice !== null ? pePrice.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '-'}
                           {peChg && <span className={`oc-cell-chg ${peChg.color}`}>{peChg.pct >= 0 ? '+' : ''}{peChg.pct.toFixed(2)}%</span>}
                         </span>
-                        <button className="oc-ltp-action-btn oc-ltp-action-btn--sell" onClick={async (e) => { e.stopPropagation(); if (!row.pe || pePrice === null || orderMode !== TradingMode.Paper) return; try { await placePaperTrade({ instrument: row.pe, strike: row.strike, optionType: OptionType.PE, side: Side.SELL, quantity: row.pe.lotSize, horizon: tradeHorizon }); } catch (err) { showToast(tradeErrorMessage(err), 'red'); } }}>S</button>
+                        <button className="oc-ltp-action-btn oc-ltp-action-btn--sell" onClick={async (e) => { e.stopPropagation(); if (!row.pe || pePrice === null || orderMode !== TradingMode.Paper) return; try { await placePaperTrade({ instrument: row.pe, strike: row.strike, optionType: OptionType.PE, side: Side.SELL, quantity: row.pe.lotSize, horizon: tradeHorizon }); } catch (err) { showToast(tradeErrorMessage(err), ToastColor.Red); } }}>S</button>
                       </td>
                       <td className={`oc-cell-oi oc-cell-oi--pe ${peItm ? 'oc-cell--itm-pe' : ''}`}>
                         <span className="oc-oi-content">
@@ -832,7 +841,7 @@ const OptionChain: React.FC = () => {
             else await placePaperTrade(order);
             resetOrderMeta();
           } catch (err) {
-            showToast(tradeErrorMessage(err, isLimit ? 'Failed to place order' : undefined), 'red');
+            showToast(tradeErrorMessage(err, isLimit ? 'Failed to place order' : undefined), ToastColor.Red);
           }
           setOrderForm(null);
         };
@@ -1019,8 +1028,8 @@ const OptionChain: React.FC = () => {
                               {signal.confidence && (
                                 <div className="oc-tip__row">
                                   <span>Volume</span>
-                                  <span className={`oc-chart__tooltip-confidence oc-chart__tooltip-confidence--${signal.confidence}`}>
-                                    {signal.confidence === 'high' ? 'Confirmed' : signal.confidence === 'medium' ? 'Normal' : 'Low Vol'}
+                                  <span className={`oc-chart__tooltip-confidence oc-chart__tooltip-confidence--${signal.confidence.toLowerCase()}`}>
+                                    {VOLUME_CONFIDENCE_LABELS[signal.confidence]}
                                   </span>
                                 </div>
                               )}
@@ -1038,7 +1047,7 @@ const OptionChain: React.FC = () => {
                                 try {
                                   await placePaperTrade({ instrument: row.pe, strike: row.strike, optionType: OptionType.PE, side: Side.SELL, quantity: row.pe.lotSize, horizon: tradeHorizon });
                                   setSelectedChartStrike(null);
-                                } catch (err) { showToast(tradeErrorMessage(err), 'red'); }
+                                } catch (err) { showToast(tradeErrorMessage(err), ToastColor.Red); }
                               }}
                             >Sell PE {peLtp !== null ? `@ ${peLtp.toFixed(0)}` : ''}</button>
                             <button
@@ -1050,7 +1059,7 @@ const OptionChain: React.FC = () => {
                                 try {
                                   await placePaperTrade({ instrument: row.ce, strike: row.strike, optionType: OptionType.CE, side: Side.SELL, quantity: row.ce.lotSize, horizon: tradeHorizon });
                                   setSelectedChartStrike(null);
-                                } catch (err) { showToast(tradeErrorMessage(err), 'red'); }
+                                } catch (err) { showToast(tradeErrorMessage(err), ToastColor.Red); }
                               }}
                             >Sell CE {ceLtp !== null ? `@ ${ceLtp.toFixed(0)}` : ''}</button>
                           </div>
@@ -1132,8 +1141,8 @@ const OptionChain: React.FC = () => {
             </div>
           </div>
           {showSellStrategyInfo && (
-            strategyMode === 'sell' ? <SellStrategyGuide />
-              : strategyMode === 'buy' ? <BuyStrategyGuide />
+            strategyMode === StrategyMode.Sell ? <SellStrategyGuide />
+              : strategyMode === StrategyMode.Buy ? <BuyStrategyGuide />
                 : <PositionAnalyzerGuide />
           )}
           <SellStrategy
@@ -1165,3 +1174,5 @@ const OptionChain: React.FC = () => {
 };
 
 export default OptionChain;
+
+import { ToastColor, type ToastColorId } from '@/utils/uiEnums';

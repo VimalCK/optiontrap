@@ -7,6 +7,7 @@ import { PatternGuide } from './PatternGuide';
 import IconButton from '@/components/IconButton/IconButton';
 import { InfoIcon } from '@/components/icons/Icons';
 import { OptionType, Side, type OptionTypeId, type SideId } from '../../../shared/tradeEnums.js';
+import { OiFlow, oiFlowLabel, rolloverPatternLabel } from '../../../shared/analysisEnums.js';
 
 /** Strikes shown above and below ATM before the grid scrolls vertically. */
 const STRIKES_EACH_SIDE = 10;
@@ -60,7 +61,7 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
 
   const flowFor = (token: number | undefined) => (token !== undefined ? flowByToken.get(token) : undefined);
   const flowTitle = (heading: string, reading: FlowReading | undefined) =>
-    reading ? [`${heading}: ${reading.label}`, ...describeFlow(reading)].join('\n') : '';
+    reading ? [`${heading}: ${oiFlowLabel(reading.flow)}`, ...describeFlow(reading)].join('\n') : '';
 
   return (
     <div className="oi-history__table-wrap card">
@@ -115,7 +116,7 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
               const ceBarWidth = maxConsolidatedOi > 0 ? (ceConsolidatedOi / maxConsolidatedOi) * 50 : 0;
               const peBarWidth = maxConsolidatedOi > 0 ? (peConsolidatedOi / maxConsolidatedOi) * 50 : 0;
               // Nearest expiry with a usable reading; a contract on its expiry day has no IV.
-              const hasFlow = (token: number | undefined) => { const label = flowFor(token)?.label; return label !== undefined && label !== '-'; };
+              const hasFlow = (token: number | undefined) => { const flow = flowFor(token)?.flow; return flow !== undefined && flow !== OiFlow.None; };
               const ceFlowExpiry = expiries.find((exp) => hasFlow(cells.get(exp)?.ceToken));
               const peFlowExpiry = expiries.find((exp) => hasFlow(cells.get(exp)?.peToken));
               const ceFlow = ceFlowExpiry ? flowFor(cells.get(ceFlowExpiry)?.ceToken) : undefined;
@@ -132,11 +133,11 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
                   <td
                     className="oi-history__cell--pattern oi-history__cell--pattern-ce"
                     style={{ color: patternColor(cePattern) }}
-                    title={[`CE pattern: ${cePattern}`, flowTitle(flowHeading(OptionType.CE, ceFlowExpiry), ceFlow)].filter(Boolean).join('\n\n')}
+                    title={[`CE pattern: ${rolloverPatternLabel(cePattern)}`, flowTitle(flowHeading(OptionType.CE, ceFlowExpiry), ceFlow)].filter(Boolean).join('\n\n')}
                   >
-                    {cePattern}
-                    {ceFlow && ceFlow.label !== '-' && (
-                      <div className="oi-history__flow-label" style={{ color: flowColor(ceFlow.label) }}>IV: {ceFlow.label}</div>
+                    {rolloverPatternLabel(cePattern)}
+                    {ceFlow && ceFlow.flow !== OiFlow.None && (
+                      <div className="oi-history__flow-label" style={{ color: flowColor(ceFlow.flow) }}>IV: {oiFlowLabel(ceFlow.flow)}</div>
                     )}
                   </td>
 
@@ -195,11 +196,11 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
                   <td
                     className="oi-history__cell--pattern oi-history__cell--pattern-pe"
                     style={{ color: patternColor(pePattern) }}
-                    title={[`PE pattern: ${pePattern}`, flowTitle(flowHeading(OptionType.PE, peFlowExpiry), peFlow)].filter(Boolean).join('\n\n')}
+                    title={[`PE pattern: ${rolloverPatternLabel(pePattern)}`, flowTitle(flowHeading(OptionType.PE, peFlowExpiry), peFlow)].filter(Boolean).join('\n\n')}
                   >
-                    {pePattern}
-                    {peFlow && peFlow.label !== '-' && (
-                      <div className="oi-history__flow-label" style={{ color: flowColor(peFlow.label) }}>IV: {peFlow.label}</div>
+                    {rolloverPatternLabel(pePattern)}
+                    {peFlow && peFlow.flow !== OiFlow.None && (
+                      <div className="oi-history__flow-label" style={{ color: flowColor(peFlow.flow) }}>IV: {oiFlowLabel(peFlow.flow)}</div>
                     )}
                   </td>
                 </tr>

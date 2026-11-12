@@ -3,9 +3,12 @@
  * open, or an automated limit order in it is still waiting to fill.
  */
 
+/** This entry rule's id: stored in users' settings and trade records, so it never changes. */
+export const ONE_TRADE_PER_INSTRUMENT_RULE_ID = 'one-trade-per-instrument';
+
 /** @type {import('./index.js').EntryRule} */
 export default {
-  id: 'one-trade-per-instrument',
+  id: ONE_TRADE_PER_INSTRUMENT_RULE_ID,
   label: 'One position per instrument',
   description: 'A trade in an instrument that already has an open automated position, or a waiting automated limit order, is rejected.',
   params: [],

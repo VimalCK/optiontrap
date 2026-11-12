@@ -76,40 +76,40 @@ describe('priceDirection', () => {
       ['c', { close: 50, prevClose: undefined }],
     ]);
     // (+10% - 1%) / 2 = +4.5%
-    expect(priceDirection(data, ['a', 'b', 'c'])).toBe('up');
+    expect(priceDirection(data, ['a', 'b', 'c'])).toBe('Up');
   });
 
-  it('returns down, or null when the move is within 0.5%', () => {
-    expect(priceDirection(new Map([['a', { close: 98, prevClose: 100 }]]), ['a'])).toBe('down');
-    expect(priceDirection(new Map([['a', { close: 100.4, prevClose: 100 }]]), ['a'])).toBeNull();
-    expect(priceDirection(new Map(), ['a'])).toBeNull();
+  it('returns Down, or Neutral when the move is within 0.5% or unknown', () => {
+    expect(priceDirection(new Map([['a', { close: 98, prevClose: 100 }]]), ['a'])).toBe('Down');
+    expect(priceDirection(new Map([['a', { close: 100.4, prevClose: 100 }]]), ['a'])).toBe('Neutral');
+    expect(priceDirection(new Map(), ['a'])).toBe('Neutral');
   });
 });
 
 describe('classifyOptionMove', () => {
   it('classifies the four OI/price quadrants', () => {
-    expect(classifyOptionMove(1100, 1000, 105, 100)).toBe('Long Buildup');
-    expect(classifyOptionMove(1100, 1000, 95, 100)).toBe('Short Buildup');
-    expect(classifyOptionMove(900, 1000, 95, 100)).toBe('Long Unwinding');
-    expect(classifyOptionMove(900, 1000, 105, 100)).toBe('Short Covering');
+    expect(classifyOptionMove(1100, 1000, 105, 100)).toBe('LongBuildup');
+    expect(classifyOptionMove(1100, 1000, 95, 100)).toBe('ShortBuildup');
+    expect(classifyOptionMove(900, 1000, 95, 100)).toBe('LongUnwinding');
+    expect(classifyOptionMove(900, 1000, 105, 100)).toBe('ShortCovering');
   });
 
   it('is stable inside the thresholds and unknown without previous OI', () => {
     expect(classifyOptionMove(1010, 1000, 105, 100)).toBe('Stable');
     expect(classifyOptionMove(1100, 1000, 100.2, 100)).toBe('Stable');
-    expect(classifyOptionMove(1100, undefined, 105, 100)).toBe('-');
-    expect(classifyOptionMove(1100, 0, 105, 100)).toBe('-');
+    expect(classifyOptionMove(1100, undefined, 105, 100)).toBe('None');
+    expect(classifyOptionMove(1100, 0, 105, 100)).toBe('None');
   });
 });
 
 describe('patternBiasScore', () => {
   it('scores CE and PE patterns in opposite directions', () => {
-    expect(patternBiasScore('Long Buildup', 'CE')).toBe(2);
-    expect(patternBiasScore('Long Buildup', 'PE')).toBe(-2);
-    expect(patternBiasScore('Short Buildup', 'CE')).toBe(-2);
-    expect(patternBiasScore('Short Buildup', 'PE')).toBe(2);
-    expect(patternBiasScore('Short Covering', 'CE')).toBe(1);
-    expect(patternBiasScore('Long Unwinding', 'PE')).toBe(1);
+    expect(patternBiasScore('LongBuildup', 'CE')).toBe(2);
+    expect(patternBiasScore('LongBuildup', 'PE')).toBe(-2);
+    expect(patternBiasScore('ShortBuildup', 'CE')).toBe(-2);
+    expect(patternBiasScore('ShortBuildup', 'PE')).toBe(2);
+    expect(patternBiasScore('ShortCovering', 'CE')).toBe(1);
+    expect(patternBiasScore('LongUnwinding', 'PE')).toBe(1);
     expect(patternBiasScore('Stable', 'CE')).toBe(0);
   });
 });
@@ -148,11 +148,11 @@ describe('buildFuturesSeries', () => {
 
     expect(series.map((row) => row.date)).toEqual(['2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05']);
     expect(series.map((row) => row.interpretation)).toEqual([
-      'New data',
-      'Long buildup',
-      'Short buildup',
-      'Long unwinding',
-      'Short covering',
+      null,
+      'LongBuildup',
+      'ShortBuildup',
+      'LongUnwinding',
+      'ShortCovering',
     ]);
     expect(series[0].priceChangePct).toBeNull();
     expect(series[1].oiChangePct).toBeCloseTo(10);

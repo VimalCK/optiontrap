@@ -1,4 +1,4 @@
--- Three changes, each safe to run again and on a database with data:
+-- Four changes, each safe to run again and on a database with data:
 --
 -- 1. Yes/no columns stored as INTEGER 0/1 become BOOLEAN, like
 --    sessions.is_admin: users.is_admin, subscription_plans.is_active and
@@ -13,6 +13,11 @@
 --    Values already in Kite's form (BUY/SELL, CE/PE/FUT/EQ, NSE/NFO …) and the
 --    OI trade setup signals (stored as BUY/SELL and Open/Profit/Loss) already
 --    match and don't change.
+-- 4. The analysis values (shared/analysisEnums.js) stored as display text or
+--    lower case become member names too: the stock scan's setups, states and
+--    market relations, the OI setups' patterns, flows and selling setups, the
+--    automated trades' setup patterns, and plan duration units. Every column
+--    holding an enum value gets a CHECK listing its members.
 --
 -- A migration is a fixed record, so it names the old and new values as text;
 -- the app's SQL names them through sqlEnum (server/sql.js).
@@ -227,6 +232,127 @@ SET config = jsonb_set(config, '{kinds}', pg_temp.rename_keys(config->'kinds',
   ARRAY['Stock', 'StockOption', 'StockFuture', 'IndexOption', 'IndexFuture']))
 WHERE jsonb_typeof(config->'kinds') = 'object'
   AND config->'kinds' ?| ARRAY['stock', 'stock-option', 'stock-future', 'index-option', 'index-future'];
+
+-- ── 4. Analysis values as member names, and CHECKs on every enum column ──
+
+-- `obj` with the string at `key` rewritten from each old value to the new
+-- one at the same position; any other value, or none, leaves it as it is.
+CREATE OR REPLACE FUNCTION pg_temp.renamed(obj JSONB, key TEXT, old_values TEXT[], new_values TEXT[])
+RETURNS JSONB LANGUAGE sql IMMUTABLE AS $fn$
+  SELECT CASE WHEN obj->>key = ANY (old_values)
+    THEN jsonb_set(obj, ARRAY[key], to_jsonb(new_values[array_position(old_values, obj->>key)]))
+    ELSE obj END
+$fn$;
+
+-- Add CHECK `name` on `tbl` unless it exists. It is added NOT VALID (enforced
+-- on every new or changed row) and then validated; an odd legacy row that
+-- fails it leaves it unvalidated with a notice instead of failing startup.
+CREATE OR REPLACE FUNCTION pg_temp.add_check(tbl TEXT, name TEXT, condition TEXT)
+RETURNS void LANGUAGE plpgsql AS $fn$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_constraint WHERE conname = name AND conrelid = tbl::regclass) THEN RETURN; END IF;
+  EXECUTE format('ALTER TABLE %I ADD CONSTRAINT %I CHECK (%s) NOT VALID', tbl, name, condition);
+  BEGIN
+    EXECUTE format('ALTER TABLE %I VALIDATE CONSTRAINT %I', tbl, name);
+  EXCEPTION WHEN check_violation THEN
+    RAISE NOTICE '% on % left unvalidated: some existing rows hold other values', name, tbl;
+  END;
+END $fn$;
+
+-- Stock setup signals: the setup type (StockSetupType), shown on the stock
+-- setups scorecard (GET /api/stock-setups/scorecard).
+SELECT pg_temp.rename_values('stock_setup_signals', 'setup_type',
+  ARRAY['pullback', 'reversal', 'breakout', 'rejection', 'breakdown'],
+  ARRAY['Pullback', 'Reversal', 'Breakout', 'Rejection', 'Breakdown']);
+
+-- The stock scan summary the watchlist's Setups column shows
+-- (stock_candle_sync.scan_summary): the state (StockState), the market
+-- relation (MarketRelation), and each setup's type and side.
+UPDATE stock_candle_sync
+SET scan_summary = pg_temp.renamed(pg_temp.renamed(scan_summary,
+    'state', ARRAY['falling', 'stretched', 'turning', 'uptrend', 'sideways'],
+    ARRAY['Falling', 'Stretched', 'Turning', 'Uptrend', 'Sideways']),
+    'market', ARRAY['with-market', 'alone', 'stronger', 'in-line'], ARRAY['WithMarket', 'Alone', 'Stronger', 'InLine'])
+WHERE scan_summary->>'state' IN ('falling', 'stretched', 'turning', 'uptrend', 'sideways')
+   OR scan_summary->>'market' IN ('with-market', 'alone', 'stronger', 'in-line');
+
+UPDATE stock_candle_sync
+SET scan_summary = jsonb_set(scan_summary, '{setups}', (
+  SELECT COALESCE(jsonb_agg(pg_temp.renamed(pg_temp.renamed(setup,
+      'type', ARRAY['pullback', 'reversal', 'breakout', 'rejection', 'breakdown'],
+      ARRAY['Pullback', 'Reversal', 'Breakout', 'Rejection', 'Breakdown']),
+      'direction', ARRAY['buy', 'sell'], ARRAY['BUY', 'SELL']) ORDER BY position), '[]'::jsonb)
+  FROM jsonb_array_elements(scan_summary->'setups') WITH ORDINALITY AS item(setup, position)))
+WHERE jsonb_typeof(scan_summary->'setups') = 'array'
+  AND EXISTS (SELECT 1 FROM jsonb_array_elements(scan_summary->'setups') AS item(setup)
+              WHERE setup->>'type' IN ('pullback', 'reversal', 'breakout', 'rejection', 'breakdown')
+                 OR setup->>'direction' IN ('buy', 'sell'));
+
+-- Automated trades: the setup pattern behind each (SetupPattern), grouped by
+-- GET /api/automation/results and shown on Algo Trading and Win/Loss Patterns.
+SELECT pg_temp.rename_values('algo_trades', 'setup',
+  ARRAY['Wall Defense', 'Velocity Confirmed', 'PCR Extreme', 'Theta Decay', 'Directional OI', 'PCR Shift', 'Risk/Reward'],
+  ARRAY['WallDefense', 'VelocityConfirmed', 'PcrExtreme', 'ThetaDecay', 'DirectionalOi', 'PcrShift', 'RiskReward']);
+
+-- OI trade setup signals' details (trade_setup_signals.details), sliced by the
+-- OI History signal stats: the selling setup (SellingSetup), the option flow
+-- (OiFlow) and the strike's OI pattern (RolloverPattern). The trends,
+-- statuses, biases and fair value were already member names.
+UPDATE trade_setup_signals
+SET details = pg_temp.renamed(details, 'sellingType',
+  ARRAY['Call Sell', 'Put Sell', 'Range Sell', 'No Sell'], ARRAY['CallSell', 'PutSell', 'RangeSell', 'NoSell'])
+WHERE details->>'sellingType' IN ('Call Sell', 'Put Sell', 'Range Sell', 'No Sell');
+
+UPDATE trade_setup_signals
+SET details = pg_temp.renamed(details, 'ivFlow',
+  ARRAY['Buyers Adding', 'Writers Adding', 'Buyers Exiting', 'Writers Covering', '-'],
+  ARRAY['BuyersAdding', 'WritersAdding', 'BuyersExiting', 'WritersCovering', 'None'])
+WHERE details->>'ivFlow' IN ('Buyers Adding', 'Writers Adding', 'Buyers Exiting', 'Writers Covering', '-');
+
+UPDATE trade_setup_signals
+SET details = pg_temp.renamed(details, 'strikePattern',
+  ARRAY['Rolling Over (Long)', 'Rolling Over (Short)', 'Rolling Over', 'Exiting (Long Unwind)', 'Exiting (Short Cover)',
+        'Fresh Build (Long)', 'Fresh Build (Short)', 'Fresh Build', 'Doubling Down (Long)', 'Doubling Down (Short)',
+        'Doubling Down', 'Long Buildup', 'Short Buildup', 'Long Unwinding', 'Short Covering', '-'],
+  ARRAY['RollingOverLong', 'RollingOverShort', 'RollingOver', 'ExitingLongUnwind', 'ExitingShortCover',
+        'FreshBuildLong', 'FreshBuildShort', 'FreshBuild', 'DoublingDownLong', 'DoublingDownShort',
+        'DoublingDown', 'LongBuildup', 'ShortBuildup', 'LongUnwinding', 'ShortCovering', 'None'])
+WHERE details->>'strikePattern' IN ('Rolling Over (Long)', 'Rolling Over (Short)', 'Rolling Over', 'Exiting (Long Unwind)',
+  'Exiting (Short Cover)', 'Fresh Build (Long)', 'Fresh Build (Short)', 'Fresh Build', 'Doubling Down (Long)',
+  'Doubling Down (Short)', 'Doubling Down', 'Long Buildup', 'Short Buildup', 'Long Unwinding', 'Short Covering', '-');
+
+-- Subscription plans' duration unit (DurationUnit), read by the plan list
+-- (GET /api/subscription-plans) and when a subscription is activated or extended.
+SELECT pg_temp.rename_values('subscription_plans', 'duration_unit',
+  ARRAY['day', 'week', 'month', 'year'], ARRAY['Day', 'Week', 'Month', 'Year']);
+ALTER TABLE subscription_plans ALTER COLUMN duration_unit SET DEFAULT 'Month';
+
+-- A CHECK on every column holding an enum value, listing its members, so no
+-- other spelling can be stored. Nullable columns still accept NULL.
+SELECT pg_temp.add_check('positions', 'positions_side_check', $$side IN ('BUY', 'SELL')$$);
+SELECT pg_temp.add_check('positions', 'positions_mode_check', $$mode IN ('Paper', 'Live')$$);
+SELECT pg_temp.add_check('positions', 'positions_exchange_check', $$exchange IN ('NSE', 'BSE', 'NFO', 'BFO')$$);
+SELECT pg_temp.add_check('orders', 'orders_exchange_check', $$exchange IN ('NSE', 'BSE', 'NFO', 'BFO')$$);
+SELECT pg_temp.add_check('orders', 'orders_option_type_check', $$option_type IN ('CE', 'PE')$$);
+SELECT pg_temp.add_check('feedback', 'feedback_type_check', $$type IN ('Bug', 'Feature', 'General', 'Subscription')$$);
+SELECT pg_temp.add_check('feedback', 'feedback_status_check', $$status IN ('Open', 'Reviewed', 'Resolved')$$);
+SELECT pg_temp.add_check('subscriptions', 'subscriptions_status_check', $$status IN ('Active', 'Cancelled', 'Expired')$$);
+SELECT pg_temp.add_check('subscriptions', 'subscriptions_provider_check', $$provider IN ('Internal', 'Admin')$$);
+SELECT pg_temp.add_check('scheduled_job_runs', 'scheduled_job_runs_status_check', $$status IN ('Running', 'Done', 'Failed')$$);
+SELECT pg_temp.add_check('stock_setup_signals', 'stock_setup_signals_direction_check', $$direction IN ('BUY', 'SELL')$$);
+SELECT pg_temp.add_check('stock_setup_signals', 'stock_setup_signals_status_check', $$status IN ('Open', 'Target', 'Stop', 'Expired')$$);
+SELECT pg_temp.add_check('stock_setup_signals', 'stock_setup_signals_setup_type_check',
+  $$setup_type IN ('Pullback', 'Reversal', 'Breakout', 'Rejection', 'Breakdown')$$);
+SELECT pg_temp.add_check('trade_setup_signals', 'trade_setup_signals_action_check', $$action IN ('BUY', 'SELL')$$);
+SELECT pg_temp.add_check('trade_setup_signals', 'trade_setup_signals_option_type_check', $$option_type IN ('CE', 'PE')$$);
+SELECT pg_temp.add_check('trade_setup_signals', 'trade_setup_signals_status_check', $$status IN ('Confirmed', 'Watch', 'Avoid')$$);
+SELECT pg_temp.add_check('trade_setup_signals', 'trade_setup_signals_outcome_status_check', $$outcome_status IN ('Open', 'Profit', 'Loss')$$);
+SELECT pg_temp.add_check('instruments', 'instruments_exchange_check', $$exchange IN ('NSE', 'BSE', 'NFO', 'BFO')$$);
+SELECT pg_temp.add_check('instruments', 'instruments_instrument_type_check', $$instrument_type IN ('CE', 'PE', 'FUT', 'EQ')$$);
+SELECT pg_temp.add_check('watchlist_items', 'watchlist_items_exchange_check', $$exchange IN ('NSE', 'BSE', 'NFO', 'BFO')$$);
+SELECT pg_temp.add_check('price_alerts', 'price_alerts_exchange_check', $$exchange IN ('NSE', 'BSE', 'NFO', 'BFO')$$);
+SELECT pg_temp.add_check('oi_history_options', 'oi_history_options_option_type_check', $$option_type IN ('CE', 'PE')$$);
+SELECT pg_temp.add_check('subscription_plans', 'subscription_plans_duration_unit_check', $$duration_unit IN ('Day', 'Week', 'Month', 'Year')$$);
 
 -- ── Indexes, with the new predicates ──
 

@@ -22,7 +22,7 @@
  * Algo Trading and Win/Loss Patterns show it after.
  */
 import { marketDate } from './marketTime.js';
-import { InstrumentType, Side, isOptionType, oppositeSide } from './tradeEnums.js';
+import { ChargeSegment, InstrumentType, Side, isOptionType, oppositeSide } from './tradeEnums.js';
 
 /** SEBI turnover fee: ₹10 per crore. */
 const SEBI_RATE = 10 / 1e7;
@@ -33,15 +33,15 @@ const GST_RATE = 0.18;
  * @typedef {{ flat?: number, percent?: number, cap?: number }} BrokerageRule
  * @typedef {{ brokerage: BrokerageRule, stt: { BUY?: number, SELL?: number }, exchange: number,
  *             stamp: number, dpPerSell?: number }} ChargeSchedule
- * @typedef {'option' | 'future' | 'equityIntraday' | 'equityDelivery'} ChargeSegment
+ * @typedef {import('./tradeEnums.js').ChargeSegmentId} ChargeSegmentId
  */
 
-/** @type {Record<ChargeSegment, ChargeSchedule>} */
+/** @type {Record<ChargeSegmentId, ChargeSchedule>} */
 export const CHARGE_SCHEDULES = {
-  option: { brokerage: { flat: 20 }, stt: { SELL: 0.0015 }, exchange: 0.0003553, stamp: 0.00003 },
-  future: { brokerage: { percent: 0.0003, cap: 20 }, stt: { SELL: 0.0005 }, exchange: 0.0000183, stamp: 0.00002 },
-  equityIntraday: { brokerage: { percent: 0.0003, cap: 20 }, stt: { SELL: 0.00025 }, exchange: 0.0000307, stamp: 0.00003 },
-  equityDelivery: { brokerage: { flat: 0 }, stt: { BUY: 0.001, SELL: 0.001 }, exchange: 0.0000307, stamp: 0.00015, dpPerSell: 15.34 },
+  [ChargeSegment.Option]: { brokerage: { flat: 20 }, stt: { SELL: 0.0015 }, exchange: 0.0003553, stamp: 0.00003 },
+  [ChargeSegment.Future]: { brokerage: { percent: 0.0003, cap: 20 }, stt: { SELL: 0.0005 }, exchange: 0.0000183, stamp: 0.00002 },
+  [ChargeSegment.EquityIntraday]: { brokerage: { percent: 0.0003, cap: 20 }, stt: { SELL: 0.00025 }, exchange: 0.0000307, stamp: 0.00003 },
+  [ChargeSegment.EquityDelivery]: { brokerage: { flat: 0 }, stt: { BUY: 0.001, SELL: 0.001 }, exchange: 0.0000307, stamp: 0.00015, dpPerSell: 15.34 },
 };
 
 /**
@@ -69,7 +69,7 @@ function brokerage(rule, turnover) {
 
 /**
  * One order's charges.
- * @param {ChargeSegment} segment
+ * @param {ChargeSegmentId} segment
  * @param {import('./tradeEnums.js').SideId} side
  * @param {number} price
  * @param {number} quantity
@@ -102,12 +102,12 @@ export function addCharges(a, b) {
  * @param {string} instrumentType  CE, PE, FUT or EQ
  * @param {Date} entryTime
  * @param {Date} exitTime
- * @returns {ChargeSegment}
+ * @returns {ChargeSegmentId}
  */
 export function chargeSegment(instrumentType, entryTime, exitTime) {
-  if (isOptionType(instrumentType)) return 'option';
-  if (instrumentType === InstrumentType.FUT) return 'future';
-  return marketDate(entryTime) === marketDate(exitTime) ? 'equityIntraday' : 'equityDelivery';
+  if (isOptionType(instrumentType)) return ChargeSegment.Option;
+  if (instrumentType === InstrumentType.FUT) return ChargeSegment.Future;
+  return marketDate(entryTime) === marketDate(exitTime) ? ChargeSegment.EquityIntraday : ChargeSegment.EquityDelivery;
 }
 
 /**

@@ -137,13 +137,13 @@ describe('classifyPattern', () => {
   const map = (entries: Record<string, Entry>) => new Map(Object.entries(entries));
 
   it('returns a dash when no expiry has data', () => {
-    expect(classifyPattern(new Map(), [near, far])).toBe('-');
-    expect(classifyPattern(new Map(), [near])).toBe('-');
+    expect(classifyPattern(new Map(), [near, far])).toBe('None');
+    expect(classifyPattern(new Map(), [near])).toBe('None');
   });
 
   it('uses the OI/price quadrant for a single expiry', () => {
     const data = map({ [near]: { oi: 1100, prevOi: 1000, close: 105, prevClose: 100 } });
-    expect(classifyPattern(data, [near])).toBe('Long Buildup');
+    expect(classifyPattern(data, [near])).toBe('LongBuildup');
   });
 
   it('detects rolling over: near OI falling, far OI rising', () => {
@@ -151,7 +151,7 @@ describe('classifyPattern', () => {
       [near]: { oi: 800, prevOi: 1000, close: 110, prevClose: 100 },
       [far]: { oi: 600, prevOi: 400, close: 105, prevClose: 100 },
     });
-    expect(classifyPattern(data, [near, far])).toBe('Rolling Over (Long)');
+    expect(classifyPattern(data, [near, far])).toBe('RollingOverLong');
   });
 
   it('detects unwinding: both near and far OI falling', () => {
@@ -166,12 +166,12 @@ describe('classifyPattern', () => {
     expect(classifyPattern(map({
       [near]: { oi: 1200, prevOi: 1000, close: 90, prevClose: 100 },
       [far]: { oi: 500, prevOi: 400, close: 95, prevClose: 100 },
-    }), [near, far])).toBe('Doubling Down (Short)');
+    }), [near, far])).toBe('DoublingDownShort');
 
     // Far expiry has no data → judged on the near expiry alone
     expect(classifyPattern(map({
       [near]: { oi: 1200, prevOi: 1000, close: 100, prevClose: 100 },
-    }), [near, far])).toBe('Fresh Build');
+    }), [near, far])).toBe('FreshBuild');
   });
 
   it('treats a new far position as rising', () => {
@@ -179,15 +179,15 @@ describe('classifyPattern', () => {
       [near]: { oi: 1000, prevOi: 1000, close: 100, prevClose: 100 },
       [far]: { oi: 500, prevOi: undefined, close: 100, prevClose: undefined },
     });
-    expect(classifyPattern(data, [near, far])).toBe('Fresh Build');
+    expect(classifyPattern(data, [near, far])).toBe('FreshBuild');
   });
 });
 
 describe('labels', () => {
   it('colours patterns by meaning', () => {
-    expect(patternColor('Rolling Over (Long)')).toBe('var(--accent)');
-    expect(patternColor('Exiting (Long Unwind)')).toBe('#ef4444');
-    expect(patternColor('Long Buildup')).toBe('#22c55e');
+    expect(patternColor('RollingOverLong')).toBe('var(--accent)');
+    expect(patternColor('ExitingLongUnwind')).toBe('#ef4444');
+    expect(patternColor('LongBuildup')).toBe('#22c55e');
     expect(patternColor('Stable')).toBe('var(--text-secondary)');
   });
 

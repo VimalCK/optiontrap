@@ -21,7 +21,7 @@ import { MAX_DRAWDOWN_SQL, RESULTS_SQL, resultsParams, toResults } from './autoT
 import { roundTripCharges } from '../shared/paperCharges.js';
 import { runMigrations } from './migrationRunner.js';
 import { Exchange, Horizon, InstrumentType, LifecycleStage, OptionType, OrderStatus, OrderType, Side, TradeSource, TradingMode, isOptionType, oppositeSide } from '../shared/tradeEnums.js';
-import { FeedbackStatus, JobRunStatus, PriceAlertStatus, SetupOutcomeStatus, SignalOutcome, SubscriptionProvider, SubscriptionState } from '../shared/appEnums.js';
+import { DurationUnit, FeedbackStatus, JobRunStatus, PriceAlertStatus, SetupOutcomeStatus, SignalOutcome, SubscriptionProvider, SubscriptionState } from '../shared/appEnums.js';
 import { sqlEnum, sqlEnumList } from './sql.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -241,7 +241,7 @@ function mapPlan(row) {
     currency: row.plan_currency || row.currency,
     price: Number(row.plan_price ?? row.price ?? 0),
     durationCount: Number(row.plan_duration_count ?? row.duration_count ?? 1),
-    durationUnit: row.plan_duration_unit || row.duration_unit || 'month',
+    durationUnit: row.plan_duration_unit || row.duration_unit || DurationUnit.Month,
     isActive: Boolean(row.plan_is_active ?? row.is_active),
   };
 }
@@ -280,16 +280,16 @@ function addPlanDuration(fromDate, durationCount, durationUnit) {
   const count = Math.max(1, parseInt(durationCount, 10) || 1);
 
   switch (durationUnit) {
-    case 'day':
+    case DurationUnit.Day:
       d.setDate(d.getDate() + count);
       break;
-    case 'week':
+    case DurationUnit.Week:
       d.setDate(d.getDate() + count * 7);
       break;
-    case 'month':
+    case DurationUnit.Month:
       d.setMonth(d.getMonth() + count);
       break;
-    case 'year':
+    case DurationUnit.Year:
       d.setFullYear(d.getFullYear() + count);
       break;
     default:

@@ -4,21 +4,22 @@
  * edge scores, the Strategy card) and the Option Analyzer setups strategy
  * (server), so both read a chain the same way.
  */
+import { Bias, LevelSide, OiSignal } from '../analysisEnums.js';
 
 /** @typedef {import('./chain.js').ChainRow} ChainRow */
 
 /**
  * OI + Price signal classification
  * Determines market sentiment at a strike based on OI and price changes.
- * @typedef {'long-buildup' | 'short-buildup' | 'long-unwinding' | 'short-covering' | 'neutral'} OiSignal
+ * @typedef {import('../analysisEnums.js').OiSignalId} OiSignalId
  */
 
 /**
  * @typedef {object} OiSignalResult
- * @property {OiSignal} signal
+ * @property {OiSignalId} signal
  * @property {string} label
  * @property {string} description
- * @property {'bullish' | 'bearish' | 'neutral'} sentiment
+ * @property {Exclude<import('../analysisEnums.js').BiasId, 'Conflict'>} sentiment
  */
 
 /**
@@ -33,23 +34,23 @@
  */
 export function classifyOiSignal(oiChange, priceChange) {
   if (oiChange === 0 && priceChange === 0) {
-    return { signal: 'neutral', label: 'Neutral', description: 'No significant change', sentiment: 'neutral' };
+    return { signal: OiSignal.Neutral, label: 'Neutral', description: 'No significant change', sentiment: Bias.Neutral };
   }
 
   if (oiChange > 0 && priceChange > 0) {
-    return { signal: 'long-buildup', label: 'Long Buildup', description: 'New longs entering — bulls are aggressive', sentiment: 'bullish' };
+    return { signal: OiSignal.LongBuildup, label: 'Long Buildup', description: 'New longs entering — bulls are aggressive', sentiment: Bias.Bullish };
   }
   if (oiChange > 0 && priceChange <= 0) {
-    return { signal: 'short-buildup', label: 'Short Buildup', description: 'New shorts entering — bears are aggressive', sentiment: 'bearish' };
+    return { signal: OiSignal.ShortBuildup, label: 'Short Buildup', description: 'New shorts entering — bears are aggressive', sentiment: Bias.Bearish };
   }
   if (oiChange < 0 && priceChange < 0) {
-    return { signal: 'long-unwinding', label: 'Long Unwinding', description: 'Longs exiting — bulls giving up', sentiment: 'bearish' };
+    return { signal: OiSignal.LongUnwinding, label: 'Long Unwinding', description: 'Longs exiting — bulls giving up', sentiment: Bias.Bearish };
   }
   if (oiChange < 0 && priceChange >= 0) {
-    return { signal: 'short-covering', label: 'Short Covering', description: 'Shorts exiting — bears giving up', sentiment: 'bullish' };
+    return { signal: OiSignal.ShortCovering, label: 'Short Covering', description: 'Shorts exiting — bears giving up', sentiment: Bias.Bullish };
   }
 
-  return { signal: 'neutral', label: 'Neutral', description: 'Mixed signals', sentiment: 'neutral' };
+  return { signal: OiSignal.Neutral, label: 'Neutral', description: 'Mixed signals', sentiment: Bias.Neutral };
 }
 
 /**
@@ -132,7 +133,7 @@ export function calculatePCR(
  * Returns strikes with OI significantly above average
  * @typedef {object} OiWall
  * @property {number} strike
- * @property {'resistance' | 'support'} type
+ * @property {import('../analysisEnums.js').LevelSideId} type
  * @property {number} oi
  * @property {number} strength ratio above average (e.g., 2.5 = 2.5x average)
  */
@@ -176,7 +177,7 @@ export function findOiWalls(
       const ceOi = oiData.get(row.ce.instrumentToken) || 0;
       const strength = ceOi / avgCeOi;
       if (strength >= threshold) {
-        walls.push({ strike: row.strike, type: 'resistance', oi: ceOi, strength });
+        walls.push({ strike: row.strike, type: LevelSide.Resistance, oi: ceOi, strength });
       }
     }
 
@@ -185,7 +186,7 @@ export function findOiWalls(
       const peOi = oiData.get(row.pe.instrumentToken) || 0;
       const strength = peOi / avgPeOi;
       if (strength >= threshold) {
-        walls.push({ strike: row.strike, type: 'support', oi: peOi, strength });
+        walls.push({ strike: row.strike, type: LevelSide.Support, oi: peOi, strength });
       }
     }
   }

@@ -8,17 +8,27 @@ import { OptionChainRow } from './optionChain';
 
 import { calculateMaxPain, calculatePCR, classifyOiSignal, findOiWalls } from '../../shared/optionAnalysis/oiLevels.js';
 import type { OiSignalResult, OiWall } from '../../shared/optionAnalysis/oiLevels.js';
+import { Bias, LevelSide, OiSignal, OptionSetup, TrapVerdict, trapVerdictLabel, type OptionSetupId, type TrapVerdictId } from '../../shared/analysisEnums.js';
+import { OptionType, Side, type OptionTypeId, type SideId } from '../../shared/tradeEnums.js';
 
 /** The OI levels (signal, max pain, PCR, walls) live in shared/, used by the trade engine too. */
 export * from '../../shared/optionAnalysis/oiLevels.js';
 
-/**
- * Trap Verdict — the main analysis
- */
-export type TrapVerdict = 'safe' | 'caution' | 'likely-trapped';
+/** A single-option position trap analysis reads: bought or sold, call or put. */
+export type TrapPosition = typeof OptionSetup.BuyCe | typeof OptionSetup.BuyPe | typeof OptionSetup.SellCe | typeof OptionSetup.SellPe;
+
+const TRAP_POSITIONS: Record<SideId, Record<OptionTypeId, TrapPosition>> = {
+  [Side.BUY]: { [OptionType.CE]: OptionSetup.BuyCe, [OptionType.PE]: OptionSetup.BuyPe },
+  [Side.SELL]: { [OptionType.CE]: OptionSetup.SellCe, [OptionType.PE]: OptionSetup.SellPe },
+};
+
+/** The trap position for a side on a call or a put. */
+export const trapPositionOf = (side: SideId, optionType: OptionTypeId): TrapPosition => TRAP_POSITIONS[side][optionType];
+
+const CALL_POSITIONS: OptionSetupId[] = [OptionSetup.BuyCe, OptionSetup.SellCe];
 
 export interface TrapAnalysis {
-  verdict: TrapVerdict;
+  verdict: TrapVerdictId;
   verdictLabel: string;
   trapScore: number;
   reasons: string[];
@@ -55,8 +65,8 @@ export function buildTrapContext(
   const pcr = calculatePCR(chain, oiData);
 
   const walls = findOiWalls(chain, oiData);
-  const resistanceWalls = walls.filter((w) => w.type === 'resistance' && w.strike > spotPrice);
-  const supportWalls = walls.filter((w) => w.type === 'support' && w.strike < spotPrice);
+  const resistanceWalls = walls.filter((w) => w.type === LevelSide.Resistance && w.strike > spotPrice);
+  const supportWalls = walls.filter((w) => w.type === LevelSide.Support && w.strike < spotPrice);
   const nearestResistance = resistanceWalls.sort((a, b) => a.strike - b.strike)[0] ?? null;
   const nearestSupport = supportWalls.sort((a, b) => b.strike - a.strike)[0] ?? null;
 
@@ -66,7 +76,7 @@ export function buildTrapContext(
 /**
  * Analyze whether a position at a given strike is likely to get trapped.
  *
- * @param positionType 'buy-ce' | 'buy-pe' | 'sell-ce' | 'sell-pe'
+ * @param positionType the position: bought or sold, call or put (trapPositionOf)
  * @param strike The strike you're entering
  * @param spotPrice Current NIFTY spot
  * @param chain Full option chain
@@ -80,7 +90,7 @@ export function buildTrapContext(
  *            If omitted, shared context is computed internally (fine for single-strike use).
  */
 export function analyzeTrap(
-  positionType: 'buy-ce' | 'buy-pe' | 'sell-ce' | 'sell-pe',
+  positionType: TrapPosition,
   strike: number,
   spotPrice: number,
   chain: OptionChainRow[],
@@ -101,10 +111,10 @@ export function analyzeTrap(
 
   // 2. Get OI signal for the specific strike
   const row = chain.find((r) => r.strike === strike);
-  let oiSignal: OiSignalResult = { signal: 'neutral', label: 'Neutral', description: 'No data', sentiment: 'neutral' };
+  let oiSignal: OiSignalResult = { signal: OiSignal.Neutral, label: 'Neutral', description: 'No data', sentiment: Bias.Neutral };
 
   if (row) {
-    const instrument = positionType.includes('ce') ? row.ce : row.pe;
+    const instrument = CALL_POSITIONS.includes(positionType) ? row.ce : row.pe;
     if (instrument) {
       const currentOi = oiData.get(instrument.instrumentToken) || 0;
       const prevOi = prevDayOi.get(instrument.instrumentToken) || 0;
@@ -122,7 +132,7 @@ export function analyzeTrap(
   let trapScore = 0; // 0 = safe, higher = more trapped
 
   // Max Pain analysis
-  if (positionType === 'buy-ce') {
+  if (positionType === OptionSetup.BuyCe) {
     // Buying call — you need price to go UP
     if (strike > maxPain) {
       trapScore += 2;
@@ -139,11 +149,11 @@ export function analyzeTrap(
       reasons.push(`Low PCR (${pcr.toFixed(2)}) — market skewed bearish, calls may struggle`);
     }
     // OI signal check
-    if (oiSignal.sentiment === 'bearish') {
+    if (oiSignal.sentiment === Bias.Bearish) {
       trapScore += 2;
       reasons.push(`${oiSignal.label} at this strike — ${oiSignal.description}`);
     }
-  } else if (positionType === 'buy-pe') {
+  } else if (positionType === OptionSetup.BuyPe) {
     // Buying put — you need price to go DOWN
     if (strike < maxPain) {
       trapScore += 2;
@@ -160,27 +170,27 @@ export function analyzeTrap(
       reasons.push(`High PCR (${pcr.toFixed(2)}) — market skewed bullish, puts may struggle`);
     }
     // OI signal check
-    if (oiSignal.sentiment === 'bullish') {
+    if (oiSignal.sentiment === Bias.Bullish) {
       trapScore += 2;
       reasons.push(`${oiSignal.label} at this strike — ${oiSignal.description}`);
     }
-  } else if (positionType === 'sell-ce') {
+  } else if (positionType === OptionSetup.SellCe) {
     // Selling call — you need price to stay below strike
     if (strike < maxPain) {
       trapScore += 2;
       reasons.push(`Sold CE at ${strike} which is below max pain ${maxPain} — price may rise toward max pain`);
     }
-    if (oiSignal.signal === 'long-buildup') {
+    if (oiSignal.signal === OiSignal.LongBuildup) {
       trapScore += 2;
       reasons.push(`Long Buildup at this strike — aggressive buying may push price through`);
     }
-  } else if (positionType === 'sell-pe') {
+  } else if (positionType === OptionSetup.SellPe) {
     // Selling put — you need price to stay above strike
     if (strike > maxPain) {
       trapScore += 2;
       reasons.push(`Sold PE at ${strike} which is above max pain ${maxPain} — price may fall toward max pain`);
     }
-    if (oiSignal.signal === 'short-buildup') {
+    if (oiSignal.signal === OiSignal.ShortBuildup) {
       trapScore += 2;
       reasons.push(`Short Buildup at this strike — aggressive selling may push price through`);
     }
@@ -188,9 +198,9 @@ export function analyzeTrap(
 
   // Add positive signals
   if (reasons.length === 0) {
-    if (positionType === 'buy-ce' && oiSignal.sentiment === 'bullish') {
+    if (positionType === OptionSetup.BuyCe && oiSignal.sentiment === Bias.Bullish) {
       reasons.push(`${oiSignal.label} — supportive for your long call position`);
-    } else if (positionType === 'buy-pe' && oiSignal.sentiment === 'bearish') {
+    } else if (positionType === OptionSetup.BuyPe && oiSignal.sentiment === Bias.Bearish) {
       reasons.push(`${oiSignal.label} — supportive for your long put position`);
     } else {
       reasons.push('No significant trap signals detected');
@@ -216,22 +226,18 @@ export function analyzeTrap(
   }
 
   // Determine verdict
-  let verdict: TrapVerdict;
-  let verdictLabel: string;
+  let verdict: TrapVerdictId;
   if (trapScore >= 4) {
-    verdict = 'likely-trapped';
-    verdictLabel = 'Likely Trapped';
+    verdict = TrapVerdict.LikelyTrapped;
   } else if (trapScore >= 2) {
-    verdict = 'caution';
-    verdictLabel = 'Caution';
+    verdict = TrapVerdict.Caution;
   } else {
-    verdict = 'safe';
-    verdictLabel = 'Looks Safe';
+    verdict = TrapVerdict.Safe;
   }
 
   return {
     verdict,
-    verdictLabel,
+    verdictLabel: trapVerdictLabel(verdict),
     trapScore,
     reasons,
     maxPain,

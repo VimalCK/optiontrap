@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import AppSelect from '@/components/AppSelect/AppSelect';
-import { getUsers, updateUserSubscription, AdminUser, SubscriptionAction } from '@/services/admin';
+import { getUsers, updateUserSubscription, AdminUser } from '@/services/admin';
+import { DurationUnit, SubscriptionAction, type SubscriptionActionId } from '../../shared/appEnums.js';
 import { getPublicPlans, formatDuration } from '@/services/subscription';
 import { SubscriptionPlan } from '@/services/kiteAuth';
 
@@ -47,11 +48,11 @@ const AdminUsers: React.FC = () => {
     setSelectedPlan(user.subscription.planId || plans[0]?.id || '');
   };
 
-  const runAction = async (userId: string, action: SubscriptionAction) => {
+  const runAction = async (userId: string, action: SubscriptionActionId) => {
     setBusyUser(userId);
     setError(null);
     try {
-      await updateUserSubscription(userId, action, action === 'cancel' ? undefined : selectedPlan);
+      await updateUserSubscription(userId, action, action === SubscriptionAction.Cancel ? undefined : selectedPlan);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update subscription');
@@ -135,21 +136,21 @@ const AdminUsers: React.FC = () => {
                         <button
                           className="admin-action admin-action--primary"
                           disabled={busyUser === u.userId || !selectedPlan}
-                          onClick={() => runAction(u.userId, 'activate')}
+                          onClick={() => runAction(u.userId, SubscriptionAction.Activate)}
                         >
                           Activate
                         </button>
                         <button
                           className="admin-action"
                           disabled={busyUser === u.userId || !selectedPlan}
-                          onClick={() => runAction(u.userId, 'extend')}
+                          onClick={() => runAction(u.userId, SubscriptionAction.Extend)}
                         >
                           Extend
                         </button>
                         <button
                           className="admin-action admin-action--danger"
                           disabled={busyUser === u.userId || !sub.active}
-                          onClick={() => runAction(u.userId, 'cancel')}
+                          onClick={() => runAction(u.userId, SubscriptionAction.Cancel)}
                         >
                           Cancel
                         </button>
@@ -158,7 +159,7 @@ const AdminUsers: React.FC = () => {
                         <span className="au-manage__hint">
                           Extend adds {formatDuration(
                             plans.find((p) => p.id === selectedPlan)?.durationCount || 1,
-                            plans.find((p) => p.id === selectedPlan)?.durationUnit || 'month',
+                            plans.find((p) => p.id === selectedPlan)?.durationUnit || DurationUnit.Month,
                           )} from the current expiry.
                         </span>
                       )}

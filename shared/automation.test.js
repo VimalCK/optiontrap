@@ -12,7 +12,7 @@ import {
 import { Horizon } from './tradeEnums.js';
 
 /** A strategy as the trade engine describes it (GET /api/strategies). */
-const STRATEGIES = [{ id: 'test-strategy', label: 'Test strategy', description: 'For tests', params: [{ key: 'minScore', label: 'Min score', type: 'count' }] }];
+const STRATEGIES = [{ id: 'test-strategy', label: 'Test strategy', description: 'For tests', params: [{ key: 'minScore', label: 'Min score', type: 'Count' }] }];
 const parse = (input) => parseAutomationConfig(input, STRATEGIES);
 const fill = (stored) => withDefaults(stored, STRATEGIES);
 

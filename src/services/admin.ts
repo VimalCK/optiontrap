@@ -1,6 +1,7 @@
 import { apiClient } from './apiClient';
 import type { FeedbackStatusId, FeedbackTypeId } from '../../shared/appEnums.js';
 import { type HealthStatusId } from '../../shared/appEnums.js';
+import type { SubscriptionActionId } from '../../shared/appEnums.js';
 
 export interface FeedbackItem {
   id: string;
@@ -46,7 +47,6 @@ export interface AdminUser {
   };
 }
 
-export type SubscriptionAction = 'activate' | 'extend' | 'cancel';
 
 export async function getUsers(): Promise<AdminUser[]> {
   return apiClient.get<AdminUser[]>('/api/admin/users');
@@ -54,7 +54,7 @@ export async function getUsers(): Promise<AdminUser[]> {
 
 export async function updateUserSubscription(
   userId: string,
-  action: SubscriptionAction,
+  action: SubscriptionActionId,
   planId?: string,
 ): Promise<void> {
   await apiClient.post(`/api/admin/users/${encodeURIComponent(userId)}/subscription`, { action, planId });

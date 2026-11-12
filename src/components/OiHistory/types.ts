@@ -1,4 +1,5 @@
-import type { Richness } from '@/services/fairValue';
+import type { BiasId, RichnessId, RolloverPatternId, SellingSetupId, SignalVerdictId, StrengthId, TradeSetupStatusId } from '../../../shared/analysisEnums.js';
+import type { Bias, Strength, Trend } from '../../../shared/analysisEnums.js';
 import { type OptionTypeId, type SideId } from '../../../shared/tradeEnums.js';
 import { type HealthStatusId } from '../../../shared/appEnums.js';
 
@@ -56,39 +57,19 @@ export interface SignalPerformanceSummary {
   buyWinRate: number | null;
 }
 
-export type RolloverPattern =
-  | 'Rolling Over (Long)'
-  | 'Rolling Over (Short)'
-  | 'Rolling Over'
-  | 'Exiting (Long Unwind)'
-  | 'Exiting (Short Cover)'
-  | 'Exiting'
-  | 'Fresh Build (Long)'
-  | 'Fresh Build (Short)'
-  | 'Fresh Build'
-  | 'Doubling Down (Long)'
-  | 'Doubling Down (Short)'
-  | 'Doubling Down'
-  | 'Long Buildup'
-  | 'Short Buildup'
-  | 'Long Unwinding'
-  | 'Short Covering'
-  | 'Unwinding'
-  | 'Stable'
-  | '-';
+/** Which way a strike's option flow leans over the history. */
+export type StrikeBias = typeof Trend.Upward | typeof Trend.Downward | typeof Trend.Neutral;
 
-export type StrikeBias = 'Upward' | 'Downward' | 'Neutral';
+/** Which way one day's option flow leaned. */
+export type DailyBias = typeof Bias.Bullish | typeof Bias.Bearish | typeof Bias.Neutral;
 
-export type DailyBias = 'Bullish' | 'Bearish' | 'Neutral';
-
-export type PriceTrendDirection = 'Upward' | 'Downward' | 'Sideways' | 'Unknown';
-
-export type TradeBias = 'Bullish' | 'Bearish' | 'Conflict' | 'Neutral';
+/** Which way the underlying moved over the history. */
+export type PriceTrendDirection = typeof Trend.Upward | typeof Trend.Downward | typeof Trend.Sideways | typeof Trend.Unknown;
 
 export interface StrikeBiasDay {
   date: string;
-  cePattern: RolloverPattern;
-  pePattern: RolloverPattern;
+  cePattern: RolloverPatternId;
+  pePattern: RolloverPatternId;
   bias: DailyBias;
   score: number;
   cumulativeScore: number;
@@ -96,7 +77,7 @@ export interface StrikeBiasDay {
 
 export interface StrikeBiasSummary {
   bias: StrikeBias;
-  strength: 'Strong' | 'Moderate' | 'Mild' | 'Mixed';
+  strength: typeof Strength.Strong | typeof Strength.Moderate | typeof Strength.Mild | typeof Strength.Mixed;
   confidence: number;
   score: number;
   bullishDays: number;
@@ -118,7 +99,7 @@ export interface StrikeBiasSummary {
 
 export interface PriceTrendSummary {
   direction: PriceTrendDirection;
-  strength: 'Strong' | 'Moderate' | 'Mild' | 'Flat' | 'Unknown';
+  strength: Exclude<StrengthId, typeof Strength.Mixed>;
   startPrice: number | null;
   endPrice: number | null;
   changePct: number | null;
@@ -128,13 +109,11 @@ export interface PriceTrendSummary {
 }
 
 export interface TradeBiasSummary {
-  bias: TradeBias;
+  bias: BiasId;
   title: string;
   action: string;
   reason: string;
 }
-
-export type TradeSetupStatus = 'Confirmed' | 'Watch' | 'Avoid';
 
 export type ChecklistStatus = HealthStatusId;
 
@@ -163,8 +142,8 @@ export interface TradeLevelContext {
 }
 
 export interface TradeSetupSummary {
-  status: TradeSetupStatus;
-  direction: 'Bullish' | 'Bearish' | 'Neutral';
+  status: TradeSetupStatusId;
+  direction: DailyBias;
   title: string;
   action: string;
   strategy: string;
@@ -175,11 +154,9 @@ export interface TradeSetupSummary {
   checklist: TradeSetupChecklistItem[];
 }
 
-export type SellingSetupType = 'Call Sell' | 'Put Sell' | 'Range Sell' | 'No Sell';
-
 export interface SellingSetupSummary {
-  status: TradeSetupStatus;
-  type: SellingSetupType;
+  status: TradeSetupStatusId;
+  type: SellingSetupId;
   title: string;
   action: string;
   trigger: string;
@@ -202,8 +179,8 @@ export interface StrikeHistoryEntry {
   /** (close − fair) ÷ fair. */
   ceRichPct?: number | null;
   peRichPct?: number | null;
-  ceFairLabel?: Richness | null;
-  peFairLabel?: Richness | null;
+  ceFairLabel?: RichnessId | null;
+  peFairLabel?: RichnessId | null;
 }
 
 export interface PremiumDecaySide {
@@ -269,8 +246,8 @@ export interface OiCellData {
 export interface OiTableRow {
   strike: number;
   cells: Map<string, OiCellData>;
-  cePattern: RolloverPattern;
-  pePattern: RolloverPattern;
+  cePattern: RolloverPatternId;
+  pePattern: RolloverPatternId;
   ceConsolidatedOi: number;
   peConsolidatedOi: number;
   dimmed: boolean;
@@ -325,8 +302,6 @@ export interface TradeSignalDetails {
   fairRichPct?: number | null;
 }
 
-export type SignalVerdict = 'Working' | 'Mixed' | 'Losing' | 'Too few';
-
 /** Outcome stats for one slice of the logged signals, e.g. "Setup: SELL CE". */
 export interface SignalBreakdownRow {
   group: string;
@@ -336,5 +311,5 @@ export interface SignalBreakdownRow {
   winRate: number | null;
   averageReturn: number | null;
   averageMaxAdverse: number | null;
-  verdict: SignalVerdict;
+  verdict: SignalVerdictId;
 }

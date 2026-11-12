@@ -27,13 +27,11 @@ import { saveTradingMode, storedTradingMode } from '@/utils/tradingModeStorage';
 import '@/styles/analytics.css'; // reuse the shared tab-bar CSS
 import '@/styles/positions.css';
 
-type PaperTab = 'positions' | 'orders' | 'risk';
-
 /** The paper tabs, each with how many it holds: Open positions, Pending orders still waiting to fill, Position Risk strategies. */
-export const paperTabs = (openPositions: number, pendingOrders: number, riskGroups: number): TabBarItem<PaperTab>[] => [
-  { id: 'positions', label: `Open (${openPositions})` },
-  { id: 'orders', label: `Pending (${pendingOrders})` },
-  { id: 'risk', label: `Position Risk (${riskGroups})` },
+export const paperTabs = (openPositions: number, pendingOrders: number, riskGroups: number): TabBarItem<PaperTabId>[] => [
+  { id: PaperTab.Positions, label: `Open (${openPositions})` },
+  { id: PaperTab.Orders, label: `Pending (${pendingOrders})` },
+  { id: PaperTab.Risk, label: `Position Risk (${riskGroups})` },
 ];
 
 const fmtInr = (n: number) =>
@@ -591,7 +589,7 @@ const PaperPositions: React.FC = () => {
 
   useEffect(() => { loadPositions(); }, [loadPositions]);
 
-  const [tab, setTab] = useState<PaperTab>('positions');
+  const [tab, setTab] = useState<PaperTabId>(PaperTab.Positions);
   // Loaded whichever tab shows, so a fill reloads the positions either way.
   const orderBook = usePaperOrders(loadPositions);
 
@@ -725,9 +723,9 @@ const PaperPositions: React.FC = () => {
           ariaLabel="Paper positions and orders"
         />
       </div>
-      {tab === 'orders' && <PaperOrders orders={orderBook.orders} error={orderBook.error} onCancel={orderBook.cancel} />}
-      {tab === 'risk' && <RiskTable groups={riskGroups} spotPrices={spotPrices} />}
-      {tab === 'positions' && positionsView}
+      {tab === PaperTab.Orders && <PaperOrders orders={orderBook.orders} error={orderBook.error} onCancel={orderBook.cancel} />}
+      {tab === PaperTab.Risk && <RiskTable groups={riskGroups} spotPrices={spotPrices} />}
+      {tab === PaperTab.Positions && positionsView}
     </section>
   );
 
@@ -823,12 +821,14 @@ const PaperPositions: React.FC = () => {
   );
 };
 
-type LiveView = 'net' | 'day';
+
+/** Kite's live position lists, in the order their tabs show. */
+const LIVE_VIEWS: LiveViewId[] = [LiveView.Net, LiveView.Day];
 
 const LivePositions: React.FC = () => {
   // Priced from quotes on load and from ticks while the market is open.
   const { positions, loading, error, reload: load } = useLivePositions();
-  const [view, setView] = useState<LiveView>('net');
+  const [view, setView] = useState<LiveViewId>(LiveView.Net);
 
   if (loading) return <div className="card"><p className="card__description">Loading live positions...</p></div>;
 
@@ -841,7 +841,7 @@ const LivePositions: React.FC = () => {
     );
   }
 
-  const rows = view === 'net' ? positions.net : positions.day;
+  const rows = view === LiveView.Net ? positions.net : positions.day;
   const openRows   = rows.filter((p) => p.quantity !== 0);
   const closedRows = rows.filter((p) => p.quantity === 0);
 
@@ -943,9 +943,9 @@ const LivePositions: React.FC = () => {
       <>
         <div className="live-positions__controls">
           <div className="positions-mode-tabs">
-            {(['net', 'day'] as LiveView[]).map((v) => (
+            {LIVE_VIEWS.map((v) => (
               <button key={v} className={`positions-mode-tab ${view === v ? 'positions-mode-tab--active' : ''}`} onClick={() => setView(v)}>
-                {v === 'net' ? 'Net Positions' : 'Day Positions'}
+                {v === LiveView.Net ? 'Net Positions' : 'Day Positions'}
               </button>
             ))}
           </div>
@@ -957,7 +957,7 @@ const LivePositions: React.FC = () => {
           </button>
         </div>
         <div className="card">
-          <h3 className="card__title">No {view === 'net' ? 'Net' : 'Day'} Positions</h3>
+          <h3 className="card__title">No {view === LiveView.Net ? 'Net' : 'Day'} Positions</h3>
           <p className="card__description">No open positions for the selected view.</p>
         </div>
       </>
@@ -969,9 +969,9 @@ const LivePositions: React.FC = () => {
       {/* Controls */}
       <div className="live-positions__controls">
         <div className="positions-mode-tabs">
-          {(['net', 'day'] as LiveView[]).map((v) => (
+          {LIVE_VIEWS.map((v) => (
             <button key={v} className={`positions-mode-tab ${view === v ? 'positions-mode-tab--active' : ''}`} onClick={() => setView(v)}>
-              {v === 'net' ? 'Net Positions' : 'Day Positions'}
+              {v === LiveView.Net ? 'Net Positions' : 'Day Positions'}
             </button>
           ))}
         </div>
@@ -1030,7 +1030,7 @@ const Positions: React.FC<{ hideHeader?: boolean; initialMode?: TradingModeId }>
             <div className="positions-mode-tabs">
               {TRADING_MODES.map((m) => (
                 <button key={m} className={`positions-mode-tab ${mode === m ? 'positions-mode-tab--active' : ''}`} onClick={() => handleModeChange(m)}>
-                  <span className={`positions-mode-dot positions-mode-dot--${m}`} />
+                  <span className={`positions-mode-dot positions-mode-dot--${m.toLowerCase()}`} />
                   {m.charAt(0).toUpperCase() + m.slice(1)}
                 </button>
               ))}
@@ -1044,7 +1044,7 @@ const Positions: React.FC<{ hideHeader?: boolean; initialMode?: TradingModeId }>
         <div className="positions-mode-tabs" style={{ marginBottom: 20 }}>
           {TRADING_MODES.map((m) => (
             <button key={m} className={`positions-mode-tab ${mode === m ? 'positions-mode-tab--active' : ''}`} onClick={() => handleModeChange(m)}>
-              <span className={`positions-mode-dot positions-mode-dot--${m}`} />
+              <span className={`positions-mode-dot positions-mode-dot--${m.toLowerCase()}`} />
               {m.charAt(0).toUpperCase() + m.slice(1)}
             </button>
           ))}
@@ -1057,3 +1057,5 @@ const Positions: React.FC<{ hideHeader?: boolean; initialMode?: TradingModeId }>
 };
 
 export default Positions;
+
+import { LiveView, PaperTab, type LiveViewId, type PaperTabId } from '@/utils/uiEnums';

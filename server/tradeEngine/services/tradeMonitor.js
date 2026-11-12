@@ -39,6 +39,9 @@ import { paperPnl, paperPnlPercent } from '../../../shared/paperPnl.js';
 import { algoLogger } from '../../algoLog.js';
 import { TradeSource } from '../../../shared/tradeEnums.js';
 
+/** This trade engine service's id: its key in ctx.services and on Admin Services. */
+export const TRADE_MONITOR_SERVICE_ID = 'tradeMonitor';
+
 /** How often every position is checked on its last price, for time-based rules. */
 const CLOCK_CHECK_MS = 1000;
 /** How often, in market hours, the feed is started if positions are watched and it isn't running (e.g. no admin login yet). */
@@ -271,7 +274,7 @@ export function createTradeMonitor({
   }
 
   return {
-    id: 'tradeMonitor',
+    id: TRADE_MONITOR_SERVICE_ID,
 
     /** Run on the market clock: watch from each open, check time rules every second, stop after the close. */
     start(/** @type {import('../host.js').PluginContext} */ ctx) {

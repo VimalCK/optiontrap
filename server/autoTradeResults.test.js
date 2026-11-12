@@ -9,14 +9,14 @@ const row = (dimension, key, trades, pnl, extra = {}) => ({
 describe('toResults', () => {
   it('puts each grouping row in its breakdown: time and day in order, the rest best P&L first', () => {
     const results = toResults([
-      row('all', null, 3, 500, { wins: 2, losses: 1, gross_profit: 2000, gross_loss: 1500, best: 1500, worst: -1500, charges: 170.55 }),
-      row('setup', 'Bull put', 2, -1000),
-      row('setup', 'Long call', 1, 1500),
-      row('exitRule', null, 1, 500),
-      row('entrySlot', '810', 1, 500),
-      row('entrySlot', '570', 2, 0),
-      row('day', '2026-11-10', 1, 500),
-      row('day', '2026-11-09', 2, 0),
+      row('All', null, 3, 500, { wins: 2, losses: 1, gross_profit: 2000, gross_loss: 1500, best: 1500, worst: -1500, charges: 170.55 }),
+      row('Setup', 'Bull put', 2, -1000),
+      row('Setup', 'Long call', 1, 1500),
+      row('ExitRule', null, 1, 500),
+      row('EntrySlot', '810', 1, 500),
+      row('EntrySlot', '570', 2, 0),
+      row('Day', '2026-11-10', 1, 500),
+      row('Day', '2026-11-09', 2, 0),
     ], 1500);
 
     expect(results.summary).toEqual({ key: null, trades: 3, wins: 2, losses: 1, pnl: 500, grossProfit: 2000, grossLoss: 1500, best: 1500, worst: -1500, charges: 170.55 });
@@ -30,7 +30,7 @@ describe('toResults', () => {
   });
 
   it('gives an empty summary when there are no closed trades in the range', () => {
-    const results = toResults([row('all', null, 0, 0, { best: null, worst: null })], 0);
+    const results = toResults([row('All', null, 0, 0, { best: null, worst: null })], 0);
     expect(results.summary).toMatchObject({ trades: 0, pnl: 0, best: null, worst: null });
     expect(toResults([], 0).summary.trades).toBe(0);
   });

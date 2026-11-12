@@ -83,7 +83,7 @@
   background: rgba(234, 179, 8, 0.05);
 }
 
-.trap-verdict--likely-trapped {
+.trap-verdict--likelytrapped {
   border-color: rgba(239, 68, 68, 0.4);
   background: rgba(239, 68, 68, 0.05);
 }
@@ -116,7 +116,7 @@
   color: #eab308;
 }
 
-.trap-verdict--likely-trapped .trap-verdict__icon {
+.trap-verdict--likelytrapped .trap-verdict__icon {
   background: rgba(239, 68, 68, 0.2);
   color: #ef4444;
 }

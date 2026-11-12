@@ -58,13 +58,13 @@ describe('dates', () => {
 
 describe('classifyFlow', () => {
   it('reads OI against IV relative to ATM', () => {
-    expect(classifyFlow(true, 100, 0.01)).toBe('Buyers Adding');
-    expect(classifyFlow(true, 100, -0.01)).toBe('Writers Adding');
-    expect(classifyFlow(true, -100, -0.01)).toBe('Buyers Exiting');
-    expect(classifyFlow(true, -100, 0.01)).toBe('Writers Covering');
+    expect(classifyFlow(true, 100, 0.01)).toBe('BuyersAdding');
+    expect(classifyFlow(true, 100, -0.01)).toBe('WritersAdding');
+    expect(classifyFlow(true, -100, -0.01)).toBe('BuyersExiting');
+    expect(classifyFlow(true, -100, 0.01)).toBe('WritersCovering');
     expect(classifyFlow(true, 100, 0.001)).toBe('Unclear');
     expect(classifyFlow(false, 100, 0.01)).toBe('Stable');
-    expect(classifyFlow(true, 100, null)).toBe('-');
+    expect(classifyFlow(true, 100, null)).toBe('None');
   });
 });
 
@@ -101,9 +101,9 @@ describe('computeFlowReadings', () => {
     ]);
     expect(readings.get(1)!.atmIvChange).toBeCloseTo(-0.03, 3);
     expect(readings.get(3)!.relIvChange).toBeCloseTo(0.015, 3);
-    expect(readings.get(3)!.label).toBe('Buyers Adding');
-    expect(readings.get(4)!.label).toBe('Writers Adding');
-    expect(readings.get(1)!.label).toBe('Stable');
+    expect(readings.get(3)!.flow).toBe('BuyersAdding');
+    expect(readings.get(4)!.flow).toBe('WritersAdding');
+    expect(readings.get(1)!.flow).toBe('Stable');
   });
 
   it('weights OI change by delta so far OTM strikes count for less', () => {
@@ -128,10 +128,10 @@ describe('computeFlowReadings', () => {
     ]);
     const unusual = readings.get(2)!;
     expect(unusual.unusual).toBeCloseTo(3, 5);
-    expect(unusual.label).toBe('Buyers Adding');
+    expect(unusual.flow).toBe('BuyersAdding');
     expect(unusual.churn).toBeCloseTo(0.1, 5);
     expect(unusual.recentShare).toBeCloseTo((1030 - 1000) / 1030, 5);
-    expect(readings.get(3)!.label).toBe('Stable');
+    expect(readings.get(3)!.flow).toBe('Stable');
   });
 });
 
@@ -144,20 +144,20 @@ describe('impliedForward', () => {
 
   it('reads a dividend out of CE − PE prices', () => {
     const estimate = impliedForward(legs(23850), 24000, years);
-    expect(estimate.source).toBe('parity');
+    expect(estimate.source).toBe('Parity');
     expect(estimate.pricingSpot).toBeCloseTo(23850, 6);
     expect(estimate.forward).toBeCloseTo(23850 * Math.exp(RISK_FREE_RATE * years), 6);
   });
 
   it('falls back to carry without enough paired strikes, time, or plausible prices', () => {
-    expect(impliedForward(legs(24000).filter((l) => l.optionType === 'CE'), 24000, years)).toMatchObject({ source: 'carry', pricingSpot: 24000 });
-    expect(impliedForward(legs(24000), 24000, 0).source).toBe('carry');
-    expect(impliedForward(legs(18000), 24000, years).source).toBe('carry');
+    expect(impliedForward(legs(24000).filter((l) => l.optionType === 'CE'), 24000, years)).toMatchObject({ source: 'Carry', pricingSpot: 24000 });
+    expect(impliedForward(legs(24000), 24000, 0).source).toBe('Carry');
+    expect(impliedForward(legs(18000), 24000, years).source).toBe('Carry');
   });
 
   it('skips legs with no volume or tick-sized premiums', () => {
     const quiet = legs(23850).map((l) => ({ ...l, volume: 0 }));
-    expect(impliedForward(quiet, 24000, years).source).toBe('carry');
+    expect(impliedForward(quiet, 24000, years).source).toBe('Carry');
   });
 });
 

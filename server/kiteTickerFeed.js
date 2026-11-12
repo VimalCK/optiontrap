@@ -16,6 +16,7 @@
  */
 import { WebSocket } from 'ws';
 import { parseTicks } from '../shared/kiteTicks.js';
+import { TickerMode } from '../shared/tradeEnums.js';
 
 /** Kite's limits per API key. */
 export const MAX_TOKENS_PER_CONNECTION = 3000;
@@ -73,7 +74,7 @@ function createConnection({ url, openSocket, onTicks, onAuthError, log }) {
   const subscribe = (/** @type {number[]} */ list) => {
     if (list.length === 0) return;
     send({ a: 'subscribe', v: list });
-    send({ a: 'mode', v: ['ltp', list] });
+    send({ a: 'mode', v: [TickerMode.ltp, list] });
   };
 
   function open() {

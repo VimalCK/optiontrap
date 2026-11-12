@@ -11,7 +11,6 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import AutomationConfigForm, {
   AUTOMATION_SETTINGS_SECTIONS,
-  type AutomationSettingsSection,
 } from '@/components/Automation/AutomationConfigForm';
 import FormFooter from '@/components/FormFooter/FormFooter';
 import TabBar from '@/components/TabBar/TabBar';
@@ -24,8 +23,8 @@ import '@/styles/automation.css';
 const errorText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
 /** The tab named in the URL, or General. */
-export const sectionFromParams = (params: URLSearchParams): AutomationSettingsSection =>
-  AUTOMATION_SETTINGS_SECTIONS.find((s) => s.id === params.get('tab'))?.id ?? 'general';
+export const sectionFromParams = (params: URLSearchParams): AutomationSettingsSectionId =>
+  enumFromParam(AutomationSettingsSection, params.get('tab'), AutomationSettingsSection.General);
 
 const AutomationSettings: React.FC = () => {
   const navigate = useNavigate();
@@ -94,3 +93,5 @@ const AutomationSettings: React.FC = () => {
 };
 
 export default AutomationSettings;
+
+import { AutomationSettingsSection, enumFromParam, type AutomationSettingsSectionId } from '@/utils/uiEnums';

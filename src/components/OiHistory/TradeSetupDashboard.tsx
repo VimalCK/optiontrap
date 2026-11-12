@@ -5,6 +5,7 @@ import { summarizeSignalBreakdown, MIN_SCORED_FOR_VERDICT } from './signalStats'
 import { formatPct, formatPcr, todayIST } from './helpers';
 import { checklistStatusText, sortChecklistByStatus, readinessScore, setupReadinessLabel, setupReadinessWidth, expiryLabel } from './analysis';
 import { OPTION_TYPES, OptionType, Side, type SideId } from '../../../shared/tradeEnums.js';
+import { Bias, SellingSetup, TradeSetupStatus, sellingSetupLabel, signalVerdictLabel } from '../../../shared/analysisEnums.js';
 import { SignalOutcome } from '../../../shared/appEnums.js';
 
 interface TradeSetupDashboardProps {
@@ -152,7 +153,7 @@ export const SignalBreakdownTable: React.FC<{ signals: TradeSignalRow[] }> = ({ 
                     <td className={row.averageReturn === null ? '' : row.averageReturn >= 0 ? 'is-up' : 'is-down'}>{formatReturn(row.averageReturn)}</td>
                     <td>{formatReturn(row.averageMaxAdverse)}</td>
                     <td>
-                      <span className={`oi-history__signal-verdict oi-history__signal-verdict--${row.verdict.replace(' ', '-').toLowerCase()}`}>{row.verdict}</span>
+                      <span className={`oi-history__signal-verdict oi-history__signal-verdict--${row.verdict.toLowerCase()}`}>{signalVerdictLabel(row.verdict)}</span>
                     </td>
                   </tr>
                 ))}
@@ -227,7 +228,7 @@ export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
       <div className={`oi-history__setup-mode-card oi-history__setup-mode-card--${setup.tradeSetup.status.toLowerCase()}`}>
         <div className="oi-history__setup-mode-card-head">
           <span>Option Buying Trade</span>
-          <strong>{setup.tradeSetup.direction} {setup.tradeSetup.status === 'Avoid' ? 'No Trade' : setup.tradeSetup.status}</strong>
+          <strong>{setup.tradeSetup.direction} {setup.tradeSetup.status === TradeSetupStatus.Avoid ? 'No Trade' : setup.tradeSetup.status}</strong>
         </div>
         <div className="oi-history__readiness-meter">
           <span>Buying setup</span>
@@ -284,14 +285,14 @@ export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
             <strong>{setup.tradeSetup.target}</strong>
           </div>
         </div>
-        {setup.tradeSetup.status !== 'Avoid' &&
-          (setup.tradeSetup.direction === 'Bullish' || setup.tradeSetup.direction === 'Bearish') && (
+        {setup.tradeSetup.status !== TradeSetupStatus.Avoid &&
+          (setup.tradeSetup.direction === Bias.Bullish || setup.tradeSetup.direction === Bias.Bearish) && (
           <button
             type="button"
             className="oi-history__setup-trade-btn oi-history__setup-trade-btn--buy"
             onClick={() => onTrade(Side.BUY)}
           >
-            Buy {setup.tradeSetup.direction === 'Bullish' ? OptionType.CE : OptionType.PE}
+            Buy {setup.tradeSetup.direction === Bias.Bullish ? OptionType.CE : OptionType.PE}
           </button>
         )}
       </div>
@@ -299,7 +300,7 @@ export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
       <div className={`oi-history__setup-mode-card oi-history__setup-mode-card--${setup.sellingSetup.status.toLowerCase()}`}>
         <div className="oi-history__setup-mode-card-head">
           <span>Option Selling Trade</span>
-          <strong>{setup.sellingSetup.type} {setup.sellingSetup.status === 'Avoid' ? 'No Trade' : setup.sellingSetup.status}</strong>
+          <strong>{sellingSetupLabel(setup.sellingSetup.type)} {setup.sellingSetup.status === TradeSetupStatus.Avoid ? 'No Trade' : setup.sellingSetup.status}</strong>
         </div>
         <div className="oi-history__readiness-meter">
           <span>Selling setup</span>
@@ -340,7 +341,7 @@ export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
         </div>
         <div className="oi-history__setup-primary-action">
           <span>Structure</span>
-          <strong>{setup.sellingSetup.type === 'No Sell' ? 'Wait for support/resistance setup' : 'Prefer defined-risk credit spread'}</strong>
+          <strong>{setup.sellingSetup.type === SellingSetup.NoSell ? 'Wait for support/resistance setup' : 'Prefer defined-risk credit spread'}</strong>
         </div>
         <div className="oi-history__setup-mini-plan">
           <div>
@@ -356,14 +357,14 @@ export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
             <strong>{setup.sellingSetup.target}</strong>
           </div>
         </div>
-        {setup.sellingSetup.status !== 'Avoid' &&
-          (setup.sellingSetup.type === 'Call Sell' || setup.sellingSetup.type === 'Put Sell') && (
+        {setup.sellingSetup.status !== TradeSetupStatus.Avoid &&
+          (setup.sellingSetup.type === SellingSetup.CallSell || setup.sellingSetup.type === SellingSetup.PutSell) && (
           <button
             type="button"
             className="oi-history__setup-trade-btn oi-history__setup-trade-btn--sell"
             onClick={() => onTrade(Side.SELL)}
           >
-            Sell {setup.sellingSetup.type === 'Call Sell' ? OptionType.CE : OptionType.PE}
+            Sell {setup.sellingSetup.type === SellingSetup.CallSell ? OptionType.CE : OptionType.PE}
           </button>
         )}
       </div>

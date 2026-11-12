@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { formatNumericDate } from '@/utils/marketStatus';
-import { analyzeStock, MIN_CANDLES, type StockAnalysis, type Zone, type StockState, type MarketCheck } from '../../../shared/stockSetups.js';
+import { analyzeStock, MIN_CANDLES, type StockAnalysis, type Zone } from '../../../shared/stockSetups.js';
+import { LevelSide, MarketRelation, MoveDirection, type MarketRelationId, type MoveDirectionId } from '../../../shared/analysisEnums.js';
 import { backfillSetupHistory, fetchExpectedMove, fetchStockCandles, type ExpectedMove, type StockCandles } from '@/services/stockSetups';
 import { isAbortError } from '@/services/apiClient';
 import StockSetupsGuide from './StockSetupsGuide';
@@ -27,27 +28,19 @@ const REPRICE_MOVE = 0.005;
 /** Zones drawn on the price ladder on each side of the price. */
 const LADDER_ZONES = 3;
 
-const STATE_LABEL: Record<StockState, string> = {
-  falling: 'Falling',
-  stretched: 'Stretched',
-  turning: 'Turning',
-  uptrend: 'Uptrend',
-  sideways: 'Sideways',
-};
-
-const MARKET_LABEL: Record<MarketCheck['relation'], string> = {
-  alone: 'Falling on its own',
-  'with-market': 'Falling with the market',
-  stronger: 'Stronger than market',
-  'in-line': 'In line with market',
+const MARKET_LABEL: Record<MarketRelationId, string> = {
+  [MarketRelation.Alone]: 'Falling on its own',
+  [MarketRelation.WithMarket]: 'Falling with the market',
+  [MarketRelation.Stronger]: 'Stronger than market',
+  [MarketRelation.InLine]: 'In line with market',
 };
 
 /** `market`: the market reference index's label. */
-const marketText = (relation: MarketCheck['relation'], market: string): string => ({
-  alone: 'Stock-specific selling while the market holds: higher risk.',
-  'with-market': 'Moving down with the market: it often recovers when the market does.',
-  stronger: `Holding up better than ${market}.`,
-  'in-line': `Moving with ${market}.`,
+const marketText = (relation: MarketRelationId, market: string): string => ({
+  [MarketRelation.Alone]: 'Stock-specific selling while the market holds: higher risk.',
+  [MarketRelation.WithMarket]: 'Moving down with the market: it often recovers when the market does.',
+  [MarketRelation.Stronger]: `Holding up better than ${market}.`,
+  [MarketRelation.InLine]: `Moving with ${market}.`,
 })[relation];
 
 const rs = (v: number) => `₹${v.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -71,7 +64,7 @@ function sessionsTo(expiry: string): number {
 }
 /** "2026-11-24" → "24 Nov" */
 const shortDate = (iso: string) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-const tone = (v: number) => (v >= 0 ? 'up' : 'down');
+const tone = (v: number): MoveDirectionId => (v >= 0 ? MoveDirection.Up : MoveDirection.Down);
 
 function Strength({ value }: { value: 1 | 2 | 3 }) {
   return (
@@ -82,17 +75,17 @@ function Strength({ value }: { value: 1 | 2 | 3 }) {
 }
 
 /** RSI as words: under 30 oversold, over 70 overbought, 45–55 neutral, normal otherwise. */
-function rsiLabel(rsi: number): { text: string; tone: 'down' | 'up' | 'neutral' } {
-  if (rsi < 30) return { text: 'Oversold', tone: 'down' };
-  if (rsi > 70) return { text: 'Overbought', tone: 'up' };
-  if (rsi >= 45 && rsi <= 55) return { text: 'Neutral', tone: 'neutral' };
-  return { text: 'Normal', tone: 'neutral' };
+function rsiLabel(rsi: number): { text: string; tone: MoveDirectionId } {
+  if (rsi < 30) return { text: 'Oversold', tone: MoveDirection.Down };
+  if (rsi > 70) return { text: 'Overbought', tone: MoveDirection.Up };
+  if (rsi >= 45 && rsi <= 55) return { text: 'Neutral', tone: MoveDirection.Neutral };
+  return { text: 'Normal', tone: MoveDirection.Neutral };
 }
 
 function historyText(zone: Zone): string {
   const { tests, held, failed, avgMovePct } = zone.history;
   if (!tests) return 'No past tests';
-  const verb = zone.side === 'support' ? 'Held' : 'Rejected';
+  const verb = zone.side === LevelSide.Support ? 'Held' : 'Rejected';
   const broke = failed ? ` · broke ${failed}` : '';
   const move = avgMovePct !== null ? ` · avg move ${avgMovePct.toFixed(1)}%` : '';
   return `${verb} ${held} of ${tests}${broke}${move}`;
@@ -116,9 +109,9 @@ function PriceLadder({ analysis }: { analysis: StockAnalysis }) {
         {zones.map((z) => (
           <span
             key={`${z.side}-${z.low}`}
-            className={`wl-sz-ladder__zone wl-sz-ladder__zone--${z.side} wl-sz-ladder__zone--s${z.strength}`}
+            className={`wl-sz-ladder__zone wl-sz-ladder__zone--${z.side.toLowerCase()} wl-sz-ladder__zone--s${z.strength}`}
             style={{ left: at(z.low), width: `max(4px, calc(${at(z.high)} - ${at(z.low)}))` }}
-            title={`${z.side === 'support' ? 'Support' : 'Resistance'} ${rs(z.low)}–${rs(z.high)}`}
+            title={`${z.side} ${rs(z.low)}–${rs(z.high)}`}
           />
         ))}
         <span className="wl-sz-ladder__price" style={{ left: at(analysis.price) }}>
@@ -145,8 +138,8 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
   const [error, setError] = useState<string | null>(null);
   const [analysisPrice, setAnalysisPrice] = useState<number | undefined>(livePrice);
   // The body shows the setup details, the reading guide, or the scorecard after a backtest.
-  const [view, setView] = useState<'details' | 'guide' | 'scorecard'>('details');
-  const showGuide = view === 'guide';
+  const [view, setView] = useState<StockSetupsViewId>(StockSetupsView.Details);
+  const showGuide = view === StockSetupsView.Guide;
   // Read once for the ATM strike; ticks shouldn't refetch option quotes.
   const livePriceRef = useRef(livePrice);
   livePriceRef.current = livePrice;
@@ -212,7 +205,7 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
   useEffect(() => {
     setHistory({ running: false, message: null, error: false });
     setBacktested(backtestedTokens.has(instrumentToken));
-    setView('details');
+    setView(StockSetupsView.Details);
   }, [instrumentToken]);
 
   const runSetupHistory = async () => {
@@ -221,7 +214,7 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
       const counts = await backfillSetupHistory(instrumentToken);
       backtestedTokens.add(instrumentToken);
       setBacktested(true);
-      setView('scorecard');
+      setView(StockSetupsView.Scorecard);
       setHistory({
         running: false,
         error: false,
@@ -241,10 +234,10 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
   }, [onClose]);
 
   const zoneRows = (zones: Zone[]) => zones.map((zone) => {
-    const support = zone.side === 'support';
+    const support = zone.side === LevelSide.Support;
     const inside = analysis !== null && zone.low <= analysis.price && analysis.price <= zone.high;
     return (
-      <div key={`${zone.side}-${zone.low}`} className={`wl-sz-zone wl-sz-zone--${zone.side}`}>
+      <div key={`${zone.side}-${zone.low}`} className={`wl-sz-zone wl-sz-zone--${zone.side.toLowerCase()}`}>
         <div className="wl-sz-zone__main">
           <span className="wl-sz-zone__range">{rs(zone.low)} – {rs(zone.high)}</span>
           {inside ? <span className="wl-sz-tag">Price here</span> : <span className="wl-sz-zone__dist">{pct(zone.distancePct)}</span>}
@@ -289,12 +282,12 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
             <h3 id="wl-sz-title">{tradingsymbol}</h3>
             <TradingViewLink symbol={tradingsymbol} size={16} className="wl-sz__chart-link" />
             <button
-              className={`wl-sz__icon-btn wl-sz__icon-btn--small ${view !== 'details' ? 'wl-sz__icon-btn--active' : ''}`}
-              onClick={() => setView((v) => (v === 'details' ? 'guide' : 'details'))}
-              aria-label={view !== 'details' ? 'Back to setup details' : 'How to read this panel'}
-              title={view !== 'details' ? 'Back to setup details' : 'How to read this panel'}
+              className={`wl-sz__icon-btn wl-sz__icon-btn--small ${view !== StockSetupsView.Details ? 'wl-sz__icon-btn--active' : ''}`}
+              onClick={() => setView((v) => (v === StockSetupsView.Details ? StockSetupsView.Guide : StockSetupsView.Details))}
+              aria-label={view !== StockSetupsView.Details ? 'Back to setup details' : 'How to read this panel'}
+              title={view !== StockSetupsView.Details ? 'Back to setup details' : 'How to read this panel'}
             >
-              {view !== 'details' ? (
+              {view !== StockSetupsView.Details ? (
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                   <path d="M15 18l-6-6 6-6" />
                 </svg>
@@ -309,8 +302,8 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
             {backtested ? (
               // Already backtested: open the scorecard rather than replaying the same year again.
               <button
-                className={`wl-sz__pill-btn${view === 'scorecard' ? ' wl-sz__pill-btn--active' : ''}`}
-                onClick={() => setView('scorecard')}
+                className={`wl-sz__pill-btn${view === StockSetupsView.Scorecard ? ' wl-sz__pill-btn--active' : ''}`}
+                onClick={() => setView(StockSetupsView.Scorecard)}
                 aria-label={`Show the ${tradingsymbol} setup scorecard`}
                 title="Show how each setup type has played out on this stock"
               >
@@ -332,7 +325,7 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
             <div className="wl-sz__quote">
               <span className="wl-sz__price">{rs(analysis.price)}</span>
               <span className="wl-sz__quote-meta">
-                <span className={`wl-sz-state wl-sz-state--${analysis.state}`}>{STATE_LABEL[analysis.state]}</span>
+                <span className={`wl-sz-state wl-sz-state--${analysis.state.toLowerCase()}`}>{analysis.state}</span>
                 {livePrice === undefined && `Close ${formatNumericDate(analysis.date)}`}
               </span>
             </div>
@@ -345,14 +338,14 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
           </div>
         )}
 
-        {view === 'scorecard' && (
+        {view === StockSetupsView.Scorecard && (
           <div className="wl-sz__body">
             {history.message && <div className="wl-sz-message">{history.message}</div>}
             <SetupScorecard instrumentToken={instrumentToken} tradingsymbol={tradingsymbol} refreshKey={0} inSetupsPanel />
           </div>
         )}
 
-        <div className="wl-sz__body" hidden={view !== 'details'}>
+        <div className="wl-sz__body" hidden={view !== StockSetupsView.Details}>
           {error &&<div className="wl-sz-message wl-sz-message--error">{error}</div>}
           {history.running && <div className="wl-sz-message">Backtesting the past year: replaying each session and adding its setups to the scorecard…</div>}
           {history.message && <div className={`wl-sz-message${history.error ? ' wl-sz-message--error' : ''}`}>{history.message}</div>}
@@ -373,13 +366,13 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
                   <div className="wl-sz-market">
                     <div className="wl-sz-stat">
                       <span>{tradingsymbol} · 20d</span>
-                      <strong className={`wl-sz-num--${tone(analysis.market.stockPct)}`}>{pct(analysis.market.stockPct)}</strong>
+                      <strong className={`wl-sz-num--${tone(analysis.market.stockPct).toLowerCase()}`}>{pct(analysis.market.stockPct)}</strong>
                     </div>
                     <div className="wl-sz-stat">
                       <span>{data.marketLabel} · 20d</span>
-                      <strong className={`wl-sz-num--${tone(analysis.market.marketPct)}`}>{pct(analysis.market.marketPct)}</strong>
+                      <strong className={`wl-sz-num--${tone(analysis.market.marketPct).toLowerCase()}`}>{pct(analysis.market.marketPct)}</strong>
                     </div>
-                    <div className={`wl-sz-stat wl-sz-stat--wide wl-sz-market--${analysis.market.relation}`}>
+                    <div className={`wl-sz-stat wl-sz-stat--wide wl-sz-market--${analysis.market.relation.toLowerCase()}`}>
                       <span>{MARKET_LABEL[analysis.market.relation]}</span>
                       <em>{marketText(analysis.market.relation, data.marketLabel)}</em>
                     </div>
@@ -494,7 +487,7 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
                 <div className="wl-sz-stat">
                   <span>RSI (14)</span>
                   {analysis.indicators.rsi === null ? <strong>—</strong> : (
-                    <strong className={`wl-sz-rsi--${rsiLabel(analysis.indicators.rsi).tone}`} title={`RSI ${analysis.indicators.rsi.toFixed(0)}`}>
+                    <strong className={`wl-sz-rsi--${rsiLabel(analysis.indicators.rsi).tone.toLowerCase()}`} title={`RSI ${analysis.indicators.rsi.toFixed(0)}`}>
                       {rsiLabel(analysis.indicators.rsi).text}
                     </strong>
                   )}
@@ -513,3 +506,5 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
 };
 
 export default StockSetupsPanel;
+
+import { StockSetupsView, type StockSetupsViewId } from '@/utils/uiEnums';

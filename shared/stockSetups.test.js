@@ -35,7 +35,7 @@ function oscillate(count, low, high, period = 20) {
 }
 
 const ind = (overrides = {}) => ({ sma20: null, sma50: null, sma200: null, atr: 2, rsi: 50, avgVolume20: 1000, ...overrides });
-const zone = (low, high, extra = {}) => ({ low, high, mid: (low + high) / 2, score: 2, strength: 2, reasons: [], side: 'support', distancePct: 0, history: { tests: 0, held: 0, failed: 0, avgMovePct: null }, ...extra });
+const zone = (low, high, extra = {}) => ({ low, high, mid: (low + high) / 2, score: 2, strength: 2, reasons: [], side: 'Support', distancePct: 0, history: { tests: 0, held: 0, failed: 0, avgMovePct: null }, ...extra });
 
 describe('candles and instruments', () => {
   it('parses Kite rows, sorting oldest first and dropping malformed ones', () => {
@@ -88,8 +88,8 @@ describe('indicators', () => {
 describe('levels and zones', () => {
   it('finds the turning points of a swinging price', () => {
     const levels = swingLevels(fromCloses(oscillate(100, 100, 120)));
-    const lows = levels.filter((l) => l.kind === 'swing-low');
-    const highs = levels.filter((l) => l.kind === 'swing-high');
+    const lows = levels.filter((l) => l.kind === 'SwingLow');
+    const highs = levels.filter((l) => l.kind === 'SwingHigh');
     expect(lows.length).toBeGreaterThanOrEqual(3);
     expect(highs.length).toBeGreaterThanOrEqual(3);
     for (const l of lows) expect(l.price).toBeLessThan(101);
@@ -98,10 +98,10 @@ describe('levels and zones', () => {
 
   it('merges nearby levels, counts repeats, and drops round-number-only zones', () => {
     const zones = mergeLevels([
-      { price: 100, kind: 'swing-low', weight: 1 },
-      { price: 100.4, kind: 'swing-low', weight: 1 },
-      { price: 100.8, kind: 'volume', weight: 1.5 },
-      { price: 150, kind: 'round', weight: 0.5 },
+      { price: 100, kind: 'SwingLow', weight: 1 },
+      { price: 100.4, kind: 'SwingLow', weight: 1 },
+      { price: 100.8, kind: 'Volume', weight: 1.5 },
+      { price: 150, kind: 'Round', weight: 0.5 },
     ], 1, 2);
     expect(zones).toHaveLength(1);
     expect(zones[0].reasons).toEqual(['swing low ×2', 'high-volume area']);
@@ -114,10 +114,10 @@ describe('levels and zones', () => {
     const z = { low: 99, high: 101, mid: 100 };
     // Three dips to ~100 that each bounce over 105.
     const held = fromCloses([...oscillate(80, 100, 112), 112]);
-    expect(zoneHistory(held, z, 'support', 0.03, 0.02)).toMatchObject({ tests: 4, held: 4, failed: 0 });
+    expect(zoneHistory(held, z, 'Support', 0.03, 0.02)).toMatchObject({ tests: 4, held: 4, failed: 0 });
     // One dip that keeps falling through the zone.
     const broke = fromCloses([110, 108, 106, 104, 103, 102, 100.5, 98, 95, 92, 90, 89, 88]);
-    expect(zoneHistory(broke, z, 'support', 0.03, 0.02)).toMatchObject({ tests: 1, held: 0, failed: 1 });
+    expect(zoneHistory(broke, z, 'Support', 0.03, 0.02)).toMatchObject({ tests: 1, held: 0, failed: 1 });
   });
 });
 
@@ -127,9 +127,9 @@ describe('state and market', () => {
 
   it('reads a steady decline as falling and a crash as stretched', () => {
     const analysis = analyzeStock(steadyFall);
-    expect(analysis.state).toBe('falling');
+    expect(analysis.state).toBe('Falling');
     const crash = fromCloses([...Array.from({ length: 70 }, () => 200), ...Array.from({ length: 10 }, (_, i) => 196 - i * 6)]);
-    expect(analyzeStock(crash).state).toBe('stretched');
+    expect(analyzeStock(crash).state).toBe('Stretched');
   });
 
   it('sees a turn when a falling stock closes above the previous high without a new low', () => {
@@ -137,15 +137,15 @@ describe('state and market', () => {
     const base = turn[turn.length - 1].close;
     turn.push({ date: day(78), open: base, high: base + 0.5, low: base - 0.2, close: base + 0.2, volume: 1000 });
     turn.push({ date: day(79), open: base + 0.2, high: base + 2.5, low: base + 0.1, close: base + 2.2, volume: 1000 });
-    expect(stockState(turn, { ...ind(), sma20: 165, sma50: 175 }).state).toBe('turning');
+    expect(stockState(turn, { ...ind(), sma20: 165, sma50: 175 }).state).toBe('Turning');
   });
 
   it('tells a stock falling on its own from one falling with the market', () => {
     const stock = fromCloses(Array.from({ length: 30 }, (_, i) => 100 - i));
     const flatMarket = fromCloses(Array.from({ length: 30 }, () => 20000));
     const fallingMarket = fromCloses(Array.from({ length: 30 }, (_, i) => 20000 * (1 - i * 0.009)));
-    expect(marketCheck(stock, flatMarket).relation).toBe('alone');
-    expect(marketCheck(stock, fallingMarket).relation).toBe('with-market');
+    expect(marketCheck(stock, flatMarket).relation).toBe('Alone');
+    expect(marketCheck(stock, fallingMarket).relation).toBe('WithMarket');
     // 20 sessions: from day 9 (91) to day 29 (71).
     expect(marketCheck(stock, flatMarket).stockPct).toBeCloseTo((71 / 91 - 1) * 100, 9);
   });
@@ -156,33 +156,33 @@ describe('findSetups', () => {
 
   it('finds a pullback into support in an uptrend that closes strong', () => {
     const last = { date: day(1), open: 101, high: 104, low: 99, close: 103.5, volume: 1000 };
-    const [setup] = findSetups([prev, last], ind({ sma200: 90 }), 'uptrend', [zone(98, 100)], [zone(115, 117, { side: 'resistance' })], []);
-    expect(setup).toMatchObject({ type: 'pullback', direction: 'BUY', entry: 103.5, stop: 97, target: 115 });
+    const [setup] = findSetups([prev, last], ind({ sma200: 90 }), 'Uptrend', [zone(98, 100)], [zone(115, 117, { side: 'Resistance' })], []);
+    expect(setup).toMatchObject({ type: 'Pullback', direction: 'BUY', entry: 103.5, stop: 97, target: 115 });
     expect(setup.rewardRisk).toBeCloseTo(11.5 / 6.5, 9);
   });
 
   it('finds breakouts and breakdowns only on heavy volume', () => {
     const r = { low: 108, high: 110, mid: 109 };
     const up = { date: day(1), open: 109, high: 113, low: 108.5, close: 112, volume: 2000 };
-    const breakout = findSetups([{ ...prev, close: 109 }, up], ind(), 'sideways', [], [], [r]);
-    expect(breakout.map((s) => s.type)).toEqual(['breakout']);
+    const breakout = findSetups([{ ...prev, close: 109 }, up], ind(), 'Sideways', [], [], [r]);
+    expect(breakout.map((s) => s.type)).toEqual(['Breakout']);
     expect(breakout[0].stop).toBeCloseTo(107.5, 9);
-    expect(findSetups([{ ...prev, close: 109 }, { ...up, volume: 1200 }], ind(), 'sideways', [], [], [r])).toEqual([]);
+    expect(findSetups([{ ...prev, close: 109 }, { ...up, volume: 1200 }], ind(), 'Sideways', [], [], [r])).toEqual([]);
 
     const down = { date: day(1), open: 109, high: 109.5, low: 105, close: 106, volume: 2000 };
-    const breakdown = findSetups([{ ...prev, close: 109 }, down], ind(), 'falling', [], [], [r]);
-    expect(breakdown.map((s) => [s.type, s.direction])).toEqual([['breakdown', 'SELL']]);
+    const breakdown = findSetups([{ ...prev, close: 109 }, down], ind(), 'Falling', [], [], [r]);
+    expect(breakdown.map((s) => [s.type, s.direction])).toEqual([['Breakdown', 'SELL']]);
   });
 
   it('finds a rejection at resistance with a target at the support below', () => {
     const last = { date: day(1), open: 110, high: 111, low: 107.5, close: 108, volume: 1000 };
-    const [setup] = findSetups([prev, last], ind({ sma50: 115 }), 'falling', [zone(108, 109), zone(98, 100)], [zone(110, 112, { side: 'resistance' })], []);
-    expect(setup).toMatchObject({ type: 'rejection', direction: 'SELL', entry: 108, stop: 113, target: 100 });
+    const [setup] = findSetups([prev, last], ind({ sma50: 115 }), 'Falling', [zone(108, 109), zone(98, 100)], [zone(110, 112, { side: 'Resistance' })], []);
+    expect(setup).toMatchObject({ type: 'Rejection', direction: 'SELL', entry: 108, stop: 113, target: 100 });
   });
 
   it('skips setups whose reward is smaller than their risk', () => {
     const last = { date: day(1), open: 101, high: 104, low: 99, close: 103.5, volume: 1000 };
-    expect(findSetups([prev, last], ind({ sma200: 90 }), 'uptrend', [zone(98, 100)], [zone(105, 106, { side: 'resistance' })], [])).toEqual([]);
+    expect(findSetups([prev, last], ind({ sma200: 90 }), 'Uptrend', [zone(98, 100)], [zone(105, 106, { side: 'Resistance' })], [])).toEqual([]);
   });
 });
 

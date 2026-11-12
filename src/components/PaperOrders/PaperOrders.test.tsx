@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import PaperOrders, { PaperOrdersTable, orderStatus, settledSince, pendingCount } from './PaperOrders';
 import type { PaperOrder } from '@/services/orders';
 import { Horizon } from '../../../shared/tradeEnums.js';
+import { Tone } from '@/utils/uiEnums';
 
 const order = (id: string, extra: Partial<PaperOrder> = {}): PaperOrder => ({
   id, tradingsymbol: 'NIFTY26N1024000CE', instrumentToken: 101, instrumentType: 'CE', exchange: 'NFO', strike: 24000,
@@ -12,10 +13,10 @@ const order = (id: string, extra: Partial<PaperOrder> = {}): PaperOrder => ({
 
 describe('orderStatus', () => {
   it('shows open, filled at its fill price, or why it was cancelled', () => {
-    expect(orderStatus(order('a'))).toEqual({ tone: 'accent', text: 'Open' });
-    expect(orderStatus(order('a', { status: 'Filled', fillPrice: 49.5 }))).toEqual({ tone: 'positive', text: 'Filled @ 49.50' });
+    expect(orderStatus(order('a'))).toEqual({ tone: Tone.Accent, text: 'Open' });
+    expect(orderStatus(order('a', { status: 'Filled', fillPrice: 49.5 }))).toEqual({ tone: Tone.Positive, text: 'Filled @ 49.50' });
     expect(orderStatus(order('a', { status: 'Cancelled', statusReason: 'Cancelled at market close' })))
-      .toEqual({ tone: 'neutral', text: 'Cancelled at market close' });
+      .toEqual({ tone: Tone.Neutral, text: 'Cancelled at market close' });
   });
 });
 
