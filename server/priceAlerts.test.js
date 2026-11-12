@@ -5,7 +5,7 @@ const valid = {
   instrumentToken: 738561,
   tradingsymbol: 'RELIANCE',
   exchange: 'NSE',
-  condition: 'above',
+  condition: 'Above',
   value: 2950.5,
   note: '  breakout  ',
   browserNotification: true,
@@ -19,12 +19,12 @@ describe('parsePriceAlertInput', () => {
   });
 
   it('defaults exchange, note and notification when left out', () => {
-    const { alert } = parsePriceAlertInput({ instrumentToken: '738561', tradingsymbol: 'RELIANCE', condition: 'below', value: '2800' });
+    const { alert } = parsePriceAlertInput({ instrumentToken: '738561', tradingsymbol: 'RELIANCE', condition: 'Below', value: '2800' });
     expect(alert).toEqual({
       instrumentToken: 738561,
       tradingsymbol: 'RELIANCE',
       exchange: 'NSE',
-      condition: 'below',
+      condition: 'Below',
       value: 2800,
       note: null,
       browserNotification: false,

@@ -37,6 +37,7 @@ import { marketDate, marketDayStartMs } from '../../../shared/marketTime.js';
 import { checkExitRules } from '../../../shared/exitRules/index.js';
 import { paperPnl, paperPnlPercent } from '../../../shared/paperPnl.js';
 import { algoLogger } from '../../algoLog.js';
+import { TradeSource } from '../../../shared/tradeEnums.js';
 
 /** How often every position is checked on its last price, for time-based rules. */
 const CLOCK_CHECK_MS = 1000;
@@ -169,7 +170,7 @@ export function createTradeMonitor({
     exiting.add(position.id);
     try {
       // A market exit: at the bid / ask from a quote with the feed's session (exitPrice when it has none).
-      const result = await orders.exit(position.userId, position.id, { exitPrice, kite: feedKite, source: 'auto', exitReason: { ruleId, reason } });
+      const result = await orders.exit(position.userId, position.id, { exitPrice, kite: feedKite, source: TradeSource.Auto, exitReason: { ruleId, reason } });
       if (result.ok) {
         log('exit fired', { position: `${position.side} ${position.quantity} ${position.tradingsymbol}`, price: result.order.fillPrice, last: exitPrice, user: position.userId, reason });
       } else if (result.code !== NOT_FOUND) {
@@ -259,7 +260,7 @@ export function createTradeMonitor({
 
   /** A position exited by hand may be an automated one this watches: reload its owner's. */
   async function onOrderSettled(/** @type {{ userId: string, source: string, closesPosition: boolean }} */ order) {
-    if (order.closesPosition && order.source === 'manual') await refreshUser(order.userId);
+    if (order.closesPosition && order.source === TradeSource.Manual) await refreshUser(order.userId);
   }
 
   /** After the close: stop watching until the next open. */

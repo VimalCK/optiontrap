@@ -8,16 +8,17 @@
  * (no depth, or the quote call failed), the caller's price is kept.
  */
 import { fetchQuotes } from '../kiteQuotes.js';
+import { Side } from '../../shared/tradeEnums.js';
 
 /**
  * The best opposite-side price in a Kite quote: the ask for a buy, the bid
  * for a sell; null when there is none.
  * @param {any} quote  a Kite quote (with depth.buy / depth.sell)
- * @param {'BUY' | 'SELL'} side
+ * @param {import('../../shared/tradeEnums.js').SideId} side
  * @returns {number | null}
  */
 export function marketFillPrice(quote, side) {
-  const level = side === 'BUY' ? quote?.depth?.sell?.[0] : quote?.depth?.buy?.[0];
+  const level = side === Side.BUY ? quote?.depth?.sell?.[0] : quote?.depth?.buy?.[0];
   const price = Number(level?.price);
   return price > 0 ? price : null;
 }
@@ -27,7 +28,7 @@ export function marketFillPrice(quote, side) {
  * session; null when the quote has no bid / ask for it.
  * @param {{ apiKey: string, accessToken: string }} kite
  * @param {{ exchange: string, tradingsymbol: string }} instrument
- * @param {'BUY' | 'SELL'} side
+ * @param {import('../../shared/tradeEnums.js').SideId} side
  * @param {typeof fetchQuotes} [quotes]
  */
 export async function quotedFillPrice(kite, instrument, side, quotes = fetchQuotes) {

@@ -22,6 +22,8 @@ import {
   OiBar,
 } from '@/services/positionRisk';
 import { loadUnderlyings, type Underlying } from '@/services/underlyings';
+import { Side, TRADING_MODES, TradingMode, type TradingModeId } from '../../shared/tradeEnums.js';
+import { saveTradingMode, storedTradingMode } from '@/utils/tradingModeStorage';
 import '@/styles/analytics.css'; // reuse the shared tab-bar CSS
 import '@/styles/positions.css';
 
@@ -37,7 +39,6 @@ export const paperTabs = (openPositions: number, pendingOrders: number, riskGrou
 const fmtInr = (n: number) =>
   `${n >= 0 ? '+' : ''}${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-export type PositionsMode = 'paper' | 'live';
 
 /** An underlying's price instrument (its index row, or the stock's NSE row). */
 function getSpotInstrument(name: string, underlyings: Underlying[]): { token: number; quoteKey: string } | null {
@@ -698,11 +699,11 @@ const PaperPositions: React.FC = () => {
   const getPnL = (pos: Position): { value: number; pct: number } => {
     const currentPrice = pos.exited ? pos.exitPrice! : livePrices.get(pos.instrumentToken);
     if (currentPrice === undefined) return { value: 0, pct: 0 };
-    const pnl = pos.side === 'BUY'
+    const pnl = pos.side === Side.BUY
       ? (currentPrice - pos.entryPrice) * pos.quantity
       : (pos.entryPrice - currentPrice) * pos.quantity;
     const pct = pos.entryPrice > 0
-      ? ((pos.side === 'BUY' ? currentPrice - pos.entryPrice : pos.entryPrice - currentPrice) / pos.entryPrice) * 100
+      ? ((pos.side === Side.BUY ? currentPrice - pos.entryPrice : pos.entryPrice - currentPrice) / pos.entryPrice) * 100
       : 0;
     return { value: pnl, pct };
   };
@@ -871,7 +872,7 @@ const LivePositions: React.FC = () => {
             {list.map((pos) => {
               const ltp = pos.last_price;
               const livePnl = pos.pnl;
-              const side = pos.quantity > 0 ? 'BUY' : 'SELL';
+              const side = pos.quantity > 0 ? Side.BUY : Side.SELL;
               return (
                 <tr key={`${pos.exchange}:${pos.tradingsymbol}`}>
                   <td>
@@ -998,21 +999,21 @@ const LivePositions: React.FC = () => {
   );
 };
 
-const Positions: React.FC<{ hideHeader?: boolean; initialMode?: PositionsMode }> = ({ hideHeader = false, initialMode }) => {
-  const [mode, setMode] = useState<PositionsMode>(() =>
-    initialMode || (localStorage.getItem('optiontrap_order_mode') as PositionsMode) || 'paper'
+const Positions: React.FC<{ hideHeader?: boolean; initialMode?: TradingModeId }> = ({ hideHeader = false, initialMode }) => {
+  const [mode, setMode] = useState<TradingModeId>(() =>
+    initialMode || storedTradingMode()
   );
 
   useEffect(() => {
     if (!initialMode) return;
 
     setMode(initialMode);
-    localStorage.setItem('optiontrap_order_mode', initialMode);
+    saveTradingMode(initialMode);
   }, [initialMode]);
 
-  const handleModeChange = (nextMode: PositionsMode) => {
+  const handleModeChange = (nextMode: TradingModeId) => {
     setMode(nextMode);
-    localStorage.setItem('optiontrap_order_mode', nextMode);
+    saveTradingMode(nextMode);
   };
 
   return (
@@ -1023,11 +1024,11 @@ const Positions: React.FC<{ hideHeader?: boolean; initialMode?: PositionsMode }>
             <div>
               <h1 className="page-header__title">Positions</h1>
               <p className="page-header__subtitle">
-                {mode === 'paper' ? 'Simulated paper trading positions' : 'Live market positions from Kite'}
+                {mode === TradingMode.Paper ? 'Simulated paper trading positions' : 'Live market positions from Kite'}
               </p>
             </div>
             <div className="positions-mode-tabs">
-              {(['paper', 'live'] as PositionsMode[]).map((m) => (
+              {TRADING_MODES.map((m) => (
                 <button key={m} className={`positions-mode-tab ${mode === m ? 'positions-mode-tab--active' : ''}`} onClick={() => handleModeChange(m)}>
                   <span className={`positions-mode-dot positions-mode-dot--${m}`} />
                   {m.charAt(0).toUpperCase() + m.slice(1)}
@@ -1041,7 +1042,7 @@ const Positions: React.FC<{ hideHeader?: boolean; initialMode?: PositionsMode }>
       {/* When hideHeader, show the mode toggle inline */}
       {hideHeader && (
         <div className="positions-mode-tabs" style={{ marginBottom: 20 }}>
-          {(['paper', 'live'] as PositionsMode[]).map((m) => (
+          {TRADING_MODES.map((m) => (
             <button key={m} className={`positions-mode-tab ${mode === m ? 'positions-mode-tab--active' : ''}`} onClick={() => handleModeChange(m)}>
               <span className={`positions-mode-dot positions-mode-dot--${m}`} />
               {m.charAt(0).toUpperCase() + m.slice(1)}
@@ -1050,7 +1051,7 @@ const Positions: React.FC<{ hideHeader?: boolean; initialMode?: PositionsMode }>
         </div>
       )}
 
-      {mode === 'paper' ? <PaperPositions /> : <LivePositions />}
+      {mode === TradingMode.Paper ? <PaperPositions /> : <LivePositions />}
     </div>
   );
 };

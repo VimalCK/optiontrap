@@ -157,7 +157,7 @@ describe('findSetups', () => {
   it('finds a pullback into support in an uptrend that closes strong', () => {
     const last = { date: day(1), open: 101, high: 104, low: 99, close: 103.5, volume: 1000 };
     const [setup] = findSetups([prev, last], ind({ sma200: 90 }), 'uptrend', [zone(98, 100)], [zone(115, 117, { side: 'resistance' })], []);
-    expect(setup).toMatchObject({ type: 'pullback', direction: 'buy', entry: 103.5, stop: 97, target: 115 });
+    expect(setup).toMatchObject({ type: 'pullback', direction: 'BUY', entry: 103.5, stop: 97, target: 115 });
     expect(setup.rewardRisk).toBeCloseTo(11.5 / 6.5, 9);
   });
 
@@ -171,13 +171,13 @@ describe('findSetups', () => {
 
     const down = { date: day(1), open: 109, high: 109.5, low: 105, close: 106, volume: 2000 };
     const breakdown = findSetups([{ ...prev, close: 109 }, down], ind(), 'falling', [], [], [r]);
-    expect(breakdown.map((s) => [s.type, s.direction])).toEqual([['breakdown', 'sell']]);
+    expect(breakdown.map((s) => [s.type, s.direction])).toEqual([['breakdown', 'SELL']]);
   });
 
   it('finds a rejection at resistance with a target at the support below', () => {
     const last = { date: day(1), open: 110, high: 111, low: 107.5, close: 108, volume: 1000 };
     const [setup] = findSetups([prev, last], ind({ sma50: 115 }), 'falling', [zone(108, 109), zone(98, 100)], [zone(110, 112, { side: 'resistance' })], []);
-    expect(setup).toMatchObject({ type: 'rejection', direction: 'sell', entry: 108, stop: 113, target: 100 });
+    expect(setup).toMatchObject({ type: 'rejection', direction: 'SELL', entry: 108, stop: 113, target: 100 });
   });
 
   it('skips setups whose reward is smaller than their risk', () => {
@@ -208,28 +208,28 @@ describe('analyzeStock', () => {
 });
 
 describe('evaluateSetup', () => {
-  const buy = { direction: 'buy', entry: 100, stop: 95, target: 110 };
+  const buy = { direction: 'BUY', entry: 100, stop: 95, target: 110 };
   const bar = (i, low, high) => ({ date: day(i), open: 100, high, low, close: 100, volume: 1 });
 
   it('resolves at the target or the stop, whichever comes first', () => {
-    expect(evaluateSetup(buy, [bar(1, 98, 104), bar(2, 101, 111)])).toMatchObject({ status: 'target', resolvedDate: day(2), sessionsHeld: 2 });
-    expect(evaluateSetup(buy, [bar(1, 98, 104), bar(2, 94, 103)])).toMatchObject({ status: 'stop', resolvedDate: day(2) });
-    expect(evaluateSetup(buy, [bar(1, 94, 111)]).status).toBe('stop');
+    expect(evaluateSetup(buy, [bar(1, 98, 104), bar(2, 101, 111)])).toMatchObject({ status: 'Target', resolvedDate: day(2), sessionsHeld: 2 });
+    expect(evaluateSetup(buy, [bar(1, 98, 104), bar(2, 94, 103)])).toMatchObject({ status: 'Stop', resolvedDate: day(2) });
+    expect(evaluateSetup(buy, [bar(1, 94, 111)]).status).toBe('Stop');
   });
 
   it('tracks the best and worst move, and expires after the holding window', () => {
     const quiet = Array.from({ length: SETUP_HOLD_SESSIONS + 3 }, (_, i) => bar(i + 1, 97, 106));
-    expect(evaluateSetup(buy, quiet)).toMatchObject({ status: 'expired', resolvedDate: day(SETUP_HOLD_SESSIONS), sessionsHeld: SETUP_HOLD_SESSIONS });
+    expect(evaluateSetup(buy, quiet)).toMatchObject({ status: 'Expired', resolvedDate: day(SETUP_HOLD_SESSIONS), sessionsHeld: SETUP_HOLD_SESSIONS });
     const open = evaluateSetup(buy, quiet.slice(0, 3));
-    expect(open).toMatchObject({ status: 'open', resolvedDate: null, sessionsHeld: 3 });
+    expect(open).toMatchObject({ status: 'Open', resolvedDate: null, sessionsHeld: 3 });
     expect(open.maxFavorablePct).toBeCloseTo(6, 9);
     expect(open.maxAdversePct).toBeCloseTo(3, 9);
   });
 
   it('mirrors for sell setups', () => {
-    const sell = { direction: 'sell', entry: 100, stop: 105, target: 92 };
-    expect(evaluateSetup(sell, [bar(1, 91, 103)]).status).toBe('target');
-    expect(evaluateSetup(sell, [bar(1, 96, 106)]).status).toBe('stop');
+    const sell = { direction: 'SELL', entry: 100, stop: 105, target: 92 };
+    expect(evaluateSetup(sell, [bar(1, 91, 103)]).status).toBe('Target');
+    expect(evaluateSetup(sell, [bar(1, 96, 106)]).status).toBe('Stop');
   });
 });
 

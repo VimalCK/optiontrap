@@ -5,6 +5,7 @@
  * The server never persists them — they are sent during OAuth token exchange
  * and immediately discarded. Session state is managed via httpOnly cookies.
  */
+import type { SubscriptionStateId } from '../../shared/appEnums.js';
 
 const AVATAR_STORAGE_KEY = 'optiontrap_avatar_url';
 const CREDS_KEY = 'optiontrap_credentials';
@@ -36,7 +37,7 @@ export interface SubscriptionStatus {
   id?: string;
   userId?: string;
   planId: string | null;
-  status: 'active' | 'inactive' | 'expired' | 'cancelled' | string;
+  status: SubscriptionStateId;
   active: boolean;
   startsAt: string | null;
   expiresAt: string | null;

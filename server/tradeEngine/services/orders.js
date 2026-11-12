@@ -53,6 +53,7 @@ import { isMarketOpen, lastSessionEnd, marketDate } from '../../../shared/market
 import { normalizeTradeInput } from '../../../shared/paperTradeRules.js';
 import { CANCELLED_AT_CLOSE, CANCELLED_BY_USER, canFill, parseOrder } from '../../../shared/paperOrders.js';
 import { quotedFillPrice } from '../fillPrice.js';
+import { OrderStatus, OrderType, Side, TradeSource, oppositeSide } from '../../../shared/tradeEnums.js';
 
 export const NO_PRICE = 'NO_PRICE';
 const NOT_OPEN_MESSAGE = 'Order not found or no longer open';
@@ -146,7 +147,7 @@ export function createOrderService({
     const opened = await positions.openPosition(order.userId, { ...order, entryPrice: price }, { now: clock(), source: order.source });
     if (!opened.ok) {
       const cancelled = (await db.cancelUnfilledOrder(order.id, opened.message))
-        ?? { ...claimed, status: 'cancelled', statusReason: opened.message, fillPrice: null };
+        ?? { ...claimed, status: OrderStatus.Cancelled, statusReason: opened.message, fillPrice: null };
       log(`${order.tradingsymbol} [${order.userId}] could not fill: ${opened.message}`);
       await settled(cancelled);
       return cancelled;
@@ -161,7 +162,7 @@ export function createOrderService({
   /**
    * The market fill for a trade: the bid / ask already quoted (`source.fill`)
    * or from a quote with `source.kite`; `lastPrice` when neither gives one.
-   * @param {{ userId?: string, exchange: string, tradingsymbol: string, side: 'BUY' | 'SELL' }} trade
+   * @param {{ userId?: string, exchange: string, tradingsymbol: string, side: import('../../../shared/tradeEnums.js').SideId }} trade
    * @param {number} lastPrice
    * @param {PriceSource} source
    */
@@ -185,7 +186,7 @@ export function createOrderService({
    * @returns {number | Promise<number> | null}
    */
   function tickFillPrice(order, lastPrice) {
-    if (order.orderType === 'market') return marketPrice(order, lastPrice, { kite: feedKite });
+    if (order.orderType === OrderType.Market) return marketPrice(order, lastPrice, { kite: feedKite });
     return canFill(order.side, /** @type {number} */ (order.limitPrice), lastPrice) ? order.limitPrice : null;
   }
 
@@ -266,7 +267,7 @@ export function createOrderService({
    */
   async function placedFillPrice(order, lastPrice, source) {
     if (!isMarketOpen(clock())) return null;
-    if (order.orderType === 'market') return marketPrice(order, lastPrice, source);
+    if (order.orderType === OrderType.Market) return marketPrice(order, lastPrice, source);
     return canFill(order.side, /** @type {number} */ (order.limitPrice), lastPrice) ? lastPrice : null;
   }
 
@@ -322,7 +323,7 @@ export function createOrderService({
     async place(userId, input, kite) {
       // A market order's checks need the last price; anything else is checked
       // before quoting, so a failing quote can't hide why it was refused.
-      const checkedFirst = input.orderType === 'market' ? null : parseOrder(input, { now: clock() });
+      const checkedFirst = input.orderType === OrderType.Market ? null : parseOrder(input, { now: clock() });
       if (checkedFirst?.error !== undefined) return { ok: false, code: checkedFirst.code, message: checkedFirst.error };
       const { exchange, tradingsymbol } = normalizeTradeInput(input);
       let lastPrice;
@@ -333,7 +334,7 @@ export function createOrderService({
       }
       const parsed = checkedFirst ?? parseOrder(input, { now: clock(), lastPrice });
       if (parsed.error !== undefined) return { ok: false, code: parsed.code, message: parsed.error };
-      return enter(userId, parsed.order, /** @type {number} */ (lastPrice), { source: 'manual' }, { kite });
+      return enter(userId, parsed.order, /** @type {number} */ (lastPrice), { source: TradeSource.Manual }, { kite });
     },
 
     /**
@@ -349,7 +350,7 @@ export function createOrderService({
     async placeAuto(userId, input, { lastPrice, fillPrice = null, autoTradeId }) {
       const parsed = parseOrder(input, { now: clock(), lastPrice });
       if (parsed.error !== undefined) return { ok: false, code: parsed.code, message: parsed.error };
-      return enter(userId, parsed.order, lastPrice, { source: 'auto', autoTradeId }, { fill: fillPrice });
+      return enter(userId, parsed.order, lastPrice, { source: TradeSource.Auto, autoTradeId }, { fill: fillPrice });
     },
 
     /**
@@ -359,17 +360,17 @@ export function createOrderService({
      * hours only, for a paper position.
      * @param {string} userId
      * @param {string} positionId
-     * @param {{ exitPrice: unknown, kite?: KiteSession | null, source?: 'manual' | 'auto',
+     * @param {{ exitPrice: unknown, kite?: KiteSession | null, source?: import('../../../shared/tradeEnums.js').TradeSourceId,
      *   exitReason?: { ruleId: string | null, reason: string } }} exit
      *   source: who exits it, by hand or an exit rule. exitReason: recorded on an automated position's trades.
      * @returns {Promise<OrderResult>}
      */
-    async exit(userId, positionId, { exitPrice, kite = null, source = 'manual', exitReason = MANUAL_EXIT }) {
+    async exit(userId, positionId, { exitPrice, kite = null, source = TradeSource.Manual, exitReason = MANUAL_EXIT }) {
       const now = clock();
       const checked = await positions.closablePosition(userId, positionId, exitPrice, now);
       if (!checked.ok) return checked;
       const { position } = checked;
-      const side = position.side === 'BUY' ? 'SELL' : 'BUY';
+      const side = oppositeSide(position.side);
       const price = await marketPrice({ ...position, side }, Number(exitPrice), { kite });
       const closed = await positions.closePosition(userId, position, price, { now, exitReason });
       if (!closed.ok) return closed;
@@ -392,7 +393,7 @@ export function createOrderService({
       if (!checked.ok) return checked;
       const closed = await positions.closePosition(position.userId, position, price, { now: at, exitReason });
       if (!closed.ok) return closed;
-      const order = await db.recordClosingOrder(position.userId, position, price, 'auto');
+      const order = await db.recordClosingOrder(position.userId, position, price, TradeSource.Auto);
       await settled(order);
       return { ok: true, order, position: closed.position };
     },

@@ -6,7 +6,7 @@ import type { AutoTrade } from '@/services/automation';
 import { marketDate } from '../../shared/marketTime.js';
 import { formatNumericDate } from '@/utils/marketStatus';
 import Automation, { AutoTradesTable, DayRow, TradeRow, automationStatus } from './Automation';
-import { Horizon } from '../../shared/horizons.js';
+import { Horizon } from '../../shared/tradeEnums.js';
 import { TEST_STRATEGIES } from '@/services/strategies.fixture';
 
 // The strategies as if GET /api/strategies had already loaded them.
@@ -65,8 +65,8 @@ describe('automationStatus', () => {
 
 describe('AutoTradesTable', () => {
   const trade: AutoTrade = {
-    id: 't1', horizon: Horizon.Intraday, kind: 'index-option', mode: 'paper', tradingsymbol: 'NIFTY26NOV24000PE',
-    instrumentToken: 1, side: 'SELL', quantity: 75, stage: 'rejected', reason: 'Max open positions reached',
+    id: 't1', horizon: Horizon.Intraday, kind: 'IndexOption', mode: 'Paper', tradingsymbol: 'NIFTY26NOV24000PE',
+    instrumentToken: 1, side: 'SELL', quantity: 75, stage: 'Rejected', reason: 'Max open positions reached',
     entryPrice: null, exitPrice: null, charges: null, positionId: null, createdAt: '2026-11-05T05:00:00.000Z', updatedAt: '2026-11-05T05:00:00.000Z',
     events: [],
   };
@@ -86,7 +86,7 @@ describe('AutoTradesTable', () => {
   });
 
   it('groups trades under their IST day, newest first, with the count and closed P&L', () => {
-    const lateWin = { ...trade, id: 'w', stage: 'closed' as const, entryPrice: 100, exitPrice: 90, createdAt: '2026-11-05T19:00:00.000Z' }; // Fri 6 Nov 00:30 IST
+    const lateWin = { ...trade, id: 'w', stage: 'Closed' as const, entryPrice: 100, exitPrice: 90, createdAt: '2026-11-05T19:00:00.000Z' }; // Fri 6 Nov 00:30 IST
     const morning = { ...trade, id: 'm' }; // Thu 5 Nov 10:30 IST
     const table = renderToStaticMarkup(<AutoTradesTable trades={[lateWin, morning]} />);
     const days = [...table.matchAll(/<tr class="automation-trades__day"><th[^>]*>([^<]+)<span[^>]*>([^<]+)<\/span><\/th><td class="([^"]*)">([^<]+)</g)]
@@ -107,9 +107,9 @@ describe('AutoTradesTable', () => {
   });
 
   it('marks an open position live, and shows closed P&L in profit or loss colours', () => {
-    const open = { ...trade, id: 'o', stage: 'executed' as const, reason: null, entryPrice: 100 };
-    const won = { ...open, id: 'w', stage: 'closed' as const, exitPrice: 90 };
-    const lost = { ...open, id: 'l', stage: 'closed' as const, exitPrice: 120 };
+    const open = { ...trade, id: 'o', stage: 'Executed' as const, reason: null, entryPrice: 100 };
+    const won = { ...open, id: 'w', stage: 'Closed' as const, exitPrice: 90 };
+    const lost = { ...open, id: 'l', stage: 'Closed' as const, exitPrice: 120 };
     const table = renderToStaticMarkup(<AutoTradesTable trades={[open, won, lost]} />);
     expect(table).toContain('<span class="badge badge--accent"><span class="badge__dot" aria-hidden="true"></span>Executed</span>');
     expect(table).toContain('<td class="automation-trades__num automation-trades__pnl--profit">+750.00</td>');
@@ -125,7 +125,7 @@ describe('AutoTradesTable', () => {
   });
 
   it("shows each trade's own fill, even when trades merge into one position", () => {
-    const first = { ...trade, id: 'a', stage: 'executed' as const, reason: null, entryPrice: 1000, positionId: 'p1' };
+    const first = { ...trade, id: 'a', stage: 'Executed' as const, reason: null, entryPrice: 1000, positionId: 'p1' };
     const second = { ...first, id: 'b', quantity: 500, entryPrice: 1010 };
     const table = renderToStaticMarkup(<AutoTradesTable trades={[first, second]} />);
     expect(table).toContain('<td class="automation-trades__num">1,000.00</td><td class="automation-trades__num">–</td>');
@@ -136,12 +136,12 @@ describe('AutoTradesTable', () => {
 describe('TradeRow', () => {
   it('shows the lifecycle as a timeline of plain sentences when open, the IST time only on the row', () => {
     const trade: AutoTrade = {
-      id: 't', horizon: Horizon.Intraday, kind: 'index-option', mode: 'paper', tradingsymbol: 'NIFTY26N0924550PE', instrumentToken: 1,
-      side: 'SELL', quantity: 65, stage: 'executed', reason: null, entryPrice: 98.8, exitPrice: null, charges: null, positionId: 'p',
+      id: 't', horizon: Horizon.Intraday, kind: 'IndexOption', mode: 'Paper', tradingsymbol: 'NIFTY26N0924550PE', instrumentToken: 1,
+      side: 'SELL', quantity: 65, stage: 'Executed', reason: null, entryPrice: 98.8, exitPrice: null, charges: null, positionId: 'p',
       createdAt: '2026-11-06T07:00:29.000Z', updatedAt: '2026-11-06T07:00:29.000Z',
       events: [
-        { stage: 'selected', at: '2026-11-06T07:00:29.000Z', detail: { strategyId: 'option-analyzer-setups', reason: 'Wall Defense · score 53' } },
-        { stage: 'executed', at: '2026-11-06T07:00:29.000Z', detail: { entryPrice: 98.8 } },
+        { stage: 'Selected', at: '2026-11-06T07:00:29.000Z', detail: { strategyId: 'option-analyzer-setups', reason: 'Wall Defense · score 53' } },
+        { stage: 'Executed', at: '2026-11-06T07:00:29.000Z', detail: { entryPrice: 98.8 } },
       ],
     };
     const html = renderToStaticMarkup(<table><tbody><TradeRow trade={trade} open onToggle={() => {}} /></tbody></table>);

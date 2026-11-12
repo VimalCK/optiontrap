@@ -20,6 +20,7 @@ import {
 import { istClock, isAfterCloseOnWeekday } from './marketClock.js';
 import { OI_HISTORY_JOB, findWorkingAdminSession } from './oiHistoryScheduler.js';
 import { scanStock, syncStockCandles } from './stockCandles.js';
+import { JobRunStatus } from '../shared/appEnums.js';
 
 export const STOCK_SETUPS_JOB = 'stock-setups-after-close';
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
@@ -33,12 +34,12 @@ const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 async function runAfterCloseScan(date) {
   if (lastDoneDate === date) return;
-  if ((await getScheduledJobStatus(STOCK_SETUPS_JOB, date)) === 'done') {
+  if ((await getScheduledJobStatus(STOCK_SETUPS_JOB, date)) === JobRunStatus.Done) {
     lastDoneDate = date;
     return;
   }
   const oiStatus = await getScheduledJobStatus(OI_HISTORY_JOB, date);
-  if (oiStatus !== 'done' && oiStatus !== 'failed') return;
+  if (oiStatus !== JobRunStatus.Done && oiStatus !== JobRunStatus.Failed) return;
 
   const kite = await findWorkingAdminSession();
   if (!kite) return;
@@ -78,15 +79,15 @@ async function runAfterCloseScan(date) {
       }
     }
 
-    const status = authFailed ? 'failed' : 'done';
+    const status = authFailed ? JobRunStatus.Failed : JobRunStatus.Done;
     await finishScheduledJobRun(STOCK_SETUPS_JOB, date, status, { userId: kite.userId, results });
-    if (status === 'done') lastDoneDate = date;
+    if (status === JobRunStatus.Done) lastDoneDate = date;
     const setups = results.reduce((sum, r) => sum + (r.setups || 0), 0);
     const errors = results.filter((r) => r.error).length;
     console.log(`[Scheduler] ${STOCK_SETUPS_JOB}: ${status} for ${date} — ${stocks.length} stocks, ${setups} setup(s), ${errors} error(s), ${Math.round((Date.now() - started) / 1000)}s`);
   } catch (err) {
     console.error(`[Scheduler] ${STOCK_SETUPS_JOB} failed:`, err.message);
-    await finishScheduledJobRun(STOCK_SETUPS_JOB, date, 'failed', { error: err.message, results }).catch(() => {});
+    await finishScheduledJobRun(STOCK_SETUPS_JOB, date, JobRunStatus.Failed, { error: err.message, results }).catch(() => {});
   }
 }
 

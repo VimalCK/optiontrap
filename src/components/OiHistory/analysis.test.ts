@@ -71,20 +71,20 @@ describe('summarizeTradeBias', () => {
 describe('checklist helpers', () => {
   it('scores pass as 1 and warn as 0.5', () => {
     expect(readinessScore([])).toBe(0);
-    expect(readinessScore([item('pass'), item('warn'), item('fail')])).toBe(50);
-    expect(readinessScore([item('pass'), item('pass'), item('warn')])).toBe(83);
+    expect(readinessScore([item('Pass'), item('Warn'), item('Fail')])).toBe(50);
+    expect(readinessScore([item('Pass'), item('Pass'), item('Warn')])).toBe(83);
   });
 
   it('sorts pass, warn, fail without mutating the input', () => {
-    const items = [item('fail', 'a'), item('pass', 'b'), item('warn', 'c'), item('pass', 'd')];
+    const items = [item('Fail', 'a'), item('Pass', 'b'), item('Warn', 'c'), item('Pass', 'd')];
     expect(sortChecklistByStatus(items).map((i) => i.label)).toEqual(['b', 'd', 'c', 'a']);
     expect(items.map((i) => i.label)).toEqual(['a', 'b', 'c', 'd']);
   });
 
   it('labels statuses and readiness', () => {
-    expect(checklistStatusText('pass')).toBe('Yes');
-    expect(checklistStatusText('warn')).toBe('Wait');
-    expect(checklistStatusText('fail')).toBe('No');
+    expect(checklistStatusText('Pass')).toBe('Yes');
+    expect(checklistStatusText('Warn')).toBe('Wait');
+    expect(checklistStatusText('Fail')).toBe('No');
     expect(setupReadinessLabel('Avoid', 80)).toBe('No setup');
     expect(setupReadinessLabel('Watch', 80)).toBe('80%');
     expect(setupReadinessWidth('Avoid', 80)).toBe('0%');
@@ -114,19 +114,19 @@ describe('summarizeTradeLevels', () => {
     expect(result.supportStrike).toBe(22400);
     expect(result.resistanceStrike).toBe(22500);
     expect(result.maxOiStrike).toBe(22500);
-    expect(result.locationStatus).toBe('pass');
-    expect(result.riskRewardStatus).toBe('pass');
+    expect(result.locationStatus).toBe('Pass');
+    expect(result.riskRewardStatus).toBe('Pass');
   });
 
   it('grades a strike far from spot', () => {
     // 22600 is ~0.67% above 22450 → warn; 22700 is ~1.1% → fail
-    expect(summarizeTradeLevels(rows, 22450, 22600).locationStatus).toBe('warn');
-    expect(summarizeTradeLevels(rows, 22450, 22700).locationStatus).toBe('fail');
+    expect(summarizeTradeLevels(rows, 22450, 22600).locationStatus).toBe('Warn');
+    expect(summarizeTradeLevels(rows, 22450, 22700).locationStatus).toBe('Fail');
   });
 
   it('warns when spot or rows are missing', () => {
-    expect(summarizeTradeLevels(rows, null, 22500)).toMatchObject({ locationStatus: 'warn', supportStrike: null });
-    expect(summarizeTradeLevels([], 22450, 22500)).toMatchObject({ riskRewardStatus: 'warn', maxOiStrike: null });
+    expect(summarizeTradeLevels(rows, null, 22500)).toMatchObject({ locationStatus: 'Warn', supportStrike: null });
+    expect(summarizeTradeLevels([], 22450, 22500)).toMatchObject({ riskRewardStatus: 'Warn', maxOiStrike: null });
   });
 });
 

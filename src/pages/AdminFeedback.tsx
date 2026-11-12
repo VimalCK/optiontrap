@@ -4,23 +4,22 @@ import {
   getFeedback,
   updateFeedbackStatus,
   FeedbackItem,
-  FeedbackStatus,
 } from '@/services/admin';
-import { FeedbackType } from '@/services/feedback';
+import { FeedbackStatus, FeedbackType, type FeedbackStatusId, type FeedbackTypeId } from '../../shared/appEnums.js';
 
 const TYPE_OPTIONS = [
   { value: '', label: 'All types' },
-  { value: 'bug', label: 'Bug' },
-  { value: 'feature', label: 'Feature' },
-  { value: 'general', label: 'General' },
-  { value: 'subscription', label: 'Subscription' },
+  { value: FeedbackType.Bug, label: 'Bug' },
+  { value: FeedbackType.Feature, label: 'Feature' },
+  { value: FeedbackType.General, label: 'General' },
+  { value: FeedbackType.Subscription, label: 'Subscription' },
 ];
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All statuses' },
-  { value: 'open', label: 'Open' },
-  { value: 'reviewed', label: 'Reviewed' },
-  { value: 'resolved', label: 'Resolved' },
+  { value: FeedbackStatus.Open, label: 'Open' },
+  { value: FeedbackStatus.Reviewed, label: 'Reviewed' },
+  { value: FeedbackStatus.Resolved, label: 'Resolved' },
 ];
 
 const formatDate = (value: string) => {
@@ -37,8 +36,8 @@ const AdminFeedback: React.FC = () => {
   const [feedback, setFeedback] = useState<FeedbackItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [typeFilter, setTypeFilter] = useState<FeedbackType | ''>('');
-  const [statusFilter, setStatusFilter] = useState<FeedbackStatus | ''>('');
+  const [typeFilter, setTypeFilter] = useState<FeedbackTypeId | ''>('');
+  const [statusFilter, setStatusFilter] = useState<FeedbackStatusId | ''>('');
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
@@ -57,7 +56,7 @@ const AdminFeedback: React.FC = () => {
 
   useEffect(() => { load(); }, [load]);
 
-  const handleStatusChange = async (id: string, status: FeedbackStatus) => {
+  const handleStatusChange = async (id: string, status: FeedbackStatusId) => {
     setUpdatingId(id);
     setError(null);
     try {
@@ -75,7 +74,7 @@ const AdminFeedback: React.FC = () => {
   };
 
   const counts = useMemo(() => {
-    const base = { open: 0, reviewed: 0, resolved: 0 };
+    const base: Record<FeedbackStatusId, number> = { [FeedbackStatus.Open]: 0, [FeedbackStatus.Reviewed]: 0, [FeedbackStatus.Resolved]: 0 };
     for (const item of feedback) base[item.status] += 1;
     return base;
   }, [feedback]);
@@ -83,9 +82,9 @@ const AdminFeedback: React.FC = () => {
   return (
     <>
       <div className="admin-summary">
-        <span className="admin-chip admin-chip--open">{counts.open} Open</span>
-        <span className="admin-chip admin-chip--reviewed">{counts.reviewed} Reviewed</span>
-        <span className="admin-chip admin-chip--resolved">{counts.resolved} Resolved</span>
+        <span className="admin-chip admin-chip--open">{counts[FeedbackStatus.Open]} Open</span>
+        <span className="admin-chip admin-chip--reviewed">{counts[FeedbackStatus.Reviewed]} Reviewed</span>
+        <span className="admin-chip admin-chip--resolved">{counts[FeedbackStatus.Resolved]} Resolved</span>
       </div>
 
       <div className="admin-filters">
@@ -94,7 +93,7 @@ const AdminFeedback: React.FC = () => {
           <AppSelect
             value={typeFilter}
             options={TYPE_OPTIONS}
-            onChange={(v) => setTypeFilter(v as FeedbackType | '')}
+            onChange={(v) => setTypeFilter(v as FeedbackTypeId | '')}
           />
         </div>
         <div className="admin-filter">
@@ -102,7 +101,7 @@ const AdminFeedback: React.FC = () => {
           <AppSelect
             value={statusFilter}
             options={STATUS_OPTIONS}
-            onChange={(v) => setStatusFilter(v as FeedbackStatus | '')}
+            onChange={(v) => setStatusFilter(v as FeedbackStatusId | '')}
           />
         </div>
         <button className="admin-refresh" onClick={load} disabled={loading}>Refresh</button>
@@ -136,11 +135,11 @@ const AdminFeedback: React.FC = () => {
                   <span className="admin-cell admin-cell--date">{formatDate(item.createdAt)}</span>
                   <span className="admin-cell admin-cell--user">{item.userName || 'Unknown'}</span>
                   <span className="admin-cell admin-cell--type">
-                    <span className={`admin-type admin-type--${item.type}`}>{item.type}</span>
+                    <span className={`admin-type admin-type--${item.type.toLowerCase()}`}>{item.type}</span>
                   </span>
                   <span className="admin-cell admin-cell--message">{item.message}</span>
                   <span className="admin-cell admin-cell--status">
-                    <span className={`admin-status admin-status--${item.status}`}>{item.status}</span>
+                    <span className={`admin-status admin-status--${item.status.toLowerCase()}`}>{item.status}</span>
                     <svg
                       className={`admin-chevron ${expanded ? 'admin-chevron--open' : ''}`}
                       width="12" height="8" viewBox="0 0 12 8" fill="none"
@@ -173,29 +172,29 @@ const AdminFeedback: React.FC = () => {
                     </div>
 
                     <div className="admin-detail__actions">
-                      {item.status !== 'reviewed' && (
+                      {item.status !== FeedbackStatus.Reviewed && (
                         <button
                           className="admin-action"
                           disabled={updatingId === item.id}
-                          onClick={() => handleStatusChange(item.id, 'reviewed')}
+                          onClick={() => handleStatusChange(item.id, FeedbackStatus.Reviewed)}
                         >
                           Mark reviewed
                         </button>
                       )}
-                      {item.status !== 'resolved' && (
+                      {item.status !== FeedbackStatus.Resolved && (
                         <button
                           className="admin-action admin-action--primary"
                           disabled={updatingId === item.id}
-                          onClick={() => handleStatusChange(item.id, 'resolved')}
+                          onClick={() => handleStatusChange(item.id, FeedbackStatus.Resolved)}
                         >
                           Resolve
                         </button>
                       )}
-                      {item.status !== 'open' && (
+                      {item.status !== FeedbackStatus.Open && (
                         <button
                           className="admin-action admin-action--ghost"
                           disabled={updatingId === item.id}
-                          onClick={() => handleStatusChange(item.id, 'open')}
+                          onClick={() => handleStatusChange(item.id, FeedbackStatus.Open)}
                         >
                           Reopen
                         </button>

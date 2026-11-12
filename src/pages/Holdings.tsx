@@ -9,18 +9,18 @@ import { useSearchParams } from 'react-router-dom';
 import HoldingsView from './HoldingsView';
 import PositionsView from './Positions';
 import TabBar from '@/components/TabBar/TabBar';
+import { isTradingMode, type TradingModeId } from '../../shared/tradeEnums.js';
 import '@/styles/analytics.css'; // reuse same tab-bar CSS
 import '@/styles/portfolio.css';
 
 type Tab = 'holdings' | 'positions';
-type PositionsMode = 'paper' | 'live';
 
 const getTabFromParams = (searchParams: URLSearchParams): Tab =>
   searchParams.get('tab') === 'positions' ? 'positions' : 'holdings';
 
-const getModeFromParams = (searchParams: URLSearchParams): PositionsMode | undefined => {
+const getModeFromParams = (searchParams: URLSearchParams): TradingModeId | undefined => {
   const mode = searchParams.get('mode');
-  return mode === 'paper' || mode === 'live' ? mode : undefined;
+  return isTradingMode(mode) ? mode : undefined;
 };
 
 const Holdings: React.FC = () => {

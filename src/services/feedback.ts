@@ -1,8 +1,8 @@
-export type FeedbackType = 'bug' | 'feature' | 'general' | 'subscription';
 import { apiClient } from './apiClient';
+import type { FeedbackTypeId } from '../../shared/appEnums.js';
 
 export interface FeedbackPayload {
-  type: FeedbackType;
+  type: FeedbackTypeId;
   message: string;
   pageUrl: string;
   userAgent: string;

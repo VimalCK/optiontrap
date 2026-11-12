@@ -78,13 +78,13 @@ describe('trading days and session', () => {
   });
 
   it('reports pre-open, live, post-close and closed by market time', () => {
-    expect(marketStatus(utc('2026-11-03T03:29:00'))).toBe('closed');     // 08:59
-    expect(marketStatus(utc('2026-11-03T03:30:00'))).toBe('pre-open');   // 09:00
-    expect(marketStatus(utc('2026-11-03T03:45:00'))).toBe('live');       // 09:15
-    expect(marketStatus(utc('2026-11-03T10:00:00'))).toBe('live');       // 15:30
-    expect(marketStatus(utc('2026-11-03T10:01:00'))).toBe('post-close'); // 15:31
-    expect(marketStatus(utc('2026-11-03T10:31:00'))).toBe('closed');     // 16:01
-    expect(marketStatus(utc('2026-11-10T05:00:00'))).toBe('closed');     // holiday
+    expect(marketStatus(utc('2026-11-03T03:29:00'))).toBe('Closed');     // 08:59
+    expect(marketStatus(utc('2026-11-03T03:30:00'))).toBe('PreOpen');   // 09:00
+    expect(marketStatus(utc('2026-11-03T03:45:00'))).toBe('Live');       // 09:15
+    expect(marketStatus(utc('2026-11-03T10:00:00'))).toBe('Live');       // 15:30
+    expect(marketStatus(utc('2026-11-03T10:01:00'))).toBe('PostClose'); // 15:31
+    expect(marketStatus(utc('2026-11-03T10:31:00'))).toBe('Closed');     // 16:01
+    expect(marketStatus(utc('2026-11-10T05:00:00'))).toBe('Closed');     // holiday
     expect(isMarketOpen(utc('2026-11-03T07:35:00'))).toBe(true);
   });
 });

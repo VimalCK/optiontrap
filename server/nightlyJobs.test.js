@@ -9,10 +9,10 @@ vi.mock('./db.js', () => ({
   getScheduledJobStatus: async (job, date) => runs.get(job)?.get(date) ?? null,
   getScheduledJobRunsOn: async (jobs, date) => jobs
     .filter((job) => runs.get(job)?.has(date))
-    .map((job) => ({ job, status: runs.get(job).get(date), detail: runs.get(job).get(date) === 'failed' ? { error: 'boom' } : {} })),
+    .map((job) => ({ job, status: runs.get(job).get(date), detail: runs.get(job).get(date) === 'Failed' ? { error: 'boom' } : {} })),
   claimScheduledJobRun: async (job, date) => {
     if (!runs.has(job)) runs.set(job, new Map());
-    runs.get(job).set(date, 'running');
+    runs.get(job).set(date, 'Running');
     return true;
   },
   finishScheduledJobRun: async (job, date, status) => { runs.get(job).set(date, status); },
@@ -53,14 +53,20 @@ describe('startNightlyJobs', () => {
     vi.restoreAllMocks();
   });
 
+  /** Wait until no job is still running: .js jobs load through a real import(), which fake timers don't wait for. */
+  const settled = () => vi.waitFor(() => {
+    if ([...runs.values()].some((byDate) => [...byDate.values()].includes('Running'))) throw new Error('a job is still running');
+  });
+
   /** Dates each job ran (finished) for. */
-  const ranDates = () => [...runs.values()].map((byDate) => [...byDate.keys()].filter((d) => byDate.get(d) === 'done'));
+  const ranDates = () => [...runs.values()].map((byDate) => [...byDate.keys()].filter((d) => byDate.get(d) === 'Done'));
 
   it('runs at once when the server starts after a missed 08:30, then not again that day', async () => {
     // Server was down 07:00-10:00 and is started at 10:00.
     vi.useFakeTimers({ now: ist('10:00', '2026-11-04') });
     startNightlyJobs();
     await vi.advanceTimersByTimeAsync(0);
+    await settled();
 
     expect(runs.size).toBeGreaterThan(0);
     expect(ranDates().every((dates) => dates.length === 1 && dates[0] === '2026-11-04')).toBe(true);
@@ -78,6 +84,7 @@ describe('startNightlyJobs', () => {
     expect(runs.size).toBe(0);
 
     await vi.advanceTimersByTimeAsync(2 * 60 * 60 * 1000); // 08:30 check
+    await settled();
     expect(runs.size).toBeGreaterThan(0);
     expect(ranDates().flat().every((d) => d === '2026-11-04')).toBe(true);
   });
@@ -106,18 +113,18 @@ describe('nightlyJobsStatus', () => {
 
   it("gives every job file's run for the latest due date, null when it hasn't run, with a failed run's error", async () => {
     const { jobs: [first, second, ...rest] } = await nightlyJobsStatus(ist('10:00', '2026-11-04'));
-    runs.set(`nightly:${first.file}`, new Map([['2026-11-04', 'done'], ['2026-11-03', 'failed']]));
-    runs.set(`nightly:${second.file}`, new Map([['2026-11-04', 'failed']]));
+    runs.set(`nightly:${first.file}`, new Map([['2026-11-04', 'Done'], ['2026-11-03', 'Failed']]));
+    runs.set(`nightly:${second.file}`, new Map([['2026-11-04', 'Failed']]));
 
     const today = await nightlyJobsStatus(ist('10:00', '2026-11-04'));
     expect(today.date).toBe('2026-11-04');
     expect(today.jobs).toEqual([
-      { file: first.file, status: 'done', error: null },
-      { file: second.file, status: 'failed', error: 'boom' },
+      { file: first.file, status: 'Done', error: null },
+      { file: second.file, status: 'Failed', error: 'boom' },
       ...rest.map((job) => ({ file: job.file, status: null, error: null })),
     ]);
 
     const early = await nightlyJobsStatus(ist('07:00', '2026-11-04')); // before 08:30: yesterday's run
-    expect(early.jobs[0]).toEqual({ file: first.file, status: 'failed', error: 'boom' });
+    expect(early.jobs[0]).toEqual({ file: first.file, status: 'Failed', error: 'boom' });
   });
 });

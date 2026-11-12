@@ -16,7 +16,7 @@ import { placeMarketTrade, placedOrderMessage, placedOrderRefused, type PaperOrd
 import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
 import type { FlowReading } from '@/services/oiFlow';
 import '@/styles/sellstrategy.css';
-import type { HorizonId } from '../../../shared/horizons.js';
+import { OptionType, OrderStatus, Side, TradingMode, type HorizonId, type TradingModeId } from '../../../shared/tradeEnums.js';
 
 export type StrategyMode = 'sell' | 'buy' | 'analyzer';
 
@@ -30,7 +30,7 @@ interface SellStrategyProps {
   spotPrice: number;
   daysToExpiry?: number;
   atmStrike?: number;
-  orderMode: 'paper' | 'live';
+  orderMode: TradingModeId;
   /** Intraday or positional: the trade type the Option Chain has chosen (useTradeHorizon). */
   horizon: HorizonId;
   expiry: string;
@@ -159,23 +159,23 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
    */
   const showLegs = useCallback((filledTitle: string, legs: [PaperOrder, string][]) => {
     const refused = legs.some(([placed]) => placedOrderRefused(placed));
-    const allFilled = legs.every(([placed]) => placed.status === 'filled');
+    const allFilled = legs.every(([placed]) => placed.status === OrderStatus.Filled);
     const text = allFilled ? filledTitle : legs.map(([placed, label]) => placedOrderMessage(placed, label)).join(' · ');
     onToast(text, refused ? 'red' : 'green');
   }, [onToast]);
 
   const handleTrade = useCallback(async (rec: SellRecommendation | BuyRecommendation) => {
-    if (orderMode !== 'paper' || !expiry) return;
+    if (orderMode !== TradingMode.Paper || !expiry) return;
 
-    const side = mode === 'sell' ? 'SELL' : 'BUY';
-    const verb = mode === 'sell' ? 'SELL' : 'BUY';
+    const side = mode === 'sell' ? Side.SELL : Side.BUY;
+    const verb = mode === 'sell' ? Side.SELL : Side.BUY;
     const note = rec.reasons.slice(0, 3).join(' | ');
     const confidence = Math.max(0, Math.min(100, Math.round(rec.score)));
 
     try {
       const type = rec.type;
       if (type === 'sell-ce' || type === 'sell-pe' || type === 'buy-ce' || type === 'buy-pe') {
-        const optionType = type.includes('ce') ? 'CE' : 'PE';
+        const optionType = type.includes('ce') ? OptionType.CE : OptionType.PE;
         const row = chain.find((r) => r.strike === rec.strikes[0]);
         const instrument = type.includes('ce') ? row?.ce : row?.pe;
         if (!instrument) return;
@@ -201,7 +201,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           tradingsymbol: row.ce.tradingsymbol,
           instrumentToken: row.ce.instrumentToken,
           strike: rec.strikes[0],
-          optionType: 'CE',
+          optionType: OptionType.CE,
           side,
           quantity: row.ce.lotSize,
           expiry,
@@ -213,7 +213,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           tradingsymbol: row.pe.tradingsymbol,
           instrumentToken: row.pe.instrumentToken,
           strike: rec.strikes[0],
-          optionType: 'PE',
+          optionType: OptionType.PE,
           side,
           quantity: row.pe.lotSize,
           expiry,
@@ -235,7 +235,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           tradingsymbol: ceRow.ce.tradingsymbol,
           instrumentToken: ceRow.ce.instrumentToken,
           strike: rec.strikes[0],
-          optionType: 'CE',
+          optionType: OptionType.CE,
           side,
           quantity: ceRow.ce.lotSize,
           expiry,
@@ -247,7 +247,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           tradingsymbol: peRow.pe.tradingsymbol,
           instrumentToken: peRow.pe.instrumentToken,
           strike: rec.strikes[1],
-          optionType: 'PE',
+          optionType: OptionType.PE,
           side,
           quantity: peRow.pe.lotSize,
           expiry,
@@ -399,7 +399,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
                   <span className="sell-strategy__premium">₹{rec.premium.toFixed(1)}</span>
                   <span className="sell-strategy__pattern">{rec.pattern}</span>
 
-                  {orderMode === 'paper' && (
+                  {orderMode === TradingMode.Paper && (
                     <button
                       className={`sell-strategy__sell-btn sell-strategy__sell-btn--${actionBtnClass(rec.type)}`}
                       onClick={(e) => { e.stopPropagation(); handleTrade(rec); }}

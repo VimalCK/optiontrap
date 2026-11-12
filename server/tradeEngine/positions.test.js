@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Horizon } from '../../shared/horizons.js';
+import { Horizon } from '../../shared/tradeEnums.js';
 
 vi.mock('../db.js', () => ({
   addPosition: vi.fn(),
@@ -36,17 +36,17 @@ describe('openPosition', () => {
 
     expect(result).toEqual({ ok: true, position: { id: 'p1' } });
     expect(db.addPosition).toHaveBeenCalledWith('U1', expect.objectContaining({
-      instrumentToken: 12345, strike: 24000, quantity: 75, entryPrice: 101.5, mode: 'paper',
+      instrumentToken: 12345, strike: 24000, quantity: 75, entryPrice: 101.5, mode: 'Paper',
     }));
   });
 
   it('records a trade as manual unless the caller says it is automated, never from the request', async () => {
     db.addPosition.mockResolvedValue({ id: 'p1' });
-    await openPosition('U1', { ...input, source: 'auto' }, { now: OPEN });
-    expect(db.addPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ source: 'manual' }));
+    await openPosition('U1', { ...input, source: 'Auto' }, { now: OPEN });
+    expect(db.addPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ source: 'Manual' }));
 
-    await openPosition('U1', input, { now: OPEN, source: 'auto' });
-    expect(db.addPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ source: 'auto' }));
+    await openPosition('U1', input, { now: OPEN, source: 'Auto' });
+    expect(db.addPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ source: 'Auto' }));
   });
 
   it('records a stock trade with no strike or expiry', async () => {
@@ -75,7 +75,7 @@ describe('openPosition', () => {
 });
 
 describe('closablePosition', () => {
-  const position = { id: 'p1', mode: 'paper', exited: false };
+  const position = { id: 'p1', mode: 'Paper', exited: false };
 
   it('gives the open position when it may be closed at that price now', async () => {
     db.getOpenPosition.mockResolvedValue(position);
@@ -95,13 +95,13 @@ describe('closablePosition', () => {
   });
 
   it('lets a live position close while the market is closed', async () => {
-    db.getOpenPosition.mockResolvedValue({ ...position, mode: 'live' });
+    db.getOpenPosition.mockResolvedValue({ ...position, mode: 'Live' });
     expect((await closablePosition('U1', 'p1', 95, CLOSED)).ok).toBe(true);
   });
 });
 
 describe('squareOffable', () => {
-  const position = { id: 'p1', mode: 'paper', exited: false };
+  const position = { id: 'p1', mode: 'Paper', exited: false };
 
   it('allows the engine to square off after the close, at a given price', () => {
     expect(squareOffable(position, 95.5, CLOSED)).toEqual({ ok: true, position });
@@ -113,7 +113,7 @@ describe('squareOffable', () => {
 });
 
 describe('closePosition', () => {
-  const position = { id: 'p1', mode: 'paper', exited: false };
+  const position = { id: 'p1', mode: 'Paper', exited: false };
 
   it('closes the position at the fill, and returns it as exited (with its charges)', async () => {
     const exited = { ...position, exited: true, exitPrice: 95.5, charges: 48.2 };
@@ -123,7 +123,7 @@ describe('closePosition', () => {
   });
 
   it('closes the automated trades behind an automated position, as exited manually unless told why', async () => {
-    const auto = { ...position, source: 'auto' };
+    const auto = { ...position, source: 'Auto' };
     db.exitPositionById.mockResolvedValue({ ...auto, exited: true });
 
     expect((await closePosition('U1', auto, 95.5, { now: OPEN })).ok).toBe(true);
@@ -135,10 +135,10 @@ describe('closePosition', () => {
 
   it('leaves automated trades alone for a manual position, or a close another request beat', async () => {
     db.exitPositionById.mockResolvedValue({ ...position, exited: true });
-    await closePosition('U1', { ...position, source: 'manual' }, 95, { now: OPEN });
+    await closePosition('U1', { ...position, source: 'Manual' }, 95, { now: OPEN });
 
     db.exitPositionById.mockResolvedValue(null);
-    expect(await closePosition('U1', { ...position, source: 'auto' }, 95, { now: OPEN })).toMatchObject({ ok: false, code: NOT_FOUND });
+    expect(await closePosition('U1', { ...position, source: 'Auto' }, 95, { now: OPEN })).toMatchObject({ ok: false, code: NOT_FOUND });
     expect(db.closeAutoTradesOfPosition).not.toHaveBeenCalled();
   });
 });

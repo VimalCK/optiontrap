@@ -8,7 +8,7 @@
  *   same instrument from the same source and horizon, at the average price.
  * - closePosition closes an open position at the fill and records its charges
  *   (shared/paperCharges.js, via db.js), dated when it happens. Closing an
- *   automated position (source 'auto') also closes the automated trades behind
+ *   automated position (source Auto) also closes the automated trades behind
  *   it, with why: the exit rule's reason from the trade monitor, "Exited
  *   manually" (MANUAL_EXIT), or the engine's square-off after the close
  *   (SESSION_SQUARE_OFF). It is checked first by closablePosition (an exit) or
@@ -26,6 +26,7 @@ import { checkPaperTrade, normalizeTradeInput } from '../../shared/paperTradeRul
 import { algoLog } from '../algoLog.js';
 import { paperPnl } from '../../shared/paperPnl.js';
 import { SESSION_SQUARE_OFF_ID } from '../../shared/exitRules/index.js';
+import { PaperTradeAction, TradeSource } from '../../shared/tradeEnums.js';
 
 export const NOT_FOUND = 'NOT_FOUND';
 const NOT_FOUND_MESSAGE = 'Position not found or already exited';
@@ -42,13 +43,13 @@ const refused = ({ rule, code, message }) => ({ ok: false, code, message, rule }
  * @param {Record<string, unknown>} input tradingsymbol, instrumentToken, instrumentType (CE, PE, FUT
  *   or EQ), side, quantity, entryPrice, horizon; strike and expiry for options, expiry for futures; and
  *   optionally exchange, mode, note, targetPrice, stopLossPrice, confidence
- * @param {{ now?: Date, source?: 'manual' | 'auto' }} [options] now: when the trade happens.
+ * @param {{ now?: Date, source?: import('../../shared/tradeEnums.js').TradeSourceId }} [options] now: when the trade happens.
  *   source: who placed it, set by the caller and never taken from the request; a trade merges
  *   only with open positions from the same source.
  */
-export async function openPosition(userId, input, { now = new Date(), source = 'manual' } = {}) {
+export async function openPosition(userId, input, { now = new Date(), source = TradeSource.Manual } = {}) {
   const trade = normalizeTradeInput(input);
-  const result = checkPaperTrade('open', { trade, now });
+  const result = checkPaperTrade(PaperTradeAction.Open, { trade, now });
   if (!result.ok) return refused(result.violations[0]);
   return { ok: true, position: await addPosition(userId, { ...trade, source }) };
 }
@@ -88,7 +89,7 @@ export function bookedDetails(userId, position, exited, fill, exitReason) {
 export async function closablePosition(userId, positionId, exitPrice, now) {
   const position = await getOpenPosition(positionId, userId);
   if (!position) return { ok: false, code: NOT_FOUND, message: NOT_FOUND_MESSAGE };
-  const result = checkPaperTrade('exit', { position, exitPrice, now });
+  const result = checkPaperTrade(PaperTradeAction.Exit, { position, exitPrice, now });
   if (!result.ok) return refused(result.violations[0]);
   return { ok: true, position };
 }
@@ -101,7 +102,7 @@ export async function closablePosition(userId, positionId, exitPrice, now) {
  * @param {Date} at
  */
 export function squareOffable(position, exitPrice, at) {
-  const result = checkPaperTrade('square-off', { position, exitPrice, now: at });
+  const result = checkPaperTrade(PaperTradeAction.SquareOff, { position, exitPrice, now: at });
   return result.ok ? { ok: true, position } : refused(result.violations[0]);
 }
 
@@ -119,7 +120,7 @@ export async function closePosition(userId, position, fill, { now = new Date(), 
   // Another request may have closed it since it was checked.
   const exited = await exitPositionById(position.id, userId, fill, now);
   if (!exited) return { ok: false, code: NOT_FOUND, message: NOT_FOUND_MESSAGE };
-  if (position.source === 'auto') {
+  if (position.source === TradeSource.Auto) {
     await closeAutoTradesOfPosition(userId, position, fill, exitReason, now);
     algoLog('Exit', 'booked', bookedDetails(userId, position, exited, fill, exitReason));
   }

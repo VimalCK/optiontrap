@@ -19,8 +19,10 @@ import { MARKET_TIME_ZONE, addDays, marketDateTime, marketDayStartMs } from '../
 import { buildDailyPnlQuery, buildPositionsQuery, buildStatsQueries } from './positionsQuery.js';
 import { MAX_DRAWDOWN_SQL, RESULTS_SQL, resultsParams, toResults } from './autoTradeResults.js';
 import { roundTripCharges } from '../shared/paperCharges.js';
-import { Horizon } from '../shared/horizons.js';
 import { runMigrations } from './migrationRunner.js';
+import { Exchange, Horizon, InstrumentType, LifecycleStage, OptionType, OrderStatus, OrderType, Side, TradeSource, TradingMode, isOptionType, oppositeSide } from '../shared/tradeEnums.js';
+import { FeedbackStatus, JobRunStatus, PriceAlertStatus, SetupOutcomeStatus, SignalOutcome, SubscriptionProvider, SubscriptionState } from '../shared/appEnums.js';
+import { sqlEnum, sqlEnumList } from './sql.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const MIGRATIONS_DIR = path.join(__dirname, 'migrations');
@@ -254,8 +256,8 @@ function mapSubscription(row) {
     id: row.id,
     userId: row.user_id,
     planId: row.plan_id,
-    status: expired && row.status === 'active' ? 'expired' : row.status,
-    active: row.status === 'active' && !expired,
+    status: expired && row.status === SubscriptionState.Active ? SubscriptionState.Expired : row.status,
+    active: row.status === SubscriptionState.Active && !expired,
     startsAt: row.starts_at || null,
     expiresAt,
     provider: row.provider || null,
@@ -311,7 +313,7 @@ function parseDbTimestamp(value) {
 
 export async function getActiveSubscriptionPlans() {
   const result = await rows(
-    'SELECT * FROM subscription_plans WHERE is_active = 1 ORDER BY price ASC, id ASC',
+    'SELECT * FROM subscription_plans WHERE is_active ORDER BY price ASC, id ASC',
   );
 
   return result.map(mapPlan);
@@ -348,7 +350,7 @@ export class SubscriptionPlanNotFoundError extends Error {
   }
 }
 
-export async function activateSubscription(userId, planId = 'one_month', provider = 'internal') {
+export async function activateSubscription(userId, planId = 'one_month', provider = SubscriptionProvider.Internal) {
   const plan = await requirePlan(planId);
 
   const id = crypto.randomUUID();
@@ -357,7 +359,7 @@ export async function activateSubscription(userId, planId = 'one_month', provide
 
   await query(
     `INSERT INTO subscriptions (id, user_id, plan_id, status, starts_at, expires_at, provider, updated_at)
-     VALUES ($1, $2, $3, 'active', $4, $5, $6, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))
+     VALUES ($1, $2, $3, ${sqlEnum(SubscriptionState.Active)}, $4, $5, $6, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))
      ON CONFLICT (id) DO NOTHING`,
     [id, userId, planId, startsAt, expiresAt, provider],
   );
@@ -371,7 +373,7 @@ export async function activateSubscription(userId, planId = 'one_month', provide
     await query(
       `UPDATE subscriptions SET
         plan_id = $1,
-        status = 'active',
+        status = ${sqlEnum(SubscriptionState.Active)},
         starts_at = $2,
         expires_at = $3,
         provider = $4,
@@ -391,7 +393,7 @@ export async function activateSubscription(userId, planId = 'one_month', provide
 // ---------------------------------------------------------------------------
 
 /** Upsert the user's single subscription row with explicit dates/status. */
-async function setUserSubscription(userId, planId, startsAt, expiresAt, status, provider = 'admin') {
+async function setUserSubscription(userId, planId, startsAt, expiresAt, status, provider = SubscriptionProvider.Admin) {
   const existing = await firstRow(
     'SELECT id FROM subscriptions WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1',
     [userId],
@@ -418,7 +420,7 @@ async function setUserSubscription(userId, planId, startsAt, expiresAt, status, 
 
 async function requirePlan(planId) {
   const plan = await firstRow(
-    'SELECT id, duration_count, duration_unit FROM subscription_plans WHERE id = $1 AND is_active = 1',
+    'SELECT id, duration_count, duration_unit FROM subscription_plans WHERE id = $1 AND is_active',
     [planId],
   );
   if (!plan) throw new SubscriptionPlanNotFoundError();
@@ -430,7 +432,7 @@ export async function adminActivateSubscription(userId, planId) {
   const plan = await requirePlan(planId);
   const startsAt = formatDbTimestamp(new Date());
   const expiresAt = formatDbTimestamp(getPlanExpiryDate(plan.duration_count, plan.duration_unit));
-  return setUserSubscription(userId, planId, startsAt, expiresAt, 'active');
+  return setUserSubscription(userId, planId, startsAt, expiresAt, SubscriptionState.Active);
 }
 
 /** Extend from the current expiry if still in the future, otherwise from now. */
@@ -443,7 +445,7 @@ export async function adminExtendSubscription(userId, planId) {
 
   const startsAt = current?.startsAt || formatDbTimestamp(new Date());
   const expiresAt = formatDbTimestamp(addPlanDuration(base, plan.duration_count, plan.duration_unit));
-  return setUserSubscription(userId, planId, startsAt, expiresAt, 'active');
+  return setUserSubscription(userId, planId, startsAt, expiresAt, SubscriptionState.Active);
 }
 
 /** Cancel the user's subscription (keeps dates, marks status cancelled). */
@@ -455,7 +457,7 @@ export async function adminCancelSubscription(userId) {
   if (!existing) return null;
 
   await query(
-    `UPDATE subscriptions SET status = 'cancelled', updated_at = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
+    `UPDATE subscriptions SET status = ${sqlEnum(SubscriptionState.Cancelled)}, updated_at = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
      WHERE id = $1`,
     [existing.id],
   );
@@ -482,7 +484,7 @@ export async function getAdminUsers() {
        SELECT * FROM subscriptions s2 WHERE s2.user_id = u.user_id ORDER BY s2.updated_at DESC LIMIT 1
      ) s ON TRUE
      LEFT JOIN subscription_plans p ON p.id = s.plan_id
-     WHERE u.is_admin = 0
+     WHERE NOT u.is_admin
      ORDER BY u.updated_at DESC
      LIMIT 500`,
   );
@@ -490,7 +492,7 @@ export async function getAdminUsers() {
   return result.map((row) => {
     const expiry = row.sub_expires || null;
     const expired = expiry ? new Date(String(expiry).replace(' ', 'T')).getTime() <= Date.now() : false;
-    const status = expired && row.sub_status === 'active' ? 'expired' : (row.sub_status || 'inactive');
+    const status = expired && row.sub_status === SubscriptionState.Active ? SubscriptionState.Expired : (row.sub_status || SubscriptionState.Inactive);
 
     return {
       userId: row.user_id,
@@ -500,7 +502,7 @@ export async function getAdminUsers() {
       feedbackCount: row.feedback_count || 0,
       subscription: {
         status,
-        active: row.sub_status === 'active' && !expired,
+        active: row.sub_status === SubscriptionState.Active && !expired,
         planId: row.sub_plan_id || null,
         planName: row.sub_plan_name || null,
         expiresAt: expiry,
@@ -520,7 +522,7 @@ export async function createFeedback({ userId, type, message, pageUrl, userAgent
 
   await query(
     `INSERT INTO feedback (id, user_id, type, message, page_url, user_agent, status, updated_at)
-     VALUES ($1, $2, $3, $4, $5, $6, 'open', to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))`,
+     VALUES ($1, $2, $3, $4, $5, $6, ${sqlEnum(FeedbackStatus.Open)}, to_char(now(), 'YYYY-MM-DD HH24:MI:SS'))`,
     [id, userId, type, message, pageUrl || null, userAgent || null],
   );
 
@@ -530,7 +532,7 @@ export async function createFeedback({ userId, type, message, pageUrl, userAgent
     type,
     message,
     pageUrl: pageUrl || null,
-    status: 'open',
+    status: FeedbackStatus.Open,
   };
 }
 
@@ -603,7 +605,7 @@ export async function updateFeedbackStatus(id, status) {
 export async function getFeedbackCounts() {
   const row = await firstRow(
     `SELECT COUNT(*)::int AS total,
-            COUNT(*) FILTER (WHERE status = 'open')::int AS open
+            COUNT(*) FILTER (WHERE status = ${sqlEnum(FeedbackStatus.Open)})::int AS open
      FROM feedback`,
   );
 
@@ -793,10 +795,10 @@ export async function addWatchlistItem(watchlistId, userId, { instrumentToken, t
   await query(
     `INSERT INTO watchlist_items (id, watchlist_id, instrument_token, tradingsymbol, exchange, sort_order)
      VALUES ($1, $2, $3, $4, $5, $6)`,
-    [id, watchlistId, instrumentToken, tradingsymbol, exchange || 'NSE', sortOrder],
+    [id, watchlistId, instrumentToken, tradingsymbol, exchange || Exchange.NSE, sortOrder],
   );
 
-  return { id, instrumentToken, tradingsymbol, exchange: exchange || 'NSE', sortOrder };
+  return { id, instrumentToken, tradingsymbol, exchange: exchange || Exchange.NSE, sortOrder };
 }
 
 /**
@@ -879,8 +881,8 @@ export async function createPriceAlert(userId, { instrumentToken, tradingsymbol,
 /** Mark an active alert triggered; null if it isn't the user's or already triggered. */
 export async function triggerPriceAlert(id, userId, price) {
   const row = await firstRow(
-    `UPDATE price_alerts SET status = 'triggered', triggered_at = now(), triggered_price = $3
-     WHERE id = $1 AND user_id = $2 AND status = 'active'
+    `UPDATE price_alerts SET status = ${sqlEnum(PriceAlertStatus.Triggered)}, triggered_at = now(), triggered_price = $3
+     WHERE id = $1 AND user_id = $2 AND status = ${sqlEnum(PriceAlertStatus.Active)}
      RETURNING ${PRICE_ALERT_COLUMNS}`,
     [id, userId, price],
   );
@@ -890,7 +892,7 @@ export async function triggerPriceAlert(id, userId, price) {
 /** Make a triggered alert active again; null if it isn't the user's. */
 export async function resetPriceAlert(id, userId) {
   const row = await firstRow(
-    `UPDATE price_alerts SET status = 'active', triggered_at = NULL, triggered_price = NULL
+    `UPDATE price_alerts SET status = ${sqlEnum(PriceAlertStatus.Active)}, triggered_at = NULL, triggered_price = NULL
      WHERE id = $1 AND user_id = $2
      RETURNING ${PRICE_ALERT_COLUMNS}`,
     [id, userId],
@@ -948,10 +950,10 @@ export async function getStoredAutomatedUsers() {
 }
 
 /**
- * Record a newly selected automated trade (stage 'selected') with its first
+ * Record a newly selected automated trade (LifecycleStage.Selected) with its first
  * event, in one transaction. Returns the new trade's id.
  * @param {string} userId
- * @param {{ horizon: import('../shared/horizons.js').HorizonId, kind: string, mode: string, tradingsymbol: string, instrumentToken: number, side: string, quantity: number }} trade
+ * @param {{ horizon: import('../shared/tradeEnums.js').HorizonId, kind: string, mode: string, tradingsymbol: string, instrumentToken: number, side: string, quantity: number }} trade
  * @param {{ strategyId: string, setup?: string | null, reason: string }} detail  why it was selected; the
  *   strategy and setup are also kept as columns, for Win/Loss Patterns
  * @returns {Promise<string>}
@@ -963,11 +965,11 @@ export async function createAutoTrade(userId, trade, detail) {
     await client.query('BEGIN');
     await client.query(
       `INSERT INTO algo_trades (id, user_id, horizon, kind, mode, tradingsymbol, instrument_token, side, quantity, stage, strategy_id, setup)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'selected', $10, $11)`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, ${sqlEnum(LifecycleStage.Selected)}, $10, $11)`,
       [id, userId, trade.horizon, trade.kind, trade.mode, trade.tradingsymbol, trade.instrumentToken, trade.side, trade.quantity,
         detail.strategyId, detail.setup ?? null],
     );
-    await client.query("INSERT INTO algo_trade_events (algo_trade_id, stage, detail) VALUES ($1, 'selected', $2)", [id, JSON.stringify(detail)]);
+    await client.query(`INSERT INTO algo_trade_events (algo_trade_id, stage, detail) VALUES ($1, ${sqlEnum(LifecycleStage.Selected)}, $2)`, [id, JSON.stringify(detail)]);
     await client.query('COMMIT');
     return id;
   } catch (err) {
@@ -1022,10 +1024,10 @@ export async function advanceAutoTrade(userId, id, from, to, fields, detail) {
  */
 export async function getTodayAutoRealisedPnl(userId, todayStart) {
   const row = await firstRow(
-    `SELECT COALESCE(SUM(CASE WHEN side = 'BUY' THEN exit_price - entry_price ELSE entry_price - exit_price END * quantity
+    `SELECT COALESCE(SUM(CASE WHEN side = ${sqlEnum(Side.BUY)} THEN exit_price - entry_price ELSE entry_price - exit_price END * quantity
        - COALESCE(charges, 0)), 0) AS pnl
      FROM positions
-     WHERE user_id = $1 AND mode = 'paper' AND exited = 1 AND exit_time >= $2 AND source = 'auto'`,
+     WHERE user_id = $1 AND mode = ${sqlEnum(TradingMode.Paper)} AND exited AND exit_time >= $2 AND source = ${sqlEnum(TradeSource.Auto)}`,
     [userId, todayStart],
   );
   return Number(row.pnl);
@@ -1043,7 +1045,7 @@ export async function getTodayAutoExits(userId, todayStart) {
   const result = await rows(
     `SELECT instrument_token, MAX(exit_time) AS exit_time
      FROM positions
-     WHERE user_id = $1 AND mode = 'paper' AND exited = 1 AND exit_time >= $2 AND source = 'auto'
+     WHERE user_id = $1 AND mode = ${sqlEnum(TradingMode.Paper)} AND exited AND exit_time >= $2 AND source = ${sqlEnum(TradeSource.Auto)}
      GROUP BY instrument_token`,
     [userId, todayStart],
   );
@@ -1058,22 +1060,22 @@ export async function getTodayAutoExits(userId, todayStart) {
  */
 export async function getOpenIntradayPositionsBefore(before) {
   const result = await rows(
-    'SELECT * FROM positions WHERE exited = 0 AND mode = $1 AND horizon = $2 AND entry_time < $3 ORDER BY entry_time',
-    ['paper', Horizon.Intraday, before],
+    'SELECT * FROM positions WHERE NOT exited AND mode = $1 AND horizon = $2 AND entry_time < $3 ORDER BY entry_time',
+    [TradingMode.Paper, Horizon.Intraday, before],
   );
   return result.map(mapPositionRow);
 }
 
 /** Every user's open automated paper positions, for the trade monitor. Served by positions_open_auto_idx. */
 export async function getAllOpenAutoPositions() {
-  const result = await rows("SELECT * FROM positions WHERE source = 'auto' AND exited = 0 AND mode = 'paper'");
+  const result = await rows(`SELECT * FROM positions WHERE source = ${sqlEnum(TradeSource.Auto)} AND NOT exited AND mode = ${sqlEnum(TradingMode.Paper)}`);
   return result.map(mapPositionRow);
 }
 
 /** One user's open automated paper positions, for the trade monitor. Served by positions_open_auto_idx. */
 export async function getOpenAutoPositions(userId) {
   const result = await rows(
-    "SELECT * FROM positions WHERE user_id = $1 AND source = 'auto' AND exited = 0 AND mode = 'paper'",
+    `SELECT * FROM positions WHERE user_id = $1 AND source = ${sqlEnum(TradeSource.Auto)} AND NOT exited AND mode = ${sqlEnum(TradingMode.Paper)}`,
     [userId],
   );
   return result.map(mapPositionRow);
@@ -1081,7 +1083,7 @@ export async function getOpenAutoPositions(userId) {
 
 /**
  * Close the user's executed automated trades behind a position that was just
- * exited: each gets the exit price and stage 'closed', with an event saying
+ * exited: each gets the exit price and stage Closed, with an event saying
  * why (`detail`; its ruleId is kept as exit_rule_id), and its own charges:
  * its entry and exit at its own prices (shared/paperCharges.js), since merged
  * trades share one position at the average price. One transaction, so a trade
@@ -1100,7 +1102,7 @@ export async function closeAutoTradesOfPosition(userId, position, exitPrice, det
     await client.query('BEGIN');
     const open = await client.query(
       `SELECT id, side, quantity, entry_price, created_at FROM algo_trades
-       WHERE position_id = $1 AND user_id = $2 AND stage = 'executed'
+       WHERE position_id = $1 AND user_id = $2 AND stage = ${sqlEnum(LifecycleStage.Executed)}
        FOR UPDATE`,
       [position.id, userId],
     );
@@ -1112,9 +1114,9 @@ export async function closeAutoTradesOfPosition(userId, position, exitPrice, det
       entryTime: row.created_at,
     }, exitPrice, exitTime).total);
     const closed = await client.query(
-      `UPDATE algo_trades t SET stage = 'closed', exit_price = $3, reason = $4, exit_rule_id = $5, charges = c.charges, updated_at = now()
+      `UPDATE algo_trades t SET stage = ${sqlEnum(LifecycleStage.Closed)}, exit_price = $3, reason = $4, exit_rule_id = $5, charges = c.charges, updated_at = now()
        FROM unnest($6::text[], $7::numeric[]) AS c (id, charges)
-       WHERE t.id = c.id AND t.position_id = $1 AND t.user_id = $2 AND t.stage = 'executed'
+       WHERE t.id = c.id AND t.position_id = $1 AND t.user_id = $2 AND t.stage = ${sqlEnum(LifecycleStage.Executed)}
        RETURNING t.id`,
       [position.id, userId, exitPrice, detail.reason, detail.ruleId, open.rows.map((row) => row.id), charges],
     );
@@ -1122,7 +1124,7 @@ export async function closeAutoTradesOfPosition(userId, position, exitPrice, det
     if (ids.length > 0) {
       await client.query(
         `INSERT INTO algo_trade_events (algo_trade_id, stage, detail)
-         SELECT id, 'closed', $2 FROM unnest($1::text[]) AS id`,
+         SELECT id, ${sqlEnum(LifecycleStage.Closed)}, $2 FROM unnest($1::text[]) AS id`,
         [ids, JSON.stringify({ ...detail, exitPrice })],
       );
     }
@@ -1310,7 +1312,7 @@ export async function saveInstruments(instruments, stamp) {
           inst.tradingsymbol,
           inst.name,
           inst.exchange,
-          inst.instrumentType || 'EQ',
+          inst.instrumentType || InstrumentType.EQ,
           inst.strike || null,
           inst.expiry || null,
           inst.lotSize || null,
@@ -1347,7 +1349,7 @@ export async function saveInstruments(instruments, stamp) {
 
 /**
  * List a user's positions. By default, open positions plus those exited
- * today; with status 'closed', a filtered page of exited positions. The
+ * today; with status Closed, a filtered page of exited positions. The
  * filter comes from parsePositionsQuery (positionsQuery.js).
  */
 export async function getPositions(userId, filter = {}) {
@@ -1407,7 +1409,7 @@ function mapPositionRow(row) {
     entryPrice: row.entry_price,
     entryTime: row.entry_time,
     expiry: row.expiry,
-    exited: Number(row.exited) === 1,
+    exited: row.exited === true,
     exitPrice: row.exit_price,
     exitTime: row.exit_time,
     note: row.note || '',
@@ -1434,12 +1436,12 @@ async function closePositionRow(row, exitPrice, exitTime) {
     entryTime: new Date(row.entry_time),
   }, exitPrice, new Date(exitTime));
   const res = await query(
-    `UPDATE positions SET exited = 1, exit_price = $1, exit_time = $2, charges = $3, charge_breakdown = $4
-     WHERE id = $5 AND exited = 0`,
+    `UPDATE positions SET exited = true, exit_price = $1, exit_time = $2, charges = $3, charge_breakdown = $4
+     WHERE id = $5 AND NOT exited`,
     [exitPrice, exitTime, charges.total, JSON.stringify(charges), row.id],
   );
   if (res.rowCount === 0) return null;
-  return { ...row, exited: 1, exit_price: exitPrice, exit_time: exitTime, charges: charges.total, charge_breakdown: charges };
+  return { ...row, exited: true, exit_price: exitPrice, exit_time: exitTime, charges: charges.total, charge_breakdown: charges };
 }
 
 function positionMetaValues(position) {
@@ -1457,11 +1459,11 @@ function positionMetaValues(position) {
  */
 function instrumentColumns(position) {
   const type = position.instrumentType;
-  const isOption = type === 'CE' || type === 'PE';
+  const isOption = isOptionType(type);
   return {
     strike: isOption ? position.strike : null,
     optionType: isOption ? type : null,
-    expiry: isOption || type === 'FUT' ? position.expiry : null,
+    expiry: isOption || type === InstrumentType.FUT ? position.expiry : null,
   };
 }
 
@@ -1473,7 +1475,7 @@ async function insertPosition(userId, mode, position, quantity, now) {
        side, quantity, entry_price, entry_time, expiry, note, target_price, stop_loss_price, confidence, horizon)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
      RETURNING *`,
-    [crypto.randomUUID(), userId, mode, position.source || 'manual', position.tradingsymbol, position.instrumentToken,
+    [crypto.randomUUID(), userId, mode, position.source || TradeSource.Manual, position.tradingsymbol, position.instrumentToken,
      position.instrumentType, position.exchange, strike, optionType, position.side, quantity, position.entryPrice, now, expiry,
      ...positionMetaValues(position), position.horizon],
   );
@@ -1483,20 +1485,20 @@ async function insertPosition(userId, mode, position, quantity, now) {
 /**
  * Open a position. A trade merges with the user's open position in the same
  * instrument from the same source and of the same horizon (intraday or
- * positional, shared/horizons.js): the same side averages in, the opposite
+ * positional, shared/tradeEnums.js): the same side averages in, the opposite
  * side nets out. Manual trades merge with manual positions and automated
- * trades (source 'auto') with automated ones, so 100 bought by the automation
+ * trades (source Auto) with automated ones, so 100 bought by the automation
  * then 500 more shows as one automated position of 600, and the automation
  * never changes a manual position (or the other way round).
  */
 export async function addPosition(userId, position) {
-  const mode = position.mode || 'paper';
-  const source = position.source || 'manual';
+  const mode = position.mode || TradingMode.Paper;
+  const source = position.source || TradeSource.Manual;
   const now = new Date().toISOString();
 
   const openSameSource = (side) => firstRow(
     `SELECT * FROM positions
-     WHERE user_id = $1 AND mode = $2 AND instrument_token = $3 AND side = $4 AND exited = 0 AND source = $5 AND horizon = $6`,
+     WHERE user_id = $1 AND mode = $2 AND instrument_token = $3 AND side = $4 AND NOT exited AND source = $5 AND horizon = $6`,
     [userId, mode, position.instrumentToken, side, source, position.horizon],
   );
 
@@ -1529,7 +1531,7 @@ export async function addPosition(userId, position) {
   }
 
   // Opposite-side existing → net out
-  const opposite = await openSameSource(position.side === 'BUY' ? 'SELL' : 'BUY');
+  const opposite = await openSameSource(oppositeSide(position.side));
 
   if (opposite) {
     const oppQty = Number(opposite.quantity);
@@ -1557,7 +1559,7 @@ export async function addPosition(userId, position) {
 
 /** One of a user's open positions, or null if there's no such open position. */
 export async function getOpenPosition(id, userId) {
-  const row = await firstRow('SELECT * FROM positions WHERE id = $1 AND user_id = $2 AND exited = 0', [id, userId]);
+  const row = await firstRow('SELECT * FROM positions WHERE id = $1 AND user_id = $2 AND NOT exited', [id, userId]);
   return row ? mapPositionRow(row) : null;
 }
 
@@ -1566,7 +1568,7 @@ export async function getOpenPosition(id, userId) {
  * Returns the exited position, or null if it is not open (any more).
  */
 export async function exitPositionById(id, userId, exitPrice, exitTime = new Date()) {
-  const row = await firstRow('SELECT * FROM positions WHERE id = $1 AND user_id = $2 AND exited = 0', [id, userId]);
+  const row = await firstRow('SELECT * FROM positions WHERE id = $1 AND user_id = $2 AND NOT exited', [id, userId]);
   if (!row) return null;
   const closed = await closePositionRow(row, exitPrice, exitTime.toISOString());
   return closed ? mapPositionRow(closed) : null;
@@ -1615,13 +1617,13 @@ function toOrder(row) {
 /**
  * Record a new open order (limit or market) for the user and return it. Who
  * placed it is set by the caller, never read from the order: by hand
- * ('manual'), or by the trade engine for an automated trade ('auto', with that
+ * (Manual), or by the trade engine for an automated trade (Auto, with that
  * trade's id).
  * @param {string} userId
  * @param {import('../shared/paperOrders.js').Order} order
- * @param {{ source?: 'manual' | 'auto', autoTradeId?: string | null }} [placedBy]
+ * @param {{ source?: import('../shared/tradeEnums.js').TradeSourceId, autoTradeId?: string | null }} [placedBy]
  */
-export async function createOrder(userId, order, { source = 'manual', autoTradeId = null } = {}) {
+export async function createOrder(userId, order, { source = TradeSource.Manual, autoTradeId = null } = {}) {
   const { strike, optionType, expiry } = instrumentColumns(order);
   const row = await firstRow(
     `INSERT INTO orders (id, user_id, tradingsymbol, instrument_token, instrument_type, exchange, strike, option_type, expiry,
@@ -1637,22 +1639,22 @@ export async function createOrder(userId, order, { source = 'manual', autoTradeI
 /**
  * Record the filled order that closed one of the user's positions (an exit):
  * the opposite side for the whole quantity, at `fillPrice`. Who placed it is
- * set by the caller: by hand ('manual') or an exit rule ('auto').
+ * set by the caller: by hand (Manual) or an exit rule (Auto).
  * @param {string} userId
  * @param {{ id: string, tradingsymbol: string, instrumentToken: number, instrumentType: string, exchange: string,
  *           strike: number | null, optionType: string | null, expiry: string | null, side: string, quantity: number,
- *           horizon: number }} position  the position it closed
+ *           horizon: import('../shared/tradeEnums.js').HorizonId }} position  the position it closed
  * @param {number} fillPrice
- * @param {'manual' | 'auto'} source
+ * @param {import('../shared/tradeEnums.js').TradeSourceId} source
  */
 export async function recordClosingOrder(userId, position, fillPrice, source) {
   const row = await firstRow(
     `INSERT INTO orders (id, user_id, tradingsymbol, instrument_token, instrument_type, exchange, strike, option_type, expiry,
        side, quantity, order_type, limit_price, status, fill_price, position_id, closes_position, source, horizon)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, 'market', NULL, 'filled', $12, $13, true, $14, $15)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, ${sqlEnum(OrderType.Market)}, NULL, ${sqlEnum(OrderStatus.Filled)}, $12, $13, true, $14, $15)
      RETURNING *`,
     [crypto.randomUUID(), userId, position.tradingsymbol, position.instrumentToken, position.instrumentType, position.exchange,
-     position.strike, position.optionType, position.expiry, position.side === 'BUY' ? 'SELL' : 'BUY', position.quantity,
+     position.strike, position.optionType, position.expiry, oppositeSide(position.side), position.quantity,
      fillPrice, position.id, source, position.horizon],
   );
   return toOrder(row);
@@ -1666,7 +1668,7 @@ export async function recordClosingOrder(userId, position, fillPrice, source) {
  * @returns {Promise<{ instrumentToken: number }[]>}
  */
 export async function getWaitingAutoOrders(userId) {
-  const result = await rows("SELECT instrument_token FROM orders WHERE user_id = $1 AND status = 'open' AND source = 'auto'", [userId]);
+  const result = await rows(`SELECT instrument_token FROM orders WHERE user_id = $1 AND status = ${sqlEnum(OrderStatus.Open)} AND source = ${sqlEnum(TradeSource.Auto)}`, [userId]);
   return result.map((row) => ({ instrumentToken: Number(row.instrument_token) }));
 }
 
@@ -1689,7 +1691,7 @@ export async function getOrders(userId, { from, to }) {
  * Pending tab). Served by orders_user_open_idx.
  */
 export async function getUserOpenOrders(userId) {
-  const result = await rows("SELECT * FROM orders WHERE user_id = $1 AND status = 'open' ORDER BY created_at DESC", [userId]);
+  const result = await rows(`SELECT * FROM orders WHERE user_id = $1 AND status = ${sqlEnum(OrderStatus.Open)} ORDER BY created_at DESC`, [userId]);
   return result.map(toOrder);
 }
 
@@ -1698,7 +1700,7 @@ export async function getUserOpenOrders(userId) {
  * first, for the order book. Served by orders_open_idx.
  */
 export async function getOpenOrders(since) {
-  const result = await rows("SELECT * FROM orders WHERE status = 'open' AND created_at >= $1 ORDER BY created_at", [since]);
+  const result = await rows(`SELECT * FROM orders WHERE status = ${sqlEnum(OrderStatus.Open)} AND created_at >= $1 ORDER BY created_at`, [since]);
   return result.map(toOrder);
 }
 
@@ -1709,8 +1711,8 @@ export async function getOpenOrders(since) {
  */
 export async function claimOrderFill(id, fillPrice) {
   const row = await firstRow(
-    `UPDATE orders SET status = 'filled', fill_price = $2, updated_at = now()
-     WHERE id = $1 AND status = 'open'
+    `UPDATE orders SET status = ${sqlEnum(OrderStatus.Filled)}, fill_price = $2, updated_at = now()
+     WHERE id = $1 AND status = ${sqlEnum(OrderStatus.Open)}
      RETURNING *`,
     [id, fillPrice],
   );
@@ -1730,8 +1732,8 @@ export async function setOrderPosition(id, positionId) {
  */
 export async function cancelUnfilledOrder(id, reason) {
   const row = await firstRow(
-    `UPDATE orders SET status = 'cancelled', status_reason = $2, fill_price = NULL, updated_at = now()
-     WHERE id = $1 AND status = 'filled' AND position_id IS NULL
+    `UPDATE orders SET status = ${sqlEnum(OrderStatus.Cancelled)}, status_reason = $2, fill_price = NULL, updated_at = now()
+     WHERE id = $1 AND status = ${sqlEnum(OrderStatus.Filled)} AND position_id IS NULL
      RETURNING *`,
     [id, reason],
   );
@@ -1744,8 +1746,8 @@ export async function cancelUnfilledOrder(id, reason) {
  */
 export async function cancelOrder(userId, id, reason) {
   const row = await firstRow(
-    `UPDATE orders SET status = 'cancelled', status_reason = $3, updated_at = now()
-     WHERE id = $1 AND user_id = $2 AND status = 'open'
+    `UPDATE orders SET status = ${sqlEnum(OrderStatus.Cancelled)}, status_reason = $3, updated_at = now()
+     WHERE id = $1 AND user_id = $2 AND status = ${sqlEnum(OrderStatus.Open)}
      RETURNING *`,
     [id, userId, reason],
   );
@@ -1759,8 +1761,8 @@ export async function cancelOrder(userId, id, reason) {
  */
 export async function cancelOpenOrdersPlacedBefore(before, reason) {
   const result = await rows(
-    `UPDATE orders SET status = 'cancelled', status_reason = $2, updated_at = now()
-     WHERE status = 'open' AND created_at < $1
+    `UPDATE orders SET status = ${sqlEnum(OrderStatus.Cancelled)}, status_reason = $2, updated_at = now()
+     WHERE status = ${sqlEnum(OrderStatus.Open)} AND created_at < $1
      RETURNING *`,
     [before, reason],
   );
@@ -2151,7 +2153,7 @@ export async function evaluateTradeSetupSignalOutcomes(scrip = null) {
       const spot = Number(spotRow?.spot);
       if (spot > 0) {
         const strike = Number(signal.strike);
-        const intrinsic = signal.option_type === 'CE' ? Math.max(spot - strike, 0) : Math.max(strike - spot, 0);
+        const intrinsic = signal.option_type === OptionType.CE ? Math.max(spot - strike, 0) : Math.max(strike - spot, 0);
         path.push({ date: signal.expiry, price: intrinsic });
         settled = true;
       }
@@ -2163,7 +2165,7 @@ export async function evaluateTradeSetupSignalOutcomes(scrip = null) {
     const entry = Number(signal.entry_premium);
     const returns = path.map(({ price }) => {
       const raw = ((price - entry) / entry) * 100;
-      return signal.action === 'SELL' ? -raw : raw;
+      return signal.action === Side.SELL ? -raw : raw;
     });
     const last = path[path.length - 1];
     const returnPct = returns[returns.length - 1];
@@ -2173,7 +2175,7 @@ export async function evaluateTradeSetupSignalOutcomes(scrip = null) {
        SET outcome_price = $1, outcome_date = $2, outcome_return = $3, outcome_status = $4,
            max_favorable_return = $5, max_adverse_return = $6, outcome_final = $7
        WHERE id = $8`,
-      [last.price, last.date, returnPct, final ? (returnPct > 0 ? 'Profit' : 'Loss') : 'Open',
+      [last.price, last.date, returnPct, final ? (returnPct > 0 ? SignalOutcome.Profit : SignalOutcome.Loss) : SignalOutcome.Open,
         Math.max(...returns), Math.min(...returns), final, signal.id],
     );
     updated += 1;
@@ -2189,8 +2191,8 @@ export async function getOptionsForAtm(scripName, atmStrike, stepSize = 50, rang
     `SELECT instrument_token, tradingsymbol, strike, instrument_type, expiry
      FROM instruments
      WHERE name = $1
-       AND exchange = 'NFO'
-       AND instrument_type IN ('CE', 'PE')
+       AND exchange = ${sqlEnum(Exchange.NFO)}
+       AND instrument_type IN (${sqlEnumList(OptionType.CE, OptionType.PE)})
        AND strike >= $2 AND strike <= $3
      ORDER BY expiry, strike, instrument_type`,
     [scripName, lowerStrike, upperStrike],
@@ -2223,8 +2225,8 @@ export async function getOptionsForStrikes(scripName, strikes, { targetMonth = '
   let sql = `SELECT instrument_token, tradingsymbol, strike, instrument_type, expiry
      FROM instruments
      WHERE name = $1
-       AND exchange = 'NFO'
-       AND instrument_type IN ('CE', 'PE')
+       AND exchange = ${sqlEnum(Exchange.NFO)}
+       AND instrument_type IN (${sqlEnumList(OptionType.CE, OptionType.PE)})
        AND strike = ANY($2::double precision[])`;
   const params = [scripName, uniqueStrikes];
 
@@ -2373,12 +2375,12 @@ export async function getAdminKiteSessions() {
 export async function claimScheduledJobRun(job, runDate) {
   const row = await firstRow(
     `INSERT INTO scheduled_job_runs (job, run_date, status)
-     VALUES ($1, $2, 'running')
+     VALUES ($1, $2, ${sqlEnum(JobRunStatus.Running)})
      ON CONFLICT (job, run_date) DO UPDATE
-       SET status = 'running', detail = '{}'::jsonb, finished_at = NULL,
+       SET status = ${sqlEnum(JobRunStatus.Running)}, detail = '{}'::jsonb, finished_at = NULL,
            started_at = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
-     WHERE scheduled_job_runs.status = 'failed'
-        OR (scheduled_job_runs.status = 'running'
+     WHERE scheduled_job_runs.status = ${sqlEnum(JobRunStatus.Failed)}
+        OR (scheduled_job_runs.status = ${sqlEnum(JobRunStatus.Running)}
             AND scheduled_job_runs.started_at < to_char(now() - interval '2 hours', 'YYYY-MM-DD HH24:MI:SS'))
      RETURNING job`,
     [job, runDate],
@@ -2386,7 +2388,7 @@ export async function claimScheduledJobRun(job, runDate) {
   return Boolean(row);
 }
 
-/** Status of a job's run for a date ('running' | 'done' | 'failed'), or null if it hasn't run. */
+/** Status of a job's run for a date (JobRunStatus in shared/appEnums.js), or null if it hasn't run. */
 export async function getScheduledJobStatus(job, runDate) {
   const row = await firstRow('SELECT status FROM scheduled_job_runs WHERE job = $1 AND run_date = $2', [job, runDate]);
   return row?.status ?? null;
@@ -2456,8 +2458,8 @@ export async function getOiHistoryExpiryMonths(scrip, minExpiryDate, limit = 3) 
     `SELECT DISTINCT substr(expiry, 1, 7) AS month
      FROM instruments
      WHERE name = $1
-       AND exchange = 'NFO'
-       AND instrument_type IN ('CE', 'PE')
+       AND exchange = ${sqlEnum(Exchange.NFO)}
+       AND instrument_type IN (${sqlEnumList(OptionType.CE, OptionType.PE)})
        AND expiry IS NOT NULL
        AND expiry >= $2
      ORDER BY month
@@ -2504,7 +2506,7 @@ export async function deleteOiHistoryByDatesForExpiryMonth(scrip, expiryMonth, d
 
 export async function getFnoSymbols() {
   const result = await rows(
-    "SELECT DISTINCT name FROM instruments WHERE exchange = 'NFO' AND instrument_type IN ('CE', 'PE') ORDER BY name",
+    `SELECT DISTINCT name FROM instruments WHERE exchange = ${sqlEnum(Exchange.NFO)} AND instrument_type IN (${sqlEnumList(OptionType.CE, OptionType.PE)}) ORDER BY name`,
   );
   return result.map((r) => r.name);
 }
@@ -2519,7 +2521,7 @@ async function queryUnderlyings(name = null) {
   const result = await rows(
     `WITH fno AS (
        SELECT DISTINCT name FROM instruments
-       WHERE exchange = 'NFO' AND instrument_type IN ('CE', 'PE') AND ($1::text IS NULL OR name = $1)
+       WHERE exchange = ${sqlEnum(Exchange.NFO)} AND instrument_type IN (${sqlEnumList(OptionType.CE, OptionType.PE)}) AND ($1::text IS NULL OR name = $1)
      )
      SELECT DISTINCT ON (f.name)
        f.name,
@@ -2531,7 +2533,7 @@ async function queryUnderlyings(name = null) {
      -- Two joins rather than one with OR: the OR forces a nested loop (~0.6 s against ~30 ms).
      LEFT JOIN instruments i ON i.fno_name = f.name
      LEFT JOIN instruments e
-       ON e.fno_name IS NULL AND e.exchange = 'NSE' AND e.instrument_type = 'EQ' AND e.tradingsymbol = f.name
+       ON e.fno_name IS NULL AND e.exchange = ${sqlEnum(Exchange.NSE)} AND e.instrument_type = ${sqlEnum(InstrumentType.EQ)} AND e.tradingsymbol = f.name
      CROSS JOIN LATERAL (SELECT (CASE WHEN i.instrument_token IS NOT NULL THEN i ELSE e END).*) p
      ORDER BY f.name`,
     [name],
@@ -2588,7 +2590,7 @@ export async function setAlwaysSnapshot(name, alwaysSnapshot) {
 export async function getStrikeStepSize(scripName) {
   const result = await rows(
     `SELECT DISTINCT strike FROM instruments
-     WHERE name = $1 AND exchange = 'NFO' AND instrument_type = 'CE' AND strike > 0
+     WHERE name = $1 AND exchange = ${sqlEnum(Exchange.NFO)} AND instrument_type = ${sqlEnum(OptionType.CE)} AND strike > 0
      ORDER BY strike LIMIT 20`,
     [scripName],
   );
@@ -2615,7 +2617,7 @@ export async function getStrikeStepSize(scripName) {
 export async function getCashStock(instrumentToken) {
   const row = await firstRow(
     `SELECT instrument_token, tradingsymbol FROM instruments
-     WHERE instrument_token = $1 AND exchange IN ('NSE', 'BSE') AND instrument_type = 'EQ' AND tradingsymbol NOT LIKE '% %'`,
+     WHERE instrument_token = $1 AND exchange IN (${sqlEnumList(Exchange.NSE, Exchange.BSE)}) AND instrument_type = ${sqlEnum(InstrumentType.EQ)} AND tradingsymbol NOT LIKE '% %'`,
     [instrumentToken],
   );
   return row ? { instrumentToken: Number(row.instrument_token), tradingsymbol: row.tradingsymbol } : null;
@@ -2626,7 +2628,7 @@ export async function getWatchlistStocks() {
   const result = await rows(
     `SELECT DISTINCT ON (instrument_token) instrument_token, tradingsymbol
      FROM watchlist_items
-     WHERE exchange IN ('NSE', 'BSE') AND tradingsymbol NOT LIKE '% %'
+     WHERE exchange IN (${sqlEnumList(Exchange.NSE, Exchange.BSE)}) AND tradingsymbol NOT LIKE '% %'
      ORDER BY instrument_token`,
   );
   return result.map((row) => ({ instrumentToken: Number(row.instrument_token), tradingsymbol: row.tradingsymbol }));
@@ -2718,7 +2720,7 @@ export async function insertStockSetupSignals(signals) {
       'ON CONFLICT (instrument_token, signal_date, setup_type) DO NOTHING',
       signals.map((s) => [
         s.instrumentToken, s.tradingsymbol, s.signalDate, s.setupType, s.direction, s.entry, s.stop, s.target,
-        s.outcome?.status ?? 'open', s.outcome?.resolvedDate ?? null, s.outcome?.sessionsHeld ?? 0,
+        s.outcome?.status ?? SetupOutcomeStatus.Open, s.outcome?.resolvedDate ?? null, s.outcome?.sessionsHeld ?? 0,
         s.outcome?.maxFavorablePct ?? null, s.outcome?.maxAdversePct ?? null, Date.now(),
       ]),
     );
@@ -2728,7 +2730,7 @@ export async function insertStockSetupSignals(signals) {
 export async function getOpenStockSetupSignals(instrumentToken) {
   const result = await rows(
     `SELECT id, signal_date, setup_type, direction, entry, stop, target
-     FROM stock_setup_signals WHERE instrument_token = $1 AND status = 'open' ORDER BY signal_date`,
+     FROM stock_setup_signals WHERE instrument_token = $1 AND status = ${sqlEnum(SetupOutcomeStatus.Open)} ORDER BY signal_date`,
     [instrumentToken],
   );
   return result.map((row) => ({
@@ -2751,12 +2753,12 @@ export async function getStockSetupStats(instrumentToken) {
   const result = await rows(
     `SELECT setup_type, direction,
             COUNT(*) AS total,
-            COUNT(*) FILTER (WHERE status = 'open') AS open,
-            COUNT(*) FILTER (WHERE status = 'target') AS target,
-            COUNT(*) FILTER (WHERE status = 'stop') AS stop,
-            COUNT(*) FILTER (WHERE status = 'expired') AS expired,
-            AVG(max_favorable_pct) FILTER (WHERE status <> 'open') AS avg_favorable_pct,
-            AVG(max_adverse_pct) FILTER (WHERE status <> 'open') AS avg_adverse_pct
+            COUNT(*) FILTER (WHERE status = ${sqlEnum(SetupOutcomeStatus.Open)}) AS open,
+            COUNT(*) FILTER (WHERE status = ${sqlEnum(SetupOutcomeStatus.Target)}) AS target,
+            COUNT(*) FILTER (WHERE status = ${sqlEnum(SetupOutcomeStatus.Stop)}) AS stop,
+            COUNT(*) FILTER (WHERE status = ${sqlEnum(SetupOutcomeStatus.Expired)}) AS expired,
+            AVG(max_favorable_pct) FILTER (WHERE status <> ${sqlEnum(SetupOutcomeStatus.Open)}) AS avg_favorable_pct,
+            AVG(max_adverse_pct) FILTER (WHERE status <> ${sqlEnum(SetupOutcomeStatus.Open)}) AS avg_adverse_pct
      FROM stock_setup_signals
      WHERE instrument_token = $1
      GROUP BY setup_type, direction

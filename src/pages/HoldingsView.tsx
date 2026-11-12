@@ -9,6 +9,7 @@ import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import { heldQuantity } from '@/services/holdings';
 import { useHoldings } from '@/hooks/useHoldings';
 import { formatAmount, formatSignedAmount } from '@/utils/formatAmount';
+import { MarketStatus } from '../../shared/tradeEnums.js';
 import '@/styles/holdings.css';
 
 type AllocationView = 'bar' | 'treemap';
@@ -62,9 +63,9 @@ const HoldingsView: React.FC = () => {
       {/* Sub-header row: market status + privacy toggle */}
       <div className="holdings-subheader">
         <div className="holdings-status-row">
-          {marketStatus === 'live'     && <span className="live-badge">● LIVE</span>}
-          {marketStatus === 'pre-open' && <span className="live-badge live-badge--preopen">● PRE-OPEN</span>}
-          {marketStatus === 'closed'   && <span className="live-badge live-badge--closed">● CLOSED</span>}
+          {marketStatus === MarketStatus.Live && <span className="live-badge">● LIVE</span>}
+          {marketStatus === MarketStatus.PreOpen && <span className="live-badge live-badge--preopen">● PRE-OPEN</span>}
+          {marketStatus === MarketStatus.Closed && <span className="live-badge live-badge--closed">● CLOSED</span>}
           <span className="holdings-count">{holdings.length > 0 ? `${holdings.length} holdings` : ''}</span>
         </div>
         <button

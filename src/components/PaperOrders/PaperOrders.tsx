@@ -19,6 +19,7 @@ import { cancelOrder, fetchOpenOrders, type PaperOrder } from '@/services/orders
 import { tradeErrorMessage } from '@/services/positions';
 import { isAbortError } from '@/services/apiClient';
 import { istTimeLabel, isMarketLive } from '@/utils/marketStatus';
+import { OrderStatus } from '../../../shared/tradeEnums.js';
 import '@/styles/positions.css';
 
 /** How often open orders are reloaded in market hours, to show fills. */
@@ -26,8 +27,8 @@ const ORDER_REFRESH_MS = 5000;
 
 /** An order's status as a badge: open (waiting), filled at its price, or why it was cancelled. */
 export function orderStatus(order: PaperOrder): { tone: BadgeTone; text: string } {
-  if (order.status === 'open') return { tone: 'accent', text: 'Open' };
-  if (order.status === 'filled') return { tone: 'positive', text: `Filled @ ${(order.fillPrice ?? order.limitPrice ?? 0).toFixed(2)}` };
+  if (order.status === OrderStatus.Open) return { tone: 'accent', text: 'Open' };
+  if (order.status === OrderStatus.Filled) return { tone: 'positive', text: `Filled @ ${(order.fillPrice ?? order.limitPrice ?? 0).toFixed(2)}` };
   return { tone: 'neutral', text: order.statusReason ?? 'Cancelled' };
 }
 
@@ -40,7 +41,7 @@ export function settledSince(openBefore: ReadonlySet<string>, openNow: PaperOrde
   return [...openBefore].some((id) => !stillOpen.has(id));
 }
 
-const openIds = (orders: PaperOrder[]) => new Set(orders.filter((o) => o.status === 'open').map((o) => o.id));
+const openIds = (orders: PaperOrder[]) => new Set(orders.filter((o) => o.status === OrderStatus.Open).map((o) => o.id));
 
 export const PaperOrdersTable: React.FC<{ orders: PaperOrder[]; onCancel: (id: string) => void }> = ({ orders, onCancel }) => (
   <div className="positions-table-scroll">
@@ -66,9 +67,9 @@ export const PaperOrdersTable: React.FC<{ orders: PaperOrder[]; onCancel: (id: s
               <td><span className={`positions-table__side positions-table__side--${order.side.toLowerCase()}`}>{order.side}</span></td>
               <td>{order.quantity}</td>
               <td>{order.limitPrice === null ? 'Market' : order.limitPrice.toFixed(2)}</td>
-              <td><Badge tone={status.tone} dot={order.status === 'open'}>{status.text}</Badge></td>
+              <td><Badge tone={status.tone} dot={order.status === OrderStatus.Open}>{status.text}</Badge></td>
               <td>
-                {order.status === 'open' && (
+                {order.status === OrderStatus.Open && (
                   <button type="button" className="positions-table__exit" onClick={() => onCancel(order.id)} title="Cancel order">
                     CANCEL
                   </button>
@@ -83,7 +84,7 @@ export const PaperOrdersTable: React.FC<{ orders: PaperOrder[]; onCancel: (id: s
 );
 
 /** The orders still waiting to fill. */
-export const pendingOrders = (orders: PaperOrder[]) => orders.filter((o) => o.status === 'open');
+export const pendingOrders = (orders: PaperOrder[]) => orders.filter((o) => o.status === OrderStatus.Open);
 
 /** How many orders are still waiting to fill (the Pending tab's count). */
 export const pendingCount = (orders: PaperOrder[]) => pendingOrders(orders).length;
@@ -122,7 +123,7 @@ export function usePaperOrders(onFilled: () => void): PaperOrderBook {
     return () => controller.abort();
   }, [load]);
 
-  const hasOpen = orders.some((o) => o.status === 'open');
+  const hasOpen = orders.some((o) => o.status === OrderStatus.Open);
   useEffect(() => {
     if (!hasOpen || !isMarketLive()) return;
     const controller = new AbortController();

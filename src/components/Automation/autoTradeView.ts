@@ -12,38 +12,40 @@ import type { BadgeTone } from '@/components/Badge/Badge';
 import type { AutoTrade, AutoTradeEvent } from '@/services/automation';
 import type { StrategyInfo } from '@/services/strategies';
 import { formatAmount } from '@/utils/formatAmount';
+import { LifecycleStage, Side } from '../../../shared/tradeEnums.js';
 
 type Stage = AutoTrade['stage'];
 
 /** Each stage's badge tone: in-progress stages in the accent, a rejection red, a finished trade grey. */
 const STAGE_TONES: Record<Stage, BadgeTone> = {
-  selected: 'neutral',
-  validated: 'accent',
-  executed: 'accent',
-  rejected: 'negative',
-  closed: 'neutral',
+  [LifecycleStage.Selected]: 'neutral',
+  [LifecycleStage.Validated]: 'accent',
+  [LifecycleStage.Executed]: 'accent',
+  [LifecycleStage.Rejected]: 'negative',
+  [LifecycleStage.Closed]: 'neutral',
 };
 
 export const stageTone = (stage: Stage): BadgeTone => STAGE_TONES[stage];
 
 /** A lifecycle step's tone in the timeline: every step green, a rejection red. */
-export const stepTone = (stage: Stage): BadgeTone => (stage === 'rejected' ? 'negative' : 'positive');
+export const stepTone = (stage: Stage): BadgeTone => (stage === LifecycleStage.Rejected ? 'negative' : 'positive');
 
 /** An open position (executed, not yet closed) shows a live dot. */
-export const stageIsLive = (stage: Stage): boolean => stage === 'executed';
+export const stageIsLive = (stage: Stage): boolean => stage === LifecycleStage.Executed;
 
 export const stageLabel = (stage: string): string => LIFECYCLE_STAGES.find((s) => s.id === stage)?.label ?? stage;
 
-/** How long the trade is meant to be held, e.g. "Intraday" (shared/horizons.js). */
-export { horizonLabel } from '../../../shared/horizons.js';
+/** How long the trade is meant to be held, e.g. "Intraday" (shared/tradeEnums.js). */
+export { horizonLabel } from '../../../shared/tradeEnums.js';
 
-export const sideTone = (side: AutoTrade['side']): BadgeTone => (side === 'BUY' ? 'positive' : 'negative');
+export const sideTone = (side: AutoTrade['side']): BadgeTone => (side === Side.BUY ? 'positive' : 'negative');
 
-export const sideLabel = (side: AutoTrade['side']): string => (side === 'BUY' ? 'Buy' : 'Sell');
+/** A side's label, e.g. "Buy" (shared/tradeEnums.js). */
+export { sideLabel } from '../../../shared/tradeEnums.js';
 
 /** The trade's own P&L once closed (its entry to its exit), after its charges; null before that. */
 export function closedPnl(trade: AutoTrade): number | null {
-  if (trade.stage !== 'closed' || trade.entryPrice == null || trade.exitPrice == null) return null;
+  if (trade.stage !== LifecycleStage.Closed || trade.entryPrice == null || trade.exitPrice == null) return null;
   return paperPnl({ side: trade.side, quantity: trade.quantity, entryPrice: trade.entryPrice }, trade.exitPrice) - (trade.charges ?? 0);
 }
 
@@ -89,15 +91,15 @@ export function eventSummary(event: AutoTradeEvent, strategies: StrategyInfo[]):
   const detail = detailOf(event);
   const joined = (...parts: (string | null)[]) => parts.filter(Boolean).join(' · ');
   switch (event.stage) {
-    case 'selected':
+    case LifecycleStage.Selected:
       return joined(strategyLabel(detail.strategyId, strategies), text(detail.reason)) || 'Selected';
-    case 'validated':
+    case LifecycleStage.Validated:
       return 'Passed the General settings and every active entry rule';
-    case 'rejected':
+    case LifecycleStage.Rejected:
       return text(detail.reason) ?? 'Rejected';
-    case 'executed':
+    case LifecycleStage.Executed:
       return amount(detail.entryPrice) ? `Opened a paper position at ${amount(detail.entryPrice)}` : 'Opened a paper position';
-    case 'closed':
+    case LifecycleStage.Closed:
       // An exit rule's reason already names it ("Stop-loss hit: …").
       return joined(amount(detail.exitPrice) ? `Closed at ${amount(detail.exitPrice)}` : 'Closed', text(detail.reason));
     default:

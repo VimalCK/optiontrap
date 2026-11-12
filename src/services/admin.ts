@@ -1,24 +1,23 @@
-import { FeedbackType } from './feedback';
 import { apiClient } from './apiClient';
-
-export type FeedbackStatus = 'open' | 'reviewed' | 'resolved';
+import type { FeedbackStatusId, FeedbackTypeId } from '../../shared/appEnums.js';
+import { type HealthStatusId } from '../../shared/appEnums.js';
 
 export interface FeedbackItem {
   id: string;
   userId: string;
   userName: string | null;
-  type: FeedbackType;
+  type: FeedbackTypeId;
   message: string;
   pageUrl: string | null;
   userAgent: string | null;
-  status: FeedbackStatus;
+  status: FeedbackStatusId;
   createdAt: string;
   updatedAt: string;
 }
 
 export interface FeedbackFilters {
-  type?: FeedbackType | '';
-  status?: FeedbackStatus | '';
+  type?: FeedbackTypeId | '';
+  status?: FeedbackStatusId | '';
 }
 
 export async function getFeedback(filters: FeedbackFilters = {}): Promise<FeedbackItem[]> {
@@ -61,14 +60,14 @@ export async function updateUserSubscription(
   await apiClient.post(`/api/admin/users/${encodeURIComponent(userId)}/subscription`, { action, planId });
 }
 
-/** One service's health check (IETF health check format): pass / warn / fail, why, and when it was observed (ISO, null when not yet). */
+/** One service's health check (IETF health check format): Pass / Warn / Fail, why, and when it was observed (ISO, null when not yet). */
 export interface HealthCheck {
-  status: 'pass' | 'warn' | 'fail';
+  status: HealthStatusId;
   output: string;
   time: string | null;
 }
 
-export interface HealthStatus {
+export interface HealthReport {
   db: { connected: boolean };
   kite: { connected: boolean; userId: string | null; userName: string | null; loginTime: string | null };
   lastOiUpdate: number | null;
@@ -79,10 +78,10 @@ export interface HealthStatus {
   timestamp: number;
 }
 
-export async function getHealth(): Promise<HealthStatus> {
-  return apiClient.get<HealthStatus>('/api/admin/health');
+export async function getHealth(): Promise<HealthReport> {
+  return apiClient.get<HealthReport>('/api/admin/health');
 }
 
-export async function updateFeedbackStatus(id: string, status: FeedbackStatus): Promise<void> {
+export async function updateFeedbackStatus(id: string, status: FeedbackStatusId): Promise<void> {
   await apiClient.patch(`/api/admin/feedback/${id}`, { status });
 }

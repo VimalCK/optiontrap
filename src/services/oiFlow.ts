@@ -24,6 +24,7 @@
 
 import type { OptionChainRow } from './optionChain';
 import { addDays, marketCloseTime, marketDate } from '../../shared/marketTime.js';
+import { OptionType, type OptionTypeId } from '../../shared/tradeEnums.js';
 
 export const RISK_FREE_RATE = 0.065;
 
@@ -54,7 +55,7 @@ export type FlowLabel =
 
 export interface FlowInput {
   token: number;
-  optionType: 'CE' | 'PE';
+  optionType: OptionTypeId;
   strike: number;
   /** YYYY-MM-DD */
   expiry: string;
@@ -121,7 +122,7 @@ const MIN_PARITY_STRIKES = 3;
 const MAX_FORWARD_GAP = 0.03;
 
 export interface ParityLeg {
-  optionType: 'CE' | 'PE';
+  optionType: OptionTypeId;
   strike: number;
   price: number;
   volume?: number;
@@ -181,25 +182,25 @@ export function d1(spot: number, strike: number, years: number, vol: number, rat
   return (Math.log(spot / strike) + (rate + (vol * vol) / 2) * years) / (vol * Math.sqrt(years));
 }
 
-export function bsPrice(type: 'CE' | 'PE', spot: number, strike: number, years: number, vol: number, rate = RISK_FREE_RATE): number {
+export function bsPrice(type: OptionTypeId, spot: number, strike: number, years: number, vol: number, rate = RISK_FREE_RATE): number {
   const a = d1(spot, strike, years, vol, rate);
   const b = a - vol * Math.sqrt(years);
   const discounted = strike * Math.exp(-rate * years);
-  return type === 'CE'
+  return type === OptionType.CE
     ? spot * normCdf(a) - discounted * normCdf(b)
     : discounted * normCdf(-b) - spot * normCdf(-a);
 }
 
-export function bsDelta(type: 'CE' | 'PE', spot: number, strike: number, years: number, vol: number, rate = RISK_FREE_RATE): number {
+export function bsDelta(type: OptionTypeId, spot: number, strike: number, years: number, vol: number, rate = RISK_FREE_RATE): number {
   const n = normCdf(d1(spot, strike, years, vol, rate));
-  return type === 'CE' ? n : n - 1;
+  return type === OptionType.CE ? n : n - 1;
 }
 
 /** IV that reproduces the premium, or null when the premium has no time value or inputs are unusable. */
-export function impliedVol(type: 'CE' | 'PE', price: number, spot: number, strike: number, years: number, rate = RISK_FREE_RATE): number | null {
+export function impliedVol(type: OptionTypeId, price: number, spot: number, strike: number, years: number, rate = RISK_FREE_RATE): number | null {
   if (!(price > 0) || !(spot > 0) || !(strike > 0) || !(years >= MIN_YEARS)) return null;
   const discounted = strike * Math.exp(-rate * years);
-  const intrinsic = type === 'CE' ? Math.max(0, spot - discounted) : Math.max(0, discounted - spot);
+  const intrinsic = type === OptionType.CE ? Math.max(0, spot - discounted) : Math.max(0, discounted - spot);
   if (price <= intrinsic + 1e-6) return null;
 
   let lo = 0.005;

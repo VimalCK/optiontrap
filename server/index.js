@@ -125,6 +125,8 @@ import { resolveSessionSecret } from './sessionSecret.js';
 import { createConcurrencyLimit } from './concurrencyLimit.js';
 import { allowOnlyKnownKiteCalls } from './kiteProxyAllowlist.js';
 import { MAX_CLIENT_MESSAGE_BYTES, MAX_CONNECTIONS_PER_USER } from './wsLimits.js';
+import { Exchange, InstrumentType, OptionType, OrderStatus, Side, isOptionType, isSide } from '../shared/tradeEnums.js';
+import { FEEDBACK_STATUSES, PriceAlertStatus, SignalOutcome, SubscriptionProvider, isFeedbackStatus, isFeedbackType } from '../shared/appEnums.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -527,7 +529,7 @@ app.post('/api/subscriptions', requireAuth, async (req, res) => {
   const { planId = 'one_month' } = req.body || {};
 
   try {
-    const subscription = await activateSubscription(req.session.kiteSession.userId, planId, 'internal');
+    const subscription = await activateSubscription(req.session.kiteSession.userId, planId, SubscriptionProvider.Internal);
     res.status(201).json({ status: 'ok', data: subscription });
   } catch (err) {
     sendSubscriptionFailure(res, err, '[Subscription] activate error');
@@ -536,9 +538,8 @@ app.post('/api/subscriptions', requireAuth, async (req, res) => {
 
 app.post('/api/feedback', requireAuth, async (req, res) => {
   const { type, message, pageUrl, userAgent } = req.body || {};
-  const allowedTypes = new Set(['bug', 'feature', 'general', 'subscription']);
 
-  if (!allowedTypes.has(type)) {
+  if (!isFeedbackType(type)) {
     return res.status(400).json({ status: 'error', message: 'Valid feedback type is required' });
   }
 
@@ -580,17 +581,14 @@ app.get('/api/admin/scheduled-jobs/nightly', requireAuth, requireAdmin, async (r
   }
 });
 
-const FEEDBACK_STATUSES = new Set(['open', 'reviewed', 'resolved']);
-const FEEDBACK_TYPES = new Set(['bug', 'feature', 'general', 'subscription']);
-
 app.get('/api/admin/feedback', requireAuth, requireAdmin, async (req, res) => {
   const { type, status } = req.query;
 
-  if (type && !FEEDBACK_TYPES.has(type)) {
+  if (type && !isFeedbackType(type)) {
     return res.status(400).json({ status: 'error', message: 'Invalid feedback type filter' });
   }
 
-  if (status && !FEEDBACK_STATUSES.has(status)) {
+  if (status && !isFeedbackStatus(status)) {
     return res.status(400).json({ status: 'error', message: 'Invalid feedback status filter' });
   }
 
@@ -606,10 +604,10 @@ app.get('/api/admin/feedback', requireAuth, requireAdmin, async (req, res) => {
 app.patch('/api/admin/feedback/:id', requireAuth, requireAdmin, async (req, res) => {
   const { status } = req.body || {};
 
-  if (!FEEDBACK_STATUSES.has(status)) {
+  if (!isFeedbackStatus(status)) {
     return res.status(400).json({
       status: 'error',
-      message: 'status must be one of: open, reviewed, resolved',
+      message: `status must be one of: ${FEEDBACK_STATUSES.join(', ')}`,
     });
   }
 
@@ -774,7 +772,7 @@ app.post('/api/watchlists/:id/items', requireAuth, requireSubscription, async (r
   const item = await addWatchlistItem(req.params.id, userId, {
     instrumentToken: Number(instrumentToken),
     tradingsymbol,
-    exchange: exchange || 'NSE',
+    exchange: exchange || Exchange.NSE,
   });
 
   if (!item) {
@@ -870,13 +868,14 @@ app.post('/api/price-alerts', requireAuth, requireSubscription, async (req, res)
 });
 
 // Change an alert's status:
-//   { status: 'triggered', price }  the browser saw a tick cross the alert's price
-//   { status: 'active' }            re-arm a triggered alert
+//   { status: 'Triggered', price }  the browser saw a tick cross the alert's price
+//   { status: 'Active' }            re-arm a triggered alert
+// (PriceAlertStatus in shared/appEnums.js)
 app.patch('/api/price-alerts/:id', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { status } = req.body || {};
 
-  if (status === 'triggered') {
+  if (status === PriceAlertStatus.Triggered) {
     const price = Number(req.body.price);
     if (!Number.isFinite(price) || price <= 0) {
       return res.status(400).json({ status: 'error', message: 'price must be above 0' });
@@ -886,13 +885,13 @@ app.patch('/api/price-alerts/:id', requireAuth, requireSubscription, async (req,
     return res.json({ status: 'ok', data: alert });
   }
 
-  if (status === 'active') {
+  if (status === PriceAlertStatus.Active) {
     const alert = await resetPriceAlert(req.params.id, userId);
     if (!alert) return res.status(404).json({ status: 'error', message: 'Alert not found' });
     return res.json({ status: 'ok', data: alert });
   }
 
-  res.status(400).json({ status: 'error', message: "status must be 'triggered' or 'active'" });
+  res.status(400).json({ status: 'error', message: `status must be '${PriceAlertStatus.Triggered}' or '${PriceAlertStatus.Active}'` });
 });
 
 app.delete('/api/price-alerts/:id', requireAuth, requireSubscription, async (req, res) => {
@@ -940,12 +939,12 @@ const sendOrderResult = (res, result, okStatus = 200) => {
     .json({ status: 'error', code: result.code, message: result.message });
 };
 
-// The user's orders, newest first: ?status=open for every open one (whenever it
+// The user's orders, newest first: ?status=Open for every open one (whenever it
 // was placed), else those placed in ?from=…&to=… (market days, both required).
 app.get('/api/orders', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   if (req.query.status !== undefined) {
-    if (req.query.status !== 'open') return res.status(400).json({ status: 'error', message: "status must be 'open'" });
+    if (req.query.status !== OrderStatus.Open) return res.status(400).json({ status: 'error', message: `status must be '${OrderStatus.Open}'` });
     return res.json({ status: 'ok', data: await getUserOpenOrders(userId) });
   }
   const range = parseRange(req.query.from, req.query.to, { required: true });
@@ -973,9 +972,9 @@ app.post('/api/orders', requireAuth, requireSubscription, async (req, res) => {
   }
 });
 
-// Cancel an open order: the only change an order takes, { status: 'cancelled' }.
+// Cancel an open order: the only change an order takes, { status: 'Cancelled' }.
 app.patch('/api/orders/:id', requireAuth, requireSubscription, async (req, res) => {
-  if (req.body?.status !== 'cancelled') return res.status(400).json({ status: 'error', message: "status must be 'cancelled'" });
+  if (req.body?.status !== OrderStatus.Cancelled) return res.status(400).json({ status: 'error', message: `status must be '${OrderStatus.Cancelled}'` });
   sendOrderResult(res, await tradeEngine.services.orders.cancel(req.session.kiteSession.userId, req.params.id));
 });
 
@@ -1116,8 +1115,8 @@ app.get('/api/oi-history/expiry-months', requireAuth, requireSubscription, async
       instruments
         .filter((inst) =>
           inst.name === scrip &&
-          inst.exchange === 'NFO' &&
-          (inst.instrumentType === 'CE' || inst.instrumentType === 'PE') &&
+          inst.exchange === Exchange.NFO &&
+          isOptionType(inst.instrumentType) &&
           inst.expiry &&
           inst.expiry >= minExpiryDate
         )
@@ -1255,7 +1254,7 @@ app.get('/api/stocks/:token/setups', requireAuth, requireSubscription, async (re
 app.post('/api/oi-history/signals', requireAuth, requireSubscription, async (req, res) => {
   try {
     const { scrip, signalDate, expiry, strike, optionType, action, status, entryPremium, spotPrice, details } = req.body || {};
-    if (!scrip || !signalDate || !Number.isFinite(Number(strike)) || !['CE', 'PE'].includes(optionType) || !['BUY', 'SELL'].includes(action)) {
+    if (!scrip || !signalDate || !Number.isFinite(Number(strike)) || !isOptionType(optionType) || !isSide(action)) {
       return res.status(400).json({ status: 'error', message: 'Invalid trade setup signal' });
     }
     const signal = await saveTradeSetupSignal(req.session.kiteSession.userId, {
@@ -1303,7 +1302,7 @@ app.patch('/api/oi-history/signals/:id/outcome', requireAuth, requireSubscriptio
     const { price, date, returnPct, status, maxFavorableReturn, maxAdverseReturn, final } = req.body || {};
     if (!Number.isFinite(Number(price)) || !date || !Number.isFinite(Number(returnPct)) ||
         !Number.isFinite(Number(maxFavorableReturn)) || !Number.isFinite(Number(maxAdverseReturn)) ||
-        !['Profit', 'Loss', 'Open'].includes(status)) {
+        !Object.values(SignalOutcome).includes(status)) {
       return res.status(400).json({ status: 'error', message: 'Invalid signal outcome' });
     }
     const outcome = await updateTradeSetupSignalOutcome(req.session.kiteSession.userId, req.params.id, {

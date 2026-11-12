@@ -3,7 +3,7 @@
  * Positional positions are held over days, so this rule leaves them alone.
  */
 import { marketTimeLabel } from '../marketTime.js';
-import { Horizon } from '../horizons.js';
+import { Horizon } from '../tradeEnums.js';
 
 /** @type {import('./index.js').ExitRule} */
 export default {

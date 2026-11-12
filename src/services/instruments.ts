@@ -6,6 +6,7 @@
  * Provides a fast prefix-match search for the watchlist "add instrument" UI.
  */
 import { apiClient } from './apiClient';
+import { InstrumentType } from '../../shared/tradeEnums.js';
 
 export interface Instrument {
   instrumentToken: number;
@@ -71,11 +72,11 @@ function formatExpiry(expiry: string): string {
  * Futures: "NIFTY FUT 26Jun"
  */
 export function getDisplayLabel(inst: Instrument): string {
-  if (inst.instrumentType === 'EQ') return inst.tradingsymbol;
+  if (inst.instrumentType === InstrumentType.EQ) return inst.tradingsymbol;
 
   const expLabel = inst.expiry ? formatExpiry(inst.expiry) : '';
 
-  if (inst.instrumentType === 'FUT') {
+  if (inst.instrumentType === InstrumentType.FUT) {
     return `${inst.name} FUT ${expLabel}`.trim();
   }
 
@@ -111,8 +112,8 @@ export function searchInstruments(
     if (aPrefix !== bPrefix) return aPrefix - bPrefix;
 
     // Stocks before options for same-name prefix
-    const aIsEq = a.instrumentType === 'EQ' ? 0 : 1;
-    const bIsEq = b.instrumentType === 'EQ' ? 0 : 1;
+    const aIsEq = a.instrumentType === InstrumentType.EQ ? 0 : 1;
+    const bIsEq = b.instrumentType === InstrumentType.EQ ? 0 : 1;
     if (aIsEq !== bIsEq) return aIsEq - bIsEq;
 
     return a.tradingsymbol.length - b.tradingsymbol.length;

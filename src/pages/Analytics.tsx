@@ -1,6 +1,7 @@
 import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import TabBar from '@/components/TabBar/TabBar';
+import { isTradingMode } from '../../shared/tradeEnums.js';
 
 // Each tab is large; load it only when the tab is opened.
 const OptionChain = lazy(() => import('@/components/OptionChain/OptionChain'));
@@ -57,7 +58,7 @@ const Analytics: React.FC = () => {
         {tab === 'journal'  && (
           <TradeJournal
             initialRange={range === 'today' ? 'today' : undefined}
-            initialMode={mode === 'paper' || mode === 'live' ? mode : undefined}
+            initialMode={isTradingMode(mode) ? mode : undefined}
             initialDate={date ?? undefined}
             initialTradeId={tradeId ?? undefined}
           />

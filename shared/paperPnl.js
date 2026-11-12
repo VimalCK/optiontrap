@@ -5,6 +5,7 @@
  * both count it the same way. The percentage is of the entry price, so it is
  * the same for any quantity: what the stop-loss and target exit rules compare.
  */
+import { Side } from './tradeEnums.js';
 
 /**
  * The P&L of `trade` at `price`.
@@ -12,7 +13,7 @@
  * @param {number} price
  */
 export function paperPnl(trade, price) {
-  const perUnit = trade.side === 'BUY' ? price - trade.entryPrice : trade.entryPrice - price;
+  const perUnit = trade.side === Side.BUY ? price - trade.entryPrice : trade.entryPrice - price;
   return perUnit * trade.quantity;
 }
 
@@ -23,6 +24,6 @@ export function paperPnl(trade, price) {
  * @param {number} price
  */
 export function paperPnlPercent(trade, price) {
-  const perUnit = trade.side === 'BUY' ? price - trade.entryPrice : trade.entryPrice - price;
+  const perUnit = trade.side === Side.BUY ? price - trade.entryPrice : trade.entryPrice - price;
   return (perUnit / trade.entryPrice) * 100;
 }

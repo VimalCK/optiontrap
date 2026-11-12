@@ -20,7 +20,7 @@ import maxDailyLoss from './maxDailyLoss.js';
 
 /**
  * @typedef {import('../rules/ruleSettings.js').RuleSettings} RuleSettings
- * @typedef {{ instrumentToken: number, tradingsymbol: string, horizon: import('../horizons.js').HorizonId, pnl: number, pnlPercent: number }} OpenAutoPosition
+ * @typedef {{ instrumentToken: number, tradingsymbol: string, horizon: import('../tradeEnums.js').HorizonId, pnl: number, pnlPercent: number }} OpenAutoPosition
  *   horizon is intraday or positional; pnl is the position's live P&L in ₹; pnlPercent the same as a percentage of its entry price
  * @typedef {{ now: Date, todayAutoPnl: number }} ExitRuleContext
  *   todayAutoPnl is the owner's automated P&L today in ₹: booked plus open positions at their last price

@@ -6,6 +6,7 @@ import { describeFlow, flowColor, type FlowReading } from '@/services/oiFlow';
 import { PatternGuide } from './PatternGuide';
 import IconButton from '@/components/IconButton/IconButton';
 import { InfoIcon } from '@/components/icons/Icons';
+import { OptionType, Side, type OptionTypeId, type SideId } from '../../../shared/tradeEnums.js';
 
 /** Strikes shown above and below ATM before the grid scrolls vertically. */
 const STRIKES_EACH_SIDE = 10;
@@ -22,7 +23,7 @@ interface OiSnapshotTableProps {
   flowByToken: Map<number, FlowReading>;
   selectedStrike: number | null;
   onSelectStrike: (strike: number) => void;
-  onTrade: (cell: OiCellData, optionType: 'CE' | 'PE', side: 'BUY' | 'SELL', strike: number, expiry: string) => void;
+  onTrade: (cell: OiCellData, optionType: OptionTypeId, side: SideId, strike: number, expiry: string) => void;
 }
 
 /** Strike × expiry OI table for the selected date, with CE/PE patterns and buy/sell buttons. */
@@ -131,7 +132,7 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
                   <td
                     className="oi-history__cell--pattern oi-history__cell--pattern-ce"
                     style={{ color: patternColor(cePattern) }}
-                    title={[`CE pattern: ${cePattern}`, flowTitle(flowHeading('CE', ceFlowExpiry), ceFlow)].filter(Boolean).join('\n\n')}
+                    title={[`CE pattern: ${cePattern}`, flowTitle(flowHeading(OptionType.CE, ceFlowExpiry), ceFlow)].filter(Boolean).join('\n\n')}
                   >
                     {cePattern}
                     {ceFlow && ceFlow.label !== '-' && (
@@ -152,8 +153,8 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
                         </div>
                         {cell?.ceToken && closePrice > 0 && (
                           <div className="oi-history__cell-actions">
-                            <button className="oi-history__action-btn oi-history__action-btn--buy" onClick={(e) => { e.stopPropagation(); onTrade(cell!, 'CE', 'BUY', strike, exp); }}>B</button>
-                            <button className="oi-history__action-btn oi-history__action-btn--sell" onClick={(e) => { e.stopPropagation(); onTrade(cell!, 'CE', 'SELL', strike, exp); }}>S</button>
+                            <button className="oi-history__action-btn oi-history__action-btn--buy" onClick={(e) => { e.stopPropagation(); onTrade(cell!, OptionType.CE, Side.BUY, strike, exp); }}>B</button>
+                            <button className="oi-history__action-btn oi-history__action-btn--sell" onClick={(e) => { e.stopPropagation(); onTrade(cell!, OptionType.CE, Side.SELL, strike, exp); }}>S</button>
                           </div>
                         )}
                       </td>
@@ -182,8 +183,8 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
                         </div>
                         {cell?.peToken && closePrice > 0 && (
                           <div className="oi-history__cell-actions">
-                            <button className="oi-history__action-btn oi-history__action-btn--buy" onClick={(e) => { e.stopPropagation(); onTrade(cell!, 'PE', 'BUY', strike, exp); }}>B</button>
-                            <button className="oi-history__action-btn oi-history__action-btn--sell" onClick={(e) => { e.stopPropagation(); onTrade(cell!, 'PE', 'SELL', strike, exp); }}>S</button>
+                            <button className="oi-history__action-btn oi-history__action-btn--buy" onClick={(e) => { e.stopPropagation(); onTrade(cell!, OptionType.PE, Side.BUY, strike, exp); }}>B</button>
+                            <button className="oi-history__action-btn oi-history__action-btn--sell" onClick={(e) => { e.stopPropagation(); onTrade(cell!, OptionType.PE, Side.SELL, strike, exp); }}>S</button>
                           </div>
                         )}
                       </td>
@@ -194,7 +195,7 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
                   <td
                     className="oi-history__cell--pattern oi-history__cell--pattern-pe"
                     style={{ color: patternColor(pePattern) }}
-                    title={[`PE pattern: ${pePattern}`, flowTitle(flowHeading('PE', peFlowExpiry), peFlow)].filter(Boolean).join('\n\n')}
+                    title={[`PE pattern: ${pePattern}`, flowTitle(flowHeading(OptionType.PE, peFlowExpiry), peFlow)].filter(Boolean).join('\n\n')}
                   >
                     {pePattern}
                     {peFlow && peFlow.label !== '-' && (

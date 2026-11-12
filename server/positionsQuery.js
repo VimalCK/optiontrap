@@ -3,7 +3,7 @@
  * database driver so it can be unit-tested.
  *
  *   GET /api/positions                 open positions plus today's exits
- *   GET /api/positions?status=closed   exited positions, filtered and paged
+ *   GET /api/positions?status=Closed   exited positions, filtered and paged
  *   GET /api/positions/daily-pnl       P&L and trade count per exit day
  *   GET /api/positions/stats           all-time win/loss figures
  *
@@ -13,10 +13,10 @@
  * market-zone midnights selects whole market days.
  */
 import { MARKET_TIME_ZONE, addDays, marketDateTime } from '../shared/marketTime.js';
+import { InstrumentType, OptionType, PositionStatus, SEGMENTS, Segment, Side, TRADING_MODES, isTradingMode } from '../shared/tradeEnums.js';
+import { sqlEnum, sqlEnumList } from './sql.js';
 
-export const POSITION_STATUSES = ['closed'];
-export const POSITION_MODES = ['paper', 'live'];
-export const SEGMENTS = ['options', 'futures', 'stocks'];
+export const POSITION_STATUSES = [PositionStatus.Closed];
 export const DEFAULT_TRADE_LIMIT = 100;
 export const MAX_TRADE_LIMIT = 500;
 
@@ -24,13 +24,13 @@ export const MAX_TRADE_LIMIT = 500;
 // before charges were recorded); the same formula as the browser's positionToEntry.
 /** A position's charges; 0 for one closed before charges were kept. */
 const CHARGES_SQL = 'COALESCE(charges, 0)';
-const PNL_SQL = `(CASE WHEN side = 'BUY' THEN (exit_price - entry_price) * quantity ELSE (entry_price - exit_price) * quantity END - ${CHARGES_SQL})`;
+const PNL_SQL = `(CASE WHEN side = ${sqlEnum(Side.BUY)} THEN (exit_price - entry_price) * quantity ELSE (entry_price - exit_price) * quantity END - ${CHARGES_SQL})`;
 // By instrument_type, which every position has (option_type is NULL for stocks
 // and futures, and NOT IN never matches NULL).
 const SEGMENT_SQL = {
-  options: "instrument_type IN ('CE', 'PE')",
-  futures: "instrument_type = 'FUT'",
-  stocks: "instrument_type = 'EQ'",
+  [Segment.Options]: `instrument_type IN (${sqlEnumList(OptionType.CE, OptionType.PE)})`,
+  [Segment.Futures]: `instrument_type = ${sqlEnum(InstrumentType.FUT)}`,
+  [Segment.Stocks]: `instrument_type = ${sqlEnum(InstrumentType.EQ)}`,
 };
 
 const isDate = (value) =>
@@ -44,7 +44,7 @@ function toInt(value) {
 
 function parseMode(mode) {
   if (mode === undefined) return { mode: null };
-  return POSITION_MODES.includes(mode) ? { mode } : { error: `mode must be one of: ${POSITION_MODES.join(', ')}` };
+  return isTradingMode(mode) ? { mode } : { error: `mode must be one of: ${TRADING_MODES.join(', ')}` };
 }
 
 function parseSegment(segment) {
@@ -73,9 +73,9 @@ export function parsePositionsQuery(query = {}) {
   const mode = parseMode(query.mode);
   if (mode.error) return mode;
 
-  if (status !== 'closed') {
+  if (status !== PositionStatus.Closed) {
     const closedOnly = ['from', 'to', 'segment', 'limit', 'offset'].filter((key) => query[key] !== undefined);
-    if (closedOnly.length) return { error: `${closedOnly.join(', ')} can only be used with status=closed` };
+    if (closedOnly.length) return { error: `${closedOnly.join(', ')} can only be used with status=${PositionStatus.Closed}` };
     return { filter: { mode: mode.mode } };
   }
 
@@ -133,7 +133,7 @@ function whereBuilder(userId) {
 /** Conditions shared by every query over exited positions. */
 function closedConditions({ conditions, param }, { mode, from, to, segment }) {
   if (mode) conditions.push(`mode = ${param(mode)}`);
-  conditions.push('exited = 1', 'exit_price IS NOT NULL');
+  conditions.push('exited', 'exit_price IS NOT NULL');
   if (from) conditions.push(`exit_time >= ${param(marketDateTime(from).toISOString())}`);
   if (to) conditions.push(`exit_time < ${param(marketDateTime(addDays(to, 1)).toISOString())}`);
   if (segment) conditions.push(SEGMENT_SQL[segment]);
@@ -143,15 +143,15 @@ function closedConditions({ conditions, param }, { mode, from, to, segment }) {
  * SQL for GET /api/positions.
  * @param {string} userId
  * @param {object} filter from parsePositionsQuery, plus todayStart: the ISO
- *   instant of today's market-zone midnight (used without status=closed).
+ *   instant of today's market-zone midnight (used without status=Closed).
  * @returns {{ sql: string, params: unknown[] }}
  */
 export function buildPositionsQuery(userId, { mode = null, status, from, to, segment, limit, offset, todayStart }) {
   const where = whereBuilder(userId);
 
-  if (status !== 'closed') {
+  if (status !== PositionStatus.Closed) {
     if (mode) where.conditions.push(`mode = ${where.param(mode)}`);
-    where.conditions.push(`(exited = 0 OR exit_time >= ${where.param(todayStart)})`);
+    where.conditions.push(`(NOT exited OR exit_time >= ${where.param(todayStart)})`);
     const sql = `SELECT * FROM positions WHERE ${where.conditions.join(' AND ')} ORDER BY entry_time DESC`;
     return { sql, params: where.params };
   }

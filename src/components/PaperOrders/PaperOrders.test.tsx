@@ -2,19 +2,19 @@ import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import PaperOrders, { PaperOrdersTable, orderStatus, settledSince, pendingCount } from './PaperOrders';
 import type { PaperOrder } from '@/services/orders';
-import { Horizon } from '../../../shared/horizons.js';
+import { Horizon } from '../../../shared/tradeEnums.js';
 
 const order = (id: string, extra: Partial<PaperOrder> = {}): PaperOrder => ({
   id, tradingsymbol: 'NIFTY26N1024000CE', instrumentToken: 101, instrumentType: 'CE', exchange: 'NFO', strike: 24000,
-  optionType: 'CE', expiry: '2026-11-10', side: 'BUY', quantity: 75, orderType: 'limit', limitPrice: 50, status: 'open', statusReason: null,
-  fillPrice: null, positionId: null, closesPosition: false, source: 'manual', horizon: Horizon.Intraday, autoTradeId: null, createdAt: '2026-11-05T06:30:00.000Z', updatedAt: '2026-11-05T06:30:00.000Z', ...extra, // Thu 12:00 IST
+  optionType: 'CE', expiry: '2026-11-10', side: 'BUY', quantity: 75, orderType: 'Limit', limitPrice: 50, status: 'Open', statusReason: null,
+  fillPrice: null, positionId: null, closesPosition: false, source: 'Manual', horizon: Horizon.Intraday, autoTradeId: null, createdAt: '2026-11-05T06:30:00.000Z', updatedAt: '2026-11-05T06:30:00.000Z', ...extra, // Thu 12:00 IST
 });
 
 describe('orderStatus', () => {
   it('shows open, filled at its fill price, or why it was cancelled', () => {
     expect(orderStatus(order('a'))).toEqual({ tone: 'accent', text: 'Open' });
-    expect(orderStatus(order('a', { status: 'filled', fillPrice: 49.5 }))).toEqual({ tone: 'positive', text: 'Filled @ 49.50' });
-    expect(orderStatus(order('a', { status: 'cancelled', statusReason: 'Cancelled at market close' })))
+    expect(orderStatus(order('a', { status: 'Filled', fillPrice: 49.5 }))).toEqual({ tone: 'positive', text: 'Filled @ 49.50' });
+    expect(orderStatus(order('a', { status: 'Cancelled', statusReason: 'Cancelled at market close' })))
       .toEqual({ tone: 'neutral', text: 'Cancelled at market close' });
   });
 });
@@ -32,7 +32,7 @@ describe('settledSince', () => {
 
 describe('PaperOrdersTable', () => {
   const html = renderToStaticMarkup(
-    <PaperOrdersTable orders={[order('a'), order('b', { status: 'filled', fillPrice: 50, side: 'SELL' })]} onCancel={() => {}} />,
+    <PaperOrdersTable orders={[order('a'), order('b', { status: 'Filled', fillPrice: 50, side: 'SELL' })]} onCancel={() => {}} />,
   );
 
   it('lists each order with its instrument, IST time, side, quantity, limit and status', () => {
@@ -44,7 +44,7 @@ describe('PaperOrdersTable', () => {
   });
 
   it('says who placed each order, Auto or Manual, like its position', () => {
-    const auto = renderToStaticMarkup(<PaperOrdersTable orders={[order('c', { source: 'auto', autoTradeId: 't1' })]} onCancel={() => {}} />);
+    const auto = renderToStaticMarkup(<PaperOrdersTable orders={[order('c', { source: 'Auto', autoTradeId: 't1' })]} onCancel={() => {}} />);
     expect(auto).toContain('>Auto</span>');
     expect(auto).not.toContain('>Manual</span>');
     expect(html.match(/>Manual<\/span>/g)).toHaveLength(2);
@@ -52,7 +52,7 @@ describe('PaperOrdersTable', () => {
   });
 
   it('shows Market in the Limit column for a market order', () => {
-    const market = renderToStaticMarkup(<PaperOrdersTable orders={[order('m', { orderType: 'market', limitPrice: null, horizon: Horizon.Positional })]} onCancel={() => {}} />);
+    const market = renderToStaticMarkup(<PaperOrdersTable orders={[order('m', { orderType: 'Market', limitPrice: null, horizon: Horizon.Positional })]} onCancel={() => {}} />);
     expect(market).toContain('<td>Market</td>');
   });
 
@@ -65,13 +65,13 @@ describe('PaperOrdersTable', () => {
 
 describe('pendingCount', () => {
   it('counts only the orders still waiting to fill', () => {
-    expect(pendingCount([order('a'), order('b', { status: 'filled' }), order('c', { status: 'cancelled' }), order('d')])).toBe(2);
+    expect(pendingCount([order('a'), order('b', { status: 'Filled' }), order('c', { status: 'Cancelled' }), order('d')])).toBe(2);
     expect(pendingCount([])).toBe(0);
   });
 });
 
 describe('PaperOrders', () => {
-  const closed = [order('f', { status: 'filled', fillPrice: 50 }), order('c', { status: 'cancelled', statusReason: 'Cancelled at market close' })];
+  const closed = [order('f', { status: 'Filled', fillPrice: 50 }), order('c', { status: 'Cancelled', statusReason: 'Cancelled at market close' })];
 
   it('lists only the orders still waiting to fill, not those filled or cancelled today', () => {
     const html = renderToStaticMarkup(<PaperOrders orders={[order('a'), ...closed]} error={null} onCancel={() => {}} />);

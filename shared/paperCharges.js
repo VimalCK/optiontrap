@@ -22,6 +22,7 @@
  * Algo Trading and Win/Loss Patterns show it after.
  */
 import { marketDate } from './marketTime.js';
+import { InstrumentType, Side, isOptionType, oppositeSide } from './tradeEnums.js';
 
 /** SEBI turnover fee: ₹10 per crore. */
 const SEBI_RATE = 10 / 1e7;
@@ -69,7 +70,7 @@ function brokerage(rule, turnover) {
 /**
  * One order's charges.
  * @param {ChargeSegment} segment
- * @param {'BUY' | 'SELL'} side
+ * @param {import('./tradeEnums.js').SideId} side
  * @param {number} price
  * @param {number} quantity
  * @returns {Charges}
@@ -82,8 +83,8 @@ export function orderCharges(segment, side, price, quantity) {
     stt: paise(turnover * (schedule.stt[side] ?? 0)),
     exchange: paise(turnover * schedule.exchange),
     sebi: paise(turnover * SEBI_RATE),
-    stamp: side === 'BUY' ? paise(turnover * schedule.stamp) : 0,
-    dp: side === 'SELL' ? schedule.dpPerSell ?? 0 : 0,
+    stamp: side === Side.BUY ? paise(turnover * schedule.stamp) : 0,
+    dp: side === Side.SELL ? schedule.dpPerSell ?? 0 : 0,
     gst: 0,
   };
   parts.gst = paise((parts.brokerage + parts.exchange + parts.sebi) * GST_RATE);
@@ -104,22 +105,22 @@ export function addCharges(a, b) {
  * @returns {ChargeSegment}
  */
 export function chargeSegment(instrumentType, entryTime, exitTime) {
-  if (instrumentType === 'CE' || instrumentType === 'PE') return 'option';
-  if (instrumentType === 'FUT') return 'future';
+  if (isOptionType(instrumentType)) return 'option';
+  if (instrumentType === InstrumentType.FUT) return 'future';
   return marketDate(entryTime) === marketDate(exitTime) ? 'equityIntraday' : 'equityDelivery';
 }
 
 /**
  * A closed trade's charges: its entry order and its exit order (the opposite
  * side), both at its quantity.
- * @param {{ instrumentType: string, side: 'BUY' | 'SELL', quantity: number, entryPrice: number, entryTime: Date }} trade
+ * @param {{ instrumentType: string, side: import('./tradeEnums.js').SideId, quantity: number, entryPrice: number, entryTime: Date }} trade
  * @param {number} exitPrice
  * @param {Date} exitTime
  * @returns {Charges}
  */
 export function roundTripCharges(trade, exitPrice, exitTime) {
   const segment = chargeSegment(trade.instrumentType, trade.entryTime, exitTime);
-  const exitSide = trade.side === 'BUY' ? 'SELL' : 'BUY';
+  const exitSide = oppositeSide(trade.side);
   return addCharges(
     orderCharges(segment, trade.side, trade.entryPrice, trade.quantity),
     orderCharges(segment, exitSide, exitPrice, trade.quantity),

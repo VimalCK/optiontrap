@@ -6,8 +6,10 @@
  * starts again that day. The runner doesn't know what a job does:
  *
  *   - `.sql` files run in one transaction.
- *   - `.js` files export `default async function run({ query, date, log })`;
- *     whatever object it returns is saved with the run.
+ *   - `.js` files export `default async function run({ query, runSql, date, log })`;
+ *     whatever object it returns is saved with the run. `runSql` runs SQL the
+ *     way a `.sql` file runs, for jobs that build their SQL (enum values
+ *     through sqlEnum, server/sql.js).
  *
  * Files starting with `_` or `.` are skipped, so renaming a job pauses it.
  * The folder is read at each run, so a new or edited job takes effect the
@@ -34,6 +36,7 @@ import {
 } from './db.js';
 import { istClock, isNightlyJobTime } from './marketClock.js';
 import { addDays } from '../shared/marketTime.js';
+import { JobRunStatus } from '../shared/appEnums.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export const NIGHTLY_JOBS_DIR = path.join(__dirname, 'jobs', 'nightly');
@@ -56,12 +59,15 @@ function listJobFiles() {
   return selectJobFiles(fs.readdirSync(NIGHTLY_JOBS_DIR));
 }
 
+/** Run SQL in one transaction, in market time, with the job timeout; returns the rows affected. */
+const runSql = (sql) => runSqlScript(sql, SQL_TIMEOUT_MS);
+
 /** Run one job file and return the detail to store with the run. */
 async function runJobFile(file, date) {
   const fullPath = path.join(NIGHTLY_JOBS_DIR, file);
 
   if (file.endsWith('.sql')) {
-    const rowCount = await runSqlScript(fs.readFileSync(fullPath, 'utf8'), SQL_TIMEOUT_MS);
+    const rowCount = await runSql(fs.readFileSync(fullPath, 'utf8'));
     return { rowCount };
   }
 
@@ -72,7 +78,7 @@ async function runJobFile(file, date) {
     throw new Error('Job file must export a default async function');
   }
   const log = (...args) => console.log(`[Nightly] ${file}:`, ...args);
-  const result = await mod.default({ query, date, log });
+  const result = await mod.default({ query, runSql, date, log });
   return result && typeof result === 'object' ? result : {};
 }
 
@@ -81,7 +87,7 @@ export async function runNightlyJobs(date) {
   for (const file of listJobFiles()) {
     const job = NIGHTLY_JOB_PREFIX + file;
     const status = await getScheduledJobStatus(job, date);
-    if (status === 'done' || status === 'failed') continue;
+    if (status === JobRunStatus.Done || status === JobRunStatus.Failed) continue;
     // Running elsewhere: checked again next tick, in case it goes stale.
     if (!(await claimScheduledJobRun(job, date))) continue;
 
@@ -90,11 +96,11 @@ export async function runNightlyJobs(date) {
     try {
       const detail = await runJobFile(file, date);
       const durationMs = Date.now() - started;
-      await finishScheduledJobRun(job, date, 'done', { ...detail, durationMs });
+      await finishScheduledJobRun(job, date, JobRunStatus.Done, { ...detail, durationMs });
       console.log(`[Nightly] ${file}: done in ${Math.round(durationMs / 1000)}s`, detail);
     } catch (err) {
       console.error(`[Nightly] ${file}: failed —`, err.message);
-      await finishScheduledJobRun(job, date, 'failed', { error: err.message, durationMs: Date.now() - started })
+      await finishScheduledJobRun(job, date, JobRunStatus.Failed, { error: err.message, durationMs: Date.now() - started })
         .catch(() => {});
     }
   }

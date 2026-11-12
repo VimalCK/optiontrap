@@ -4,6 +4,8 @@ import type { SignalPerformanceSummary, TradeSetupData, TradeSignalRow } from '.
 import { summarizeSignalBreakdown, MIN_SCORED_FOR_VERDICT } from './signalStats';
 import { formatPct, formatPcr, todayIST } from './helpers';
 import { checklistStatusText, sortChecklistByStatus, readinessScore, setupReadinessLabel, setupReadinessWidth, expiryLabel } from './analysis';
+import { OPTION_TYPES, OptionType, Side, type SideId } from '../../../shared/tradeEnums.js';
+import { SignalOutcome } from '../../../shared/appEnums.js';
 
 interface TradeSetupDashboardProps {
   setup: TradeSetupData;
@@ -14,7 +16,7 @@ interface TradeSetupDashboardProps {
   signalPerformance: SignalPerformanceSummary | null;
   signalRows: TradeSignalRow[];
   onDeleteSignal?: (id: number) => void;
-  onTrade: (mode: 'buy' | 'sell') => void;
+  onTrade: (side: SideId) => void;
 }
 
 const formatReturn = (value: number | null) => (value === null ? '-' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`);
@@ -73,9 +75,9 @@ export const SignalResultsGrid: React.FC<{ rows: TradeSignalRow[]; today?: strin
             </thead>
             <tbody>
               {visibleRows.map((row) => {
-                const status = row.outcome_status || 'Open';
+                const status = row.outcome_status || SignalOutcome.Open;
                 return (
-                  <tr key={row.id} className={status === 'Loss' ? 'is-loss' : status === 'Profit' ? 'is-profit' : ''}>
+                  <tr key={row.id} className={status === SignalOutcome.Loss ? 'is-loss' : status === SignalOutcome.Profit ? 'is-profit' : ''}>
                     <td>{shortDate(row.signal_date)}</td>
                     <td className="oi-history__signal-grid-signal">{row.action} {row.option_type} {row.strike}</td>
                     <td>{shortDate(row.expiry)}</td>
@@ -86,7 +88,7 @@ export const SignalResultsGrid: React.FC<{ rows: TradeSignalRow[]; today?: strin
                     <td>{formatReturn(row.max_adverse_return)}</td>
                     <td>
                       {status}
-                      {status !== 'Open' && !row.outcome_final && <small> · live</small>}
+                      {status !== SignalOutcome.Open && !row.outcome_final && <small> · live</small>}
                     </td>
                     {onDelete && (
                       <td className="oi-history__signal-grid-delete">
@@ -242,8 +244,8 @@ export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
             <em>Buying pressure</em>
           </div>
           <div className="oi-history__buying-summary-grid">
-            {(['CE', 'PE'] as const).map((optionType) => {
-              const side = optionType === 'CE' ? setup.optionMomentum.ce : setup.optionMomentum.pe;
+            {OPTION_TYPES.map((optionType) => {
+              const side = optionType === OptionType.CE ? setup.optionMomentum.ce : setup.optionMomentum.pe;
               return (
                 <div key={optionType} className="oi-history__buying-summary-side">
                   <div className="oi-history__buying-summary-side-head">
@@ -287,9 +289,9 @@ export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
           <button
             type="button"
             className="oi-history__setup-trade-btn oi-history__setup-trade-btn--buy"
-            onClick={() => onTrade('buy')}
+            onClick={() => onTrade(Side.BUY)}
           >
-            Buy {setup.tradeSetup.direction === 'Bullish' ? 'CE' : 'PE'}
+            Buy {setup.tradeSetup.direction === 'Bullish' ? OptionType.CE : OptionType.PE}
           </button>
         )}
       </div>
@@ -314,8 +316,8 @@ export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
             <em>Time decay</em>
           </div>
           <div className="oi-history__buying-summary-grid">
-            {(['CE', 'PE'] as const).map((optionType) => {
-              const side = optionType === 'CE' ? setup.premiumDecay.ce : setup.premiumDecay.pe;
+            {OPTION_TYPES.map((optionType) => {
+              const side = optionType === OptionType.CE ? setup.premiumDecay.ce : setup.premiumDecay.pe;
               return (
                 <div key={optionType} className="oi-history__buying-summary-side">
                   <div className="oi-history__buying-summary-side-head">
@@ -359,9 +361,9 @@ export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
           <button
             type="button"
             className="oi-history__setup-trade-btn oi-history__setup-trade-btn--sell"
-            onClick={() => onTrade('sell')}
+            onClick={() => onTrade(Side.SELL)}
           >
-            Sell {setup.sellingSetup.type === 'Call Sell' ? 'CE' : 'PE'}
+            Sell {setup.sellingSetup.type === 'Call Sell' ? OptionType.CE : OptionType.PE}
           </button>
         )}
       </div>
@@ -394,7 +396,7 @@ export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
           </div>
         <div className="oi-history__setup-signal-strip">
           {sortChecklistByStatus(setup.tradeSetup.checklist).map((item) => (
-            <div key={item.label} className={`oi-history__signal-tile oi-history__signal-tile--${item.status}`}>
+            <div key={item.label} className={`oi-history__signal-tile oi-history__signal-tile--${item.status.toLowerCase()}`}>
               <span>{item.label}</span>
               <strong>{checklistStatusText(item.status)}</strong>
               <em>{item.answer}</em>
@@ -409,7 +411,7 @@ export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
           </div>
         <div className="oi-history__setup-signal-strip">
           {sortChecklistByStatus(setup.sellingSetup.checklist).map((item) => (
-            <div key={item.label} className={`oi-history__signal-tile oi-history__signal-tile--${item.status}`}>
+            <div key={item.label} className={`oi-history__signal-tile oi-history__signal-tile--${item.status.toLowerCase()}`}>
               <span>{item.label}</span>
               <strong>{checklistStatusText(item.status)}</strong>
               <em>{item.answer}</em>

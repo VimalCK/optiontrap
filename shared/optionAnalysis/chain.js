@@ -4,6 +4,7 @@
  * look at the same strikes: the chain of one expiry, ATM as the strike
  * closest to spot, and the ±15 strikes around it that the analyzer shows.
  */
+import { InstrumentType } from '../tradeEnums.js';
 
 /**
  * The fields of an option the analysis reads; the browser's and the
@@ -44,7 +45,7 @@ export function buildOptionChain(options, expiry) {
     if (option.expiry !== expiry) continue;
     if (!rows.has(option.strike)) rows.set(option.strike, { strike: option.strike, ce: null, pe: null });
     const row = /** @type {ChainRow<T>} */ (rows.get(option.strike));
-    if (option.instrumentType === 'CE') row.ce = option;
+    if (option.instrumentType === InstrumentType.CE) row.ce = option;
     else row.pe = option;
   }
   return [...rows.values()].sort((a, b) => a.strike - b.strike);

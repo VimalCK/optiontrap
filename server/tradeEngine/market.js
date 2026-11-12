@@ -18,6 +18,7 @@
  * that plug-in (onError) and never stops the clock or anyone else's handlers.
  */
 import { isMarketOpen } from '../../shared/marketTime.js';
+import { MarketEvent } from '../../shared/tradeEnums.js';
 
 /** How often the clock is read. */
 const TICK_MS = 1000;
@@ -25,7 +26,7 @@ const TICK_MS = 1000;
 /**
  * @typedef {() => unknown} Handler
  * @typedef {{ ms: number, fn: Handler, lastRunAt: number, running: boolean }} Repeat
- * @typedef {{ open: Set<Handler>, close: Set<Handler>, repeats: Set<Repeat> }} Subscriptions
+ * @typedef {{ [MarketEvent.Open]: Set<Handler>, [MarketEvent.Close]: Set<Handler>, repeats: Set<Repeat> }} Subscriptions
  * @typedef {{
  *   isOpen: () => boolean,
  *   onOpen: (fn: Handler) => () => void,
@@ -66,7 +67,7 @@ export function createMarket({
     }
   }
 
-  function fire(/** @type {'open' | 'close'} */ event) {
+  function fire(/** @type {import('../../shared/tradeEnums.js').MarketEventId} */ event) {
     for (const [pluginId, subs] of plugins) for (const fn of subs[event]) call(pluginId, fn);
   }
 
@@ -87,7 +88,7 @@ export function createMarket({
     const open = isOpen(now);
     if (open !== wasOpen) {
       if (!open) for (const subs of plugins.values()) for (const repeat of subs.repeats) repeat.lastRunAt = -Infinity;
-      fire(open ? 'open' : 'close');
+      fire(open ? MarketEvent.Open : MarketEvent.Close);
     }
     wasOpen = open;
     if (open) runRepeats(now.getTime());
@@ -118,7 +119,7 @@ export function createMarket({
      */
     forPlugin(pluginId) {
       /** @type {Subscriptions} */
-      const subs = { open: new Set(), close: new Set(), repeats: new Set() };
+      const subs = { [MarketEvent.Open]: new Set(), [MarketEvent.Close]: new Set(), repeats: new Set() };
       plugins.set(pluginId, subs);
       const add = (/** @type {Set<any>} */ set, /** @type {any} */ item) => {
         set.add(item);
@@ -126,8 +127,8 @@ export function createMarket({
       };
       return {
         isOpen: () => isOpen(clock()),
-        onOpen: (fn) => add(subs.open, fn),
-        onClose: (fn) => add(subs.close, fn),
+        onOpen: (fn) => add(subs[MarketEvent.Open], fn),
+        onClose: (fn) => add(subs[MarketEvent.Close], fn),
         every: (ms, fn) => add(subs.repeats, { ms, fn, lastRunAt: -Infinity, running: false }),
         dispose: () => { plugins.delete(pluginId); },
       };

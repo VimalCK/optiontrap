@@ -12,14 +12,14 @@
  * rules: shared/automation.js; strategies come from the server (GET /api/strategies).
  */
 import React from 'react';
-import { EXECUTION_MODES, HORIZONS, TRADE_KINDS, TRADE_SIDES } from '../../../shared/automation.js';
-import { Horizon } from '../../../shared/horizons.js';
-import type { AutomationConfig, TradeKindId, TradeSide } from '@/services/automation';
+import { EXECUTION_MODES, HORIZONS, TRADE_KINDS } from '../../../shared/automation.js';
+import type { AutomationConfig, TradeKindId } from '@/services/automation';
 import Toggle from '@/components/Toggle/Toggle';
 import type { StrategyInfo } from '@/services/strategies';
 import { ENTRY_RULES } from '../../../shared/entryRules/index.js';
 import { EXIT_RULES } from '../../../shared/exitRules/index.js';
 import RuleSettingsForm from './RuleSettingsForm';
+import { Horizon, SIDES, type SideId } from '../../../shared/tradeEnums.js';
 
 export type AutomationSettingsSection = 'general' | 'strategies' | 'entry-rules' | 'exit-rules';
 
@@ -45,10 +45,8 @@ interface SectionProps {
   onChange: (config: AutomationConfig) => void;
 }
 
-const sideLabel = (side: string) => (side === 'BUY' ? 'Buy' : 'Sell');
-
 const GeneralSettings: React.FC<SectionProps> = ({ config, onChange }) => {
-  const setSide = (kind: TradeKindId, side: TradeSide, on: boolean) =>
+  const setSide = (kind: TradeKindId, side: SideId, on: boolean) =>
     onChange({ ...config, kinds: { ...config.kinds, [kind]: { ...config.kinds[kind], [side]: on } } });
 
   return (
@@ -101,21 +99,21 @@ const GeneralSettings: React.FC<SectionProps> = ({ config, onChange }) => {
         <thead>
           <tr>
             <th>Trade type</th>
-            {TRADE_SIDES.map((side) => <th key={side}>{sideLabel(side)}</th>)}
+            {SIDES.map((side) => <th key={side.id}>{side.label}</th>)}
           </tr>
         </thead>
         <tbody>
           {TRADE_KINDS.map((kind) => (
             <tr key={kind.id}>
               <td>{kind.label}</td>
-              {TRADE_SIDES.map((side) => (
-                <td key={side}>
+              {SIDES.map((side) => (
+                <td key={side.id}>
                   <Toggle
-                    checked={config.kinds[kind.id as TradeKindId][side as TradeSide]}
-                    label={`${sideLabel(side)} ${kind.label}`}
+                    checked={config.kinds[kind.id as TradeKindId][side.id]}
+                    label={`${side.label} ${kind.label}`}
                     onText=""
                     offText=""
-                    onChange={(on) => setSide(kind.id as TradeKindId, side as TradeSide, on)}
+                    onChange={(on) => setSide(kind.id as TradeKindId, side.id, on)}
                   />
                 </td>
               ))}

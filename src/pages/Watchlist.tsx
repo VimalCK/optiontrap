@@ -19,7 +19,6 @@ import TabBar from '@/components/TabBar/TabBar';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import {
   PriceAlert,
-  PriceAlertCondition,
   createPriceAlert,
   deletePriceAlert,
   describePriceAlert,
@@ -34,6 +33,8 @@ import { isCashStock } from '../../shared/stockSetups.js';
 import StockSetupsPanel from '@/components/StockSetups/StockSetupsPanel';
 import SetupScorecard from '@/components/StockSetups/SetupScorecard';
 import SetupChip from '@/components/StockSetups/SetupChip';
+import { InstrumentType } from '../../shared/tradeEnums.js';
+import { PRICE_ALERT_CONDITIONS, PriceAlertCondition, PriceAlertStatus, priceAlertConditionLabel, type PriceAlertConditionId } from '../../shared/appEnums.js';
 import '@/styles/watchlist.css';
 
 // ── Price data stored per instrument token ──
@@ -82,7 +83,7 @@ const Watchlist: React.FC = () => {
   // Read by the tick handler, which fires too often to re-create on every alert change.
   const alertsRef = useRef<PriceAlert[]>([]);
   const [alertDraftItem, setAlertDraftItem] = useState<WatchlistItem | null>(null);
-  const [alertCondition, setAlertCondition] = useState<PriceAlertCondition>('above');
+  const [alertCondition, setAlertCondition] = useState<PriceAlertConditionId>(PriceAlertCondition.Above);
   const [alertValue, setAlertValue] = useState('');
   const [alertNote, setAlertNote] = useState('');
   const [alertBrowserNotification, setAlertBrowserNotification] = useState(false);
@@ -234,8 +235,8 @@ const Watchlist: React.FC = () => {
 
     // Mark them triggered here at once so the next tick doesn't fire them again, then save.
     const triggeredAt = new Date().toISOString();
-    const markHits = (list: PriceAlert[]) => list.map((alert) => (hits.has(alert.id) && alert.status === 'active'
-      ? { ...alert, status: 'triggered' as const, triggeredAt, triggeredPrice: hits.get(alert.id) }
+    const markHits = (list: PriceAlert[]) => list.map((alert) => (hits.has(alert.id) && alert.status === PriceAlertStatus.Active
+      ? { ...alert, status: PriceAlertStatus.Triggered, triggeredAt, triggeredPrice: hits.get(alert.id) }
       : alert));
     for (const alert of alertsRef.current) {
       const price = hits.get(alert.id);
@@ -450,10 +451,10 @@ const Watchlist: React.FC = () => {
     }
   };
 
-  const openAlertModal = (item: WatchlistItem, prefill?: { condition: PriceAlertCondition; value: number; note: string }) => {
+  const openAlertModal = (item: WatchlistItem, prefill?: { condition: PriceAlertConditionId; value: number; note: string }) => {
     const currentPrice = livePrices.get(item.instrumentToken)?.ltp;
     setAlertDraftItem(item);
-    setAlertCondition(prefill?.condition ?? 'above');
+    setAlertCondition(prefill?.condition ?? PriceAlertCondition.Above);
     setAlertValue(prefill ? prefill.value.toFixed(2) : currentPrice ? currentPrice.toFixed(2) : '');
     setAlertNote(prefill?.note ?? '');
     setAlertBrowserNotification(false);
@@ -551,8 +552,8 @@ const Watchlist: React.FC = () => {
     ? new Date(value).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
     : '-';
 
-  const activeAlerts = alerts.filter((alert) => alert.status === 'active');
-  const triggeredAlerts = alerts.filter((alert) => alert.status === 'triggered');
+  const activeAlerts = alerts.filter((alert) => alert.status === PriceAlertStatus.Active);
+  const triggeredAlerts = alerts.filter((alert) => alert.status === PriceAlertStatus.Triggered);
   const groupedAlerts = alerts.reduce<Array<{ key: string; symbol: string; exchange: string; alerts: PriceAlert[] }>>((groups, alert) => {
     const key = `${alert.instrumentToken}`;
     const group = groups.find((g) => g.key === key);
@@ -717,7 +718,7 @@ const Watchlist: React.FC = () => {
                     onMouseEnter={() => setHighlightIdx(idx)}
                   >
                     <span className="wl-search__result-symbol">{getDisplayLabel(inst)}</span>
-                    <span className="wl-search__result-name">{inst.instrumentType === 'EQ' ? inst.name : inst.tradingsymbol}</span>
+                    <span className="wl-search__result-name">{inst.instrumentType === InstrumentType.EQ ? inst.name : inst.tradingsymbol}</span>
                     <span className={`wl-search__result-exchange wl-exchange--${inst.exchange.toLowerCase()}`}>{inst.exchange}</span>
                   </button>
                 ))}
@@ -902,7 +903,7 @@ const Watchlist: React.FC = () => {
               </thead>
               <tbody>
                 {groupedAlerts.map((group) => {
-                  const groupActiveCount = group.alerts.filter((alert) => alert.status === 'active').length;
+                  const groupActiveCount = group.alerts.filter((alert) => alert.status === PriceAlertStatus.Active).length;
                   const groupTriggeredCount = group.alerts.length - groupActiveCount;
 
                   return (
@@ -923,18 +924,18 @@ const Watchlist: React.FC = () => {
                             <td>
                               {alert.note && <div className="wl-alerts-table__note">{alert.note}</div>}
                             </td>
-                            <td className="wl-alerts-table__center">{alert.condition === 'above' ? 'Above' : 'Below'}</td>
+                            <td className="wl-alerts-table__center">{priceAlertConditionLabel(alert.condition)}</td>
                             <td className="wl-alerts-table__num">{formatPrice(alert.value)}</td>
                             <td className="wl-alerts-table__num">{price ? formatPrice(price.ltp) : alert.triggeredPrice ? formatPrice(alert.triggeredPrice) : '-'}</td>
                             <td className="wl-alerts-table__center">
-                              <span className={`wl-alert-status wl-alert-status--${alert.status}`}>
-                                {alert.status === 'active' ? 'Active' : 'Triggered'}
+                              <span className={`wl-alert-status wl-alert-status--${alert.status.toLowerCase()}`}>
+                                {alert.status === PriceAlertStatus.Active ? 'Active' : 'Triggered'}
                               </span>
                             </td>
                             <td className="wl-alerts-table__center">{formatDateTime(alert.triggeredAt)}</td>
                             <td className="wl-alerts-table__center">
                               <div className="wl-alert-actions">
-                                {alert.status === 'triggered' && (
+                                {alert.status === PriceAlertStatus.Triggered && (
                                   <button className="wl-alert-action" onClick={() => handleResetAlert(alert.id)} title="Reset alert" aria-label={`Reset ${alert.tradingsymbol} alert`}>
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                                       <path d="M3 12a9 9 0 1 0 3-6.7" />
@@ -993,11 +994,8 @@ const Watchlist: React.FC = () => {
                 <span>Condition</span>
                 <AppSelect
                   value={alertCondition}
-                  options={[
-                    { value: 'above', label: 'Above' },
-                    { value: 'below', label: 'Below' },
-                  ]}
-                  onChange={(value) => setAlertCondition(value as PriceAlertCondition)}
+                  options={PRICE_ALERT_CONDITIONS.map((condition) => ({ value: condition.id, label: condition.label }))}
+                  onChange={(value) => setAlertCondition(value as PriceAlertConditionId)}
                   className="wl-alert-select"
                 />
               </label>

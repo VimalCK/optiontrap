@@ -6,6 +6,7 @@
  * on the way to 2026; those are treated as not picked yet, so no fetch runs
  * on a half-typed year.
  */
+import { TradingMode } from '../../../shared/tradeEnums.js';
 
 export const isDateValue = (value: string | undefined): value is string =>
   Boolean(value && /^\d{4}-\d{2}-\d{2}$/.test(value));
@@ -26,7 +27,7 @@ export function rangeProblem(from: string, to: string): string | null {
  * null when there's nothing to fetch (live mode, or a range that can't be).
  */
 export function reportToFetch<S>(mode: string, from: string, to: string, segment: S): { from: string; to: string; segment: S } | null {
-  if (mode !== 'paper' || rangeProblem(from, to)) return null;
+  if (mode !== TradingMode.Paper || rangeProblem(from, to)) return null;
   return { from, to, segment };
 }
 

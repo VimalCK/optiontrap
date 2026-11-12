@@ -29,6 +29,7 @@ import { daysUntil, marketDate } from '../../../shared/marketTime.js';
 import { getLatestOiSnapshotTimestamp, getTodayOiSnapshots, getUnderlyings } from '../../db.js';
 import { findWorkingAdminSession } from '../../oiHistoryScheduler.js';
 import { getOrFetchInstruments } from '../../instruments.js';
+import { Exchange, InstrumentType, Side, isOptionType } from '../../../shared/tradeEnums.js';
 
 /** How often, in market hours, it looks for a new OI snapshot. */
 const SNAPSHOT_CHECK_MS = 30 * 1000;
@@ -42,13 +43,13 @@ const SNAPSHOT_CHECK_MS = 30 * 1000;
 
 /**
  * The card's single-option setups, by side and option type; straddles and strangles have none.
- * @type {Record<string, { side: 'BUY' | 'SELL', optionType: 'ce' | 'pe' }>}
+ * @type {Record<string, { side: import('../../../shared/tradeEnums.js').SideId, optionType: 'ce' | 'pe' }>}
  */
 const SINGLE_OPTION_SETUPS = {
-  'sell-ce': { side: 'SELL', optionType: 'ce' },
-  'sell-pe': { side: 'SELL', optionType: 'pe' },
-  'buy-ce': { side: 'BUY', optionType: 'ce' },
-  'buy-pe': { side: 'BUY', optionType: 'pe' },
+  'sell-ce': { side: Side.SELL, optionType: 'ce' },
+  'sell-pe': { side: Side.SELL, optionType: 'pe' },
+  'buy-ce': { side: Side.BUY, optionType: 'ce' },
+  'buy-pe': { side: Side.BUY, optionType: 'pe' },
 };
 
 /** A snapshot's token → number record as a map. */
@@ -129,7 +130,7 @@ export const createOptionAnalyzerSetups = ({
     /** @type {Map<string, StrategyInstrument[]>} */
     const optionsByName = new Map();
     for (const instrument of input.instruments) {
-      if (instrument.exchange !== 'NFO' || (instrument.instrumentType !== 'CE' && instrument.instrumentType !== 'PE')) continue;
+      if (instrument.exchange !== Exchange.NFO || !isOptionType(instrument.instrumentType)) continue;
       const options = optionsByName.get(instrument.name);
       if (options) options.push(instrument);
       else optionsByName.set(instrument.name, [instrument]);

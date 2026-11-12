@@ -5,16 +5,10 @@
  */
 import { apiClient } from './apiClient';
 
-import type {
-  AutomationConfig,
-  ExecutionModeId,
-  HorizonId,
-  LifecycleStageId,
-  TradeKindId,
-  TradeSide,
-} from '../../shared/automation.js';
+import type { AutomationConfig, HorizonId, TradeKindId } from '../../shared/automation.js';
+import type { LifecycleStageId, SideId, TradingModeId } from '../../shared/tradeEnums.js';
 
-export type { AutomationConfig, ExecutionModeId, HorizonId, LifecycleStageId, TradeKindId, TradeSide };
+export type { AutomationConfig, HorizonId, TradeKindId };
 
 export interface AutoTradeEvent {
   stage: LifecycleStageId;
@@ -26,10 +20,10 @@ export interface AutoTrade {
   id: string;
   horizon: HorizonId;
   kind: TradeKindId;
-  mode: ExecutionModeId;
+  mode: TradingModeId;
   tradingsymbol: string;
   instrumentToken: number;
-  side: TradeSide;
+  side: SideId;
   quantity: number;
   stage: LifecycleStageId;
   reason: string | null;
@@ -82,7 +76,7 @@ export interface AutoTradeResults {
   bySetup: ResultGroup[];
   byExitRule: ResultGroup[];
   byEntrySlot: ResultGroup<number>[];
-  bySide: ResultGroup<TradeSide>[];
+  bySide: ResultGroup<SideId>[];
   byDay: ResultGroup<string>[];
 }
 

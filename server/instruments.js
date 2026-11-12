@@ -14,6 +14,7 @@
 
 import { getInstrumentsDate, getInstruments, saveInstruments, withAdvisoryLock } from './db.js';
 import { currentInstrumentListStart } from './marketClock.js';
+import { Exchange, InstrumentType, OptionType } from '../shared/tradeEnums.js';
 
 // Arbitrary constant identifying the instruments-fetch advisory lock.
 const INSTRUMENTS_FETCH_LOCK = 573210;
@@ -105,7 +106,7 @@ export function isDebtOrFund({ exchange, exchangeToken, tradingsymbol, name }) {
   if (!name) return true;
   // "SDL KA 6.56% 2030", "2.50%GOLDBONDS2028SR-VI", "7.95% GOI 2032"
   if (name.includes('%') || /MUTUAL FUND/i.test(name)) return true;
-  if (exchange === 'NSE') return NSE_DEBT_SERIES.has(tradingsymbol.match(/-([A-Z0-9]+)$/)?.[1]);
+  if (exchange === Exchange.NSE) return NSE_DEBT_SERIES.has(tradingsymbol.match(/-([A-Z0-9]+)$/)?.[1]);
   return exchangeToken < 500000 || exchangeToken > 599999;
 }
 
@@ -114,19 +115,19 @@ export function isDebtOrFund({ exchange, exchangeToken, tradingsymbol, name }) {
  */
 function nseFilter(cols, idx) {
   const type = cols[idx.instrument_type]?.trim();
-  if (type !== 'EQ') return null;
+  if (type !== InstrumentType.EQ) return null;
 
   const tradingsymbol = cols[idx.tradingsymbol]?.trim();
   const name = cols[idx.name]?.trim();
-  if (!tradingsymbol || isDebtOrFund({ exchange: 'NSE', tradingsymbol, name })) return null;
+  if (!tradingsymbol || isDebtOrFund({ exchange: Exchange.NSE, tradingsymbol, name })) return null;
 
   return {
     instrumentToken: parseInt(cols[idx.instrument_token], 10),
     exchangeToken: parseInt(cols[idx.exchange_token], 10) || 0,
     tradingsymbol,
     name,
-    exchange: 'NSE',
-    instrumentType: 'EQ',
+    exchange: Exchange.NSE,
+    instrumentType: InstrumentType.EQ,
     strike: null,
     expiry: null,
     lotSize: null,
@@ -137,20 +138,20 @@ function nseFilter(cols, idx) {
  * Filter for BSE CSV — stocks and ETFs. Indices, debt and fund units are skipped.
  */
 function bseFilter(cols, idx) {
-  if (cols[idx.instrument_type]?.trim() !== 'EQ' || cols[idx.segment]?.trim() !== 'BSE') return null;
+  if (cols[idx.instrument_type]?.trim() !== InstrumentType.EQ || cols[idx.segment]?.trim() !== Exchange.BSE) return null;
 
   const tradingsymbol = cols[idx.tradingsymbol]?.trim();
   const name = cols[idx.name]?.trim();
   const exchangeToken = parseInt(cols[idx.exchange_token], 10) || 0;
-  if (!tradingsymbol || isDebtOrFund({ exchange: 'BSE', exchangeToken, tradingsymbol, name })) return null;
+  if (!tradingsymbol || isDebtOrFund({ exchange: Exchange.BSE, exchangeToken, tradingsymbol, name })) return null;
 
   return {
     instrumentToken: parseInt(cols[idx.instrument_token], 10),
     exchangeToken,
     tradingsymbol,
     name,
-    exchange: 'BSE',
-    instrumentType: 'EQ',
+    exchange: Exchange.BSE,
+    instrumentType: InstrumentType.EQ,
     strike: null,
     expiry: null,
     lotSize: null,
@@ -182,7 +183,7 @@ export function bseOnlyStocks(nseStocks, bseStocks) {
  */
 function nfoFilter(cols, idx) {
   const type = cols[idx.instrument_type]?.trim();
-  if (type !== 'CE' && type !== 'PE' && type !== 'FUT') return null;
+  if (type !== OptionType.CE && type !== OptionType.PE && type !== InstrumentType.FUT) return null;
 
   const name = cols[idx.name]?.trim();
   if (!name) return null;
@@ -199,7 +200,7 @@ function nfoFilter(cols, idx) {
     exchangeToken: parseInt(cols[idx.exchange_token], 10) || 0,
     tradingsymbol,
     name,
-    exchange: 'NFO',
+    exchange: Exchange.NFO,
     instrumentType: type,
     strike,
     expiry,

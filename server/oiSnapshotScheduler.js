@@ -21,6 +21,7 @@ import { istClock, isMarketOpen } from './marketClock.js';
 import { marketDateTime, marketTimeLabel } from '../shared/marketTime.js';
 import { findWorkingAdminSession } from './oiHistoryScheduler.js';
 import { fetchQuotes, KiteAuthError } from './kiteQuotes.js';
+import { Exchange, InstrumentType, isOptionType } from '../shared/tradeEnums.js';
 
 /** Strikes each side of ATM. The analyzer shows ±15; the extra covers ATM drifting during the day. */
 const STRIKES_EACH_SIDE = 20;
@@ -101,7 +102,7 @@ const spotContract = (underlying, symbol) => ({ symbol, underlying, type: 'SPOT'
 function optionsByUnderlying(instruments) {
   const byName = new Map();
   for (const i of instruments) {
-    if (i.exchange !== 'NFO' || (i.instrumentType !== 'CE' && i.instrumentType !== 'PE')) continue;
+    if (i.exchange !== Exchange.NFO || !isOptionType(i.instrumentType)) continue;
     if (!byName.has(i.name)) byName.set(i.name, []);
     byName.get(i.name).push(i);
   }
@@ -117,7 +118,7 @@ async function snapshottedToday(instruments) {
   const tokens = new Set(await getTodayOiSnapshotTokens());
   const names = new Set();
   for (const i of instruments) {
-    if (i.exchange === 'NFO' && tokens.has(String(i.instrumentToken))) names.add(i.name);
+    if (i.exchange === Exchange.NFO && tokens.has(String(i.instrumentToken))) names.add(i.name);
   }
   return names;
 }

@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { getHealth, HealthCheck, HealthStatus } from '@/services/admin';
+import { getHealth, HealthCheck, HealthReport } from '@/services/admin';
 import {
   ConnectionIcon, SettingsIcon, LinkIcon, UserIcon, AnalyticsIcon, AutomationIcon, CalendarIcon,
 } from '@/components/icons/Icons';
 import { formatCalendarDate, istDateString, istTimeLabel } from '@/utils/marketStatus';
+import { HealthStatus } from '../../shared/appEnums.js';
 import '@/styles/admin.css';
 
 /** How long ago, roughly: "just now", "12m ago", "3h ago", "2d ago". */
@@ -26,9 +27,9 @@ const formatUptime = (seconds: number) => {
 
 /** The badge look and word for each health check status. */
 const CHECK_BADGES: Record<HealthCheck['status'], { tone: string; label: string }> = {
-  pass: { tone: 'up', label: 'OK' },
-  warn: { tone: 'warn', label: 'Warning' },
-  fail: { tone: 'down', label: 'Failing' },
+  [HealthStatus.Pass]: { tone: 'up', label: 'OK' },
+  [HealthStatus.Warn]: { tone: 'warn', label: 'Warning' },
+  [HealthStatus.Fail]: { tone: 'down', label: 'Failing' },
 };
 
 /** When a check was observed, in IST: the time today, with the date on other days. */
@@ -70,7 +71,7 @@ export const HealthCheckRow: React.FC<{ icon: React.ReactNode; name: string; che
 const secondsAgo = (ts: number) => Math.max(0, Math.round((Date.now() - ts) / 1000));
 
 const Health: React.FC = () => {
-  const [health, setHealth] = useState<HealthStatus | null>(null);
+  const [health, setHealth] = useState<HealthReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [, setTick] = useState(0); // re-render for the "checked Xs ago" line

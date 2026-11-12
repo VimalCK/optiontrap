@@ -19,6 +19,7 @@ import oneTradePerInstrument from './oneTradePerInstrument.js';
 import maxDailyLoss from './maxDailyLoss.js';
 import waitAfterExit from './waitAfterExit.js';
 import entryLimitOffset from './entryLimitOffset.js';
+import { Side } from '../tradeEnums.js';
 
 /**
  * @typedef {import('../rules/ruleSettings.js').RuleSettings} RuleSettings
@@ -59,14 +60,14 @@ const TICK_EPSILON = 1e-9;
  * the tick in the trade's favour; or null while that rule is off (enter at
  * the last price).
  * @param {RuleSettings} settings  the user's entry rules
- * @param {'BUY' | 'SELL'} side
+ * @param {import('../tradeEnums.js').SideId} side
  * @param {number} lastPrice
  */
 export function entryLimitPrice(settings, side, lastPrice) {
   const setting = settings[entryLimitOffset.id];
   if (!setting?.active) return null;
   const factor = Number(setting.params.percent) / 100;
-  const ticks = side === 'BUY'
+  const ticks = side === Side.BUY
     ? Math.floor((lastPrice * (1 - factor)) / PRICE_TICK + TICK_EPSILON)
     : Math.ceil((lastPrice * (1 + factor)) / PRICE_TICK - TICK_EPSILON);
   return Number((ticks * PRICE_TICK).toFixed(2));

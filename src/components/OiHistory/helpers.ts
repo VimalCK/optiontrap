@@ -1,6 +1,7 @@
 import type { FuturesHistoryRow, RolloverPattern } from './types';
 import { marketDate, marketMonth } from '../../../shared/marketTime.js';
 import { formatCalendarDate } from '@/utils/marketStatus';
+import { OptionType, type OptionTypeId } from '../../../shared/tradeEnums.js';
 
 export const RECENT_SCRIPS_KEY = 'optiontrap_oi_history_recent_scrips';
 export const MAX_RECENT_SCRIPS = 5;
@@ -141,8 +142,8 @@ export function classifyOptionMove(oi: number, prevOi: number | undefined, close
   return 'Stable';
 }
 
-export function patternBiasScore(pattern: RolloverPattern, optionType: 'CE' | 'PE'): number {
-  if (optionType === 'CE') {
+export function patternBiasScore(pattern: RolloverPattern, optionType: OptionTypeId): number {
+  if (optionType === OptionType.CE) {
     if (pattern === 'Long Buildup') return 2;
     if (pattern === 'Short Covering') return 1;
     if (pattern === 'Short Buildup') return -2;

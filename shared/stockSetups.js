@@ -1,3 +1,5 @@
+import { Exchange, InstrumentType, Side } from './tradeEnums.js';
+import { SetupOutcomeStatus } from './appEnums.js';
 // @ts-check
 /**
  * Stock entry and exit setups
@@ -29,10 +31,10 @@
  * @typedef {'with-market' | 'alone' | 'stronger' | 'in-line'} MarketRelation
  * @typedef {{ stockPct: number, marketPct: number, relativePct: number, relation: MarketRelation }} MarketCheck
  * @typedef {'pullback' | 'reversal' | 'breakout' | 'rejection' | 'breakdown'} SetupType
- * @typedef {{ type: SetupType, direction: 'buy' | 'sell', label: string, date: string, entry: number, stop: number, target: number, rewardRisk: number, zone: { low: number, high: number, mid: number }, note: string }} Setup
+ * @typedef {{ type: SetupType, direction: import('./tradeEnums.js').SideId, label: string, date: string, entry: number, stop: number, target: number, rewardRisk: number, zone: { low: number, high: number, mid: number }, note: string }} Setup
  * @typedef {{ sma20: number | null, sma50: number | null, sma200: number | null, atr: number | null, rsi: number | null, avgVolume20: number | null }} Indicators
  * @typedef {{ price: number, date: string, state: StockState, stateNote: string, indicators: Indicators, supports: Zone[], resistances: Zone[], market: MarketCheck | null, setups: Setup[], plan: string }} StockAnalysis
- * @typedef {{ status: 'open' | 'target' | 'stop' | 'expired', resolvedDate: string | null, sessionsHeld: number, maxFavorablePct: number | null, maxAdversePct: number | null }} SetupOutcome
+ * @typedef {{ status: import('./appEnums.js').SetupOutcomeStatusId, resolvedDate: string | null, sessionsHeld: number, maxFavorablePct: number | null, maxAdversePct: number | null }} SetupOutcome
  */
 
 /** Candles needed before any analysis: a 50-day average plus room to find swings. */
@@ -94,8 +96,8 @@ export function parseKiteCandles(raw) {
  * @param {{ exchange: string, tradingsymbol: string, instrumentType?: string }} instrument
  */
 export function isCashStock(instrument) {
-  return (instrument.exchange === 'NSE' || instrument.exchange === 'BSE')
-    && (instrument.instrumentType === undefined || instrument.instrumentType === 'EQ')
+  return (instrument.exchange === Exchange.NSE || instrument.exchange === Exchange.BSE)
+    && (instrument.instrumentType === undefined || instrument.instrumentType === InstrumentType.EQ)
     && !/\s/.test(instrument.tradingsymbol);
 }
 
@@ -416,9 +418,9 @@ export function stockState(candles, ind) {
  * @returns {Setup | null}
  */
 function makeSetup(type, last, entry, stop, target, zone, note) {
-  const direction = type === 'rejection' || type === 'breakdown' ? 'sell' : 'buy';
-  const risk = direction === 'buy' ? entry - stop : stop - entry;
-  const reward = direction === 'buy' ? target - entry : entry - target;
+  const direction = type === 'rejection' || type === 'breakdown' ? Side.SELL : Side.BUY;
+  const risk = direction === Side.BUY ? entry - stop : stop - entry;
+  const reward = direction === Side.BUY ? target - entry : entry - target;
   if (!(risk > 0) || !(reward > 0)) return null;
   const rewardRisk = reward / risk;
   if (rewardRisk < MIN_REWARD_RISK) return null;
@@ -580,12 +582,12 @@ export function planText(state, price, supports, resistances, atr, last) {
 /**
  * Follow a setup through the sessions after its signal date. The stop wins when one
  * session touches both stop and target: the cautious reading of a daily candle.
- * @param {{ direction: 'buy' | 'sell', entry: number, stop: number, target: number }} setup
+ * @param {{ direction: import('./tradeEnums.js').SideId, entry: number, stop: number, target: number }} setup
  * @param {Candle[]} after  sessions after the signal date, oldest first
  * @returns {SetupOutcome}
  */
 export function evaluateSetup(setup, after) {
-  const buy = setup.direction === 'buy';
+  const buy = setup.direction === Side.BUY;
   let favorable = 0;
   let adverse = 0;
   let sessions = 0;
@@ -596,12 +598,12 @@ export function evaluateSetup(setup, after) {
     const hitStop = buy ? c.low <= setup.stop : c.high >= setup.stop;
     const hitTarget = buy ? c.high >= setup.target : c.low <= setup.target;
     if (hitStop || hitTarget) {
-      return { status: hitStop ? 'stop' : 'target', resolvedDate: c.date, sessionsHeld: sessions, maxFavorablePct: favorable * 100, maxAdversePct: adverse * 100 };
+      return { status: hitStop ? SetupOutcomeStatus.Stop : SetupOutcomeStatus.Target, resolvedDate: c.date, sessionsHeld: sessions, maxFavorablePct: favorable * 100, maxAdversePct: adverse * 100 };
     }
   }
   const done = sessions >= SETUP_HOLD_SESSIONS;
   return {
-    status: done ? 'expired' : 'open',
+    status: done ? SetupOutcomeStatus.Expired : SetupOutcomeStatus.Open,
     resolvedDate: done ? after[SETUP_HOLD_SESSIONS - 1].date : null,
     sessionsHeld: sessions,
     maxFavorablePct: sessions ? favorable * 100 : null,

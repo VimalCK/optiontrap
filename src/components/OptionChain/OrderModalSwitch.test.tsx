@@ -4,8 +4,8 @@ import OrderModalSwitch from './OrderModalSwitch';
 
 describe('OrderModalSwitch', () => {
   const html = renderToStaticMarkup(
-    <OrderModalSwitch label="Order type" value="limit" onChange={() => {}}
-      options={[{ value: 'market', label: 'Market' }, { value: 'limit', label: 'Limit' }]} />,
+    <OrderModalSwitch label="Order type" value="Limit" onChange={() => {}}
+      options={[{ value: 'Market', label: 'Market' }, { value: 'Limit', label: 'Limit' }]} />,
   );
 
   it('is a named group of buttons, the chosen one pressed and highlighted', () => {

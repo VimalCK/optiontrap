@@ -11,6 +11,7 @@ import { sideLabel, strategyLabel } from '@/components/Automation/autoTradeView'
 import type { StrategyInfo } from '@/services/strategies';
 import type { ResultGroup } from '@/services/automation';
 import { formatCalendarDate } from '@/utils/marketStatus';
+import { type SideId } from '../../../shared/tradeEnums.js';
 
 /** Share of trades that made money, in %; null with no trades. */
 export const winRate = (g: ResultGroup<unknown>): number | null => (g.trades > 0 ? (g.wins / g.trades) * 100 : null);
@@ -44,7 +45,7 @@ const clock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(
 /** An entry slot (minutes after IST midnight) as its IST time span, e.g. "09:30–10:00". */
 export const entrySlotLabel = (minutes: number): string => `${clock(minutes)}–${clock(minutes + RESULTS_ENTRY_SLOT_MINUTES)}`;
 
-export const sideName = (side: 'BUY' | 'SELL'): string => sideLabel(side);
+export const sideName = (side: SideId): string => sideLabel(side);
 
 /** An IST day, e.g. "Mon, 9 Nov". */
 export const dayLabel = (day: string): string => formatCalendarDate(day, { weekday: 'short', day: 'numeric', month: 'short' });

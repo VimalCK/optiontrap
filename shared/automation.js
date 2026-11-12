@@ -17,22 +17,21 @@
  *              rule (shared/exitRules/); it ends here
  */
 import { defaultRuleSettings, parseRuleSettings, ruleSettingsWithDefaults } from './rules/ruleSettings.js';
-import { Horizon, HORIZONS, horizonLabel } from './horizons.js';
 import { ENTRY_RULES } from './entryRules/index.js';
 import { EXIT_RULES } from './exitRules/index.js';
+import { HORIZONS, Horizon, InstrumentType, LifecycleStage, SIDES, Side, TradeKind, TradingMode, horizonLabel, isOptionType, sideLabel } from './tradeEnums.js';
 
 /**
- * @typedef {'stock' | 'stock-option' | 'stock-future' | 'index-option' | 'index-future'} TradeKindId
- * @typedef {'BUY' | 'SELL'} TradeSide
- * @typedef {import('./horizons.js').HorizonId} HorizonId
- * @typedef {'paper' | 'live'} ExecutionModeId
- * @typedef {'selected' | 'validated' | 'rejected' | 'executed' | 'closed'} LifecycleStageId
+ * @typedef {import('./tradeEnums.js').TradeKindId} TradeKindId
+ * @typedef {import('./tradeEnums.js').HorizonId} HorizonId
+ * @typedef {import('./tradeEnums.js').SideId} SideId
+ * @typedef {import('./tradeEnums.js').TradingModeId} TradingModeId
  * @typedef {import('./rules/ruleSettings.js').RuleInfo} RuleInfo  a strategy as the configuration knows it (the trade engine's, GET /api/strategies)
  * @typedef {{
  *   enabled: boolean,
- *   mode: ExecutionModeId,
+ *   mode: TradingModeId,
  *   horizons: Record<HorizonId, boolean>,
- *   kinds: Record<TradeKindId, Record<TradeSide, boolean>>,
+ *   kinds: Record<TradeKindId, Record<SideId, boolean>>,
  *   strategies: import('./rules/ruleSettings.js').RuleSettings,
  *   entryRules: import('./rules/ruleSettings.js').RuleSettings,
  *   exitRules: import('./rules/ruleSettings.js').RuleSettings,
@@ -41,34 +40,32 @@ import { EXIT_RULES } from './exitRules/index.js';
 
 /** Trade types, as the user turns them on and off. */
 export const TRADE_KINDS = [
-  { id: 'stock', label: 'Stock' },
-  { id: 'stock-option', label: 'Stock option' },
-  { id: 'stock-future', label: 'Stock future' },
-  { id: 'index-option', label: 'Index option' },
-  { id: 'index-future', label: 'Index future' },
+  { id: TradeKind.Stock, label: 'Stock' },
+  { id: TradeKind.StockOption, label: 'Stock option' },
+  { id: TradeKind.StockFuture, label: 'Stock future' },
+  { id: TradeKind.IndexOption, label: 'Index option' },
+  { id: TradeKind.IndexFuture, label: 'Index future' },
 ];
-
-export const TRADE_SIDES = ['BUY', 'SELL'];
 
 /**
  * Where trades come from. Intraday trades follow the OI snapshots; positional
  * trades will follow OI history and are not built yet. Defined in
- * shared/horizons.js, which positions and orders share.
+ * shared/tradeEnums.js, which positions and orders share.
  */
 export { HORIZONS };
 
 /** Where executed trades go. Live trading places real orders and is not built yet. */
 export const EXECUTION_MODES = [
-  { id: 'paper', label: 'Paper trading', available: true },
-  { id: 'live', label: 'Live trading', available: false },
+  { id: TradingMode.Paper, label: 'Paper trading', available: true },
+  { id: TradingMode.Live, label: 'Live trading', available: false },
 ];
 
 export const LIFECYCLE_STAGES = [
-  { id: 'selected', label: 'Selected', final: false },
-  { id: 'validated', label: 'Validated', final: false },
-  { id: 'rejected', label: 'Rejected', final: true },
-  { id: 'executed', label: 'Executed', final: false },
-  { id: 'closed', label: 'Closed', final: true },
+  { id: LifecycleStage.Selected, label: 'Selected', final: false },
+  { id: LifecycleStage.Validated, label: 'Validated', final: false },
+  { id: LifecycleStage.Rejected, label: 'Rejected', final: true },
+  { id: LifecycleStage.Executed, label: 'Executed', final: false },
+  { id: LifecycleStage.Closed, label: 'Closed', final: true },
 ];
 
 /** Win/Loss Patterns groups closed trades by entry time in IST slots this many minutes long. */
@@ -78,11 +75,11 @@ export const RESULTS_ENTRY_SLOT_MINUTES = 30;
 const NEXT_STAGES = {
   // The settings and entry rules refuse a signal before it is saved, so a saved
   // trade is rejected only after validation, when it cannot be placed.
-  selected: ['validated'],
-  validated: ['executed', 'rejected'],
-  executed: ['closed'],
-  rejected: [],
-  closed: [],
+  [LifecycleStage.Selected]: [LifecycleStage.Validated],
+  [LifecycleStage.Validated]: [LifecycleStage.Executed, LifecycleStage.Rejected],
+  [LifecycleStage.Executed]: [LifecycleStage.Closed],
+  [LifecycleStage.Rejected]: [],
+  [LifecycleStage.Closed]: [],
 };
 
 /**
@@ -111,7 +108,7 @@ function noKinds() {
 export function defaultAutomationConfig(strategies) {
   return {
     enabled: false,
-    mode: 'paper',
+    mode: TradingMode.Paper,
     horizons: { [Horizon.Intraday]: true, [Horizon.Positional]: false },
     kinds: noKinds(),
     strategies: defaultRuleSettings(strategies),
@@ -150,13 +147,13 @@ export function parseAutomationConfig(input, strategyInfos) {
   if (!kinds || typeof kinds !== 'object') return { error: 'kinds is required' };
   const unknown = Object.keys(kinds).filter((id) => !TRADE_KINDS.some((kind) => kind.id === id));
   if (unknown.length) return { error: `unknown trade type: ${unknown.join(', ')}` };
-  const parsedKinds = /** @type {Record<string, Record<TradeSide, boolean>>} */ ({});
+  const parsedKinds = /** @type {Record<string, Record<SideId, boolean>>} */ ({});
   for (const kind of TRADE_KINDS) {
     const sides = kinds[kind.id];
-    if (!sides || TRADE_SIDES.some((side) => typeof sides[side] !== 'boolean')) {
+    if (!sides || SIDES.some((side) => typeof sides[side.id] !== 'boolean')) {
       return { error: `kinds.${kind.id} must say true or false for BUY and SELL` };
     }
-    parsedKinds[kind.id] = { BUY: sides.BUY, SELL: sides.SELL };
+    parsedKinds[kind.id] = { [Side.BUY]: sides[Side.BUY], [Side.SELL]: sides[Side.SELL] };
   }
 
   const parsedStrategies = parseRuleSettings(strategyInfos, strategies, 'strategies');
@@ -190,10 +187,10 @@ export function parseAutomationConfig(input, strategyInfos) {
 export function withDefaults(stored, strategies) {
   const base = defaultAutomationConfig(strategies);
   if (!stored || typeof stored !== 'object') return base;
-  const kinds = /** @type {Record<string, Record<TradeSide, boolean>>} */ (noKinds());
+  const kinds = /** @type {Record<string, Record<SideId, boolean>>} */ (noKinds());
   for (const kind of TRADE_KINDS) {
     const sides = stored.kinds?.[kind.id];
-    if (sides) kinds[kind.id] = { BUY: sides.BUY === true, SELL: sides.SELL === true };
+    if (sides) kinds[kind.id] = { [Side.BUY]: sides[Side.BUY] === true, [Side.SELL]: sides[Side.SELL] === true };
   }
   const horizons = /** @type {Record<string, boolean>} */ ({ ...base.horizons });
   for (const horizon of HORIZONS) {
@@ -219,19 +216,18 @@ export function withDefaults(stored, strategies) {
  * @returns {TradeKindId | null}
  */
 export function tradeKind(instrumentType, isIndex) {
-  if (instrumentType === 'CE' || instrumentType === 'PE') return isIndex ? 'index-option' : 'stock-option';
-  if (instrumentType === 'FUT') return isIndex ? 'index-future' : 'stock-future';
-  if (instrumentType === 'EQ') return isIndex ? null : 'stock';
+  if (isOptionType(instrumentType)) return isIndex ? TradeKind.IndexOption : TradeKind.StockOption;
+  if (instrumentType === InstrumentType.FUT) return isIndex ? TradeKind.IndexFuture : TradeKind.StockFuture;
+  if (instrumentType === InstrumentType.EQ) return isIndex ? null : TradeKind.Stock;
   return null;
 }
 
 /**
- * @typedef {{ horizon: HorizonId, kind: TradeKindId, side: TradeSide }} GeneralTrade
+ * @typedef {{ horizon: HorizonId, kind: TradeKindId, side: SideId }} GeneralTrade
  * @typedef {{ id: string, check: (trade: GeneralTrade, config: AutomationConfig) => string | null }} GeneralCheck
  */
 
 const kindLabel = (/** @type {string} */ id) => TRADE_KINDS.find((k) => k.id === id)?.label ?? id;
-const sideLabel = (/** @type {string} */ side) => (side === 'BUY' ? 'Buy' : 'Sell');
 
 /**
  * What the General tab allows, checked on every selected trade before the

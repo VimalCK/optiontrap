@@ -3,17 +3,16 @@
  * in shared/marketTime.js (shared with the server); this file adapts it.
  */
 import { daysUntil, marketDate, marketStatus, marketTimeLabel } from '../../shared/marketTime.js';
-
-export type MarketStatus = 'live' | 'closed' | 'pre-open' | 'post-close';
+import { MarketStatus, type MarketStatusId } from '../../shared/tradeEnums.js';
 
 /** Pre-open, live, post-close (30 min after the close) or closed, by market time. */
-export function getMarketStatus(): MarketStatus {
+export function getMarketStatus(): MarketStatusId {
   return marketStatus();
 }
 
 /** Is the market currently open for trading? */
 export function isMarketLive(): boolean {
-  return getMarketStatus() === 'live';
+  return getMarketStatus() === MarketStatus.Live;
 }
 
 /** Today's market-zone date (YYYY-MM-DD), whatever the browser's time zone. */

@@ -25,6 +25,7 @@
 import { tryHoldNamedAdvisoryLock } from '../db.js';
 import { algoLogger } from '../algoLog.js';
 import { createMarket } from './market.js';
+import { PluginState } from '../../shared/appEnums.js';
 
 const LOCK_NAME = 'trade-engine';
 /** How often a standing-by server tries to take over the engine. */
@@ -34,7 +35,7 @@ const LOCK_RETRY_MS = 10_000;
  * @typedef {{ market: import('./market.js').PluginMarket, services: Record<string, any>, log: (event: string, details?: import('../algoLog.js').AlgoDetails) => void }} PluginContext
  * @typedef {{ id: string, start: (ctx: PluginContext) => unknown, stop?: () => unknown, status?: () => Record<string, unknown> }} Plugin
  * @typedef {'service' | 'strategy'} PluginKind
- * @typedef {{ plugin: Plugin, kind: PluginKind, state: 'stopped' | 'running' | 'failed', error: string | null, dispose: (() => void) | null }} PluginRun
+ * @typedef {{ plugin: Plugin, kind: PluginKind, state: import('../../shared/appEnums.js').PluginStateId, error: string | null, dispose: (() => void) | null }} PluginRun
  * @typedef {{ release: () => Promise<void> }} HeldLock
  */
 
@@ -62,7 +63,7 @@ export function createTradeEngine({
   const log = logFor('Engine');
   /** @type {Map<string, PluginRun>} */
   const runs = new Map();
-  const add = (/** @type {Plugin} */ plugin, /** @type {PluginKind} */ kind) => runs.set(plugin.id, { plugin, kind, state: 'stopped', error: null, dispose: null });
+  const add = (/** @type {Plugin} */ plugin, /** @type {PluginKind} */ kind) => runs.set(plugin.id, { plugin, kind, state: PluginState.Stopped, error: null, dispose: null });
   services.forEach((plugin) => add(plugin, 'service'));
   strategies.forEach((plugin) => add(plugin, 'strategy'));
   const servicesById = Object.fromEntries(services.map((s) => [s.id, s]));
@@ -84,12 +85,12 @@ export function createTradeEngine({
     const scope = marketClock.forPlugin(run.plugin.id);
     try {
       await run.plugin.start({ market: scope, services: servicesById, log: logFor(run.plugin.id) });
-      run.state = 'running';
+      run.state = PluginState.Running;
       run.error = null;
       run.dispose = scope.dispose;
     } catch (err) {
       scope.dispose();
-      run.state = 'failed';
+      run.state = PluginState.Failed;
       failed(run.plugin.id, /** @type {Error} */ (err), 'could not start');
     }
   }
@@ -97,14 +98,14 @@ export function createTradeEngine({
   async function stopPlugin(/** @type {PluginRun} */ run) {
     run.dispose?.();
     run.dispose = null;
-    if (run.state === 'running') {
+    if (run.state === PluginState.Running) {
       try {
         await run.plugin.stop?.();
       } catch (err) {
         failed(run.plugin.id, /** @type {Error} */ (err), 'could not stop');
       }
     }
-    run.state = 'stopped';
+    run.state = PluginState.Stopped;
   }
 
   /** Services first (strategies use them), then strategies, then the clock. */
@@ -170,7 +171,7 @@ export function createTradeEngine({
         kind,
         state,
         error,
-        ...(state === 'running' ? plugin.status?.() : {}),
+        ...(state === PluginState.Running ? plugin.status?.() : {}),
       })),
     }),
   };

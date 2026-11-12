@@ -5,7 +5,7 @@ export interface OptionInstrument {
   name: string;
   expiry: string;
   strike: number;
-  instrumentType: 'CE' | 'PE';
+  instrumentType: OptionTypeId;
   lotSize: number;
   lastPrice: number;
 }
@@ -18,6 +18,7 @@ export interface OptionChainRow {
 import { apiClient } from './apiClient';
 import { istDateString } from '@/utils/marketStatus';
 import { buildOptionChain as buildChain, upcomingExpiries } from '../../shared/optionAnalysis/chain.js';
+import { Exchange, isOptionType, type OptionTypeId } from '../../shared/tradeEnums.js';
 
 /** In-memory cache of all instruments to avoid re-fetching */
 let instrumentsCache: any[] | null = null;
@@ -33,7 +34,7 @@ export async function fetchOptions(symbol: string, signal?: AbortSignal): Promis
 
   // Filter for the given symbol's CE/PE options
   return instrumentsCache!
-    .filter((i: any) => i.exchange === 'NFO' && i.name === symbol && (i.instrumentType === 'CE' || i.instrumentType === 'PE'))
+    .filter((i: any) => i.exchange === Exchange.NFO && i.name === symbol && isOptionType(i.instrumentType))
     .map((i: any) => ({
       instrumentToken: i.instrumentToken,
       exchangeToken: i.exchangeToken,
@@ -41,7 +42,7 @@ export async function fetchOptions(symbol: string, signal?: AbortSignal): Promis
       name: i.name,
       expiry: i.expiry,
       strike: i.strike,
-      instrumentType: i.instrumentType as 'CE' | 'PE',
+      instrumentType: i.instrumentType as OptionTypeId,
       lotSize: i.lotSize || 0,
       lastPrice: i.lastPrice || 0,
     }));

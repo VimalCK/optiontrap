@@ -24,6 +24,8 @@ import { findNseStock } from '@/services/stockSetups';
 import { useUnderlyings } from '@/hooks/useUnderlyings';
 import { computeFlowReadings, marketCloseIST, type FlowInput, type FlowReading } from '@/services/oiFlow';
 import { computeFairValues, realizedVol, volVerdict, REALIZED_WINDOW, type FairInput, type FairValueResult } from '@/services/fairValue';
+import { OptionType, Side, isOptionType, type OptionTypeId, type SideId } from '../../../shared/tradeEnums.js';
+import { SignalOutcome } from '../../../shared/appEnums.js';
 
 /** When a day's prices were taken: the close, or now for today's rows, which are a live snapshot until the close. */
 function snapshotTime(date: string): Date {
@@ -36,7 +38,7 @@ function fairInputs(rows: OiHistoryRow[], date: string, expiry?: string): FairIn
   const asOf = snapshotTime(date);
   const inputs: FairInput[] = [];
   for (const r of rows) {
-    if (!r.strike || !r.expiry || (r.optionType !== 'CE' && r.optionType !== 'PE') || !(r.spotClose > 0) || !(r.close > 0)) continue;
+    if (!r.strike || !r.expiry || !isOptionType(r.optionType) || !(r.spotClose > 0) || !(r.close > 0)) continue;
     if (expiry && r.expiry !== expiry) continue;
     inputs.push({ token: r.instrumentToken, optionType: r.optionType, strike: r.strike, expiry: r.expiry, price: r.close, spot: r.spotClose, asOf, volume: r.volume });
   }
@@ -438,14 +440,14 @@ const OiHistory: React.FC = () => {
   // Handle buy/sell from OI history cells
   const handleTrade = useCallback(async (
     cell: any,
-    optionType: 'CE' | 'PE',
-    side: 'BUY' | 'SELL',
+    optionType: OptionTypeId,
+    side: SideId,
     strike: number,
     expiry: string,
   ) => {
-    const token = optionType === 'CE' ? cell.ceToken : cell.peToken;
-    const tradingsymbol = optionType === 'CE' ? cell.ceTradingsymbol : cell.peTradingsymbol;
-    const historicalClose = optionType === 'CE' ? cell.ceClose : cell.peClose;
+    const token = optionType === OptionType.CE ? cell.ceToken : cell.peToken;
+    const tradingsymbol = optionType === OptionType.CE ? cell.ceTradingsymbol : cell.peTradingsymbol;
+    const historicalClose = optionType === OptionType.CE ? cell.ceClose : cell.peClose;
 
     if (!token || !tradingsymbol || !historicalClose) return;
 
@@ -578,7 +580,7 @@ const OiHistory: React.FC = () => {
 
     const inputs: FlowInput[] = [];
     for (const r of filteredRows) {
-      if (!r.strike || !r.expiry || (r.optionType !== 'CE' && r.optionType !== 'PE') || !(r.spotClose > 0)) continue;
+      if (!r.strike || !r.expiry || !isOptionType(r.optionType) || !(r.spotClose > 0)) continue;
       const oiHistory = (oiSeriesByToken.get(r.instrumentToken) ?? [])
         .filter((entry) => entry.date < filterDate)
         .map((entry) => entry.oi);
@@ -710,7 +712,7 @@ const OiHistory: React.FC = () => {
       }
       const cell = strikeMap.get(r.expiry)!;
 
-      if (r.optionType === 'CE') {
+      if (r.optionType === OptionType.CE) {
         cell.ceOi = r.oi;
         cell.ceClose = r.close;
         cell.ceToken = r.instrumentToken;
@@ -853,7 +855,7 @@ const OiHistory: React.FC = () => {
       }
       const entry = expMap.get(r.expiry)!;
       const fair = fairByDate.get(r.date)?.byToken.get(r.instrumentToken);
-      if (r.optionType === 'CE') {
+      if (r.optionType === OptionType.CE) {
         entry.ceOi = r.oi;
         entry.ceClose = r.close;
         entry.ceVolume = r.volume;
@@ -910,24 +912,24 @@ const OiHistory: React.FC = () => {
     if (!chartData || !selectedStrike || chartData.dates.length === 0 || dataScrip !== scrip) return;
     const selling = chartData.sellingSetup;
     const buying = chartData.tradeSetup;
-    let action: 'BUY' | 'SELL' | null = null;
-    let optionType: 'CE' | 'PE' | null = null;
+    let action: SideId | null = null;
+    let optionType: OptionTypeId | null = null;
     let setupStatus: TradeSetupStatus = 'Avoid';
 
     if ((selling.type === 'Call Sell' || selling.type === 'Put Sell') && selling.status !== 'Avoid') {
-      action = 'SELL';
-      optionType = selling.type === 'Call Sell' ? 'CE' : 'PE';
+      action = Side.SELL;
+      optionType = selling.type === 'Call Sell' ? OptionType.CE : OptionType.PE;
       setupStatus = selling.status;
     } else if ((buying.direction === 'Bullish' || buying.direction === 'Bearish') && buying.status !== 'Avoid') {
-      action = 'BUY';
-      optionType = buying.direction === 'Bullish' ? 'CE' : 'PE';
+      action = Side.BUY;
+      optionType = buying.direction === 'Bullish' ? OptionType.CE : OptionType.PE;
       setupStatus = buying.status;
     }
     if (!action || !optionType) return;
 
     const signalDate = chartData.dates[chartData.dates.length - 1];
     const expiry = chartData.premiumDecay.nearestExpiry;
-    const side = optionType === 'CE' ? chartData.premiumDecay.ce : chartData.premiumDecay.pe;
+    const side = optionType === OptionType.CE ? chartData.premiumDecay.ce : chartData.premiumDecay.pe;
 
     // Log one setup per scrip per day: only the ATM strike on the signal date.
     const signalDayRows = data.filter((row) => row.date === signalDate && row.strike);
@@ -942,7 +944,7 @@ const OiHistory: React.FC = () => {
     // date it can be a contract that has expired by the signal date, so take
     // the entry premium from the signal date itself and skip if it has none.
     const signalDayEntry = expiry ? chartData.dateMap.get(signalDate)?.get(expiry) : undefined;
-    const entryPremium = signalDayEntry ? (optionType === 'CE' ? signalDayEntry.ceClose : signalDayEntry.peClose) : 0;
+    const entryPremium = signalDayEntry ? (optionType === OptionType.CE ? signalDayEntry.ceClose : signalDayEntry.peClose) : 0;
     if (!expiry || expiry < signalDate || !(entryPremium > 0)) return;
 
     const key = `${scrip}|${signalDate}|${expiry}|${selectedStrike}|${optionType}|${action}`;
@@ -953,9 +955,9 @@ const OiHistory: React.FC = () => {
     // signal when that date is the signal date. Otherwise leave it out; the
     // server merges details, so a pattern recorded earlier is kept.
     const strikeRow = filterDate === signalDate ? tableData.find((row) => row.strike === selectedStrike) : undefined;
-    const strikePattern = strikeRow ? (optionType === 'CE' ? strikeRow.cePattern : strikeRow.pePattern) : null;
+    const strikePattern = strikeRow ? (optionType === OptionType.CE ? strikeRow.cePattern : strikeRow.pePattern) : null;
     const strikeCell = strikeRow?.cells.get(expiry);
-    const flowToken = strikeCell ? (optionType === 'CE' ? strikeCell.ceToken : strikeCell.peToken) : undefined;
+    const flowToken = strikeCell ? (optionType === OptionType.CE ? strikeCell.ceToken : strikeCell.peToken) : undefined;
     const ivFlow = flowToken !== undefined ? flowByToken.get(flowToken)?.label : undefined;
     const fair = flowToken !== undefined ? fairToday.byToken.get(flowToken) : undefined;
 
@@ -975,7 +977,7 @@ const OiHistory: React.FC = () => {
           sellingStatus: selling.status,
           buyingDirection: buying.direction,
           buyingStatus: buying.status,
-          buyingMomentum: optionType === 'CE' ? chartData.optionMomentum.ce : chartData.optionMomentum.pe,
+          buyingMomentum: optionType === OptionType.CE ? chartData.optionMomentum.ce : chartData.optionMomentum.pe,
           decay: side ? { decayPct: side.decayPct, score: side.score, daysToExpiry: side.daysToExpiry, latestVolume: side.latestVolume } : null,
           flowBias: chartData.biasSummary.bias,
           ...(strikePattern && strikePattern !== '-' ? { strikePattern } : {}),
@@ -998,13 +1000,13 @@ const OiHistory: React.FC = () => {
         );
         const signals = result || [];
         setSignalRows(signals);
-        const openSignals = signals.filter((signal) => signal.outcome_status === 'Open' || signal.outcome_status === null);
+        const openSignals = signals.filter((signal) => signal.outcome_status === SignalOutcome.Open || signal.outcome_status === null);
         const openReturns = openSignals
           .map((signal) => signal.outcome_return)
           .filter((value): value is number => value !== null && Number.isFinite(Number(value)))
           .map(Number);
-        const evaluated = signals.filter((signal) => signal.outcome_status === 'Profit' || signal.outcome_status === 'Loss');
-        const wins = evaluated.filter((signal) => signal.outcome_status === 'Profit').length;
+        const evaluated = signals.filter((signal) => signal.outcome_status === SignalOutcome.Profit || signal.outcome_status === SignalOutcome.Loss);
+        const wins = evaluated.filter((signal) => signal.outcome_status === SignalOutcome.Profit).length;
         const average = evaluated.length ? evaluated.reduce((sum, signal) => sum + Number(signal.outcome_return || 0), 0) / evaluated.length : null;
         const favorableRows = evaluated.filter((signal) => signal.max_favorable_return !== null);
         const adverseRows = evaluated.filter((signal) => signal.max_adverse_return !== null);
@@ -1021,12 +1023,12 @@ const OiHistory: React.FC = () => {
         const averageWin = winningReturns.length ? grossProfit / winningReturns.length : null;
         const averageLoss = losingReturns.length ? -grossLoss / losingReturns.length : null;
         const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : null);
-        const byAction = (action: 'BUY' | 'SELL') => {
+        const byAction = (action: SideId) => {
           const rows = evaluated.filter((signal) => signal.action === action);
-          return { count: rows.length, wins: rows.filter((signal) => signal.outcome_status === 'Profit').length };
+          return { count: rows.length, wins: rows.filter((signal) => signal.outcome_status === SignalOutcome.Profit).length };
         };
-        const sells = byAction('SELL');
-        const buys = byAction('BUY');
+        const sells = byAction(Side.SELL);
+        const buys = byAction(Side.BUY);
         setSignalPerformance({
           total: signals.length,
           open: openSignals.length,
@@ -1064,25 +1066,22 @@ const OiHistory: React.FC = () => {
   /**
    * Resolve the strike/side/optionType a trade setup recommends and place it.
    * Reuses handleTrade so token/tradingsymbol/price come from the OI grid.
-   *   mode 'buy'  → BUY; CE for Bullish, PE for Bearish
-   *   mode 'sell' → SELL; CE for Call Sell, PE for Put Sell
+   *   side BUY  → CE for Bullish, PE for Bearish
+   *   side SELL → CE for Call Sell, PE for Put Sell
    * Strike = setup's key level (resistance for CE side, support for PE side),
    * falling back to ATM / max-OI magnet when the level is missing.
    */
-  const tradeFromSetup = useCallback((mode: 'buy' | 'sell') => {
+  const tradeFromSetup = useCallback((side: SideId) => {
     if (!chartData) return;
     const { tradeSetup, sellingSetup, tradeLevels } = chartData;
 
-    let optionType: 'CE' | 'PE' | null = null;
-    let side: 'BUY' | 'SELL';
-    if (mode === 'buy') {
-      side = 'BUY';
-      if (tradeSetup.direction === 'Bullish') optionType = 'CE';
-      else if (tradeSetup.direction === 'Bearish') optionType = 'PE';
+    let optionType: OptionTypeId | null = null;
+    if (side === Side.BUY) {
+      if (tradeSetup.direction === 'Bullish') optionType = OptionType.CE;
+      else if (tradeSetup.direction === 'Bearish') optionType = OptionType.PE;
     } else {
-      side = 'SELL';
-      if (sellingSetup.type === 'Call Sell') optionType = 'CE';
-      else if (sellingSetup.type === 'Put Sell') optionType = 'PE';
+      if (sellingSetup.type === 'Call Sell') optionType = OptionType.CE;
+      else if (sellingSetup.type === 'Put Sell') optionType = OptionType.PE;
     }
 
     if (!optionType) {
@@ -1091,7 +1090,7 @@ const OiHistory: React.FC = () => {
     }
 
     // CE side leans to resistance, PE side to support; fall back to ATM/max-OI.
-    const keyLevel = optionType === 'CE' ? tradeLevels.resistanceStrike : tradeLevels.supportStrike;
+    const keyLevel = optionType === OptionType.CE ? tradeLevels.resistanceStrike : tradeLevels.supportStrike;
     const targetStrike = keyLevel ?? atmStrike ?? tradeLevels.maxOiStrike;
     if (!targetStrike) {
       showToast('No tradeable strike found', 'red');
@@ -1111,8 +1110,8 @@ const OiHistory: React.FC = () => {
     for (const exp of visibleTableExpiries) {
       const cell = row.cells.get(exp);
       if (!cell) continue;
-      const token = optionType === 'CE' ? cell.ceToken : cell.peToken;
-      const price = optionType === 'CE' ? cell.ceClose : cell.peClose;
+      const token = optionType === OptionType.CE ? cell.ceToken : cell.peToken;
+      const price = optionType === OptionType.CE ? cell.ceClose : cell.peClose;
       if (token && price) {
         chosenCell = cell;
         chosenExpiry = exp;
@@ -1432,8 +1431,8 @@ const OiHistory: React.FC = () => {
           {analysisTab === 'history' && (
             <>
           <div className="oi-history__chart-pair">
-            <StrikeOiChart optionType="CE" dates={chartData.dates} dateMap={chartData.dateMap} maxOi={chartData.maxOi} maxPrice={chartData.maxCePrice} expiries={chartExpiries} expiryColors={expiryColors} showVolume={showVolume} showFair={chartFairExpiry !== null} />
-            <StrikeOiChart optionType="PE" dates={chartData.dates} dateMap={chartData.dateMap} maxOi={chartData.maxOi} maxPrice={chartData.maxPePrice} expiries={chartExpiries} expiryColors={expiryColors} showVolume={showVolume} showFair={chartFairExpiry !== null} />
+            <StrikeOiChart optionType={OptionType.CE} dates={chartData.dates} dateMap={chartData.dateMap} maxOi={chartData.maxOi} maxPrice={chartData.maxCePrice} expiries={chartExpiries} expiryColors={expiryColors} showVolume={showVolume} showFair={chartFairExpiry !== null} />
+            <StrikeOiChart optionType={OptionType.PE} dates={chartData.dates} dateMap={chartData.dateMap} maxOi={chartData.maxOi} maxPrice={chartData.maxPePrice} expiries={chartExpiries} expiryColors={expiryColors} showVolume={showVolume} showFair={chartFairExpiry !== null} />
           </div>
 
           {/* Legend: toggles expiries, or picks the single expiry in the fair-value view */}

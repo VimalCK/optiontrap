@@ -1,17 +1,18 @@
 import React, { useState } from 'react';
-import { FeedbackType, submitFeedback } from '@/services/feedback';
+import { submitFeedback } from '@/services/feedback';
+import { FeedbackType, type FeedbackTypeId } from '../../../shared/appEnums.js';
 import '@/styles/feedback.css';
 
-const feedbackTypes: Array<{ id: FeedbackType; label: string }> = [
-  { id: 'bug', label: 'Bug' },
-  { id: 'feature', label: 'Feature Request' },
-  { id: 'general', label: 'General Feedback' },
-  { id: 'subscription', label: 'Subscription / Billing' },
+const feedbackTypes: Array<{ id: FeedbackTypeId; label: string }> = [
+  { id: FeedbackType.Bug, label: 'Bug' },
+  { id: FeedbackType.Feature, label: 'Feature Request' },
+  { id: FeedbackType.General, label: 'General Feedback' },
+  { id: FeedbackType.Subscription, label: 'Subscription / Billing' },
 ];
 
 const FeedbackButton: React.FC = () => {
   const [open, setOpen] = useState(false);
-  const [type, setType] = useState<FeedbackType>('general');
+  const [type, setType] = useState<FeedbackTypeId>(FeedbackType.General);
   const [message, setMessage] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);

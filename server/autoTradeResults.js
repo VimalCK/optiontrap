@@ -13,6 +13,8 @@
  */
 import { MARKET_TIME_ZONE, addDays, marketDateTime } from '../shared/marketTime.js';
 import { RESULTS_ENTRY_SLOT_MINUTES as SLOT } from '../shared/automation.js';
+import { LifecycleStage, Side } from '../shared/tradeEnums.js';
+import { sqlEnum } from './sql.js';
 
 // $1 user, $2/$3 the range's ISO instants, $4 the market time zone.
 const CLOSED_TRADES_SQL = `
@@ -21,9 +23,9 @@ const CLOSED_TRADES_SQL = `
     (EXTRACT(HOUR FROM created_at AT TIME ZONE $4) * 60
       + FLOOR(EXTRACT(MINUTE FROM created_at AT TIME ZONE $4) / ${SLOT}) * ${SLOT})::int AS slot,
     COALESCE(charges, 0) AS charges,
-    CASE WHEN side = 'BUY' THEN exit_price - entry_price ELSE entry_price - exit_price END * quantity - COALESCE(charges, 0) AS pnl
+    CASE WHEN side = ${sqlEnum(Side.BUY)} THEN exit_price - entry_price ELSE entry_price - exit_price END * quantity - COALESCE(charges, 0) AS pnl
   FROM algo_trades
-  WHERE user_id = $1 AND stage = 'closed' AND created_at >= $2 AND created_at < $3`;
+  WHERE user_id = $1 AND stage = ${sqlEnum(LifecycleStage.Closed)} AND created_at >= $2 AND created_at < $3`;
 
 // Which column each GROUPING SETS row is grouped by ('all' is the summary).
 // Each row groups by one column at most, so COALESCE picks its value.

@@ -11,6 +11,7 @@
  */
 
 import { MARKET_HOLIDAYS_2026 } from './marketHolidays.js';
+import { MarketStatus } from './tradeEnums.js';
 
 /** IANA time zone of the exchange (NSE). */
 export const MARKET_TIME_ZONE = 'Asia/Kolkata';
@@ -153,18 +154,18 @@ export function isTradingDay(date) {
 
 /**
  * @param {Date} [now]
- * @returns {'live' | 'closed' | 'pre-open' | 'post-close'}
+ * @returns {import('./tradeEnums.js').MarketStatusId}
  */
 export function marketStatus(now = new Date()) {
   const { date, minutes } = marketClock(now);
-  if (!isTradingDay(date)) return 'closed';
-  if (minutes >= PRE_OPEN_MINUTES && minutes < MARKET_OPEN_MINUTES) return 'pre-open';
-  if (minutes >= MARKET_OPEN_MINUTES && minutes <= MARKET_CLOSE_MINUTES) return 'live';
-  if (minutes > MARKET_CLOSE_MINUTES && minutes <= MARKET_CLOSE_MINUTES + 30) return 'post-close';
-  return 'closed';
+  if (!isTradingDay(date)) return MarketStatus.Closed;
+  if (minutes >= PRE_OPEN_MINUTES && minutes < MARKET_OPEN_MINUTES) return MarketStatus.PreOpen;
+  if (minutes >= MARKET_OPEN_MINUTES && minutes <= MARKET_CLOSE_MINUTES) return MarketStatus.Live;
+  if (minutes > MARKET_CLOSE_MINUTES && minutes <= MARKET_CLOSE_MINUTES + 30) return MarketStatus.PostClose;
+  return MarketStatus.Closed;
 }
 
 /** Whether the session is open now (trading day, open–close inclusive). */
 export function isMarketOpen(now = new Date()) {
-  return marketStatus(now) === 'live';
+  return marketStatus(now) === MarketStatus.Live;
 }

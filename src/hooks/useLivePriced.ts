@@ -6,7 +6,8 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe } from '@/services/tickerSingleton';
-import { getMarketStatus, MarketStatus } from '@/utils/marketStatus';
+import { getMarketStatus } from '@/utils/marketStatus';
+import { MarketStatus, type MarketStatusId } from '../../shared/tradeEnums.js';
 
 const MARKET_STATUS_CHECK_MS = 30_000;
 
@@ -23,7 +24,7 @@ export function useLivePriced<T>({ name, initial, load, tokensOf, applyTicks }: 
   const [data, setData] = useState<T>(initial);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [marketStatus, setMarketStatus] = useState<MarketStatus>(getMarketStatus);
+  const [marketStatus, setMarketStatus] = useState<MarketStatusId>(getMarketStatus);
   const subscriberKey = `${name}-${useId()}`;
   const controllerRef = useRef<AbortController | null>(null);
 
@@ -56,7 +57,7 @@ export function useLivePriced<T>({ name, initial, load, tokensOf, applyTicks }: 
   // Subscribe again only when the set of instruments changes, not on every tick.
   const tokenKey = tokensOf(data).join(',');
   useEffect(() => {
-    if (!tokenKey || marketStatus !== 'live') return;
+    if (!tokenKey || marketStatus !== MarketStatus.Live) return;
     const tokens = tokenKey.split(',').map(Number);
     return tickerSubscribe(subscriberKey, tokens, (ticks) => setData((prev) => applyTicks(prev, ticks)));
   }, [tokenKey, marketStatus, subscriberKey, applyTicks]);

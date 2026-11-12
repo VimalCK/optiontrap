@@ -5,7 +5,7 @@
  * merging) runs on the server.
  */
 import { apiClient, ApiError } from './apiClient';
-import type { HorizonId } from '../../shared/horizons.js';
+import { InstrumentType, PositionStatus, TradingMode, type HorizonId, type InstrumentTypeId, type OptionTypeId, type SegmentId, type SideId, type TradeSourceId, type TradingModeId } from '../../shared/tradeEnums.js';
 
 /**
  * What to tell the user when placing or exiting a trade failed: the server's
@@ -17,21 +17,21 @@ export function tradeErrorMessage(err: unknown, fallback = 'Failed to add positi
 
 export interface Position {
   id: string;
-  mode: 'paper' | 'live';
+  mode: TradingModeId;
   tradingsymbol: string;
   instrumentToken: number;
   /** CE / PE (options), FUT (futures), EQ (stocks). */
-  instrumentType: 'CE' | 'PE' | 'FUT' | 'EQ';
+  instrumentType: InstrumentTypeId;
   exchange: string;
   /** manual: placed by the user; auto: by the trade automation. */
-  source: 'manual' | 'auto';
-  /** Intraday or positional (shared/horizons.js): only intraday positions are squared off, and trades merge only within one. */
+  source: TradeSourceId;
+  /** Intraday or positional (shared/tradeEnums.js): only intraday positions are squared off, and trades merge only within one. */
   horizon: HorizonId;
   /** Options only. */
   strike: number | null;
   /** Options only: the same as instrumentType. */
-  optionType: 'CE' | 'PE' | null;
-  side: 'BUY' | 'SELL';
+  optionType: OptionTypeId | null;
+  side: SideId;
   quantity: number;
   entryPrice: number;
   entryTime: string; // ISO timestamp
@@ -64,7 +64,7 @@ export interface ChargeBreakdown {
 /**
  * Open positions plus those exited today.
  */
-export async function getPositions(mode: 'paper' | 'live' = 'paper'): Promise<Position[]> {
+export async function getPositions(mode: TradingModeId = TradingMode.Paper): Promise<Position[]> {
   return apiClient.get<Position[]>(`/api/positions?mode=${mode}`);
 }
 
@@ -72,7 +72,7 @@ export interface ClosedPositionsFilter {
   /** Market-zone (IST) exit days, 'YYYY-MM-DD', inclusive. */
   from?: string;
   to?: string;
-  segment?: 'options' | 'futures' | 'stocks';
+  segment?: SegmentId;
   /** Page size; the server defaults to 100 and allows at most 500. */
   limit?: number;
   offset?: number;
@@ -110,10 +110,10 @@ function query(params: Record<string, string | number | undefined>): string {
  * A page of exited positions, most recently exited first.
  */
 export async function getClosedPositions(
-  mode: 'paper' | 'live' = 'paper',
+  mode: TradingModeId = TradingMode.Paper,
   filter: ClosedPositionsFilter = {},
 ): Promise<Position[]> {
-  return apiClient.get<Position[]>(`/api/positions?${query({ mode, status: 'closed', ...filter })}`);
+  return apiClient.get<Position[]>(`/api/positions?${query({ mode, status: PositionStatus.Closed, ...filter })}`);
 }
 
 /**
@@ -121,10 +121,10 @@ export async function getClosedPositions(
  * first. Days without exits are left out.
  */
 export async function getDailyPnl(
-  mode: 'paper' | 'live',
+  mode: TradingModeId,
   from: string,
   to: string,
-  segment?: 'options' | 'futures' | 'stocks',
+  segment?: SegmentId,
 ): Promise<DailyPnl[]> {
   return apiClient.get<DailyPnl[]>(`/api/positions/daily-pnl?${query({ mode, from, to, segment })}`);
 }
@@ -132,7 +132,7 @@ export async function getDailyPnl(
 /**
  * All-time win/loss figures over exited positions.
  */
-export async function getPositionStats(mode: 'paper' | 'live' = 'paper'): Promise<PositionStats> {
+export async function getPositionStats(mode: TradingModeId = TradingMode.Paper): Promise<PositionStats> {
   return apiClient.get<PositionStats>(`/api/positions/stats?${query({ mode })}`);
 }
 
@@ -148,7 +148,7 @@ export async function getPositionStats(mode: 'paper' | 'live' = 'paper'): Promis
  * server records browser trades as manual.
  */
 export type NewPosition = Omit<Position, 'id' | 'entryTime' | 'mode' | 'instrumentType' | 'exchange' | 'source'> & {
-  mode?: 'paper' | 'live';
+  mode?: TradingModeId;
   instrumentType?: Position['instrumentType'];
   exchange?: string;
 };
@@ -160,5 +160,5 @@ export function positionQuoteKey(pos: Pick<Position, 'exchange' | 'tradingsymbol
 
 /** Name to show: a stock's symbol, or an F&O contract's underlying (NIFTY26NOV24000CE → NIFTY). */
 export function instrumentName(pos: Pick<Position, 'instrumentType' | 'tradingsymbol'>): string {
-  return pos.instrumentType === 'EQ' ? pos.tradingsymbol : pos.tradingsymbol.replace(/\d.*/, '');
+  return pos.instrumentType === InstrumentType.EQ ? pos.tradingsymbol : pos.tradingsymbol.replace(/\d.*/, '');
 }

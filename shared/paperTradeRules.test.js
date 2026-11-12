@@ -7,7 +7,7 @@ import {
   checkPaperTrade,
   normalizeTradeInput,
 } from './paperTradeRules.js';
-import { Horizon } from './horizons.js';
+import { Horizon } from './tradeEnums.js';
 
 /** The instant at `hhmm` IST on `date` (IST is UTC+5:30). */
 const ist = (date, hhmm) => {
@@ -31,8 +31,8 @@ const validInput = {
   horizon: Horizon.Intraday,
 };
 
-const open = (input, now = OPEN) => checkPaperTrade('open', { trade: normalizeTradeInput(input), now });
-const exit = (position, exitPrice, now = OPEN) => checkPaperTrade('exit', { position, exitPrice, now });
+const open = (input, now = OPEN) => checkPaperTrade('Open', { trade: normalizeTradeInput(input), now });
+const exit = (position, exitPrice, now = OPEN) => checkPaperTrade('Exit', { position, exitPrice, now });
 const rulesHit = (result) => (result.ok ? [] : result.violations.map((v) => v.rule));
 
 describe('normalizeTradeInput', () => {
@@ -42,8 +42,8 @@ describe('normalizeTradeInput', () => {
   });
 
   it('defaults mode to paper and keeps an explicit mode', () => {
-    expect(normalizeTradeInput(validInput).mode).toBe('paper');
-    expect(normalizeTradeInput({ ...validInput, mode: 'live' }).mode).toBe('live');
+    expect(normalizeTradeInput(validInput).mode).toBe('Paper');
+    expect(normalizeTradeInput({ ...validInput, mode: 'Live' }).mode).toBe('Live');
   });
 
   it('leaves missing values missing so the rules can report them', () => {
@@ -141,7 +141,7 @@ describe('instrument-fields rule', () => {
 });
 
 describe('exit-price-given rule', () => {
-  const position = { id: 'p1', mode: 'paper' };
+  const position = { id: 'p1', mode: 'Paper' };
 
   it('passes when an exit price is given, including 0', () => {
     expect(exit(position, 95)).toEqual({ ok: true });
@@ -157,7 +157,7 @@ describe('exit-price-given rule', () => {
 });
 
 describe('intraday-market-hours rule (placing an order)', () => {
-  const place = (input, now) => checkPaperTrade('place', { trade: normalizeTradeInput(input), now });
+  const place = (input, now) => checkPaperTrade('Place', { trade: normalizeTradeInput(input), now });
 
   it('places an intraday order only while the market is open', () => {
     expect(place(validInput, OPEN)).toEqual({ ok: true });
@@ -213,35 +213,35 @@ describe('market-open rule', () => {
   });
 
   it('applies to exits too, judged on the position’s mode', () => {
-    expect(rulesHit(exit({ mode: 'paper' }, 95, CLOSED))).toEqual(['market-open']);
+    expect(rulesHit(exit({ mode: 'Paper' }, 95, CLOSED))).toEqual(['market-open']);
     expect(rulesHit(exit({ mode: null }, 95, CLOSED))).toEqual(['market-open']); // missing mode is paper
-    expect(exit({ mode: 'paper' }, 95, OPEN).ok).toBe(true);
+    expect(exit({ mode: 'Paper' }, 95, OPEN).ok).toBe(true);
   });
 
   it('never blocks live trades, which go through Kite', () => {
-    expect(open({ ...validInput, mode: 'live' }, CLOSED).ok).toBe(true);
-    expect(exit({ mode: 'live' }, 95, ist('2026-10-17', '11:00')).ok).toBe(true);
+    expect(open({ ...validInput, mode: 'Live' }, CLOSED).ok).toBe(true);
+    expect(exit({ mode: 'Live' }, 95, ist('2026-10-17', '11:00')).ok).toBe(true);
   });
 });
 
 describe('checkPaperTrade', () => {
   it('reports every failing rule, in list order', () => {
     expect(rulesHit(open({}, CLOSED))).toEqual(['required-fields', 'instrument-fields', 'horizon-given', 'market-open']);
-    expect(rulesHit(exit({ mode: 'paper' }, undefined, CLOSED))).toEqual(['exit-price-given', 'market-open']);
+    expect(rulesHit(exit({ mode: 'Paper' }, undefined, CLOSED))).toEqual(['exit-price-given', 'market-open']);
   });
 
   it('runs only the rules for the action', () => {
     // An open is never refused for a missing exit price, nor an exit for missing trade fields.
     expect(rulesHit(open(validInput))).toEqual([]);
-    expect(rulesHit(exit({ mode: 'paper' }, 95))).toEqual([]);
+    expect(rulesHit(exit({ mode: 'Paper' }, 95))).toEqual([]);
   });
 
   it("checks the engine's square-off after the close for an exit price only, not for the market being open", () => {
-    const squareOff = (exitPrice) => checkPaperTrade('square-off', { position: { id: 'p1', mode: 'paper' }, exitPrice, now: CLOSED });
+    const squareOff = (exitPrice) => checkPaperTrade('SquareOff', { position: { id: 'p1', mode: 'Paper' }, exitPrice, now: CLOSED });
     expect(squareOff(95)).toEqual({ ok: true });
     expect(rulesHit(squareOff(null))).toEqual(['exit-price-given']);
     // An ordinary exit at the same moment is refused.
-    expect(rulesHit(exit({ mode: 'paper' }, 95, CLOSED))).toEqual(['market-open']);
+    expect(rulesHit(exit({ mode: 'Paper' }, 95, CLOSED))).toEqual(['market-open']);
   });
 
   it('rejects an unknown action', () => {
@@ -251,15 +251,15 @@ describe('checkPaperTrade', () => {
   it('accepts a custom rule list', () => {
     const maxQuantity = {
       id: 'max-quantity',
-      appliesTo: ['open'],
+      appliesTo: ['Open'],
       code: 'TOO_BIG',
       check: ({ trade }) => (trade.quantity > 100 ? 'Too many lots' : null),
     };
     const rules = [...PAPER_TRADE_RULES, maxQuantity];
     const ctx = (quantity) => ({ trade: normalizeTradeInput({ ...validInput, quantity }), now: OPEN });
 
-    expect(checkPaperTrade('open', ctx(75), rules)).toEqual({ ok: true });
-    expect(checkPaperTrade('open', ctx(150), rules)).toEqual({
+    expect(checkPaperTrade('Open', ctx(75), rules)).toEqual({ ok: true });
+    expect(checkPaperTrade('Open', ctx(150), rules)).toEqual({
       ok: false,
       violations: [{ rule: 'max-quantity', code: 'TOO_BIG', message: 'Too many lots' }],
     });

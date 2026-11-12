@@ -9,6 +9,7 @@
  * (instruments.tradingview_symbol; e.g. FINNIFTY charts as CNXFINANCE).
  */
 import type { Underlying } from './underlyings';
+import { Exchange, InstrumentType } from '../../shared/tradeEnums.js';
 
 /**
  * Extract the underlying name from an F&O tradingsymbol.
@@ -31,13 +32,13 @@ function underlyingFromOption(tradingsymbol: string): string {
 function resolveSymbol(tradingsymbol: string, exchange: string | undefined, underlyings: Underlying[]): { exchange: string; symbol: string } {
   const upperEx = (exchange || '').toUpperCase();
   const upperSym = tradingsymbol.toUpperCase();
-  const chart = (u: Underlying) => ({ exchange: u.exchange || 'NSE', symbol: u.tradingviewSymbol || u.name });
+  const chart = (u: Underlying) => ({ exchange: u.exchange || Exchange.NSE, symbol: u.tradingviewSymbol || u.name });
 
   // Option/future symbol → chart the underlying
-  if (upperEx === 'NFO' || upperEx === 'BFO' || /\d(CE|PE|FUT)$/.test(upperSym) || upperSym.endsWith('FUT')) {
+  if (upperEx === Exchange.NFO || upperEx === Exchange.BFO || /\d(CE|PE|FUT)$/.test(upperSym) || upperSym.endsWith(InstrumentType.FUT)) {
     const name = underlyingFromOption(upperSym);
     const underlying = underlyings.find((u) => u.name === name);
-    return underlying ? chart(underlying) : { exchange: 'NSE', symbol: name };
+    return underlying ? chart(underlying) : { exchange: Exchange.NSE, symbol: name };
   }
 
   // An underlying by its F&O name ("NIFTY") or its price row ("NIFTY 50")
@@ -45,7 +46,7 @@ function resolveSymbol(tradingsymbol: string, exchange: string | undefined, unde
   if (underlying) return chart(underlying);
 
   // Regular equity — default to NSE, use BSE only if that's explicitly the exchange
-  const ex = upperEx === 'BSE' ? 'BSE' : 'NSE';
+  const ex = upperEx === Exchange.BSE ? Exchange.BSE : Exchange.NSE;
   return { exchange: ex, symbol: upperSym };
 }
 

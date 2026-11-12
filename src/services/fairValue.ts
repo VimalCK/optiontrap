@@ -25,6 +25,7 @@
  */
 
 import { bsPrice, d1, impliedForward, impliedVol, normCdf, yearsToExpiry } from './oiFlow';
+import { OptionType, type OptionTypeId } from '../../shared/tradeEnums.js';
 
 /** IV this far above or below the curve, as a decimal (0.01 = 1 vol point), marks a strike expensive or cheap. */
 export const RICH_IV_GAP = 0.01;
@@ -47,7 +48,7 @@ export type VolVerdict = 'Options expensive' | 'Fairly priced' | 'Options cheap'
 
 export interface FairInput {
   token: number;
-  optionType: 'CE' | 'PE';
+  optionType: OptionTypeId;
   strike: number;
   /** YYYY-MM-DD */
   expiry: string;
@@ -310,7 +311,7 @@ export function computeFairValues(inputs: FairInput[]): FairValueResult {
       let itmProb: number | null = null;
       if (iv !== null) {
         const d2 = d1(pricingSpot, input.strike, t, iv) - iv * Math.sqrt(t);
-        itmProb = input.optionType === 'CE' ? normCdf(d2) : normCdf(-d2);
+        itmProb = input.optionType === OptionType.CE ? normCdf(d2) : normCdf(-d2);
       }
 
       const pair = byStrike.get(input.strike)!;

@@ -19,12 +19,13 @@
 import { Position } from './positions';
 
 /** An option position: always has a strike, CE/PE and an expiry. */
-export type OptionPosition = Position & { optionType: 'CE' | 'PE'; strike: number; expiry: string };
+export type OptionPosition = Position & { optionType: OptionTypeId; strike: number; expiry: string };
 
 export function isOptionPosition(pos: Position): pos is OptionPosition {
-  return (pos.optionType === 'CE' || pos.optionType === 'PE') && pos.strike != null && pos.expiry != null;
+  return isOptionType(pos.optionType) && pos.strike != null && pos.expiry != null;
 }
 import { apiClient } from './apiClient';
+import { OptionType, Side, isOptionType, type OptionTypeId } from '../../shared/tradeEnums.js';
 
 export interface LegRisk {
   position: OptionPosition;
@@ -82,12 +83,12 @@ export function underlyingFromSymbol(tradingsymbol: string): string {
  */
 function legPayoffAtExpiry(pos: OptionPosition, underlyingPrice: number): number {
   const intrinsic =
-    pos.optionType === 'CE'
+    pos.optionType === OptionType.CE
       ? Math.max(underlyingPrice - pos.strike, 0)
       : Math.max(pos.strike - underlyingPrice, 0);
 
   const perUnit =
-    pos.side === 'BUY'
+    pos.side === Side.BUY
       ? intrinsic - pos.entryPrice
       : pos.entryPrice - intrinsic;
 
@@ -98,7 +99,7 @@ function legPayoffAtExpiry(pos: OptionPosition, underlyingPrice: number): number
  * Live P&L for a single leg given its current LTP.
  */
 function legLivePnL(pos: OptionPosition, ltp: number): number {
-  return pos.side === 'BUY'
+  return pos.side === Side.BUY
     ? (ltp - pos.entryPrice) * pos.quantity
     : (pos.entryPrice - ltp) * pos.quantity;
 }
@@ -110,7 +111,7 @@ function legLivePnL(pos: OptionPosition, ltp: number): number {
  */
 function isInvalidationHit(pos: OptionPosition, ltp: number | null): boolean {
   if (ltp == null || pos.stopLossPrice == null || pos.exited) return false;
-  return pos.side === 'BUY' ? ltp <= pos.stopLossPrice : ltp >= pos.stopLossPrice;
+  return pos.side === Side.BUY ? ltp <= pos.stopLossPrice : ltp >= pos.stopLossPrice;
 }
 
 /**
@@ -167,8 +168,8 @@ export function computeRiskGroups(
     //   Low tail  (price → 0):  only puts are ITM, and their intrinsic
     //     increases as price falls, so slope w.r.t. a *falling* price is the
     //     net put quantity.
-    const netCallQty = signedQty(legsPos, 'CE');
-    const netPutQty = signedQty(legsPos, 'PE');
+    const netCallQty = signedQty(legsPos, OptionType.CE);
+    const netPutQty = signedQty(legsPos, OptionType.PE);
 
     // Profit unbounded upward if net long calls; loss unbounded upward if net short calls.
     const profitUnboundedUp = netCallQty > 0;
@@ -289,10 +290,10 @@ export function samplePayoffCurve(
 /**
  * Net signed contract quantity for one option type (BUY positive, SELL negative).
  */
-function signedQty(legs: OptionPosition[], type: 'CE' | 'PE'): number {
+function signedQty(legs: OptionPosition[], type: OptionTypeId): number {
   return legs
     .filter((l) => l.optionType === type)
-    .reduce((s, l) => s + (l.side === 'SELL' ? -l.quantity : l.quantity), 0);
+    .reduce((s, l) => s + (l.side === Side.SELL ? -l.quantity : l.quantity), 0);
 }
 
 /**
@@ -367,7 +368,7 @@ export async function loadGroupOi(group: RiskGroup): Promise<OiBar[]> {
       if (oi <= 0) continue;
       let bar = byStrike.get(strike);
       if (!bar) { bar = { strike, ceOi: 0, peOi: 0 }; byStrike.set(strike, bar); }
-      if (r.optionType === 'CE') bar.ceOi += oi;
+      if (r.optionType === OptionType.CE) bar.ceOi += oi;
       else bar.peOi += oi;
     }
 

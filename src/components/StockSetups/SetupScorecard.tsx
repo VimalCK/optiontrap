@@ -3,12 +3,14 @@ import { formatNumericDate } from '@/utils/marketStatus';
 import { setupLabel } from '../../../shared/stockSetups.js';
 import { fetchSetupScorecard, type SetupStats, type TrackedSetup } from '@/services/stockSetups';
 import { isAbortError } from '@/services/apiClient';
+import { SetupOutcomeStatus } from '../../../shared/appEnums.js';
+import { sideLabel } from '../../../shared/tradeEnums.js';
 
 const STATUS_TEXT: Record<TrackedSetup['status'], string> = {
-  open: 'Open',
-  target: 'Target hit',
-  stop: 'Stopped',
-  expired: 'Expired',
+  [SetupOutcomeStatus.Open]: 'Open',
+  [SetupOutcomeStatus.Target]: 'Target hit',
+  [SetupOutcomeStatus.Stop]: 'Stopped',
+  [SetupOutcomeStatus.Expired]: 'Expired',
 };
 
 /** Share of resolved setups that reached the target before the stop; expiries count as neither. */
@@ -65,7 +67,7 @@ const SetupScorecard: React.FC<{
             <tbody>
               {data.stats.map((s) => (
                 <tr key={s.setupType}>
-                  <td><span className={`wl-setup-chip wl-setup-chip--${s.direction}`}>{s.direction === 'buy' ? 'Buy' : 'Sell'}</span> {setupLabel(s.setupType)}</td>
+                  <td><span className={`wl-setup-chip wl-setup-chip--${s.direction.toLowerCase()}`}>{sideLabel(s.direction)}</span> {setupLabel(s.setupType)}</td>
                   <td className="wl-alerts-table__num">{s.total}</td>
                   <td className="wl-alerts-table__num">{s.target}</td>
                   <td className="wl-alerts-table__num">{s.stop}</td>
@@ -96,12 +98,12 @@ const SetupScorecard: React.FC<{
                   {data.recent.map((s) => (
                     <tr key={s.id}>
                       <td>{formatNumericDate(s.signalDate)}</td>
-                      <td><span className={`wl-setup-chip wl-setup-chip--${s.direction}`}>{s.direction === 'buy' ? 'Buy' : 'Sell'}</span> {setupLabel(s.setupType)}</td>
+                      <td><span className={`wl-setup-chip wl-setup-chip--${s.direction.toLowerCase()}`}>{sideLabel(s.direction)}</span> {setupLabel(s.setupType)}</td>
                       <td className="wl-alerts-table__num">{s.entry.toFixed(2)}</td>
                       <td className="wl-alerts-table__num">{s.stop.toFixed(2)}</td>
                       <td className="wl-alerts-table__num">{s.target.toFixed(2)}</td>
                       <td className="wl-alerts-table__center">
-                        <span className={`wl-scorecard__status wl-scorecard__status--${s.status}`}>{STATUS_TEXT[s.status]}</span>
+                        <span className={`wl-scorecard__status wl-scorecard__status--${s.status.toLowerCase()}`}>{STATUS_TEXT[s.status]}</span>
                       </td>
                     </tr>
                   ))}

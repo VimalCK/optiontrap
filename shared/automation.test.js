@@ -9,7 +9,7 @@ import {
   tradeKind,
   withDefaults,
 } from './automation.js';
-import { Horizon } from './horizons.js';
+import { Horizon } from './tradeEnums.js';
 
 /** A strategy as the trade engine describes it (GET /api/strategies). */
 const STRATEGIES = [{ id: 'test-strategy', label: 'Test strategy', description: 'For tests', params: [{ key: 'minScore', label: 'Min score', type: 'count' }] }];
@@ -19,21 +19,21 @@ const fill = (stored) => withDefaults(stored, STRATEGIES);
 const valid = () => {
   const config = defaultAutomationConfig(STRATEGIES);
   config.enabled = true;
-  config.kinds['index-option'].SELL = true;
-  config.kinds.stock.BUY = true;
+  config.kinds.IndexOption.SELL = true;
+  config.kinds.Stock.BUY = true;
   return config;
 };
 
 describe('trade kinds', () => {
   it('covers stocks, stock options and futures, and index options and futures', () => {
-    expect(TRADE_KINDS.map((k) => k.id)).toEqual(['stock', 'stock-option', 'stock-future', 'index-option', 'index-future']);
+    expect(TRADE_KINDS.map((k) => k.id)).toEqual(['Stock', 'StockOption', 'StockFuture', 'IndexOption', 'IndexFuture']);
   });
 });
 
 describe('defaultAutomationConfig', () => {
   it('is off, on paper, intraday only, with nothing chosen to trade', () => {
     const config = defaultAutomationConfig(STRATEGIES);
-    expect(config).toMatchObject({ enabled: false, mode: 'paper', horizons: { [Horizon.Intraday]: true, [Horizon.Positional]: false } });
+    expect(config).toMatchObject({ enabled: false, mode: 'Paper', horizons: { [Horizon.Intraday]: true, [Horizon.Positional]: false } });
     expect(Object.values(config.kinds).every((sides) => !sides.BUY && !sides.SELL)).toBe(true);
   });
 
@@ -48,7 +48,7 @@ describe('parseAutomationConfig', () => {
   });
 
   it('refuses live trading and positional trades until they are built', () => {
-    expect(parse({ ...valid(), mode: 'live' })).toEqual({ error: 'Live trading is not available yet' });
+    expect(parse({ ...valid(), mode: 'Live' })).toEqual({ error: 'Live trading is not available yet' });
     expect(parse({ ...valid(), horizons: { [Horizon.Intraday]: true, [Horizon.Positional]: true } }))
       .toEqual({ error: 'Positional trades are not available yet' });
   });
@@ -56,10 +56,10 @@ describe('parseAutomationConfig', () => {
   it('refuses missing or malformed fields instead of guessing', () => {
     expect(parse(null)).toEqual({ error: 'configuration is required' });
     expect(parse({ ...valid(), enabled: 'yes' })).toEqual({ error: 'enabled must be true or false' });
-    expect(parse({ ...valid(), mode: 'demo' })).toEqual({ error: 'mode must be one of: paper, live' });
+    expect(parse({ ...valid(), mode: 'demo' })).toEqual({ error: 'mode must be one of: Paper, Live' });
     const noSell = valid();
-    delete noSell.kinds.stock.SELL;
-    expect(parse(noSell)).toEqual({ error: 'kinds.stock must say true or false for BUY and SELL' });
+    delete noSell.kinds.Stock.SELL;
+    expect(parse(noSell)).toEqual({ error: 'kinds.Stock must say true or false for BUY and SELL' });
   });
 
   it('refuses a trade type it does not know', () => {
@@ -70,8 +70,8 @@ describe('parseAutomationConfig', () => {
 
   it('drops anything extra sent with a trade type', () => {
     const config = valid();
-    config.kinds.stock = { BUY: true, SELL: false, extra: 1 };
-    expect(parse(config).config.kinds.stock).toEqual({ BUY: true, SELL: false });
+    config.kinds.Stock = { BUY: true, SELL: false, extra: 1 };
+    expect(parse(config).config.kinds.Stock).toEqual({ BUY: true, SELL: false });
   });
 });
 
@@ -89,11 +89,11 @@ describe('parseAutomationConfig strategies', () => {
 
 describe('tradeKind', () => {
   it('tells index and stock options, futures and stocks apart', () => {
-    expect(tradeKind('CE', true)).toBe('index-option');
-    expect(tradeKind('PE', false)).toBe('stock-option');
-    expect(tradeKind('FUT', true)).toBe('index-future');
-    expect(tradeKind('FUT', false)).toBe('stock-future');
-    expect(tradeKind('EQ', false)).toBe('stock');
+    expect(tradeKind('CE', true)).toBe('IndexOption');
+    expect(tradeKind('PE', false)).toBe('StockOption');
+    expect(tradeKind('FUT', true)).toBe('IndexFuture');
+    expect(tradeKind('FUT', false)).toBe('StockFuture');
+    expect(tradeKind('EQ', false)).toBe('Stock');
   });
 
   it('has no kind for an index itself or an unknown type', () => {
@@ -103,7 +103,7 @@ describe('tradeKind', () => {
 });
 
 describe('checkGeneralSettings', () => {
-  const trade = { horizon: Horizon.Intraday, kind: 'index-option', side: 'SELL' };
+  const trade = { horizon: Horizon.Intraday, kind: 'IndexOption', side: 'SELL' };
 
   it('allows a trade type and side the user switched on', () => {
     expect(checkGeneralSettings(trade, valid())).toBeNull();
@@ -126,13 +126,18 @@ describe('withDefaults', () => {
 
   it('switches off a trade type added after the configuration was saved', () => {
     const stored = valid();
-    delete stored.kinds['index-future'];
-    expect(fill(stored).kinds['index-future']).toEqual({ BUY: false, SELL: false });
-    expect(fill(stored).kinds['index-option']).toEqual({ BUY: false, SELL: true });
+    delete stored.kinds.IndexFuture;
+    expect(fill(stored).kinds.IndexFuture).toEqual({ BUY: false, SELL: false });
+    expect(fill(stored).kinds.IndexOption).toEqual({ BUY: false, SELL: true });
   });
 
   it('falls back to paper if a stored mode is not available', () => {
-    expect(fill({ ...valid(), mode: 'live' }).mode).toBe('paper');
+    expect(fill({ ...valid(), mode: 'Live' }).mode).toBe('Paper');
+  });
+
+  it('keeps stored horizon switches keyed by text, and ignores old numeric keys', () => {
+    expect(fill({ ...valid(), horizons: { Intraday: false, Positional: false } }).horizons).toEqual({ Intraday: false, Positional: false });
+    expect(fill({ ...valid(), horizons: { 1: false, 2: true } }).horizons).toEqual({ Intraday: true, Positional: false });
   });
 
   it('gives a configuration saved before entry or exit rules existed every rule, inactive', () => {
@@ -164,19 +169,19 @@ describe('parseAutomationConfig entry and exit rules', () => {
 
 describe('lifecycle', () => {
   it('runs selected → validated → executed → closed', () => {
-    expect(canMoveTo('selected', 'validated')).toBe(true);
-    expect(canMoveTo('validated', 'executed')).toBe(true);
-    expect(canMoveTo('executed', 'closed')).toBe(true);
+    expect(canMoveTo('Selected', 'Validated')).toBe(true);
+    expect(canMoveTo('Validated', 'Executed')).toBe(true);
+    expect(canMoveTo('Executed', 'Closed')).toBe(true);
   });
 
   it('is rejected only after validation (it cannot be placed), never at selection or after execution', () => {
-    expect(canMoveTo('selected', 'rejected')).toBe(false);
-    expect(canMoveTo('validated', 'rejected')).toBe(true);
-    expect(canMoveTo('executed', 'rejected')).toBe(false);
+    expect(canMoveTo('Selected', 'Rejected')).toBe(false);
+    expect(canMoveTo('Validated', 'Rejected')).toBe(true);
+    expect(canMoveTo('Executed', 'Rejected')).toBe(false);
   });
 
   it('never skips validation, and ends at rejected or closed', () => {
-    expect(canMoveTo('selected', 'executed')).toBe(false);
+    expect(canMoveTo('Selected', 'Executed')).toBe(false);
     for (const stage of LIFECYCLE_STAGES.filter((s) => s.final)) {
       expect(LIFECYCLE_STAGES.some((next) => canMoveTo(stage.id, next.id))).toBe(false);
     }

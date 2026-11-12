@@ -6,17 +6,17 @@ vi.mock('./apiClient', () => ({ apiClient: { get: apiGet } }));
 
 import { getPositions, getClosedPositions, getDailyPnl, getPositionStats } from './positions';
 import { chargesTitle, getPaperTrades, getPaperDailyPnl, getPaperTradeStats, hasTradeMeta, journalTotals, positionToEntry, positionToSegment } from './tradeJournal';
-import { Horizon } from '../../shared/horizons.js';
+import { Horizon } from '../../shared/tradeEnums.js';
 
 function position(overrides: Partial<Position>): Position {
   return {
     id: 'p1',
-    mode: 'paper',
+    mode: 'Paper',
     tradingsymbol: 'NIFTY26NOV24000CE',
     instrumentToken: 1001,
     instrumentType: 'CE',
     exchange: 'NFO',
-    source: 'manual',
+    source: 'Manual',
     horizon: Horizon.Intraday,
     strike: 24000,
     optionType: 'CE',
@@ -40,31 +40,31 @@ beforeEach(() => {
 describe('positions API URLs', () => {
   it('getPositions asks for current positions only', async () => {
     await getPositions();
-    expect(apiGet).toHaveBeenCalledWith('/api/positions?mode=paper');
+    expect(apiGet).toHaveBeenCalledWith('/api/positions?mode=Paper');
   });
 
   it('getClosedPositions sends only the filters given', async () => {
-    await getClosedPositions('paper');
-    expect(apiGet).toHaveBeenLastCalledWith('/api/positions?mode=paper&status=closed');
+    await getClosedPositions('Paper');
+    expect(apiGet).toHaveBeenLastCalledWith('/api/positions?mode=Paper&status=Closed');
 
-    await getClosedPositions('paper', { from: '2026-11-03', to: '2026-11-03', segment: 'options', limit: 100, offset: 200 });
+    await getClosedPositions('Paper', { from: '2026-11-03', to: '2026-11-03', segment: 'Options', limit: 100, offset: 200 });
     expect(apiGet).toHaveBeenLastCalledWith(
-      '/api/positions?mode=paper&status=closed&from=2026-11-03&to=2026-11-03&segment=options&limit=100&offset=200',
+      '/api/positions?mode=Paper&status=Closed&from=2026-11-03&to=2026-11-03&segment=Options&limit=100&offset=200',
     );
   });
 
   it('getDailyPnl always sends the range', async () => {
-    await getDailyPnl('paper', '2025-11-04', '2026-11-04');
-    expect(apiGet).toHaveBeenLastCalledWith('/api/positions/daily-pnl?mode=paper&from=2025-11-04&to=2026-11-04');
+    await getDailyPnl('Paper', '2025-11-04', '2026-11-04');
+    expect(apiGet).toHaveBeenLastCalledWith('/api/positions/daily-pnl?mode=Paper&from=2025-11-04&to=2026-11-04');
 
-    await getDailyPnl('paper', '2025-11-04', '2026-11-04', 'options');
-    expect(apiGet).toHaveBeenLastCalledWith('/api/positions/daily-pnl?mode=paper&from=2025-11-04&to=2026-11-04&segment=options');
+    await getDailyPnl('Paper', '2025-11-04', '2026-11-04', 'Options');
+    expect(apiGet).toHaveBeenLastCalledWith('/api/positions/daily-pnl?mode=Paper&from=2025-11-04&to=2026-11-04&segment=Options');
   });
 
   it('getPositionStats asks for one mode', async () => {
     apiGet.mockResolvedValue({});
-    await getPositionStats('paper');
-    expect(apiGet).toHaveBeenCalledWith('/api/positions/stats?mode=paper');
+    await getPositionStats('Paper');
+    expect(apiGet).toHaveBeenCalledWith('/api/positions/stats?mode=Paper');
   });
 });
 
@@ -95,10 +95,10 @@ describe('hasTradeMeta', () => {
 
 describe('positionToSegment', () => {
   it('sorts positions into options, futures and stocks by instrument type', () => {
-    expect(positionToSegment(position({ instrumentType: 'CE' }))).toBe('options');
-    expect(positionToSegment(position({ instrumentType: 'PE', optionType: 'PE' }))).toBe('options');
-    expect(positionToSegment(position({ instrumentType: 'FUT', optionType: null, strike: null }))).toBe('futures');
-    expect(positionToSegment(position({ instrumentType: 'EQ', optionType: null, strike: null, expiry: null }))).toBe('stocks');
+    expect(positionToSegment(position({ instrumentType: 'CE' }))).toBe('Options');
+    expect(positionToSegment(position({ instrumentType: 'PE', optionType: 'PE' }))).toBe('Options');
+    expect(positionToSegment(position({ instrumentType: 'FUT', optionType: null, strike: null }))).toBe('Futures');
+    expect(positionToSegment(position({ instrumentType: 'EQ', optionType: null, strike: null, expiry: null }))).toBe('Stocks');
   });
 });
 
@@ -120,8 +120,8 @@ describe('positionToEntry', () => {
   });
 
   it('gives each entry the segment of its instrument type', () => {
-    expect(positionToEntry(position({ instrumentType: 'PE', optionType: 'PE' })).segment).toBe('options');
-    expect(positionToEntry(position({ instrumentType: 'EQ', optionType: null, strike: null, expiry: null })).segment).toBe('stocks');
+    expect(positionToEntry(position({ instrumentType: 'PE', optionType: 'PE' })).segment).toBe('Options');
+    expect(positionToEntry(position({ instrumentType: 'EQ', optionType: null, strike: null, expiry: null })).segment).toBe('Stocks');
   });
 });
 
@@ -131,7 +131,7 @@ describe('getPaperTrades', () => {
 
     const trades = await getPaperTrades({ from: '2026-10-20', to: '2026-10-20', limit: 100 });
 
-    expect(apiGet).toHaveBeenCalledWith('/api/positions?mode=paper&status=closed&from=2026-10-20&to=2026-10-20&limit=100');
+    expect(apiGet).toHaveBeenCalledWith('/api/positions?mode=Paper&status=Closed&from=2026-10-20&to=2026-10-20&limit=100');
     expect(trades.map((t) => [t.id, t.pnl])).toEqual([['a', 1500], ['b', -750]]);
   });
 });
@@ -141,8 +141,8 @@ describe('getPaperDailyPnl', () => {
     const days = [{ date: '2026-11-03', pnl: 2450.5, trades: 12 }];
     apiGet.mockResolvedValue(days);
 
-    expect(await getPaperDailyPnl('2026-10-01', '2026-11-04', 'options')).toEqual(days);
-    expect(apiGet).toHaveBeenCalledWith('/api/positions/daily-pnl?mode=paper&from=2026-10-01&to=2026-11-04&segment=options');
+    expect(await getPaperDailyPnl('2026-10-01', '2026-11-04', 'Options')).toEqual(days);
+    expect(apiGet).toHaveBeenCalledWith('/api/positions/daily-pnl?mode=Paper&from=2026-10-01&to=2026-11-04&segment=Options');
   });
 });
 

@@ -28,12 +28,12 @@ import {
   journalTotals,
   DailyPnl,
   TradeEntry,
-  TradingMode,
-  Segment,
 } from '@/services/tradeJournal';
+import { Segment, TRADING_MODES, TradingMode, type SegmentId, type TradingModeId } from '../../../shared/tradeEnums.js';
+import { saveTradingMode, storedTradingMode } from '@/utils/tradingModeStorage';
 import '@/styles/tradejournal.css';
 
-type SegmentFilter = 'all' | Segment;
+type SegmentFilter = 'all' | SegmentId;
 
 /** Wait after the last filter change before fetching, so typing a date fetches once. */
 const FETCH_DELAY_MS = 400;
@@ -53,7 +53,7 @@ interface DayTrades {
   error: string | null;
 }
 
-const segmentParam = (segment: SegmentFilter): Segment | undefined => (segment === 'all' ? undefined : segment);
+const segmentParam = (segment: SegmentFilter): SegmentId | undefined => (segment === 'all' ? undefined : segment);
 
 const errorText = (err: unknown) => (err instanceof Error ? err.message : 'Could not load trades');
 
@@ -64,7 +64,7 @@ const pnlClass = (pnl: number) => (pnl > 0 ? 'heatmap-positive' : pnl < 0 ? 'hea
 
 const TradeJournal: React.FC<{
   initialRange?: 'today';
-  initialMode?: TradingMode;
+  initialMode?: TradingModeId;
   initialDate?: string;
   initialTradeId?: string;
 }> = ({
@@ -73,8 +73,8 @@ const TradeJournal: React.FC<{
   initialDate,
   initialTradeId,
 }) => {
-  const [mode, setMode] = useState<TradingMode>(() =>
-    initialMode || (localStorage.getItem('optiontrap_order_mode') as TradingMode) || 'paper'
+  const [mode, setMode] = useState<TradingModeId>(() =>
+    initialMode || storedTradingMode()
   );
   const [segment, setSegment] = useState<SegmentFilter>('all');
   const [rangeStart, setRangeStart] = useState<string>(() => subtractMonths(marketDate(), 12));
@@ -162,7 +162,7 @@ const TradeJournal: React.FC<{
     if (!initialMode) return;
 
     setMode(initialMode);
-    localStorage.setItem('optiontrap_order_mode', initialMode);
+    saveTradingMode(initialMode);
   }, [initialMode]);
 
   const problem = rangeProblem(rangeStart, rangeEnd);
@@ -196,10 +196,10 @@ const TradeJournal: React.FC<{
       <div className="tj-controls">
         {/* Live / Paper toggle */}
         <div className="tj-mode-tabs">
-          {(['paper', 'live'] as TradingMode[]).map((m) => (
+          {TRADING_MODES.map((m) => (
             <button
               key={m}
-              className={`tj-mode-tab ${mode === m ? 'tj-mode-tab--active' : ''} ${m === 'live' ? 'tj-mode-tab--live' : ''}`}
+              className={`tj-mode-tab ${mode === m ? 'tj-mode-tab--active' : ''} ${m === TradingMode.Live ? 'tj-mode-tab--live' : ''}`}
               onClick={() => setMode(m)}
             >
               <span className={`tj-mode-dot tj-mode-dot--${m}`} />
@@ -208,16 +208,16 @@ const TradeJournal: React.FC<{
           ))}
         </div>
 
-        {mode === 'paper' && (
+        {mode === TradingMode.Paper && (
           <>
             <AppSelect
               className="tj-segment-select"
               value={segment}
               options={[
                 { value: 'all', label: 'All Segments' },
-                { value: 'options', label: 'Options' },
-                { value: 'futures', label: 'Futures' },
-                { value: 'stocks', label: 'Stocks' },
+                { value: Segment.Options, label: 'Options' },
+                { value: Segment.Futures, label: 'Futures' },
+                { value: Segment.Stocks, label: 'Stocks' },
               ]}
               onChange={(v) => setSegment(v as SegmentFilter)}
             />
@@ -256,7 +256,7 @@ const TradeJournal: React.FC<{
       </div>
 
       {/* Live — Coming Soon */}
-      {mode === 'live' && (
+      {mode === TradingMode.Live && (
         <div className="card tj-coming-soon">
           <div className="tj-coming-soon__icon">📡</div>
           <h4 className="tj-coming-soon__title">Live Trading Journal</h4>
@@ -267,7 +267,7 @@ const TradeJournal: React.FC<{
         </div>
       )}
 
-      {mode === 'paper' && (
+      {mode === TradingMode.Paper && (
         <>
           {problem && <div className="tj-notice">{problem}</div>}
           {reportError && <div className="tj-notice tj-notice--error">{reportError}</div>}

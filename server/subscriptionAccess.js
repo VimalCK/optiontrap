@@ -1,9 +1,10 @@
 // Shared access rule for paid features, used by both the HTTP
 // requireSubscription middleware and the /ws live-tick upgrade handler so the
 // two gates cannot drift apart. DB lookups are injected to keep this testable.
+import { SubscriptionState } from '../shared/appEnums.js';
 
 export const inactiveSubscription = {
-  status: 'inactive',
+  status: SubscriptionState.Inactive,
   active: false,
   planId: null,
   plan: null,
@@ -12,7 +13,7 @@ export const inactiveSubscription = {
 };
 
 export const adminSubscription = {
-  status: 'admin', active: true, planId: null, plan: null, startsAt: null, expiresAt: null,
+  status: SubscriptionState.Admin, active: true, planId: null, plan: null, startsAt: null, expiresAt: null,
 };
 
 /**

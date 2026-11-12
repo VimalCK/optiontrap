@@ -9,18 +9,18 @@
  *
  * A rule is { id, appliesTo, code, check }:
  *   id         stable name, for logs and tests
- *   appliesTo  the actions it checks: 'open' and/or 'exit'
+ *   appliesTo  the actions it checks (PaperTradeAction, shared/tradeEnums.js)
  *   code       error code reported when it fails (callers map it to HTTP etc.)
  *   check(ctx) returns null when the trade passes, or a message saying why not
  *
- * ctx for 'open': { trade, now }            trade from normalizeTradeInput
- * ctx for 'place': { trade, now }           an order's trade (shared/paperOrders.js)
- * ctx for 'exit': { position, exitPrice, now }  position is the open position
- * ctx for 'square-off': { position, exitPrice, now }  the engine closing an intraday position after its
+ * ctx for Open: { trade, now }            trade from normalizeTradeInput
+ * ctx for Place: { trade, now }           an order's trade (shared/paperOrders.js)
+ * ctx for Exit: { position, exitPrice, now }  position is the open position
+ * ctx for SquareOff: { position, exitPrice, now }  the engine closing an intraday position after its
  *   session ended, at its last price after the close (server/tradeEngine/services/sessionSquareOff.js)
  */
 import { isMarketOpen } from './marketTime.js';
-import { Horizon, HORIZONS, isHorizon } from './horizons.js';
+import { HORIZONS, Horizon, INSTRUMENT_TYPES, InstrumentType, PaperTradeAction, TradingMode, exchangeFor, isHorizon, isOptionType } from './tradeEnums.js';
 
 /**
  * @typedef {{ trade?: any, position?: any, exitPrice?: unknown, now?: Date }} RuleContext
@@ -31,7 +31,7 @@ import { Horizon, HORIZONS, isHorizon } from './horizons.js';
  * open: a trade fills now; exit: a position closes now; place: an order is placed, to fill later or now;
  * square-off: the engine closes a position its session left open, after the close, at the closing price.
  */
-export const PAPER_TRADE_ACTIONS = ['open', 'exit', 'place', 'square-off'];
+export const PAPER_TRADE_ACTIONS = Object.values(PaperTradeAction);
 
 /** Error codes a rule can report. */
 export const RULE_CODES = {
@@ -48,15 +48,9 @@ export const INTRADAY_CLOSED_MESSAGE =
  * What a position is in: CE / PE (options), FUT (futures), EQ (stocks).
  * Options need a strike, CE/PE and an expiry; futures an expiry; stocks neither.
  */
-export const INSTRUMENT_TYPES = ['CE', 'PE', 'FUT', 'EQ'];
-/** The instrument types that are options; an option's optionType is its instrument type. */
-export const OPTION_TYPES = ['CE', 'PE'];
-
-/** Exchange a trade defaults to when none is given: options and futures NFO, stocks NSE. */
-const defaultExchange = (/** @type {unknown} */ instrumentType) => (instrumentType === 'EQ' ? 'NSE' : 'NFO');
 
 /** Positions without a mode are paper trades. */
-const isPaper = (/** @type {unknown} */ mode) => (mode ?? 'paper') === 'paper';
+const isPaper = (/** @type {unknown} */ mode) => (mode ?? TradingMode.Paper) === TradingMode.Paper;
 
 /**
  * A trade request with its numbers parsed, as the rules and the database
@@ -67,19 +61,19 @@ const isPaper = (/** @type {unknown} */ mode) => (mode ?? 'paper') === 'paper';
 export function normalizeTradeInput(input = /** @type {Record<string, any>} */ ({})) {
   const num = (/** @type {unknown} */ value) => (value === undefined || value === null || value === '' ? value : Number(value));
   // Callers from before stocks and futures send only optionType: CE/PE is an option.
-  const instrumentType = input.instrumentType ?? (OPTION_TYPES.includes(/** @type {string} */ (input.optionType)) ? input.optionType : undefined);
+  const instrumentType = input.instrumentType ?? (isOptionType(input.optionType) ? input.optionType : undefined);
   return {
     tradingsymbol: input.tradingsymbol,
     instrumentToken: num(input.instrumentToken),
     instrumentType,
-    exchange: input.exchange || defaultExchange(instrumentType),
+    exchange: input.exchange || exchangeFor(instrumentType),
     strike: num(input.strike),
     optionType: input.optionType,
     side: input.side,
     quantity: num(input.quantity),
     entryPrice: num(input.entryPrice),
     expiry: input.expiry,
-    mode: input.mode || 'paper',
+    mode: input.mode || TradingMode.Paper,
     horizon: input.horizon,
     note: input.note,
     targetPrice: input.targetPrice,
@@ -92,7 +86,7 @@ export function normalizeTradeInput(input = /** @type {Record<string, any>} */ (
 export const PAPER_TRADE_RULES = [
   {
     id: 'required-fields',
-    appliesTo: ['open', 'place'],
+    appliesTo: [PaperTradeAction.Open, PaperTradeAction.Place],
     code: RULE_CODES.INVALID_TRADE,
     check: ({ trade }) => {
       const { tradingsymbol, instrumentToken, side, quantity, entryPrice } = trade;
@@ -103,16 +97,16 @@ export const PAPER_TRADE_RULES = [
   {
     // Each instrument type carries exactly the fields it has.
     id: 'instrument-fields',
-    appliesTo: ['open', 'place'],
+    appliesTo: [PaperTradeAction.Open, PaperTradeAction.Place],
     code: RULE_CODES.INVALID_TRADE,
     check: ({ trade }) => {
       const { instrumentType, strike, optionType, expiry } = trade;
-      if (!INSTRUMENT_TYPES.includes(instrumentType)) return `instrumentType must be one of: ${INSTRUMENT_TYPES.join(', ')}`;
-      if (OPTION_TYPES.includes(instrumentType)) {
+      if (!INSTRUMENT_TYPES.some((type) => type === instrumentType)) return `instrumentType must be one of: ${INSTRUMENT_TYPES.join(', ')}`;
+      if (isOptionType(instrumentType)) {
         if (strike == null || Number.isNaN(strike) || !expiry) return 'An option needs a strike and an expiry';
         if (optionType !== instrumentType) return 'optionType must match instrumentType for an option';
       }
-      if (instrumentType === 'FUT' && !expiry) return 'A future needs an expiry';
+      if (instrumentType === InstrumentType.FUT && !expiry) return 'A future needs an expiry';
       return null;
     },
   },
@@ -120,13 +114,13 @@ export const PAPER_TRADE_RULES = [
     // Intraday or positional: the trade monitor squares off only intraday
     // positions, and trades merge only within the same horizon.
     id: 'horizon-given',
-    appliesTo: ['open', 'place'],
+    appliesTo: [PaperTradeAction.Open, PaperTradeAction.Place],
     code: RULE_CODES.INVALID_TRADE,
     check: ({ trade }) => (isHorizon(trade.horizon) ? null : `Choose ${HORIZONS.map((h) => h.label).join(' or ')}`),
   },
   {
     id: 'exit-price-given',
-    appliesTo: ['exit', 'square-off'],
+    appliesTo: [PaperTradeAction.Exit, PaperTradeAction.SquareOff],
     code: RULE_CODES.INVALID_TRADE,
     check: ({ exitPrice }) => (exitPrice == null ? 'exitPrice is required' : null),
   },
@@ -136,7 +130,7 @@ export const PAPER_TRADE_RULES = [
     // Live trades go through Kite and aren't limited here. A square-off isn't
     // covered: it is priced at the closing price on purpose, after the close.
     id: 'market-open',
-    appliesTo: ['open', 'exit'],
+    appliesTo: [PaperTradeAction.Open, PaperTradeAction.Exit],
     code: RULE_CODES.MARKET_CLOSED,
     check: ({ trade, position, now = new Date() }) => {
       const mode = (trade ?? position)?.mode;
@@ -147,9 +141,9 @@ export const PAPER_TRADE_RULES = [
   {
     // An intraday order is placed only while the market is open. A positional
     // one can be placed at any time: it waits, and the order book fills it in
-    // market hours (a fill is an 'open', checked by market-open above).
+    // market hours (a fill is an Open, checked by market-open above).
     id: 'intraday-market-hours',
-    appliesTo: ['place'],
+    appliesTo: [PaperTradeAction.Place],
     code: RULE_CODES.MARKET_CLOSED,
     check: ({ trade, now = new Date() }) => {
       if (!isPaper(trade?.mode) || trade?.horizon !== Horizon.Intraday) return null;
@@ -160,7 +154,7 @@ export const PAPER_TRADE_RULES = [
 
 /**
  * Run every rule for `action`, in list order.
- * @param {'open' | 'exit' | 'place' | 'square-off'} action
+ * @param {import('./tradeEnums.js').PaperTradeActionId} action
  * @param {RuleContext} ctx see the file header
  * @param {PaperTradeRule[]} [rules] defaults to PAPER_TRADE_RULES
  * @returns {{ ok: true } | { ok: false, violations: { rule: string, code: string, message: string }[] }}

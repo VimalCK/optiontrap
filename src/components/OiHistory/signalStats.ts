@@ -1,9 +1,11 @@
 import type { SignalBreakdownRow, SignalVerdict, TradeSignalRow } from './types';
+import { Side } from '../../../shared/tradeEnums.js';
+import { SignalOutcome } from '../../../shared/appEnums.js';
 
 /** Fewer scored signals than this and a slice gets no verdict. */
 export const MIN_SCORED_FOR_VERDICT = 5;
 
-const isScored = (signal: TradeSignalRow) => signal.outcome_status === 'Profit' || signal.outcome_status === 'Loss';
+const isScored = (signal: TradeSignalRow) => signal.outcome_status === SignalOutcome.Profit || signal.outcome_status === SignalOutcome.Loss;
 
 const average = (values: number[]) => (values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null);
 
@@ -20,7 +22,7 @@ function dteBucket(days: number | null | undefined): string | null {
  * `order` fixes the row order; labels not listed sort by sample size.
  */
 const SLICES: { group: string; label: (signal: TradeSignalRow) => string | null | undefined; order?: string[] }[] = [
-  { group: 'Action', label: (s) => s.action, order: ['BUY', 'SELL'] },
+  { group: 'Action', label: (s) => s.action, order: [Side.BUY, Side.SELL] },
   { group: 'Setup', label: (s) => `${s.action} ${s.option_type}`, order: ['BUY CE', 'BUY PE', 'SELL CE', 'SELL PE'] },
   { group: 'Strength', label: (s) => s.status, order: ['Confirmed', 'Watch'] },
   { group: 'OI pattern', label: (s) => s.details?.strikePattern },
@@ -59,7 +61,7 @@ export function summarizeSignalBreakdown(signals: TradeSignalRow[]): SignalBreak
         .map((signal) => signal.max_adverse_return)
         .filter((value): value is number => value !== null && Number.isFinite(Number(value)))
         .map(Number);
-      const winRate = scored.length ? (scored.filter((signal) => signal.outcome_status === 'Profit').length / scored.length) * 100 : null;
+      const winRate = scored.length ? (scored.filter((signal) => signal.outcome_status === SignalOutcome.Profit).length / scored.length) * 100 : null;
       const averageReturn = average(returns);
       return {
         group: slice.group,

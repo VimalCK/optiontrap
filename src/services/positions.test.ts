@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { instrumentName, positionQuoteKey, tradeErrorMessage } from './positions';
 import { exitPosition, placeMarketTrade } from './orders';
 import { ApiError, isLoginEnded } from './apiClient';
-import { Horizon } from '../../shared/horizons.js';
+import { Horizon } from '../../shared/tradeEnums.js';
 
 const MARKET_CLOSED = 'The market is closed. Paper trades can be placed and exited 9:15–15:30 IST on trading days.';
 

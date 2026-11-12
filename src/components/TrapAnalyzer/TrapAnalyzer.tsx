@@ -3,6 +3,7 @@ import { OptionChainRow } from '@/services/optionChain';
 import { analyzeTrap, buildTrapContext, TrapAnalysis } from '@/services/trapAnalysis';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { describeFlow, flowColor, type FlowReading } from '@/services/oiFlow';
+import { OptionType, SIDES, Side, type OptionTypeId, type SideId } from '../../../shared/tradeEnums.js';
 import '@/styles/trapanalyzer.css';
 
 interface TrapAnalyzerProps {
@@ -20,8 +21,10 @@ interface TrapAnalyzerProps {
   flowByToken?: Map<number, FlowReading>;
 }
 
-type PositionSide = 'buy' | 'sell';
 type AnalyzerView = 'single' | 'map';
+
+/** The position analyzeTrap reads: the chosen side on a call or a put, e.g. 'sell-ce'. */
+const trapPosition = (side: SideId, option: 'ce' | 'pe') => `${side.toLowerCase()}-${option}` as `${Lowercase<SideId>}-${'ce' | 'pe'}`;
 
 const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   chain,
@@ -36,7 +39,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   expectedMove,
   flowByToken,
 }) => {
-  const [positionSide, setPositionSide] = useState<PositionSide>('sell');
+  const [positionSide, setPositionSide] = useState<SideId>(Side.SELL);
   const [selectedStrike, setSelectedStrike] = useState<number>(atmStrike);
   const [view, setView] = useState<AnalyzerView>('map');
   const [hoveredStrike, setHoveredStrike] = useState<number | null>(null);
@@ -60,12 +63,12 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   // Run analysis for single view — both CE and PE
   const analysisCe: TrapAnalysis | null = useMemo(() => {
     if (!trapCtx) return null;
-    return analyzeTrap(`${positionSide}-ce`, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
+    return analyzeTrap(trapPosition(positionSide, 'ce'), selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
   }, [positionSide, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx]);
 
   const analysisPe: TrapAnalysis | null = useMemo(() => {
     if (!trapCtx) return null;
-    return analyzeTrap(`${positionSide}-pe`, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
+    return analyzeTrap(trapPosition(positionSide, 'pe'), selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
   }, [positionSide, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx]);
 
   // Run analysis for all strikes (map view) — both CE and PE.
@@ -73,7 +76,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   const mapDataCe = useMemo(() => {
     if (!trapCtx) return [];
     return chain.map((row) => {
-      const result = analyzeTrap(`${positionSide}-ce`, row.strike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
+      const result = analyzeTrap(trapPosition(positionSide, 'ce'), row.strike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
       return { strike: row.strike, ...result };
     });
   }, [positionSide, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx]);
@@ -81,7 +84,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   const mapDataPe = useMemo(() => {
     if (!trapCtx) return [];
     return chain.map((row) => {
-      const result = analyzeTrap(`${positionSide}-pe`, row.strike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
+      const result = analyzeTrap(trapPosition(positionSide, 'pe'), row.strike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
       return { strike: row.strike, ...result };
     });
   }, [positionSide, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx]);
@@ -91,10 +94,10 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
     setView('single');
   };
 
-  const renderVerdict = (analysis: TrapAnalysis, label: 'CE' | 'PE') => {
+  const renderVerdict = (analysis: TrapAnalysis, label: OptionTypeId) => {
     const verdictClass = `trap-verdict--${analysis.verdict}`;
     const row = chain.find((r) => r.strike === selectedStrike);
-    const option = label === 'CE' ? row?.ce : row?.pe;
+    const option = label === OptionType.CE ? row?.ce : row?.pe;
     const flow = option ? flowByToken?.get(option.instrumentToken) : undefined;
     return (
       <div className={`trap-verdict ${verdictClass}`}>
@@ -274,8 +277,8 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
             <label className="trap-input__label">Position</label>
             <AppSelect
               value={positionSide}
-              options={[{ value: 'buy', label: 'Buy' }, { value: 'sell', label: 'Sell' }]}
-              onChange={(v) => setPositionSide(v as PositionSide)}
+              options={SIDES.map((side) => ({ value: side.id, label: side.label }))}
+              onChange={(v) => setPositionSide(v as SideId)}
             />
           </div>
           {view === 'single' && (
@@ -311,8 +314,8 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
       {/* Single View - CE and PE side by side */}
       {view === 'single' && analysisCe && analysisPe && (
         <div className="trap-verdict-grid">
-          {renderVerdict(analysisCe, 'CE')}
-          {renderVerdict(analysisPe, 'PE')}
+          {renderVerdict(analysisCe, OptionType.CE)}
+          {renderVerdict(analysisPe, OptionType.PE)}
         </div>
       )}
 

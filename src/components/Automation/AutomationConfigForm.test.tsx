@@ -26,7 +26,7 @@ describe('AutomationConfigForm', () => {
 
   it('switches on exactly the trade types and sides that are on', () => {
     const config = defaultAutomationConfig(TEST_STRATEGIES);
-    config.kinds['index-option'].SELL = true;
+    config.kinds.IndexOption.SELL = true;
     const html = form(config);
     expect(toggle(html, 'Sell Index option')).toContain('aria-checked="true"');
     expect(toggle(html, 'Buy Index option')).toContain('aria-checked="false"');
@@ -35,8 +35,8 @@ describe('AutomationConfigForm', () => {
 
   it('offers live trading and positional trades only as unavailable', () => {
     const html = form(defaultAutomationConfig(TEST_STRATEGIES));
-    const live = html.match(/<input[^>]*value="live"[^>]*>/)?.[0] ?? '';
-    const paper = html.match(/<input[^>]*value="paper"[^>]*>/)?.[0] ?? '';
+    const live = html.match(/<input[^>]*value="Live"[^>]*>/)?.[0] ?? '';
+    const paper = html.match(/<input[^>]*value="Paper"[^>]*>/)?.[0] ?? '';
     expect(live).toContain('disabled');
     expect(paper).not.toContain('disabled');
     expect(paper).toContain('checked');

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import TradeHorizonSelect from './TradeHorizonSelect';
-import { Horizon } from '../../../shared/horizons.js';
+import { Horizon } from '../../../shared/tradeEnums.js';
 import { storedTradeHorizon } from '@/hooks/useTradeHorizon';
 
 describe('TradeHorizonSelect', () => {

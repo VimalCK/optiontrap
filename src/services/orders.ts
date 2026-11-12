@@ -15,18 +15,16 @@
  */
 import { apiClient } from './apiClient';
 import type { NewPosition, Position } from './positions';
-
-export type PaperOrderStatus = 'open' | 'filled' | 'cancelled';
-export type OrderType = 'limit' | 'market';
+import { OrderStatus, OrderType, type OrderStatusId, type OrderTypeId } from '../../shared/tradeEnums.js';
 
 export interface PaperOrder extends Pick<Position, 'tradingsymbol' | 'instrumentToken' | 'instrumentType' | 'exchange' | 'strike' | 'optionType' | 'expiry' | 'side' | 'quantity' | 'source' | 'horizon'> {
   id: string;
   /** The automated trade it enters, for an order the trade automation placed (source auto). */
   autoTradeId: string | null;
-  orderType: OrderType;
+  orderType: OrderTypeId;
   /** null for a market order. */
   limitPrice: number | null;
-  status: PaperOrderStatus;
+  status: OrderStatusId;
   /** Why it was cancelled: by the user, at the market close, or a refused fill. */
   statusReason: string | null;
   /** The price it filled at: the last price or its limit for a limit order, the bid / ask for a market one. */
@@ -42,7 +40,7 @@ export interface PaperOrder extends Pick<Position, 'tradingsymbol' | 'instrument
 export type OrderTrade = Omit<NewPosition, 'entryPrice' | 'mode'>;
 
 /** An order to place: a paper trade with its type; a limit order has its limit price. */
-export type NewOrder = OrderTrade & ({ orderType: 'limit'; limitPrice: number } | { orderType: 'market' });
+export type NewOrder = OrderTrade & ({ orderType: typeof OrderType.Limit; limitPrice: number } | { orderType: typeof OrderType.Market });
 
 /** Place an order; the reply says whether it filled at once or is open. */
 export function placeOrder(order: NewOrder): Promise<PaperOrder> {
@@ -54,7 +52,7 @@ export function placeOrder(order: NewOrder): Promise<PaperOrder> {
  * hours; a positional one placed while the market is closed fills at the open.
  */
 export function placeMarketTrade(trade: OrderTrade): Promise<PaperOrder> {
-  return placeOrder({ ...trade, orderType: 'market' });
+  return placeOrder({ ...trade, orderType: OrderType.Market });
 }
 
 /**
@@ -67,16 +65,16 @@ export function exitPosition(positionId: string, exitPrice: number): Promise<Pap
 
 /** Every open order, whenever it was placed, newest first (the Pending tab). */
 export function fetchOpenOrders(signal?: AbortSignal): Promise<PaperOrder[]> {
-  return apiClient.get('/api/orders?status=open', { signal });
+  return apiClient.get(`/api/orders?status=${OrderStatus.Open}`, { signal });
 }
 
 /** Cancel an open order. */
 export function cancelOrder(id: string): Promise<PaperOrder> {
-  return apiClient.patch(`/api/orders/${id}`, { status: 'cancelled' });
+  return apiClient.patch(`/api/orders/${id}`, { status: OrderStatus.Cancelled });
 }
 
 /** Whether paper trading refused an order just placed (it was cancelled), for a red toast. */
-export const placedOrderRefused = (order: PaperOrder): boolean => order.status === 'cancelled';
+export const placedOrderRefused = (order: PaperOrder): boolean => order.status === OrderStatus.Cancelled;
 
 /**
  * What to tell the user about an order just placed: filled at once, waiting
@@ -84,8 +82,8 @@ export const placedOrderRefused = (order: PaperOrder): boolean => order.status =
  * refused the fill. `label` names the trade, e.g. "BUY 24000CE".
  */
 export function placedOrderMessage(order: PaperOrder, label: string): string {
-  if (order.status === 'filled') return `${label} filled @ ${(order.fillPrice ?? 0).toFixed(2)}`;
-  if (order.status === 'cancelled') return `${label} not filled · ${order.statusReason ?? 'cancelled'}`;
+  if (order.status === OrderStatus.Filled) return `${label} filled @ ${(order.fillPrice ?? 0).toFixed(2)}`;
+  if (order.status === OrderStatus.Cancelled) return `${label} not filled · ${order.statusReason ?? OrderStatus.Cancelled}`;
   if (order.limitPrice === null) return `${label} market order placed · fills when the market opens`;
   return `${label} limit @ ${order.limitPrice.toFixed(2)} placed · fills when the price reaches it`;
 }

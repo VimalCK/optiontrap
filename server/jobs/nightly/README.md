@@ -30,7 +30,13 @@ export default async function run({ query, date, log }) {
 }
 ```
 
+SQL that names an enum value is a `.js` job, so the value comes from its enum
+(`${sqlEnum(PriceAlertStatus.Triggered)}`, `server/sql.js`) instead of a
+literal in a `.sql` file.
+
 - `query(text, params)` — pg query against the app's pool
+- `runSql(text)` — runs SQL like a `.sql` job (one transaction, market time
+  zone, 10-minute timeout) and returns the rows affected
 - `date` — the run's IST date, `YYYY-MM-DD`
 - `log(...)` — console log prefixed with the job's file name
 

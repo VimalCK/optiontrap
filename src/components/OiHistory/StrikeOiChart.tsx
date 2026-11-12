@@ -3,9 +3,10 @@ import type { StrikeHistoryEntry } from './types';
 import { formatOiCompact } from './helpers';
 import { ChartXAxis } from './ChartXAxis';
 import { FAIR_LINE_COLOR, richnessColor, type Richness } from '@/services/fairValue';
+import { OptionType, type OptionTypeId } from '../../../shared/tradeEnums.js';
 
 interface StrikeOiChartProps {
-  optionType: 'CE' | 'PE';
+  optionType: OptionTypeId;
   dates: string[];
   dateMap: Map<string, Map<string, StrikeHistoryEntry>>;
   /** Highest CE or PE OI across both charts, so their bars share a scale. */
@@ -20,12 +21,12 @@ interface StrikeOiChartProps {
 
 /** OI (or volume) bars per expiry with price lines, for one option type of the selected strike. */
 export const StrikeOiChart: React.FC<StrikeOiChartProps> = ({ optionType, dates, dateMap, maxOi, maxPrice, expiries, expiryColors, showVolume, showFair = false }) => {
-  const oiKey = optionType === 'CE' ? 'ceOi' : 'peOi';
-  const closeKey = optionType === 'CE' ? 'ceClose' : 'peClose';
-  const volumeKey = optionType === 'CE' ? 'ceVolume' : 'peVolume';
-  const fairKey = optionType === 'CE' ? 'ceFair' : 'peFair';
-  const richKey = optionType === 'CE' ? 'ceRichPct' : 'peRichPct';
-  const labelKey = optionType === 'CE' ? 'ceFairLabel' : 'peFairLabel';
+  const oiKey = optionType === OptionType.CE ? 'ceOi' : 'peOi';
+  const closeKey = optionType === OptionType.CE ? 'ceClose' : 'peClose';
+  const volumeKey = optionType === OptionType.CE ? 'ceVolume' : 'peVolume';
+  const fairKey = optionType === OptionType.CE ? 'ceFair' : 'peFair';
+  const richKey = optionType === OptionType.CE ? 'ceRichPct' : 'peRichPct';
+  const labelKey = optionType === OptionType.CE ? 'ceFairLabel' : 'peFairLabel';
   const W = 700, H = 162, PAD_L = 50, PAD_R = 50, PAD_T = 16, PAD_B = 30;
   const plotW = W - PAD_L - PAD_R;
   const plotH = H - PAD_T - PAD_B;
@@ -84,7 +85,7 @@ export const StrikeOiChart: React.FC<StrikeOiChartProps> = ({ optionType, dates,
 
   return (
     <div className="oi-history__chart-panel">
-      <div className={`oi-history__chart-label${optionType === 'PE' ? ' oi-history__chart-label--pe' : ''}`}>{optionType}</div>
+      <div className={`oi-history__chart-label${optionType === OptionType.PE ? ' oi-history__chart-label--pe' : ''}`}>{optionType}</div>
       <svg viewBox={`0 0 ${W} ${H}`} className="oi-history__chart-svg">
         {/* Grid lines */}
         {[0.25, 0.5, 0.75].map((frac) => (

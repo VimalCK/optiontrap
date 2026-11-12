@@ -34,7 +34,7 @@ import { optionAnalyzerSetups } from './optionAnalyzerSetups.js';
 /**
  * A signal: what to trade and why. `setup` names the pattern it traded (e.g.
  * "Bull put"), so Win/Loss Patterns can group results by it.
- * @typedef {{ instrumentToken: number, side: 'BUY' | 'SELL', reason: string, setup?: string }} Signal
+ * @typedef {{ instrumentToken: number, side: import('../../../shared/tradeEnums.js').SideId, reason: string, setup?: string }} Signal
  * @typedef {{ instrumentToken: number, tradingsymbol: string, name: string, exchange: string, instrumentType: string,
  *             strike: number, expiry: string | null }} StrategyInstrument
  * @typedef {{ name: string, instrumentToken: number | null, isIndex: boolean }} StrategyUnderlying

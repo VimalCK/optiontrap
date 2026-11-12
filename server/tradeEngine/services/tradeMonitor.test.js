@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Horizon } from '../../../shared/horizons.js';
+import { Horizon } from '../../../shared/tradeEnums.js';
 
 // Keep the real database and Kite session lookup out of the default dependencies.
 vi.mock('../../db.js', () => ({}));
@@ -141,7 +141,7 @@ describe('the monitor service', () => {
     expect(orders.exit).toHaveBeenCalledWith('U1', 'p1', {
       exitPrice: 120,
       kite: ADMIN_KITE, // a market exit at the bid / ask, quoted with the feed's session
-      source: 'auto',
+      source: 'Auto',
       exitReason: { ruleId: 'stop-loss', reason: 'Stop-loss hit: P&L -20.00% (₹-1500.00), stop-loss 20%' },
     });
     expect(monitor.watchedPositionIds()).toEqual(['p2']);
@@ -236,10 +236,10 @@ describe('the monitor service', () => {
 
   it('reloads the owner when they exit a position by hand, not on its own exits or other orders, and stops listening when stopped', async () => {
     await market.open();
-    await orders.settledListener({ userId: 'U1', source: 'auto', closesPosition: true });
-    await orders.settledListener({ userId: 'U1', source: 'manual', closesPosition: false });
+    await orders.settledListener({ userId: 'U1', source: 'Auto', closesPosition: true });
+    await orders.settledListener({ userId: 'U1', source: 'Manual', closesPosition: false });
     expect(db.getOpenAutoPositions).not.toHaveBeenCalled();
-    await orders.settledListener({ userId: 'U1', source: 'manual', closesPosition: true });
+    await orders.settledListener({ userId: 'U1', source: 'Manual', closesPosition: true });
     expect(db.getOpenAutoPositions).toHaveBeenCalledWith('U1');
     expect(monitor.watchedPositionIds()).toEqual(['p2']);
     monitor.stop();

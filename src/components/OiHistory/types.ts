@@ -1,4 +1,6 @@
 import type { Richness } from '@/services/fairValue';
+import { type OptionTypeId, type SideId } from '../../../shared/tradeEnums.js';
+import { type HealthStatusId } from '../../../shared/appEnums.js';
 
 export interface OiHistoryRow {
   date: string;
@@ -134,7 +136,7 @@ export interface TradeBiasSummary {
 
 export type TradeSetupStatus = 'Confirmed' | 'Watch' | 'Avoid';
 
-export type ChecklistStatus = 'pass' | 'warn' | 'fail';
+export type ChecklistStatus = HealthStatusId;
 
 export interface TradeSetupChecklistItem {
   label: string;
@@ -205,7 +207,7 @@ export interface StrikeHistoryEntry {
 }
 
 export interface PremiumDecaySide {
-  optionType: 'CE' | 'PE';
+  optionType: OptionTypeId;
   firstClose: number;
   latestClose: number;
   decayPct: number;
@@ -226,7 +228,7 @@ export interface PremiumDecaySummary {
 }
 
 export interface OptionMomentumSide {
-  optionType: 'CE' | 'PE';
+  optionType: OptionTypeId;
   firstClose: number;
   latestClose: number;
   momentumPct: number;
@@ -292,8 +294,8 @@ export interface TradeSignalRow {
   signal_date: string;
   expiry: string | null;
   strike: number;
-  option_type: 'CE' | 'PE';
-  action: 'BUY' | 'SELL';
+  option_type: OptionTypeId;
+  action: SideId;
   /** Setup strength when logged: Confirmed or Watch. */
   status: string;
   details: TradeSignalDetails | null;

@@ -17,15 +17,10 @@
  *
  * An order opens its position through the one paper-trading path
  * (server/tradeEngine/positions.js), so the paper trade rules (shared/paperTradeRules.js)
- * apply when it is placed ('place') and again when it fills ('open').
+ * apply when it is placed (PaperTradeAction.Place) and again when it fills (PaperTradeAction.Open).
  */
 import { checkPaperTrade, normalizeTradeInput, RULE_CODES } from './paperTradeRules.js';
-
-/** @typedef {'open' | 'filled' | 'cancelled'} PaperOrderStatus */
-export const PAPER_ORDER_STATUSES = /** @type {const} */ (['open', 'filled', 'cancelled']);
-
-/** @typedef {'limit' | 'market'} OrderType */
-export const ORDER_TYPES = /** @type {const} */ (['limit', 'market']);
+import { ORDER_TYPES, OrderType, PaperTradeAction, Side } from './tradeEnums.js';
 
 /** Why an order was cancelled, when it wasn't the user's own cancel. */
 export const CANCELLED_AT_CLOSE = 'Cancelled at market close';
@@ -34,14 +29,14 @@ export const CANCELLED_BY_USER = 'Cancelled';
 /**
  * Whether a limit order fills at this price: a buy at its limit or lower, a
  * sell at its limit or higher.
- * @param {'BUY' | 'SELL'} side
+ * @param {import('./tradeEnums.js').SideId} side
  * @param {number} limitPrice
  * @param {number} lastPrice
  */
-export const canFill = (side, limitPrice, lastPrice) => (side === 'BUY' ? lastPrice <= limitPrice : lastPrice >= limitPrice);
+export const canFill = (side, limitPrice, lastPrice) => (side === Side.BUY ? lastPrice <= limitPrice : lastPrice >= limitPrice);
 
 /**
- * @typedef {ReturnType<typeof normalizeTradeInput> & { orderType: OrderType, limitPrice: number | null }} Order
+ * @typedef {ReturnType<typeof normalizeTradeInput> & { orderType: import('./tradeEnums.js').OrderTypeId, limitPrice: number | null }} Order
  *   the trade the order opens, with its type and its limit (null for a market
  *   order). Its entryPrice is the limit, or for a market order the last price
  *   when it was placed (the fill happens at the bid / ask).
@@ -49,7 +44,7 @@ export const canFill = (side, limitPrice, lastPrice) => (side === 'BUY' ? lastPr
 
 /**
  * Parse an order from a request body: the fields of a paper trade, with
- * `orderType` ('limit' or 'market') and, for a limit order, `limitPrice` in
+ * `orderType` (OrderType.Limit or OrderType.Market) and, for a limit order, `limitPrice` in
  * place of `entryPrice`. Checked by the paper trade rules for placing an
  * order: an intraday one only in market hours, a positional one at any time.
  * @param {Record<string, unknown>} input
@@ -58,12 +53,12 @@ export const canFill = (side, limitPrice, lastPrice) => (side === 'BUY' ? lastPr
  * @returns {{ order: Order, error?: undefined } | { error: string, code: string, order?: undefined }}
  */
 export function parseOrder(input, { now = new Date(), lastPrice } = {}) {
-  const orderType = /** @type {OrderType} */ (input.orderType);
+  const orderType = /** @type {import('./tradeEnums.js').OrderTypeId} */ (input.orderType);
   if (!ORDER_TYPES.includes(orderType)) return { error: `orderType must be one of: ${ORDER_TYPES.join(', ')}`, code: RULE_CODES.INVALID_TRADE };
-  const limitPrice = orderType === 'limit' ? Number(input.limitPrice) : null;
+  const limitPrice = orderType === OrderType.Limit ? Number(input.limitPrice) : null;
   if (limitPrice !== null && !(limitPrice > 0)) return { error: 'Limit price must be more than 0', code: RULE_CODES.INVALID_TRADE };
   const trade = normalizeTradeInput({ ...input, entryPrice: limitPrice ?? lastPrice });
-  const result = checkPaperTrade('place', { trade, now });
+  const result = checkPaperTrade(PaperTradeAction.Place, { trade, now });
   if (!result.ok) return { error: result.violations[0].message, code: result.violations[0].code };
   return { order: { ...trade, orderType, limitPrice } };
 }

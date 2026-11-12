@@ -4,15 +4,13 @@ import AppSelect from '@/components/AppSelect/AppSelect';
 import { useAbortSignal } from '@/hooks/useAbortSignal';
 import { useKiteSession } from '@/hooks/useKiteSession';
 import { fetchUnderlyings, setAlwaysSnapshot, type Underlying } from '@/services/underlyings';
+import { TradingMode, type TradingModeId } from '../../shared/tradeEnums.js';
+import { saveTradingMode, storedTradingMode } from '@/utils/tradingModeStorage';
 import '@/styles/settings.css';
 
-const TRADING_MODE_KEY = 'optiontrap_order_mode';
-
-type TradingMode = 'paper' | 'live';
-
-const TRADING_MODES: { id: TradingMode; label: string; hint: string }[] = [
-  { id: 'paper', label: 'Paper', hint: 'Orders are simulated: nothing is sent to Kite and no money is used.' },
-  { id: 'live', label: 'Live', hint: 'Orders are sent to Kite and placed with real money.' },
+const TRADING_MODE_CHOICES: { id: TradingModeId; label: string; hint: string }[] = [
+  { id: TradingMode.Paper, label: 'Paper', hint: 'Orders are simulated: nothing is sent to Kite and no money is used.' },
+  { id: TradingMode.Live, label: 'Live', hint: 'Orders are sent to Kite and placed with real money.' },
 ];
 
 /** One setting: a card with a small label, a title, a line on what it does, then its control. */
@@ -118,16 +116,16 @@ const AlwaysSnapshotSetting: React.FC = () => {
 const Settings: React.FC = () => {
   const { session } = useKiteSession();
   const { accent, setAccent } = useTheme();
-  const [tradingMode, setTradingMode] = useState<TradingMode>(() =>
-    (localStorage.getItem(TRADING_MODE_KEY) as TradingMode) || 'paper'
+  const [tradingMode, setTradingMode] = useState<TradingModeId>(() =>
+    storedTradingMode()
   );
 
-  const handleTradingModeChange = (mode: TradingMode) => {
+  const handleTradingModeChange = (mode: TradingModeId) => {
     setTradingMode(mode);
-    localStorage.setItem(TRADING_MODE_KEY, mode);
+    saveTradingMode(mode);
   };
 
-  const modeHint = TRADING_MODES.find((m) => m.id === tradingMode)?.hint;
+  const modeHint = TRADING_MODE_CHOICES.find((m) => m.id === tradingMode)?.hint;
 
   return (
     <div className="settings">
@@ -142,7 +140,7 @@ const Settings: React.FC = () => {
           description="Choose whether orders are placed as paper trades or sent live to Kite."
         >
           <div className="settings-toggle" role="radiogroup" aria-label="Trading mode">
-            {TRADING_MODES.map((m) => (
+            {TRADING_MODE_CHOICES.map((m) => (
               <button
                 key={m.id}
                 type="button"

@@ -24,6 +24,7 @@ import {
 import { getOrFetchInstruments } from './instruments.js';
 import { createKeyedQueue, createSharedRuns } from './sharedRuns.js';
 import { marketDate } from '../shared/marketTime.js';
+import { Exchange, InstrumentType } from '../shared/tradeEnums.js';
 
 /** Get current date in IST as YYYY-MM-DD */
 export function todayIST() {
@@ -199,7 +200,7 @@ export async function fetchOiHistoryMonthNow({
     // Use the nearest futures contract in the selected expiry month.
     const instruments = await getOrFetchInstruments(apiKey, accessToken);
     const futuresContract = instruments
-      .filter((inst) => inst.name === scrip && inst.exchange === 'NFO' && inst.instrumentType === 'FUT'
+      .filter((inst) => inst.name === scrip && inst.exchange === Exchange.NFO && inst.instrumentType === InstrumentType.FUT
         && inst.expiry && inst.expiry.startsWith(expiryMonth) && inst.expiry >= today)
       .sort((a, b) => a.expiry.localeCompare(b.expiry))[0];
     if (futuresContract) {

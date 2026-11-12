@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { Horizon } from '../../../shared/horizons.js';
+import { Horizon } from '../../../shared/tradeEnums.js';
 
 // Keep the real database, positions and Kite session lookup out of the default dependencies.
 vi.mock('../../db.js', () => ({}));
@@ -18,7 +18,7 @@ const ADMIN_KITE = { apiKey: 'key', accessToken: 'admin-token' };
 /** An open intraday position as the database returns it. */
 const position = (id, extra = {}) => ({
   id, userId: 'U1', tradingsymbol: `NIFTY26N10${id}CE`, instrumentToken: 101, instrumentType: 'CE', exchange: 'NFO',
-  side: 'BUY', quantity: 75, entryPrice: 50, horizon: Horizon.Intraday, source: 'manual', mode: 'paper', ...extra,
+  side: 'BUY', quantity: 75, entryPrice: 50, horizon: Horizon.Intraday, source: 'Manual', mode: 'Paper', ...extra,
 });
 const keyOf = (p) => `NFO:${p.tradingsymbol}`;
 
@@ -53,7 +53,7 @@ describe('the session square-off service', () => {
 
   beforeEach(() => {
     now = EVENING;
-    open = [position('a'), position('b', { userId: 'U2', source: 'auto' })];
+    open = [position('a'), position('b', { userId: 'U2', source: 'Auto' })];
     lastPrices = { [keyOf(open[0])]: 63, [keyOf(open[1])]: 41 };
     kite = ADMIN_KITE;
     logs = [];
@@ -92,8 +92,8 @@ describe('the session square-off service', () => {
     await marketCheck();
     // Today's session hasn't ended, so only positions opened before Thursday's end are looked for.
     expect(db.getOpenIntradayPositionsBefore).toHaveBeenCalledWith(THU_SESSION_END.toISOString());
-    expect(orders.exit).toHaveBeenCalledWith('U1', 'a', { exitPrice: 63, kite: ADMIN_KITE, source: 'auto', exitReason: SESSION_SQUARE_OFF });
-    expect(orders.exit).toHaveBeenCalledWith('U2', 'b', { exitPrice: 41, kite: ADMIN_KITE, source: 'auto', exitReason: SESSION_SQUARE_OFF });
+    expect(orders.exit).toHaveBeenCalledWith('U1', 'a', { exitPrice: 63, kite: ADMIN_KITE, source: 'Auto', exitReason: SESSION_SQUARE_OFF });
+    expect(orders.exit).toHaveBeenCalledWith('U2', 'b', { exitPrice: 41, kite: ADMIN_KITE, source: 'Auto', exitReason: SESSION_SQUARE_OFF });
     expect(orders.squareOff).not.toHaveBeenCalled();
     expect(service.status().lastRun).toMatchObject({ when: 'in market hours', found: 2, closed: 2 });
   });

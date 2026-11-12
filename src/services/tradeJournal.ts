@@ -3,7 +3,7 @@
  * Trade entries and summaries from the positions API. The server filters,
  * pages and totals the trades, so the browser never loads the full history.
  *
- * Paper  → exited paper positions (GET /api/positions?status=closed, /daily-pnl, /stats)
+ * Paper  → exited paper positions (GET /api/positions?status=Closed, /daily-pnl, /stats)
  * Live   → not yet implemented (reserved for Kite Trades API)
  */
 
@@ -16,17 +16,16 @@ import {
   DailyPnl,
   Position,
 } from './positions';
+import { Side, TradingMode, segmentOf, type SegmentId, type SideId } from '../../shared/tradeEnums.js';
 
-export type Segment = 'stocks' | 'options' | 'futures';
-export type TradingMode = 'paper' | 'live';
 export type { DailyPnl };
 
 export interface TradeEntry {
   id: string;
   date: string;       // market-zone (IST) exit day, 'YYYY-MM-DD'
-  segment: Segment;
+  segment: SegmentId;
   symbol: string;
-  side: 'BUY' | 'SELL';
+  side: SideId;
   quantity: number;
   entryPrice: number;
   exitPrice: number;
@@ -77,10 +76,7 @@ export interface TradeStats {
 }
 
 /** By instrument type, the same rule the server's segment filter uses. */
-export function positionToSegment(pos: Position): Segment {
-  if (pos.instrumentType === 'CE' || pos.instrumentType === 'PE') return 'options';
-  return pos.instrumentType === 'FUT' ? 'futures' : 'stocks';
-}
+export const positionToSegment = (pos: Position): SegmentId => segmentOf(pos.instrumentType);
 
 const CHARGE_LABELS: [keyof NonNullable<Position['chargeBreakdown']>, string][] = [
   ['brokerage', 'Brokerage'], ['stt', 'STT'], ['exchange', 'Exchange'], ['sebi', 'SEBI'], ['stamp', 'Stamp duty'], ['gst', 'GST'], ['dp', 'DP'],
@@ -99,7 +95,7 @@ export function positionToEntry(pos: Position): TradeEntry {
   const exitPrice = pos.exitPrice ?? 0;
   const charges = pos.charges ?? 0;
   const gross =
-    pos.side === 'BUY'
+    pos.side === Side.BUY
       ? (exitPrice - pos.entryPrice) * pos.quantity
       : (pos.entryPrice - exitPrice) * pos.quantity;
   const pnl = gross - charges;
@@ -129,22 +125,22 @@ export function positionToEntry(pos: Position): TradeEntry {
  * A page of paper trades, most recently exited first.
  */
 export async function getPaperTrades(filter: ClosedPositionsFilter = {}): Promise<TradeEntry[]> {
-  const positions = await getClosedPositions('paper', filter);
+  const positions = await getClosedPositions(TradingMode.Paper, filter);
   return positions.map(positionToEntry);
 }
 
 /**
  * Paper P&L per exit day between `from` and `to`, newest day first.
  */
-export async function getPaperDailyPnl(from: string, to: string, segment?: Segment): Promise<DailyPnl[]> {
-  return getDailyPnl('paper', from, to, segment);
+export async function getPaperDailyPnl(from: string, to: string, segment?: SegmentId): Promise<DailyPnl[]> {
+  return getDailyPnl(TradingMode.Paper, from, to, segment);
 }
 
 /**
  * All-time paper win/loss figures.
  */
 export async function getPaperTradeStats(): Promise<TradeStats> {
-  const { bestTrade, worstTrade, ...counts } = await getPositionStats('paper');
+  const { bestTrade, worstTrade, ...counts } = await getPositionStats(TradingMode.Paper);
   return {
     ...counts,
     bestTrade: bestTrade ? positionToEntry(bestTrade) : undefined,

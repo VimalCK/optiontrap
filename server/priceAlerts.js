@@ -1,4 +1,5 @@
-const CONDITIONS = ['above', 'below'];
+import { Exchange } from '../shared/tradeEnums.js';
+import { PRICE_ALERT_CONDITIONS, isPriceAlertCondition } from '../shared/appEnums.js';
 const MAX_NOTE_LENGTH = 200;
 
 /**
@@ -11,7 +12,7 @@ export function parsePriceAlertInput(body) {
   const token = Number(instrumentToken);
   if (!Number.isInteger(token) || token <= 0) return { error: 'instrumentToken is required' };
   if (typeof tradingsymbol !== 'string' || !tradingsymbol.trim()) return { error: 'tradingsymbol is required' };
-  if (!CONDITIONS.includes(condition)) return { error: 'condition must be above or below' };
+  if (!isPriceAlertCondition(condition)) return { error: `condition must be one of: ${PRICE_ALERT_CONDITIONS.map((c) => c.id).join(', ')}` };
 
   const price = Number(value);
   if (!Number.isFinite(price) || price <= 0) return { error: 'value must be a price above 0' };
@@ -23,7 +24,7 @@ export function parsePriceAlertInput(body) {
     alert: {
       instrumentToken: token,
       tradingsymbol: tradingsymbol.trim(),
-      exchange: typeof exchange === 'string' && exchange.trim() ? exchange.trim() : 'NSE',
+      exchange: typeof exchange === 'string' && exchange.trim() ? exchange.trim() : Exchange.NSE,
       condition,
       value: price,
       note: trimmedNote || null,

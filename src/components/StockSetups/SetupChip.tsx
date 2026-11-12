@@ -1,6 +1,7 @@
 import React from 'react';
 import { formatNumericDate } from '@/utils/marketStatus';
 import type { ScanSummary } from '@/services/stockSetups';
+import { sideLabel } from '../../../shared/tradeEnums.js';
 
 const STATE_TEXT: Record<ScanSummary['state'], string> = {
   falling: 'Falling',
@@ -27,11 +28,11 @@ const SetupChip: React.FC<{ scan: ScanSummary | undefined; onOpen: () => void }>
   return (
     <button
       type="button"
-      className={`wl-setup-chip ${setup ? `wl-setup-chip--${setup.direction}` : `wl-setup-chip--state wl-setup-chip--${scan.state}`}`}
+      className={`wl-setup-chip ${setup ? `wl-setup-chip--${setup.direction.toLowerCase()}` : `wl-setup-chip--state wl-setup-chip--${scan.state}`}`}
       onClick={onOpen}
       title={title}
     >
-      {setup ? `${setup.direction === 'buy' ? 'Buy' : 'Sell'}: ${setup.label}${extra}` : STATE_TEXT[scan.state]}
+      {setup ? `${sideLabel(setup.direction)}: ${setup.label}${extra}` : STATE_TEXT[scan.state]}
     </button>
   );
 };

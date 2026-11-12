@@ -1,6 +1,8 @@
 import type { RolloverPattern, StrikeBias, DailyBias, PriceTrendDirection, StrikeBiasDay, StrikeBiasSummary, PriceTrendSummary, TradeBiasSummary, TradeSetupStatus, ChecklistStatus, TradeSetupChecklistItem, TradeLevelRow, TradeLevelContext, TradeSetupSummary, SellingSetupType, SellingSetupSummary, StrikeHistoryEntry, PremiumDecaySide, PremiumDecaySummary, OptionMomentumSide, OptionMomentumSummary } from './types';
 import { priceDirection, classifyOptionMove, patternBiasScore, pctChange, formatPct } from './helpers';
 import { formatCalendarDate, formatNumericDate } from '@/utils/marketStatus';
+import { OptionType, type OptionTypeId } from '../../../shared/tradeEnums.js';
+import { HealthStatus } from '../../../shared/appEnums.js';
 
 export function summarizePriceTrend(dates: string[], spotByDate: Map<string, number>): PriceTrendSummary {
   const values = dates
@@ -124,21 +126,21 @@ export function summarizeTradeBias(priceTrend: PriceTrendSummary, optionFlow: St
 }
 
 export function checklistStatusText(status: ChecklistStatus): string {
-  if (status === 'pass') return 'Yes';
-  if (status === 'warn') return 'Wait';
+  if (status === HealthStatus.Pass) return 'Yes';
+  if (status === HealthStatus.Warn) return 'Wait';
   return 'No';
 }
 
 export function sortChecklistByStatus(items: TradeSetupChecklistItem[]): TradeSetupChecklistItem[] {
-  const order: Record<ChecklistStatus, number> = { pass: 0, warn: 1, fail: 2 };
+  const order: Record<ChecklistStatus, number> = { [HealthStatus.Pass]: 0, [HealthStatus.Warn]: 1, [HealthStatus.Fail]: 2 };
   return [...items].sort((a, b) => order[a.status] - order[b.status]);
 }
 
 export function readinessScore(items: TradeSetupChecklistItem[]): number {
   if (items.length === 0) return 0;
   const score = items.reduce((sum, item) => {
-    if (item.status === 'pass') return sum + 1;
-    if (item.status === 'warn') return sum + 0.5;
+    if (item.status === HealthStatus.Pass) return sum + 1;
+    if (item.status === HealthStatus.Warn) return sum + 0.5;
     return sum;
   }, 0);
   return Math.round((score / items.length) * 100);
@@ -167,8 +169,8 @@ export function summarizeTradeLevels(rows: TradeLevelRow[], spot: number | null,
       resistanceStrike: null,
       maxOiStrike: null,
       selectedDistancePct: null,
-      locationStatus: 'warn',
-      riskRewardStatus: 'warn',
+      locationStatus: HealthStatus.Warn,
+      riskRewardStatus: HealthStatus.Warn,
       locationAnswer: 'Spot/level data unavailable',
       riskRewardAnswer: 'Cannot estimate reward/risk from current data',
     };
@@ -184,11 +186,11 @@ export function summarizeTradeLevels(rows: TradeLevelRow[], spot: number | null,
     .sort((a, b) => (b.ceConsolidatedOi + b.peConsolidatedOi) - (a.ceConsolidatedOi + a.peConsolidatedOi))[0]?.strike ?? null;
   const selectedDistancePct = distancePct(spot, selectedStrike);
   const absSelectedDistance = Math.abs(selectedDistancePct ?? 999);
-  const locationStatus: ChecklistStatus = absSelectedDistance <= 0.35 ? 'pass' : absSelectedDistance <= 0.8 ? 'warn' : 'fail';
+  const locationStatus: ChecklistStatus = absSelectedDistance <= 0.35 ? HealthStatus.Pass : absSelectedDistance <= 0.8 ? HealthStatus.Warn : HealthStatus.Fail;
   const supportDistance = support !== null ? Math.abs(distancePct(spot, support) ?? 999) : null;
   const resistanceDistance = resistance !== null ? Math.abs(distancePct(spot, resistance) ?? 999) : null;
   const hasNearbyBoundary = (supportDistance !== null && supportDistance <= 0.8) || (resistanceDistance !== null && resistanceDistance <= 0.8);
-  const riskRewardStatus: ChecklistStatus = hasNearbyBoundary && absSelectedDistance <= 0.8 ? 'pass' : absSelectedDistance <= 1.2 ? 'warn' : 'fail';
+  const riskRewardStatus: ChecklistStatus = hasNearbyBoundary && absSelectedDistance <= 0.8 ? HealthStatus.Pass : absSelectedDistance <= 1.2 ? HealthStatus.Warn : HealthStatus.Fail;
 
   return {
     spot,
@@ -223,10 +225,10 @@ export function summarizeOptionMomentum(
     ? Math.max(0, Math.ceil((expiryTime - latestTime) / 86400000))
     : null;
 
-  const buildSide = (optionType: 'CE' | 'PE'): OptionMomentumSide | null => {
-    const close = (entry: StrikeHistoryEntry) => optionType === 'CE' ? entry.ceClose : entry.peClose;
-    const oi = (entry: StrikeHistoryEntry) => optionType === 'CE' ? entry.ceOi : entry.peOi;
-    const volume = (entry: StrikeHistoryEntry) => optionType === 'CE' ? entry.ceVolume : entry.peVolume;
+  const buildSide = (optionType: OptionTypeId): OptionMomentumSide | null => {
+    const close = (entry: StrikeHistoryEntry) => optionType === OptionType.CE ? entry.ceClose : entry.peClose;
+    const oi = (entry: StrikeHistoryEntry) => optionType === OptionType.CE ? entry.ceOi : entry.peOi;
+    const volume = (entry: StrikeHistoryEntry) => optionType === OptionType.CE ? entry.ceVolume : entry.peVolume;
     const priced = series.filter((item) => close(item.entry) > 0);
     if (priced.length < 2) return null;
     const first = priced[0];
@@ -248,8 +250,8 @@ export function summarizeOptionMomentum(
     const recentScore = recentMomentumPct !== null && recentMomentumPct >= 8 ? 2 : recentMomentumPct !== null && recentMomentumPct >= 4 ? 1 : 0;
     const oiScore = oiChangePct !== null && oiChangePct >= 8 ? 2 : oiChangePct !== null && oiChangePct >= 0 ? 1 : 0;
     const activityScore = latestVolume > 0 && averageVolume > 0 && latestVolume >= averageVolume * 0.6 ? 1 : 0;
-    const adverseTrend = (optionType === 'CE' && priceTrend.direction === 'Downward') ||
-      (optionType === 'PE' && priceTrend.direction === 'Upward');
+    const adverseTrend = (optionType === OptionType.CE && priceTrend.direction === 'Downward') ||
+      (optionType === OptionType.PE && priceTrend.direction === 'Upward');
     const adversePenalty = adverseTrend && priceTrend.strength === 'Strong' ? 3 : adverseTrend ? 1 : 0;
     const distanceScore = Math.abs(levels.selectedDistancePct ?? 999) <= 0.8 ? 1 : 0;
     const score = momentumScore + recentScore + oiScore + activityScore + distanceScore - adversePenalty;
@@ -259,7 +261,7 @@ export function summarizeOptionMomentum(
     return { optionType, firstClose, latestClose, momentumPct, recentMomentumPct, oiChangePct, latestVolume, averageVolume, daysToExpiry, score, reason };
   };
 
-  return { nearestExpiry, ce: buildSide('CE'), pe: buildSide('PE') };
+  return { nearestExpiry, ce: buildSide(OptionType.CE), pe: buildSide(OptionType.PE) };
 }
 
 export function summarizeTradeSetup(
@@ -281,8 +283,8 @@ export function summarizeTradeSetup(
   const cePriceSupport = priceTrend.direction !== 'Downward';
   const pePriceSupport = priceTrend.direction !== 'Upward';
   const expiryPassFor = (side: OptionMomentumSide | null) => side?.daysToExpiry === null || (side?.daysToExpiry !== undefined && side.daysToExpiry >= 3);
-  const ceCandidate = Boolean(ceMomentumPass && cePriceSupport && expiryPassFor(momentum.ce) && levels.riskRewardStatus !== 'fail');
-  const peCandidate = Boolean(peMomentumPass && pePriceSupport && expiryPassFor(momentum.pe) && levels.riskRewardStatus !== 'fail');
+  const ceCandidate = Boolean(ceMomentumPass && cePriceSupport && expiryPassFor(momentum.ce) && levels.riskRewardStatus !== HealthStatus.Fail);
+  const peCandidate = Boolean(peMomentumPass && pePriceSupport && expiryPassFor(momentum.pe) && levels.riskRewardStatus !== HealthStatus.Fail);
   const selectedSide = ceCandidate ? momentum.ce : peCandidate ? momentum.pe :
     (momentum.ce?.score ?? -Infinity) >= (momentum.pe?.score ?? -Infinity) ? momentum.ce : momentum.pe;
   const directionalFlow = ceCandidate || peCandidate || flowBullish || flowBearish;
@@ -306,12 +308,12 @@ export function summarizeTradeSetup(
   const volumePass = Boolean(momentumSide && momentumSide.latestVolume > 0 && momentumSide.averageVolume > 0 && momentumSide.latestVolume >= momentumSide.averageVolume * 0.6);
   const oiPass = Boolean(momentumSide && momentumSide.oiChangePct !== null && momentumSide.oiChangePct >= 0);
   const expiryPass = expiryPassFor(momentumSide);
-  const confidenceStatus: ChecklistStatus = optionFlow.confidence >= 65 ? 'pass' : optionFlow.confidence >= 55 ? 'warn' : 'fail';
-  const priceStatus: ChecklistStatus = priceAligned ? 'pass' : priceConflicts ? 'fail' : 'warn';
-  const recentStatus: ChecklistStatus = recentAligned ? 'pass' : recentConflicts ? 'fail' : 'warn';
-  const flowStatus: ChecklistStatus = directionalFlow ? 'pass' : 'fail';
-  const ready = (ceCandidate || peCandidate) && priceAligned && momentumPass && !recentConflicts && levels.locationStatus !== 'fail' && expiryPass;
-  const watch = directionalFlow && !ready && !priceConflicts && momentumWatch && levels.locationStatus !== 'fail';
+  const confidenceStatus: ChecklistStatus = optionFlow.confidence >= 65 ? HealthStatus.Pass : optionFlow.confidence >= 55 ? HealthStatus.Warn : HealthStatus.Fail;
+  const priceStatus: ChecklistStatus = priceAligned ? HealthStatus.Pass : priceConflicts ? HealthStatus.Fail : HealthStatus.Warn;
+  const recentStatus: ChecklistStatus = recentAligned ? HealthStatus.Pass : recentConflicts ? HealthStatus.Fail : HealthStatus.Warn;
+  const flowStatus: ChecklistStatus = directionalFlow ? HealthStatus.Pass : HealthStatus.Fail;
+  const ready = (ceCandidate || peCandidate) && priceAligned && momentumPass && !recentConflicts && levels.locationStatus !== HealthStatus.Fail && expiryPass;
+  const watch = directionalFlow && !ready && !priceConflicts && momentumWatch && levels.locationStatus !== HealthStatus.Fail;
   const status: TradeSetupStatus = ready ? 'Confirmed' : watch ? 'Watch' : 'Avoid';
   const strikeLabel = selectedStrike.toFixed(0);
   const sideLabel = direction === 'Bullish' ? 'upside' : direction === 'Bearish' ? 'downside' : 'range';
@@ -348,28 +350,28 @@ export function summarizeTradeSetup(
     },
     {
       label: 'Premium momentum',
-      status: momentumPass ? 'pass' : momentumWatch ? 'warn' : 'fail',
+      status: momentumPass ? HealthStatus.Pass : momentumWatch ? HealthStatus.Warn : HealthStatus.Fail,
       answer: momentumSide
         ? `${momentumSide.optionType} ${formatPct(momentumSide.momentumPct)} overall${momentumSide.recentMomentumPct !== null ? `, ${formatPct(momentumSide.recentMomentumPct)} recent` : ''}`
         : 'No nearest-expiry momentum evidence',
     },
     {
       label: 'Volume confirms',
-      status: volumePass ? 'pass' : momentumAvailable ? 'warn' : 'fail',
+      status: volumePass ? HealthStatus.Pass : momentumAvailable ? HealthStatus.Warn : HealthStatus.Fail,
       answer: momentumSide && momentumSide.latestVolume > 0
         ? `Latest volume ${momentumSide.latestVolume.toLocaleString('en-IN')} vs average ${Math.round(momentumSide.averageVolume).toLocaleString('en-IN')}`
         : 'Volume is unavailable or too thin',
     },
     {
       label: 'OI confirms',
-      status: oiPass ? 'pass' : momentumAvailable ? 'warn' : 'fail',
+      status: oiPass ? HealthStatus.Pass : momentumAvailable ? HealthStatus.Warn : HealthStatus.Fail,
       answer: momentumSide?.oiChangePct !== null && momentumSide?.oiChangePct !== undefined
         ? `OI ${formatPct(momentumSide.oiChangePct)} across the nearest-expiry history`
         : 'OI change is unavailable',
     },
     {
       label: 'Expiry risk',
-      status: expiryPass ? 'pass' : 'fail',
+      status: expiryPass ? HealthStatus.Pass : HealthStatus.Fail,
       answer: momentumSide?.daysToExpiry === null || momentumSide?.daysToExpiry === undefined
         ? 'DTE unavailable'
         : `${momentumSide.daysToExpiry} DTE; avoid fresh buying too close to expiry`,
@@ -454,10 +456,10 @@ export function summarizePremiumDecay(
     ? Math.max(0, Math.ceil((expiryTime - latestDate) / 86400000))
     : null;
 
-  const buildSide = (optionType: 'CE' | 'PE'): PremiumDecaySide | null => {
-    const close = (entry: StrikeHistoryEntry) => optionType === 'CE' ? entry.ceClose : entry.peClose;
-    const oi = (entry: StrikeHistoryEntry) => optionType === 'CE' ? entry.ceOi : entry.peOi;
-    const volume = (entry: StrikeHistoryEntry) => optionType === 'CE' ? entry.ceVolume : entry.peVolume;
+  const buildSide = (optionType: OptionTypeId): PremiumDecaySide | null => {
+    const close = (entry: StrikeHistoryEntry) => optionType === OptionType.CE ? entry.ceClose : entry.peClose;
+    const oi = (entry: StrikeHistoryEntry) => optionType === OptionType.CE ? entry.ceOi : entry.peOi;
+    const volume = (entry: StrikeHistoryEntry) => optionType === OptionType.CE ? entry.ceVolume : entry.peVolume;
     const priced = series.filter((item) => close(item.entry) > 0);
     if (priced.length < 2) return null;
 
@@ -484,8 +486,8 @@ export function summarizePremiumDecay(
     const timeStrength = daysToExpiry !== null && daysToExpiry <= 7 ? 2 : daysToExpiry !== null && daysToExpiry <= 14 ? 1 : 0;
     const activityStrength = latestVolume > 0 && averageVolume > 0 ? 1 : 0;
     const oiStrength = latestOi > 0 && (oiChangePct === null || oiChangePct >= -15) ? 1 : 0;
-    const adverseTrend = (optionType === 'CE' && priceTrend.direction === 'Upward') ||
-      (optionType === 'PE' && priceTrend.direction === 'Downward');
+    const adverseTrend = (optionType === OptionType.CE && priceTrend.direction === 'Upward') ||
+      (optionType === OptionType.PE && priceTrend.direction === 'Downward');
     const adversePenalty = adverseTrend && priceTrend.strength === 'Strong' ? 3 : adverseTrend ? 1 : 0;
     const distancePctFromSpot = Math.abs(levels.selectedDistancePct ?? 999);
     const distanceStrength = distancePctFromSpot <= 2.5 ? 1 : 0;
@@ -510,7 +512,7 @@ export function summarizePremiumDecay(
     };
   };
 
-  return { nearestExpiry, ce: buildSide('CE'), pe: buildSide('PE') };
+  return { nearestExpiry, ce: buildSide(OptionType.CE), pe: buildSide(OptionType.PE) };
 }
 
 export function summarizeSellingSetup(
@@ -528,7 +530,7 @@ export function summarizeSellingSetup(
   const hasResistance = levels.resistanceStrike !== null;
   const hasSupport = levels.supportStrike !== null;
   const confidenceOk = optionFlow.confidence >= 55;
-  const locationOk = levels.locationStatus !== 'fail';
+  const locationOk = levels.locationStatus !== HealthStatus.Fail;
   const callSellCandidate = flowBearish && !priceBullish && hasResistance && confidenceOk;
   const putSellCandidate = flowBullish && !priceBearish && hasSupport && confidenceOk;
   const rangeSellCandidate = priceSideways && hasSupport && hasResistance && optionFlow.confidence >= 50;
@@ -542,13 +544,13 @@ export function summarizeSellingSetup(
     : putSellCandidate
       ? 'Put Sell'
       : decayCandidate
-        ? decaySide.optionType === 'CE' ? 'Call Sell' : 'Put Sell'
+        ? decaySide.optionType === OptionType.CE ? 'Call Sell' : 'Put Sell'
       : rangeSellCandidate
         ? 'Range Sell'
         : 'No Sell';
-  const decayConfirmed = Boolean(decayCandidate && locationOk && (decaySide!.score >= 5 || levels.riskRewardStatus !== 'fail'));
+  const decayConfirmed = Boolean(decayCandidate && locationOk && (decaySide!.score >= 5 || levels.riskRewardStatus !== HealthStatus.Fail));
   const decayWatch = Boolean(decayCandidate && !decayConfirmed);
-  const status: TradeSetupStatus = ((callSellCandidate || putSellCandidate) && locationOk && levels.riskRewardStatus !== 'fail') || decayConfirmed
+  const status: TradeSetupStatus = ((callSellCandidate || putSellCandidate) && locationOk && levels.riskRewardStatus !== HealthStatus.Fail) || decayConfirmed
     ? 'Confirmed'
     : type !== 'No Sell' || decayWatch
       ? 'Watch'
@@ -557,7 +559,7 @@ export function summarizeSellingSetup(
   const checklist: TradeSetupChecklistItem[] = [
     {
       label: 'Selling bias',
-      status: type !== 'No Sell' ? 'pass' : 'fail',
+      status: type !== 'No Sell' ? HealthStatus.Pass : HealthStatus.Fail,
       answer: decayCandidate
         ? `${decaySide!.optionType} premium-decay setup: ${decaySide!.reason}`
         : type === 'Call Sell'
@@ -571,18 +573,18 @@ export function summarizeSellingSetup(
     {
       label: 'OI wall / decay',
       status: decayCandidate
-        ? (decaySide!.latestOi > 0 ? 'pass' : 'warn')
-        : type === 'Call Sell' ? (hasResistance ? 'pass' : 'fail') : type === 'Put Sell' ? (hasSupport ? 'pass' : 'fail') : hasSupport && hasResistance ? 'pass' : 'warn',
+        ? (decaySide!.latestOi > 0 ? HealthStatus.Pass : HealthStatus.Warn)
+        : type === 'Call Sell' ? (hasResistance ? HealthStatus.Pass : HealthStatus.Fail) : type === 'Put Sell' ? (hasSupport ? HealthStatus.Pass : HealthStatus.Fail) : hasSupport && hasResistance ? HealthStatus.Pass : HealthStatus.Warn,
       answer: `Support ${levels.supportStrike ?? '-'}, resistance ${levels.resistanceStrike ?? '-'}`,
     },
     {
       label: 'Trend risk',
-      status: (type === 'Call Sell' && priceBullish) || (type === 'Put Sell' && priceBearish) ? 'fail' : priceSideways ? 'pass' : 'warn',
+      status: (type === 'Call Sell' && priceBullish) || (type === 'Put Sell' && priceBearish) ? HealthStatus.Fail : priceSideways ? HealthStatus.Pass : HealthStatus.Warn,
       answer: `Price trend is ${priceTrend.direction.toLowerCase()}`,
     },
     {
       label: 'Premium decay',
-      status: decayCandidate ? (decayConfirmed ? 'pass' : 'warn') : 'fail',
+      status: decayCandidate ? (decayConfirmed ? HealthStatus.Pass : HealthStatus.Warn) : HealthStatus.Fail,
       answer: decaySide
         ? `${decaySide.optionType} ${formatPct(decaySide.decayPct)} over history${decaySide.daysToExpiry !== null ? `; ${decaySide.daysToExpiry} days to expiry` : ''}`
         : 'No reliable nearest-expiry premium decay',
@@ -594,13 +596,13 @@ export function summarizeSellingSetup(
     },
     {
       label: 'Defined risk',
-      status: type !== 'No Sell' ? 'warn' : 'fail',
+      status: type !== 'No Sell' ? HealthStatus.Warn : HealthStatus.Fail,
       answer: type === 'No Sell' ? 'No selling structure suggested' : 'Prefer credit spread, not naked short option',
     },
   ];
 
   if (type === 'Call Sell') {
-    const decaySell = decayCandidate && decaySide!.optionType === 'CE';
+    const decaySell = decayCandidate && decaySide!.optionType === OptionType.CE;
     return {
       status,
       type,
@@ -623,7 +625,7 @@ export function summarizeSellingSetup(
   }
 
   if (type === 'Put Sell') {
-    const decaySell = decayCandidate && decaySide!.optionType === 'PE';
+    const decaySell = decayCandidate && decaySide!.optionType === OptionType.PE;
     return {
       status,
       type,
@@ -721,7 +723,7 @@ export function summarizeStrikeBias(
 
     const cePattern = classifyOptionMove(totals.ceOi, previousTotals.ceOi, totals.ceClose, previousTotals.ceClose);
     const pePattern = classifyOptionMove(totals.peOi, previousTotals.peOi, totals.peClose, previousTotals.peClose);
-    const dayScore = patternBiasScore(cePattern, 'CE') + patternBiasScore(pePattern, 'PE');
+    const dayScore = patternBiasScore(cePattern, OptionType.CE) + patternBiasScore(pePattern, OptionType.PE);
     score += dayScore;
 
     const dayBias: DailyBias = dayScore > 0 ? 'Bullish' : dayScore < 0 ? 'Bearish' : 'Neutral';

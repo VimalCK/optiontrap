@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import { checkSubscriptionAccess, adminSubscription, inactiveSubscription } from './subscriptionAccess.js';
 
-const activeSubscription = { status: 'active', active: true, planId: 'monthly' };
-const expiredSubscription = { status: 'expired', active: false, planId: 'monthly' };
+const activeSubscription = { status: 'Active', active: true, planId: 'monthly' };
+const expiredSubscription = { status: 'Expired', active: false, planId: 'monthly' };
 
 const deps = ({ subscription = null, admin = false } = {}) => ({
   getUserSubscription: vi.fn(async () => subscription),

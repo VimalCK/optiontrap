@@ -9,9 +9,12 @@ import { getPositions, Position } from '@/services/positions';
 import { getLiveTradeEntries, getPaperTradeStats, getPaperTrades, TradeEntry, TradeStats } from '@/services/tradeJournal';
 import { fetchPriceAlerts } from '@/services/priceAlerts';
 import { fetchWatchlists } from '@/services/watchlist';
+import { Side, TradingMode, type TradingModeId } from '../../shared/tradeEnums.js';
+import { PriceAlertStatus } from '../../shared/appEnums.js';
+import { saveTradingMode } from '@/utils/tradingModeStorage';
 import '@/styles/dashboard.css';
 
-type DashboardTradeEntry = TradeEntry & { mode: 'paper' | 'live' };
+type DashboardTradeEntry = TradeEntry & { mode: TradingModeId };
 
 interface DashboardMetrics {
   paperPnl: number;
@@ -67,7 +70,7 @@ const getTone = (value: number) => value > 0 ? 'positive' : value < 0 ? 'negativ
 /** A paper position's booked P&L, after charges once it has closed (open ones count 0). */
 const getPaperPositionPnl = (position: Position) => {
   const exitPrice = position.exitPrice ?? position.entryPrice;
-  const gross = position.side === 'BUY'
+  const gross = position.side === Side.BUY
     ? (exitPrice - position.entryPrice) * position.quantity
     : (position.entryPrice - exitPrice) * position.quantity;
   return gross - (position.charges ?? 0);
@@ -109,17 +112,17 @@ const Dashboard: React.FC = () => {
 
   const goToHoldings = () => navigate('/portfolio?tab=holdings');
   const goToPaperPositions = () => {
-    localStorage.setItem('optiontrap_order_mode', 'paper');
-    navigate('/portfolio?tab=positions&mode=paper');
+    saveTradingMode(TradingMode.Paper);
+    navigate(`/portfolio?tab=positions&mode=${TradingMode.Paper}`);
   };
   const goToLivePositions = () => {
-    localStorage.setItem('optiontrap_order_mode', 'live');
-    navigate('/portfolio?tab=positions&mode=live');
+    saveTradingMode(TradingMode.Live);
+    navigate(`/portfolio?tab=positions&mode=${TradingMode.Live}`);
   };
   const goToTodayTrades = () => navigate('/analytics?tab=journal&range=today');
   const goToWatchlist = () => navigate('/watchlist');
   const goToJournalTrade = (trade: DashboardTradeEntry) => {
-    localStorage.setItem('optiontrap_order_mode', trade.mode);
+    saveTradingMode(trade.mode);
     navigate(`/analytics?tab=journal&mode=${trade.mode}&date=${encodeURIComponent(trade.date)}&tradeId=${encodeURIComponent(trade.id)}`);
   };
 
@@ -152,8 +155,8 @@ const Dashboard: React.FC = () => {
       const paperTrades = paperTradesResult.status === 'fulfilled' ? paperTradesResult.value : [];
       const liveTrades = liveTradesResult.status === 'fulfilled' ? liveTradesResult.value : [];
       const recentTrades: DashboardTradeEntry[] = [
-        ...paperTrades.map((trade) => ({ ...trade, mode: 'paper' as const })),
-        ...liveTrades.map((trade) => ({ ...trade, mode: 'live' as const })),
+        ...paperTrades.map((trade) => ({ ...trade, mode: TradingMode.Paper })),
+        ...liveTrades.map((trade) => ({ ...trade, mode: TradingMode.Live })),
       ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
       const watchlists = watchlistsResult.status === 'fulfilled' ? watchlistsResult.value : [];
       const alerts = alertsResult.status === 'fulfilled' ? alertsResult.value : [];
@@ -166,8 +169,8 @@ const Dashboard: React.FC = () => {
         watchlistCount: watchlists.reduce((sum, list) => sum + list.itemCount, 0),
         watchlistLists: watchlists.length,
         openPaperPositions: paperPositions.filter((position) => !position.exited).length,
-        activeAlerts: alerts.filter((alert) => alert.status === 'active').length,
-        triggeredAlerts: alerts.filter((alert) => alert.status === 'triggered').length,
+        activeAlerts: alerts.filter((alert) => alert.status === PriceAlertStatus.Active).length,
+        triggeredAlerts: alerts.filter((alert) => alert.status === PriceAlertStatus.Triggered).length,
         closedTrades: paperStats.closedTrades,
         winningTrades: paperStats.winningTrades,
         losingTrades: paperStats.losingTrades,

@@ -7,16 +7,17 @@
  */
 import React from 'react';
 import type { Position } from '@/services/positions';
+import { TradeSource as Source } from '../../../shared/tradeEnums.js';
 import './TradeSource.css';
 
 const SOURCES: Record<Position['source'], { label: string; title: string }> = {
-  auto: { label: 'Auto', title: 'Placed by the trade automation' },
-  manual: { label: 'Manual', title: 'Placed by hand' },
+  [Source.Auto]: { label: 'Auto', title: 'Placed by the trade automation' },
+  [Source.Manual]: { label: 'Manual', title: 'Placed by hand' },
 };
 
 const TradeSource: React.FC<{ source: Position['source'] }> = ({ source }) => {
   const { label, title } = SOURCES[source];
-  return <span className={`trade-source trade-source--${source}`} title={title}>{label}</span>;
+  return <span className={`trade-source trade-source--${source.toLowerCase()}`} title={title}>{label}</span>;
 };
 
 export default TradeSource;

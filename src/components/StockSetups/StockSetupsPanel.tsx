@@ -3,11 +3,12 @@ import { formatNumericDate } from '@/utils/marketStatus';
 import { analyzeStock, MIN_CANDLES, type StockAnalysis, type Zone, type StockState, type MarketCheck } from '../../../shared/stockSetups.js';
 import { backfillSetupHistory, fetchExpectedMove, fetchStockCandles, type ExpectedMove, type StockCandles } from '@/services/stockSetups';
 import { isAbortError } from '@/services/apiClient';
-import type { PriceAlertCondition } from '@/services/priceAlerts';
 import StockSetupsGuide from './StockSetupsGuide';
 import SetupScorecard from './SetupScorecard';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import { realizedVol, REALIZED_WINDOW, TRADING_DAYS } from '@/services/fairValue';
+import { PriceAlertCondition, type PriceAlertConditionId } from '../../../shared/appEnums.js';
+import { Side } from '../../../shared/tradeEnums.js';
 // Also opened from OI History, where the watchlist styles aren't otherwise loaded.
 import '@/styles/watchlist.css';
 
@@ -18,7 +19,7 @@ interface StockSetupsPanelProps {
   livePrice: number | undefined;
   onClose: () => void;
   /** Where the zone bells lead; without it (outside the watchlist) the bells are hidden. */
-  onSetAlert?: (condition: PriceAlertCondition, value: number, note: string) => void;
+  onSetAlert?: (condition: PriceAlertConditionId, value: number, note: string) => void;
 }
 
 /** Re-run the analysis only when the live price has moved this much: zones don't change tick by tick. */
@@ -253,7 +254,7 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
               type="button"
               className="wl-alert-btn"
               onClick={() => onSetAlert(
-                support ? 'below' : 'above',
+                support ? PriceAlertCondition.Below : PriceAlertCondition.Above,
                 Number((support ? zone.high : zone.low).toFixed(2)),
                 `${support ? 'Support' : 'Resistance'} zone ${rs(zone.low)}–${rs(zone.high)} (${zone.reasons.join(', ')})`,
               )}
@@ -393,9 +394,9 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
                   <h4>Setups on {formatNumericDate(analysis.date)}</h4>
                   <div className="wl-sz-setups">
                     {analysis.setups.map((setup) => {
-                      const buy = setup.direction === 'buy';
+                      const buy = setup.direction === Side.BUY;
                       return (
-                        <div key={setup.type} className={`wl-sz-setup wl-sz-setup--${setup.direction}`}>
+                        <div key={setup.type} className={`wl-sz-setup wl-sz-setup--${setup.direction.toLowerCase()}`}>
                           <div className="wl-sz-setup__head">
                             <span className="wl-sz-setup__dir">{buy ? 'Buy' : 'Sell / exit'}</span>
                             <strong>{setup.label}</strong>

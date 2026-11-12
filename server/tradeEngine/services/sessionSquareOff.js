@@ -22,6 +22,7 @@ import { findWorkingAdminSession } from '../../oiHistoryScheduler.js';
 import { fetchQuotes } from '../../kiteQuotes.js';
 import { lastSessionEnd } from '../../../shared/marketTime.js';
 import { NOT_FOUND, SESSION_SQUARE_OFF } from '../positions.js';
+import { TradeSource } from '../../../shared/tradeEnums.js';
 
 /** How often, in market hours, positions left from an earlier session are looked for (first at the open). */
 const LEFTOVER_CHECK_MS = 60_000;
@@ -116,7 +117,7 @@ export function createSessionSquareOff({
     const { positions, kite, prices } = await leftovers();
     if (positions.length === 0) return;
     const closed = await closeEach(positions, prices, (position, price) =>
-      orders.exit(position.userId, position.id, { exitPrice: price, kite, source: 'auto', exitReason: SESSION_SQUARE_OFF }));
+      orders.exit(position.userId, position.id, { exitPrice: price, kite, source: TradeSource.Auto, exitReason: SESSION_SQUARE_OFF }));
     report('in market hours', positions.length, closed);
   }
 

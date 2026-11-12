@@ -1,17 +1,17 @@
 import { describe, it, expect } from 'vitest';
 import type { Position } from './positions';
 import { computeRiskGroups, samplePayoffCurve, underlyingFromSymbol } from './positionRisk';
-import { Horizon } from '../../shared/horizons.js';
+import { Horizon } from '../../shared/tradeEnums.js';
 
 let nextToken = 1;
 const leg = (overrides: Partial<Position>): Position => ({
   id: String(nextToken),
-  mode: 'paper',
+  mode: 'Paper',
   tradingsymbol: 'NIFTY26OCT22500PE',
   instrumentToken: nextToken++,
   instrumentType: 'PE',
   exchange: 'NFO',
-  source: 'manual',
+  source: 'Manual',
   horizon: Horizon.Intraday,
   strike: 22500,
   optionType: 'PE',

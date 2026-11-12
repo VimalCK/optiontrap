@@ -34,17 +34,17 @@ describe('HealthCheckRow', () => {
     renderToStaticMarkup(<HealthCheckRow icon={null} name="Trade Monitor" check={check} />);
 
   it('shows the name, the output and a badge for each status', () => {
-    const html = render({ status: 'fail', output: '1 open position unwatched · no admin Kite login', time: null });
+    const html = render({ status: 'Fail', output: '1 open position unwatched · no admin Kite login', time: null });
     expect(html).toContain('<strong>Trade Monitor</strong>');
     expect(html).toContain('<small>1 open position unwatched · no admin Kite login</small>');
     expect(html).toContain('hx-badge--down');
     expect(html).toContain('Failing');
-    expect(render({ status: 'warn', output: 'x', time: null })).toContain('hx-badge--warn');
-    expect(render({ status: 'pass', output: 'x', time: null })).toContain('hx-badge--up');
+    expect(render({ status: 'Warn', output: 'x', time: null })).toContain('hx-badge--warn');
+    expect(render({ status: 'Pass', output: 'x', time: null })).toContain('hx-badge--up');
   });
 
   it('adds when the check was observed', () => {
-    expect(render({ status: 'pass', output: 'Last run · 1 user · 1 signal', time: new Date().toISOString() }))
+    expect(render({ status: 'Pass', output: 'Last run · 1 user · 1 signal', time: new Date().toISOString() }))
       .toMatch(/<small>Last run · 1 user · 1 signal · \d\d:\d\d IST<\/small>/);
   });
 });

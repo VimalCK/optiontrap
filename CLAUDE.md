@@ -110,6 +110,19 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   outside comments. For a genuine informational string in app code, add the file to its `ALLOWED` map with the reason
   (like the Login demo card); never use that to let symbol logic through.
 
+## Enums
+
+- Every fixed set of values (statuses, sides, modes, kinds, stages …) is an enum in `shared/tradeEnums.js` (trading) or
+  `shared/appEnums.js` (the rest): a frozen object whose **values equal the member names** (`OrderStatus.Open` is `'Open'`;
+  Kite's own codes keep Kite's spelling: `Side.BUY`, `Exchange.NFO`). The database stores and the API sends exactly that text.
+- Code names the member, never the value: `OrderStatus.Open`, not `'Open'`. This holds everywhere the app runs:
+  - SQL in JS: `${sqlEnum(OrderStatus.Open)}` (`server/sql.js`); Postgres still gets a literal, so partial indexes match.
+  - Nightly jobs: SQL that names a value is a `.js` job using `runSql` + `sqlEnum`, not a `.sql` file.
+  - Display text that happens to read like a value (`label: 'Open'`) is fine; it is text, not the value.
+- Migrations are the exception: a fixed, checksummed record, so they write the values they store as literals.
+- `shared/enumGuards.test.js` enforces this (typed values, members inside SQL strings, values in `.sql` job files).
+  Words that equal a value only by chance go in its `ALLOWED` map with the reason; never use that to let a real value through.
+
 ## Database and migrations
 
 - Schema changes are numbered SQL files in `server/migrations/NNN_description.sql`, applied on startup in order by
@@ -135,13 +148,14 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   - Match the query: equality columns first (`user_id`, `mode`, `status`…), then the range/sort column
     (`created_at DESC`, `trade_date`), so the query reads one index range in order, with no sort and no full scan.
   - Every foreign key column gets an index (Postgres doesn't create one), so joins and `ON DELETE CASCADE` stay fast.
-  - Use a partial index (`WHERE status = 'open'`) when queries only touch a small slice, and a `UNIQUE` index where the
+  - Use a partial index (`WHERE status = 'Open'`) when queries only touch a small slice, and a `UNIQUE` index where the
     data must be unique (also used for upserts with `ON CONFLICT`).
   - Cross-user scans (schedulers, jobs) need their own index or a redesign; never a sequential scan over all users' rows.
   - Don't add duplicate indexes: a composite index on `(a, b)` already serves queries on `a` alone.
   - Prove it: `EXPLAIN` the query with synthetic rows in a rolled-back transaction on a scratch DB and check it uses the index.
 - `db.js` conventions:
   - Use the `query` / `rows` / `firstRow` helpers with `$n` parameters only, never string-built values.
+    The one exception is an enum value written into SQL text: `${sqlEnum(Exchange.NFO)}` (`server/sql.js`), never a bare literal like `'NFO'` (see Enums).
   - Every user-owned query filters by `user_id`.
   - Map snake_case rows to camelCase objects in a `mapXRow` / `toX` function.
   - Use transactions (`BEGIN`/`COMMIT`/`ROLLBACK` on a pool client) for multi-statement writes.
@@ -155,9 +169,9 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
     `/api/watchlists/:id/items`). No verbs in paths (`/api/getTrades`, `/api/positions/exit` are wrong).
   - Methods: `GET` list/read (no side effects), `POST` create (answer **201** with the created resource), `PUT` replace a
     whole resource (e.g. a user's config), `PATCH` partial update. State changes like exit/trigger are a `PATCH` with a
-    body (`{ status: 'closed' }`), `DELETE` removes (answer 200 with data, or 204).
+    body (`{ status: 'Closed' }`), `DELETE` removes (answer 200 with data, or 204).
   - Nest only for real ownership (`/watchlists/:id/items`), at most one level deep.
-  - Filtering, sorting, paging and ranges go in query parameters (`?mode=paper&from=…&to=…`), not the path.
+  - Filtering, sorting, paging and ranges go in query parameters (`?mode=Paper&from=…&to=…`), not the path.
   - Lists that can grow are paged or range-limited on the server (by the user's chosen range, never an invented cap).
   - The resource belongs to the logged-in user; the user id comes from the session, never from the URL or body.
 - Every reply is `{ status: 'ok', data }` or `{ status: 'error', message }` (plus `code` when callers branch on it,
@@ -265,16 +279,16 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
 
 ## Domain notes
 
-- Paper positions: `instrument_type` CE/PE/FUT/EQ, `exchange` (EQ→NSE, else NFO), `source` manual/auto, `mode` paper.
+- Paper positions: `instrument_type` CE/PE/FUT/EQ, `exchange` (EQ→NSE, else NFO), `source` Manual/Auto, `mode` Paper, `horizon` Intraday/Positional.
   Same-instrument trades merge into one position at the average price, **only within the same source** (auto↔auto,
   manual↔manual, never across).
 - Share count for holdings: `quantity + t1_quantity + collateral_quantity − used_quantity`.
 - Live position P&L (Kite's formula): `sell_value − buy_value + quantity × ltp × multiplier`.
 - **Every paper trade is an order** through the engine's order service (`server/tradeEngine/services/orders.js`, table `orders`):
   `POST /api/orders` places one (201), or exits a position with `{ positionId, exitPrice }`; `PATCH /api/orders/:id`
-  `{ status: 'cancelled' }` cancels; `GET /api/orders?status=open` or `?from=…&to=…` lists. An exit is a filled market
+  `{ status: 'Cancelled' }` cancels; `GET /api/orders?status=Open` or `?from=…&to=…` lists. An exit is a filled market
   order with `closes_position`. `GET /api/positions*` only read. Settled orders placed before today are deleted nightly
-  (`server/jobs/nightly/050_purge_settled_orders.sql`); a fill lives on in its position and an automated trade's in `algo_trades`.
+  (`server/jobs/nightly/050_purge_settled_orders.js`); a fill lives on in its position and an automated trade's in `algo_trades`.
 - Paper market orders fill like Zerodha's: a buy at the best ask, a sell at the best bid (`server/tradeEngine/fillPrice.js`, from a
   quote with the user's Kite session, or the server feed's for the engine; the last price when the quote has no bid / ask). Closing a position
   records Zerodha's charges (`shared/paperCharges.js`: brokerage, STT, exchange, SEBI, stamp, GST, DP) in `positions.charges` /

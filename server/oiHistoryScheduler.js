@@ -22,6 +22,7 @@ import {
 } from './db.js';
 import { daysBefore, istClock, isAfterCloseOnWeekday } from './marketClock.js';
 import { fetchOiHistoryMonth } from './oiHistoryFetch.js';
+import { JobRunStatus } from '../shared/appEnums.js';
 
 export const OI_HISTORY_JOB = 'oi-history-after-close';
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
@@ -55,7 +56,7 @@ async function monthsToFetch(scrip, currentMonth) {
 
 async function runAfterCloseFetch(date) {
   if (lastDoneDate === date) return;
-  if ((await getScheduledJobStatus(OI_HISTORY_JOB, date)) === 'done') {
+  if ((await getScheduledJobStatus(OI_HISTORY_JOB, date)) === JobRunStatus.Done) {
     lastDoneDate = date;
     return;
   }
@@ -101,15 +102,15 @@ async function runAfterCloseFetch(date) {
       }
     }
 
-    const status = authFailed ? 'failed' : 'done';
+    const status = authFailed ? JobRunStatus.Failed : JobRunStatus.Done;
     await finishScheduledJobRun(OI_HISTORY_JOB, date, status, { userId: kite.userId, results });
-    if (status === 'done') lastDoneDate = date;
+    if (status === JobRunStatus.Done) lastDoneDate = date;
     const rowCount = results.reduce((sum, r) => sum + (r.rowCount || 0), 0);
     const errors = results.filter((r) => r.error).length;
     console.log(`[Scheduler] ${OI_HISTORY_JOB}: ${status} for ${date} — ${rowCount} rows, ${errors} error(s), ${Math.round((Date.now() - started) / 1000)}s`);
   } catch (err) {
     console.error(`[Scheduler] ${OI_HISTORY_JOB} failed:`, err.message);
-    await finishScheduledJobRun(OI_HISTORY_JOB, date, 'failed', { error: err.message, results }).catch(() => {});
+    await finishScheduledJobRun(OI_HISTORY_JOB, date, JobRunStatus.Failed, { error: err.message, results }).catch(() => {});
   }
 }
 

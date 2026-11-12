@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { EXIT_RULES, checkExitRules } from './index.js';
 import { defaultRuleSettings } from '../rules/ruleSettings.js';
-import { Horizon } from '../horizons.js';
+import { Horizon } from '../tradeEnums.js';
 
 /** A position at a P&L percentage; its ₹ P&L as for 75 units sold at 100, i.e. 75 × the percentage. */
 const position = (pnlPercent, horizon = Horizon.Intraday) => ({ instrumentToken: 101, tradingsymbol: 'NIFTY26NOV24000PE', horizon, pnlPercent, pnl: pnlPercent * 75 });

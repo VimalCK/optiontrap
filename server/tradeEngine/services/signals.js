@@ -14,7 +14,7 @@
  *   rejected   it could not be placed after validation: no price, the order
  *              rules refused it, or its order was cancelled
  *   validated  it passed the General settings and every active entry rule
- *   executed   its order filled into an automated position (source 'auto'),
+ *   executed   its order filled into an automated position (source Auto),
  *              which the trade monitor closes when an exit rule fires
  *
  * The General settings and entry rules decide whether to enter at all, so a
@@ -45,10 +45,9 @@ import { marketFillPrice } from '../fillPrice.js';
 import { checkGeneralSettings, tradeKind } from '../../../shared/automation.js';
 import { checkEntryRules, entryLimitPrice, tradeLots } from '../../../shared/entryRules/index.js';
 import { STRATEGIES } from '../strategies/index.js';
-import { OPTION_TYPES } from '../../../shared/paperTradeRules.js';
 import { marketDayStartMs } from '../../../shared/marketTime.js';
 import { algoLogger } from '../../algoLog.js';
-import { Horizon } from '../../../shared/horizons.js';
+import { Horizon, LifecycleStage, OrderStatus, OrderType, TradeSource, isOptionType } from '../../../shared/tradeEnums.js';
 
 /** Intraday strategies follow the OI snapshots; positional ones (OI history) come later. */
 const HORIZON = Horizon.Intraday;
@@ -59,7 +58,7 @@ const HORIZON = Horizon.Intraday;
  * @typedef {import('../../../shared/automation.js').AutomationConfig} AutomationConfig
  * @typedef {{ instrumentToken: number, tradingsymbol: string, name: string, exchange: string, instrumentType: string,
  *             strike: number | null, expiry: string | null, lotSize: number | null }} Instrument
- * @typedef {{ horizon: import('../../../shared/horizons.js').HorizonId, kind: import('../../../shared/automation.js').TradeKindId, mode: string, side: 'BUY' | 'SELL',
+ * @typedef {{ horizon: import('../../../shared/tradeEnums.js').HorizonId, kind: import('../../../shared/automation.js').TradeKindId, mode: string, side: import('../../../shared/tradeEnums.js').SideId,
  *             tradingsymbol: string, instrumentToken: number, exchange: string, instrumentType: string,
  *             optionType: string | null, strike: number | null, expiry: string | null, lotSize: number, quantity: number }} PlannedTrade
  * @typedef {{ users: number, signals: number, failed: number }} RunCounts
@@ -100,7 +99,7 @@ export function planTrade(signal, instrumentsByToken, indexNames, config) {
       instrumentToken: instrument.instrumentToken,
       exchange: instrument.exchange,
       instrumentType: instrument.instrumentType,
-      optionType: OPTION_TYPES.includes(instrument.instrumentType) ? instrument.instrumentType : null,
+      optionType: isOptionType(instrument.instrumentType) ? instrument.instrumentType : null,
       strike: instrument.strike,
       expiry: instrument.expiry,
       lotSize,
@@ -183,22 +182,22 @@ export function createSignalsService({
     }
 
     const id = await db.createAutoTrade(userId, trade, { strategyId: signal.strategyId, setup: signal.setup ?? null, reason: signal.reason });
-    await db.advanceAutoTrade(userId, id, 'selected', 'validated', {}, {});
-    log('validated', { trade: tradeLabel(trade), user: userId, strategy: signal.strategyId, signal: signal.reason });
+    await db.advanceAutoTrade(userId, id, LifecycleStage.Selected, LifecycleStage.Validated, {}, {});
+    log(LifecycleStage.Validated, { trade: tradeLabel(trade), user: userId, strategy: signal.strategyId, signal: signal.reason });
     const reject = (/** @type {string} */ reason) => {
-      log('rejected', { trade: tradeLabel(trade), user: userId, strategy: signal.strategyId, reason });
-      return db.advanceAutoTrade(userId, id, 'validated', 'rejected', { reason }, { ruleId: null, reason });
+      log(LifecycleStage.Rejected, { trade: tradeLabel(trade), user: userId, strategy: signal.strategyId, reason });
+      return db.advanceAutoTrade(userId, id, LifecycleStage.Validated, LifecycleStage.Rejected, { reason }, { ruleId: null, reason });
     };
 
     const quote = quotesByKey.get(`${trade.exchange}:${trade.tradingsymbol}`);
     const lastPrice = quote?.last_price;
     if (!lastPrice) return reject(`No last price for ${trade.tradingsymbol}`);
     const limitPrice = entryLimitPrice(config.entryRules, trade.side, lastPrice);
-    const order = limitPrice === null ? { ...trade, orderType: 'market' } : { ...trade, orderType: 'limit', limitPrice };
+    const order = limitPrice === null ? { ...trade, orderType: OrderType.Market } : { ...trade, orderType: OrderType.Limit, limitPrice };
     // A market entry fills at the bid / ask in the same quote, as on Zerodha (the last price when it has none).
     const placed = await orders.placeAuto(userId, order, { lastPrice, fillPrice: marketFillPrice(quote, trade.side), autoTradeId: id });
     if (!placed.ok) return reject(placed.message);
-    if (placed.order.status === 'open') {
+    if (placed.order.status === OrderStatus.Open) {
       log('limit order placed', { trade: tradeLabel(trade), limit: limitPrice, last: lastPrice, user: userId, strategy: signal.strategyId });
     }
   }
@@ -265,19 +264,19 @@ export function createSignalsService({
    * @param {Order} order
    */
   async function settleOrder(order) {
-    if (order.source !== 'auto' || !order.autoTradeId || order.closesPosition) return;
+    if (order.source !== TradeSource.Auto || !order.autoTradeId || order.closesPosition) return;
     const { userId, autoTradeId: id } = order;
-    if (order.status === 'filled') {
+    if (order.status === OrderStatus.Filled) {
       const entryPrice = order.fillPrice;
-      await db.advanceAutoTrade(userId, id, 'validated', 'executed', { entryPrice, positionId: order.positionId }, { entryPrice, positionId: order.positionId });
+      await db.advanceAutoTrade(userId, id, LifecycleStage.Validated, LifecycleStage.Executed, { entryPrice, positionId: order.positionId }, { entryPrice, positionId: order.positionId });
       await monitor.refreshUser(userId);
-      log('executed', { trade: tradeLabel(order), price: entryPrice, order: order.orderType, user: userId });
+      log(LifecycleStage.Executed, { trade: tradeLabel(order), price: entryPrice, order: order.orderType, user: userId });
       return;
     }
-    if (order.status === 'cancelled') {
+    if (order.status === OrderStatus.Cancelled) {
       const reason = order.statusReason ?? 'Order cancelled';
-      log('rejected', { trade: tradeLabel(order), user: userId, reason });
-      await db.advanceAutoTrade(userId, id, 'validated', 'rejected', { reason }, { ruleId: null, reason });
+      log(LifecycleStage.Rejected, { trade: tradeLabel(order), user: userId, reason });
+      await db.advanceAutoTrade(userId, id, LifecycleStage.Validated, LifecycleStage.Rejected, { reason }, { ruleId: null, reason });
     }
   }
 

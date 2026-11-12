@@ -11,6 +11,8 @@ import { fetchOptions } from './optionChain';
 import { fetchQuotes } from './kiteApi';
 import { isCashStock, parseKiteCandles, scanSummary, type Candle, type SetupType } from '../../shared/stockSetups.js';
 import { marketDate } from '../../shared/marketTime.js';
+import { Exchange, InstrumentType, type SideId } from '../../shared/tradeEnums.js';
+import { type SetupOutcomeStatusId } from '../../shared/appEnums.js';
 
 export interface StockCandles {
   stock: { instrumentToken: number; tradingsymbol: string };
@@ -27,7 +29,7 @@ export type ScanSummary = ReturnType<typeof scanSummary>;
 
 export interface SetupStats {
   setupType: SetupType;
-  direction: 'buy' | 'sell';
+  direction: SideId;
   total: number;
   open: number;
   target: number;
@@ -43,11 +45,11 @@ export interface TrackedSetup {
   tradingsymbol: string;
   signalDate: string;
   setupType: SetupType;
-  direction: 'buy' | 'sell';
+  direction: SideId;
   entry: number;
   stop: number;
   target: number;
-  status: 'open' | 'target' | 'stop' | 'expired';
+  status: SetupOutcomeStatusId;
   resolvedDate: string | null;
   sessionsHeld: number;
   maxFavorablePct: number | null;
@@ -97,7 +99,7 @@ export function fetchStockCandles(instrumentToken: number, signal?: AbortSignal)
 /** The NSE cash stock an F&O underlying trades as (e.g. TATAPOWER); null for indices. */
 export async function findNseStock(symbol: string): Promise<{ instrumentToken: number; tradingsymbol: string } | null> {
   const instruments = await loadInstruments();
-  const stock = instruments.find((i) => i.exchange === 'NSE' && i.tradingsymbol === symbol && isCashStock(i));
+  const stock = instruments.find((i) => i.exchange === Exchange.NSE && i.tradingsymbol === symbol && isCashStock(i));
   return stock ? { instrumentToken: stock.instrumentToken, tradingsymbol: stock.tradingsymbol } : null;
 }
 
@@ -119,8 +121,8 @@ export async function fetchExpectedMove(symbol: string, price: number, signal?: 
   if (!expiry) return null;
   const chain = options.filter((o) => o.expiry.slice(0, 10) === expiry);
   const strike = chain.reduce((best, o) => (Math.abs(o.strike - price) < Math.abs(best - price) ? o.strike : best), chain[0].strike);
-  const ce = chain.find((o) => o.strike === strike && o.instrumentType === 'CE');
-  const pe = chain.find((o) => o.strike === strike && o.instrumentType === 'PE');
+  const ce = chain.find((o) => o.strike === strike && o.instrumentType === InstrumentType.CE);
+  const pe = chain.find((o) => o.strike === strike && o.instrumentType === InstrumentType.PE);
   if (!ce || !pe) return null;
   const keys = [`NFO:${ce.tradingsymbol}`, `NFO:${pe.tradingsymbol}`];
   const quotes = await fetchQuotes(keys, signal);

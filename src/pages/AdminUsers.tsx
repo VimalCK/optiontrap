@@ -94,7 +94,7 @@ const AdminUsers: React.FC = () => {
                     {u.isAdmin && <span className="au-adminflag">Admin</span>}
                   </span>
                   <span className="admin-cell">
-                    <span className={`au-status au-status--${sub.status}`}>{sub.status}</span>
+                    <span className={`au-status au-status--${sub.status.toLowerCase()}`}>{sub.status}</span>
                   </span>
                   <span className="admin-cell admin-cell--date">{formatDate(u.lastLogin)}</span>
                   <span className="admin-cell admin-cell--status">
