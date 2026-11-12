@@ -1,5 +1,6 @@
 /**
- * Intraday option-chain OI snapshots, taken by the server.
+ * Intraday option-chain OI snapshots, taken by the server as a scheduled job
+ * (server/scheduledJobs.js).
  *
  * Every 10 minutes while the market is open (09:15–15:30 IST, trading days),
  * quote the nearest-expiry option chain around ATM for the symbols marked
@@ -26,6 +27,7 @@ import { SnapshotContractType } from '../shared/analysisEnums.js';
 
 /** Strikes each side of ATM. The analyzer shows ±15; the extra covers ATM drifting during the day. */
 const STRIKES_EACH_SIDE = 20;
+export const OI_SNAPSHOT_JOB_ID = 'oi-snapshots';
 const SLOT_MS = 10 * 60 * 1000;
 const CHECK_INTERVAL_MS = 60 * 1000;
 
@@ -216,8 +218,8 @@ export async function watchOiSnapshotSymbol(symbol) {
   return { captured: count };
 }
 
-async function tick() {
-  if (!isMarketOpen()) return;
+/** Take this 10-minute slot's snapshot, unless it was already taken. */
+async function captureSlot() {
   const slot = Math.floor(Date.now() / SLOT_MS);
   if (slot === lastSlot) return;
 
@@ -231,20 +233,11 @@ async function tick() {
   }
 }
 
-/** Check every minute; snapshot once per 10-minute slot while the market is open. */
-export function startOiSnapshotScheduler() {
-  let running = false;
-  const run = async () => {
-    if (running) return;
-    running = true;
-    try {
-      await tick();
-    } catch (err) {
-      console.error('[OI Snapshots] Scheduled capture failed:', err.message);
-    } finally {
-      running = false;
-    }
-  };
-  run();
-  setInterval(run, CHECK_INTERVAL_MS).unref();
-}
+/** The OI snapshot plug-in: checks every minute, snapshots once per 10-minute slot while the market is open. */
+export const oiSnapshotJob = {
+  id: OI_SNAPSHOT_JOB_ID,
+  /** @param {import('./tradeEngine/host.js').PluginContext} ctx */
+  start(ctx) {
+    ctx.market.every(CHECK_INTERVAL_MS, captureSlot);
+  },
+};

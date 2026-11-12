@@ -102,14 +102,13 @@ import { clientIp, createRateLimiter } from './rateLimit.js';
 import { cached } from './cache.js';
 import { getOrFetchInstruments } from './instruments.js';
 import { fetchOiHistoryMonth, OiHistoryFetchError, todayIST } from './oiHistoryFetch.js';
-import { OI_HISTORY_JOB, startOiHistoryScheduler } from './oiHistoryScheduler.js';
-import { startOiSnapshotScheduler, watchOiSnapshotSymbol } from './oiSnapshotScheduler.js';
-import { startInstrumentSync } from './instrumentSyncScheduler.js';
+import { OI_HISTORY_JOB } from './oiHistoryScheduler.js';
+import { watchOiSnapshotSymbol } from './oiSnapshotScheduler.js';
 import { SUBSCRIPTION_REQUIRED, checkSubscriptionAccess, inactiveSubscription } from './subscriptionAccess.js';
 import { backfillStockSetups, candleSyncWarning, scanStock, syncStockCandles } from './stockCandles.js';
-import { startStockSetupScheduler } from './stockSetupScheduler.js';
-import { NIGHTLY_JOB_PREFIX, nightlyJobsStatus, startNightlyJobs } from './nightlyJobs.js';
+import { NIGHTLY_JOB_PREFIX, nightlyJobsStatus } from './nightlyJobs.js';
 import { tradeEngine } from './tradeEngine/index.js';
+import { scheduledJobs } from './scheduledJobs.js';
 import { getAutomationConfig, saveAutomationConfig } from './tradeEngine/automationConfigs.js';
 import { strategyInfos } from './tradeEngine/strategies/index.js';
 import { nightlyJobsHealth, tradeEngineHealth, unreadableHealth } from './serviceHealth.js';
@@ -1605,24 +1604,9 @@ async function start() {
   // Initialise PostgreSQL
   await initDb();
 
-  // Score open trade signals from stored prices at startup and hourly, so
-  // outcomes don't depend on someone opening that strike in the browser.
-  const evaluateSignals = () => evaluateTradeSetupSignalOutcomes()
-    .then((count) => { if (count > 0) console.log(`[OI History] Updated ${count} signal outcome(s)`); })
-    .catch((err) => console.warn('[OI History] Signal outcome evaluation failed:', err.message));
-  evaluateSignals();
-  setInterval(evaluateSignals, 60 * 60 * 1000).unref();
-
-  // Sync the instrument list from 08:30 IST each day (at startup if that time has passed).
-  startInstrumentSync();
-  // Snapshot the always-snapshot symbols (and symbols opened today) every 10 minutes in market hours.
-  startOiSnapshotScheduler();
-  // Fetch tracked scrips' OI history after the close so no trading day is missed.
-  startOiHistoryScheduler();
-  // Then update watchlist stocks' daily candles and scan them for setups.
-  startStockSetupScheduler();
-  // Run every file in server/jobs/nightly/ from 08:30 IST (at startup if that time has passed).
-  startNightlyJobs();
+  // The scheduled jobs (server/scheduledJobs.js): OI snapshots, OI history, the stock scan,
+  // the instrument sync, the nightly jobs and signal outcomes, each on the market clock.
+  scheduledJobs.start();
   // The trade engine: fills and cancels orders, runs the strategies and turns their signals
   // into automated paper trades, and exits automated positions when their exit rules fire.
   tradeEngine.start();

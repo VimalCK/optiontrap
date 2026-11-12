@@ -5,6 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { marketDayStartMs } from '../shared/marketTime.js';
 import { SnapshotContractType } from '../shared/analysisEnums.js';
+import { runPlugin } from './tradeEngine/runPlugin.fixture.js';
 
 const state = vi.hoisted(() => ({
   saves: [], // saveOiSnapshot arguments, in order (the fake oi_snapshots table)
@@ -73,6 +74,7 @@ const symbolsIn = (snapshot) => [...new Set(Object.keys(snapshot.data).map((t) =
 const ist = (hhmm, date = '2026-11-03') => new Date(`${date}T${hhmm}:00+05:30`);
 
 let scheduler;
+let stop;
 
 beforeEach(async () => {
   state.saves.length = 0;
@@ -87,6 +89,7 @@ beforeEach(async () => {
 });
 
 afterEach(() => {
+  stop?.();
   vi.clearAllTimers();
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -95,7 +98,7 @@ afterEach(() => {
 
 /** Start the scheduler and let its first check finish. */
 async function startScheduler() {
-  scheduler.startOiSnapshotScheduler();
+  stop = await runPlugin(scheduler.oiSnapshotJob);
   await vi.advanceTimersByTimeAsync(0);
 }
 
@@ -204,7 +207,7 @@ describe('the 10-minute rounds', () => {
     await scheduler.watchOiSnapshotSymbol('RELIANCE');
     await scheduler.watchOiSnapshotSymbol('HDFCBANK'); // switched straight away
 
-    await vi.advanceTimersByTimeAsync(5 * 60 * 1000); // to 10:10, the next round
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1000); // to 10:10:01, the next round's first check
 
     const round = state.saves.at(-1);
     expect(round.timeLabel).toBe('10:10');

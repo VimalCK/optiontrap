@@ -1,70 +1,87 @@
 /**
- * The trade engine host: the one runtime for trading, alive as long as the
- * server (server/tradeEngine/index.js builds it with the real plug-ins).
- *
- * It is only a host. It holds two lists of plug-ins, both of the shape
- * { id, start(ctx), stop?(), status?() }:
- *   services    the engine's ongoing work: orders (place, fill, cancel, every
- *               order manual or automated), signals (a strategy's signals →
- *               each user's settings and entry rules → orders), tradeMonitor
- *               (exit rules on open automated positions)
- *   strategies  what to trade; each decides when and how it runs
- *               (server/tradeEngine/strategies/)
+ * The plug-in host: a runtime alive as long as the server that starts and
+ * stops plug-ins of the shape { id, start(ctx), stop?(), status?() }. The
+ * server runs two:
+ *   the trade engine (createTradeEngine; server/tradeEngine/index.js builds it
+ *     with the real plug-ins):
+ *       services    the engine's ongoing work: orders (place, fill, cancel,
+ *                   every order manual or automated), signals (a strategy's
+ *                   signals → each user's settings and entry rules → orders),
+ *                   tradeMonitor (exit rules on open automated positions)
+ *       strategies  what to trade; each decides when and how it runs
+ *                   (server/tradeEngine/strategies/)
+ *   the scheduled jobs (server/scheduledJobs.js): OI snapshots, OI history,
+ *     the stock scan, the instrument sync, the nightly jobs and signal outcomes.
+ * A host starts its groups of plug-ins in order and stops them in reverse,
  * and gives each one a context:
- *   ctx.market    the market clock (market.js): onOpen, onClose, every, isOpen
- *   ctx.services  the services by id; plug-ins reach each other only here
- *   ctx.log       the algo log under the plug-in's name
- * The engine holds no trading logic: rules, orders, prices and positions live
- * in the services. A plug-in that fails to start, or a handler that throws,
- * is logged and shown on Admin Services; every other plug-in keeps running.
+ *   ctx.market    the market clock (market.js): onOpen, onClose, every,
+ *                 daily, afterClose, repeat, isOpen
+ *   ctx.services  the host's services by id; plug-ins reach each other only here
+ *   ctx.log       the host's log under the plug-in's name
+ * The host knows none of its plug-ins and holds no trading or job logic.
+ * A plug-in that fails to start, or a handler that throws, is logged and
+ * shown in status(); every other plug-in keeps running.
  *
- * Only one engine runs across servers: start() takes a Postgres advisory lock
- * held for the process's life. A server that can't get it stands by and tries
- * again every LOCK_RETRY_MS, taking over if the holder goes away.
+ * Only one copy of a host runs across servers: start() takes a Postgres
+ * advisory lock (its own name per host) held for the process's life. A server
+ * that can't get it stands by and tries again every LOCK_RETRY_MS, taking
+ * over if the holder goes away. The two hosts hold different locks, so the
+ * trade engine and the jobs never wait on each other.
  */
 import { tryHoldNamedAdvisoryLock } from '../db.js';
 import { algoLogger } from '../algoLog.js';
 import { createMarket } from './market.js';
 import { PluginKind, PluginState } from '../../shared/appEnums.js';
 
-const LOCK_NAME = 'trade-engine';
-/** How often a standing-by server tries to take over the engine. */
+const TRADE_ENGINE_LOCK = 'trade-engine';
+/** How often a standing-by server tries to take over the host. */
 const LOCK_RETRY_MS = 10_000;
 
 /**
  * @typedef {{ market: import('./market.js').PluginMarket, services: Record<string, any>, log: (event: string, details?: import('../algoLog.js').AlgoDetails) => void }} PluginContext
  * @typedef {{ id: string, start: (ctx: PluginContext) => unknown, stop?: () => unknown, status?: () => Record<string, unknown> }} Plugin
+ * @typedef {{ kind: import('../../shared/appEnums.js').PluginKindId, plugins: Plugin[] }} PluginGroup
  * @typedef {{ plugin: Plugin, kind: import('../../shared/appEnums.js').PluginKindId, state: import('../../shared/appEnums.js').PluginStateId, error: string | null, dispose: (() => void) | null }} PluginRun
  * @typedef {{ release: () => Promise<void> }} HeldLock
- */
-
-/**
- * A trade engine. Everything it talks to is injectable, for tests.
- * @param {{
- *   services: Plugin[],
- *   strategies: Plugin[],
+ * @typedef {{
  *   market?: ReturnType<typeof createMarket>,
  *   holdLock?: (name: string, onLost: () => void) => Promise<HeldLock | null>,
  *   setTimer?: (fn: () => void, ms: number) => unknown,
  *   clearTimer?: (timer: unknown) => void,
  *   logFor?: (name: string) => PluginContext['log'],
- * }} deps
+ * }} HostDeps  everything a host talks to, injectable for tests
  */
-export function createTradeEngine({
-  services,
-  strategies,
+
+/**
+ * A plug-in host.
+ * @param {{
+ *   name: string,
+ *   lockName: string,
+ *   groups: PluginGroup[],
+ *   services?: Plugin[],
+ * } & HostDeps} options
+ *   name      the host's own name in its log
+ *   lockName  the advisory lock that keeps one copy running across servers
+ *   groups    the plug-ins, started group by group in this order
+ *   services  the plug-ins every plug-in reaches through ctx.services
+ */
+export function createPluginHost({
+  name,
+  lockName,
+  groups,
+  services = [],
   market,
   holdLock = tryHoldNamedAdvisoryLock,
   setTimer = (fn, ms) => setTimeout(fn, ms),
   clearTimer = (timer) => clearTimeout(/** @type {NodeJS.Timeout} */ (timer)),
   logFor = algoLogger,
 }) {
-  const log = logFor('Engine');
+  const log = logFor(name);
   /** @type {Map<string, PluginRun>} */
   const runs = new Map();
-  const add = (/** @type {Plugin} */ plugin, /** @type {PluginKind} */ kind) => runs.set(plugin.id, { plugin, kind, state: PluginState.Stopped, error: null, dispose: null });
-  services.forEach((plugin) => add(plugin, PluginKind.Service));
-  strategies.forEach((plugin) => add(plugin, PluginKind.Strategy));
+  for (const { kind, plugins } of groups) {
+    for (const plugin of plugins) runs.set(plugin.id, { plugin, kind, state: PluginState.Stopped, error: null, dispose: null });
+  }
   const servicesById = Object.fromEntries(services.map((s) => [s.id, s]));
 
   const marketClock = market ?? createMarket({ onError: (id, err) => failed(id, err, 'handler failed') });
@@ -107,16 +124,17 @@ export function createTradeEngine({
     run.state = PluginState.Stopped;
   }
 
-  /** Services first (strategies use them), then strategies, then the clock. */
+  /** Each group in order (a later group may use an earlier one), then the clock. */
   async function startPlugins() {
-    for (const run of runs.values()) if (run.kind === PluginKind.Service) await startPlugin(run);
-    for (const run of runs.values()) if (run.kind === PluginKind.Strategy) await startPlugin(run);
+    for (const { kind } of groups) {
+      for (const run of runs.values()) if (run.kind === kind) await startPlugin(run);
+    }
     marketClock.start();
     running = true;
-    log('started', { services: services.length, strategies: strategies.length });
+    log('started', Object.fromEntries(groups.map(({ kind, plugins }) => [kind, plugins.length])));
   }
 
-  /** The clock first, then strategies, then services: the reverse of starting. */
+  /** The clock first, then the plug-ins in reverse: the reverse of starting. */
   async function stopPlugins() {
     marketClock.stop();
     for (const run of [...runs.values()].reverse()) await stopPlugin(run);
@@ -126,25 +144,25 @@ export function createTradeEngine({
   /** The lock dropped (its connection died): stop running and try to take it back. */
   async function lockLost() {
     lock = null;
-    log('lost the engine lock', { next: 'standing by' });
+    log('lost its lock', { lock: lockName, next: 'standing by' });
     await stopPlugins();
     retry();
   }
 
   function retry() {
-    retryTimer = setTimer(() => { retryTimer = null; engine.start(); }, LOCK_RETRY_MS);
+    retryTimer = setTimer(() => { retryTimer = null; host.start(); }, LOCK_RETRY_MS);
   }
 
-  const engine = {
+  const host = {
     services: servicesById,
 
-    /** Run the engine if this server can hold the lock; otherwise stand by and try again. */
+    /** Run the host if this server can hold the lock; otherwise stand by and try again. */
     async start() {
       if (running || retryTimer !== null) return;
       try {
-        lock = await holdLock(LOCK_NAME, () => { lockLost(); });
+        lock = await holdLock(lockName, () => { lockLost(); });
       } catch (err) {
-        log('could not take the engine lock', { error: /** @type {Error} */ (err).message, next: 'trying again' });
+        log('could not take its lock', { lock: lockName, error: /** @type {Error} */ (err).message, next: 'trying again' });
       }
       if (!lock) {
         retry();
@@ -162,7 +180,7 @@ export function createTradeEngine({
       lock = null;
     },
 
-    /** Whether this server runs the engine, and each plug-in's state, for Admin Services. */
+    /** Whether this server runs the host, and each plug-in's state, for Admin Services. */
     status: () => ({
       running,
       plugins: [...runs.values()].map(({ plugin, kind, state, error }) => ({
@@ -174,5 +192,20 @@ export function createTradeEngine({
       })),
     }),
   };
-  return engine;
+  return host;
+}
+
+/**
+ * The trade engine: services first (strategies use them through ctx.services),
+ * then strategies.
+ * @param {{ services: Plugin[], strategies: Plugin[] } & HostDeps} deps
+ */
+export function createTradeEngine({ services, strategies, ...deps }) {
+  return createPluginHost({
+    name: 'Engine',
+    lockName: TRADE_ENGINE_LOCK,
+    groups: [{ kind: PluginKind.Service, plugins: services }, { kind: PluginKind.Strategy, plugins: strategies }],
+    services,
+    ...deps,
+  });
 }

@@ -1,5 +1,5 @@
 /**
- * Nightly jobs.
+ * Nightly jobs, a scheduled job (server/scheduledJobs.js).
  *
  * Every day from 08:30 IST, run each job file in server/jobs/nightly/ once,
  * in filename order. If the server was down at 08:30, they run as soon as it
@@ -34,18 +34,17 @@ import {
   query,
   runSqlScript,
 } from './db.js';
-import { istClock, isNightlyJobTime } from './marketClock.js';
+import { NIGHTLY_JOBS_MINUTES, istClock, isNightlyJobTime } from './marketClock.js';
 import { addDays } from '../shared/marketTime.js';
 import { JobRunStatus } from '../shared/appEnums.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const NIGHTLY_JOBS_DIR = path.join(__dirname, 'jobs', 'nightly');
 export const NIGHTLY_JOB_PREFIX = 'nightly:';
+export const NIGHTLY_JOBS_ID = 'nightly-jobs';
 /** Checked at startup, then hourly: the 08:30-midnight window always contains a check. */
 const CHECK_INTERVAL_MS = 60 * 60 * 1000;
 const SQL_TIMEOUT_MS = 10 * 60 * 1000;
-
-let running = false;
 
 /** Job files to run, in order: `.sql` and `.js` files not starting with `_` or `.`. */
 export function selectJobFiles(names) {
@@ -132,19 +131,11 @@ export async function nightlyJobsStatus(now = new Date()) {
   };
 }
 
-/** Check now and every hour. Safe to call on every server instance. */
-export function startNightlyJobs() {
-  const tick = async () => {
-    if (running || !isNightlyJobTime()) return;
-    running = true;
-    try {
-      await runNightlyJobs(istClock().date);
-    } catch (err) {
-      console.error('[Nightly] check failed:', err.message);
-    } finally {
-      running = false;
-    }
-  };
-  tick();
-  setInterval(tick, CHECK_INTERVAL_MS).unref();
-}
+/** The nightly jobs plug-in: checks every hour from 08:30 IST. */
+export const nightlyJobsJob = {
+  id: NIGHTLY_JOBS_ID,
+  /** @param {import('./tradeEngine/host.js').PluginContext} ctx */
+  start(ctx) {
+    ctx.market.daily(NIGHTLY_JOBS_MINUTES, CHECK_INTERVAL_MS, () => runNightlyJobs(istClock().date));
+  },
+};

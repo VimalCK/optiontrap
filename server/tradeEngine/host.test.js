@@ -110,3 +110,25 @@ describe('the trade engine host', () => {
     expect(timers).toHaveLength(1);
   });
 });
+
+describe('a plug-in host of scheduled jobs', () => {
+  it('holds its own lock, starts its jobs with no services, and logs under its own name', async () => {
+    const { createPluginHost } = await import('./host.js');
+    const holdLock = vi.fn(async () => ({ release: async () => {} }));
+    const logs = [];
+    const job = { id: 'nightly', start: vi.fn() };
+    const host = createPluginHost({
+      name: 'Jobs',
+      lockName: 'scheduled-jobs',
+      groups: [{ kind: 'Job', plugins: [job] }],
+      market: fakeMarket(),
+      holdLock,
+      logFor: (name) => (event, details) => logs.push([name, event, details]),
+    });
+    await host.start();
+    expect(holdLock).toHaveBeenCalledWith('scheduled-jobs', expect.any(Function));
+    expect(job.start.mock.calls[0][0].services).toEqual({});
+    expect(host.status().plugins).toEqual([{ id: 'nightly', kind: 'Job', state: 'Running', error: null }]);
+    expect(logs).toContainEqual(['Jobs', 'started', { Job: 1 }]);
+  });
+});

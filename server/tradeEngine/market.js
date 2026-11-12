@@ -1,39 +1,63 @@
 /**
- * The market clock the trade engine gives every plug-in (ctx.market), so no
- * strategy or service writes its own timer and "is the market open?" check.
+ * The market clock every plug-in host gives its plug-ins (ctx.market): the
+ * trade engine's strategies and services, and the scheduled jobs
+ * (server/scheduledJobs.js). No plug-in writes its own timer, "is the market
+ * open?" or "is it 08:30 IST yet?" check.
  *
- * One timer for the whole engine reads the IST clock every second
- * (shared/marketTime.js: trading days, 09:15–15:30 IST) and tells subscribers:
- *   onOpen(fn)       at each session's open; at once when the engine starts
+ * One timer per host reads the IST clock every second (shared/marketTime.js:
+ * trading days, 09:15–15:30 IST; server/marketClock.js: the after-close time)
+ * and tells subscribers:
+ *   onOpen(fn)       at each session's open; at once when the host starts
  *                    while the market is open (a restart mid-session)
- *   onClose(fn)      after each session's close; once when the engine starts
+ *   onClose(fn)      after each session's close; once when the host starts
  *                    while it is closed, so cleanup missed while the server
  *                    was down still happens
- *   every(ms, fn)    every `ms` while the market is open, first at the open;
- *                    a run still going skips the next beat, never overlaps
- * So open and close handlers must be safe to run twice.
+ *   every(ms, fn)    every `ms` while the market is open, first at the open
+ *   daily(at, ms, fn)  every `ms` from `at` (minutes after midnight IST) to
+ *                    midnight, every day; first at `at`, or at once when the
+ *                    host starts later that day (a server down at `at`)
+ *   afterClose(ms, fn) every `ms` on weekdays from 15 minutes after the close
+ *                    to midnight; first then, or at once when started later
+ *   repeat(ms, fn)   every `ms` at any time; first at once
+ * A repeating handler decides itself when its work is done for the day; a run
+ * still going skips the next beat, never overlaps. Open and close handlers
+ * must be safe to run twice.
  *
- * Each plug-in subscribes through its own scope (forPlugin), which the engine
+ * Each plug-in subscribes through its own scope (forPlugin), which the host
  * disposes when it stops the plug-in. A handler that throws is reported for
  * that plug-in (onError) and never stops the clock or anyone else's handlers.
  */
-import { isMarketOpen } from '../../shared/marketTime.js';
+import { isMarketOpen, marketClock } from '../../shared/marketTime.js';
 import { MarketEvent } from '../../shared/tradeEnums.js';
+import { isAfterCloseOnWeekday } from '../marketClock.js';
 
 /** How often the clock is read. */
 const TICK_MS = 1000;
 
 /**
  * @typedef {() => unknown} Handler
- * @typedef {{ ms: number, fn: Handler, lastRunAt: number, running: boolean }} Repeat
+ * @typedef {(now: Date, open: boolean) => boolean} DueCheck  whether a repeat's window is on at `now`
+ * @typedef {{ isDue: DueCheck, ms: number, fn: Handler, lastRunAt: number, running: boolean }} Repeat
  * @typedef {{ [MarketEvent.Open]: Set<Handler>, [MarketEvent.Close]: Set<Handler>, repeats: Set<Repeat> }} Subscriptions
  * @typedef {{
  *   isOpen: () => boolean,
  *   onOpen: (fn: Handler) => () => void,
  *   onClose: (fn: Handler) => () => void,
  *   every: (ms: number, fn: Handler) => () => void,
+ *   daily: (atMinutes: number, ms: number, fn: Handler) => () => void,
+ *   afterClose: (ms: number, fn: Handler) => () => void,
+ *   repeat: (ms: number, fn: Handler) => () => void,
  * }} PluginMarket
  */
+
+/** @type {DueCheck} */
+const whileOpen = (_now, open) => open;
+/** @type {DueCheck} */
+const always = () => true;
+/** @type {DueCheck} */
+const afterCloseOnWeekday = (now) => isAfterCloseOnWeekday(now);
+/** From `atMinutes` after midnight IST to midnight. */
+const fromTimeOfDay = (/** @type {number} */ atMinutes) => /** @type {DueCheck} */ ((now) => marketClock(now).minutes >= atMinutes);
 
 /**
  * A market clock. Time and timers are injectable, for tests.
@@ -71,9 +95,15 @@ export function createMarket({
     for (const [pluginId, subs] of plugins) for (const fn of subs[event]) call(pluginId, fn);
   }
 
-  function runRepeats(/** @type {number} */ nowMs) {
+  /** Run each repeat that is due; one whose window is off starts afresh when it next opens. */
+  function runRepeats(/** @type {Date} */ now, /** @type {boolean} */ open) {
+    const nowMs = now.getTime();
     for (const [pluginId, subs] of plugins) {
       for (const repeat of subs.repeats) {
+        if (!repeat.isDue(now, open)) {
+          repeat.lastRunAt = -Infinity;
+          continue;
+        }
         if (repeat.running || nowMs - repeat.lastRunAt < repeat.ms) continue;
         repeat.lastRunAt = nowMs;
         repeat.running = true;
@@ -86,12 +116,9 @@ export function createMarket({
   function tick() {
     const now = clock();
     const open = isOpen(now);
-    if (open !== wasOpen) {
-      if (!open) for (const subs of plugins.values()) for (const repeat of subs.repeats) repeat.lastRunAt = -Infinity;
-      fire(open ? MarketEvent.Open : MarketEvent.Close);
-    }
+    if (open !== wasOpen) fire(open ? MarketEvent.Open : MarketEvent.Close);
     wasOpen = open;
-    if (open) runRepeats(now.getTime());
+    runRepeats(now, open);
   }
 
   return {
@@ -125,11 +152,16 @@ export function createMarket({
         set.add(item);
         return () => { set.delete(item); };
       };
+      const addRepeat = (/** @type {DueCheck} */ isDue, /** @type {number} */ ms, /** @type {Handler} */ fn) =>
+        add(subs.repeats, { isDue, ms, fn, lastRunAt: -Infinity, running: false });
       return {
         isOpen: () => isOpen(clock()),
         onOpen: (fn) => add(subs[MarketEvent.Open], fn),
         onClose: (fn) => add(subs[MarketEvent.Close], fn),
-        every: (ms, fn) => add(subs.repeats, { ms, fn, lastRunAt: -Infinity, running: false }),
+        every: (ms, fn) => addRepeat(whileOpen, ms, fn),
+        daily: (atMinutes, ms, fn) => addRepeat(fromTimeOfDay(atMinutes), ms, fn),
+        afterClose: (ms, fn) => addRepeat(afterCloseOnWeekday, ms, fn),
+        repeat: (ms, fn) => addRepeat(always, ms, fn),
         dispose: () => { plugins.delete(pluginId); },
       };
     },

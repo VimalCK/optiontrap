@@ -154,8 +154,8 @@ const DURATION_UNITS = /** @type {{ id: DurationUnitId, label: string }[]} */ ([
 /** A duration unit's label (day, week, month, year), or the value itself when unknown. */
 export const durationUnitLabel = (/** @type {unknown} */ unit) => DURATION_UNITS.find((u) => u.id === unit)?.label ?? String(unit);
 
-/** What a trade engine plug-in is (server/tradeEngine/host.js): a service, or a strategy started after the services. */
-export const PluginKind = Object.freeze({ Service: 'Service', Strategy: 'Strategy' });
+/** What a plug-in is (server/tradeEngine/host.js): a trade engine service, a strategy started after the services, or a scheduled job (server/scheduledJobs.js). */
+export const PluginKind = Object.freeze({ Service: 'Service', Strategy: 'Strategy', Job: 'Job' });
 
 /** @typedef {typeof PluginKind[keyof typeof PluginKind]} PluginKindId */
 

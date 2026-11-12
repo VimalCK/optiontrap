@@ -11,12 +11,17 @@ It never places real orders. The user is the sole developer; prod (optiontrap.co
   - Import from `src` with the `@/` alias (`@/services/apiClient`). Import `shared/` by relative path (`../../shared/x.js`).
 - **Backend** `server/`: Node 22 + Express (port 3001), plain ESM JavaScript. `index.js` holds the routes, auth
   middleware, Kite REST proxy (`/api/*` → api.kite.trade) and WebSocket ticker proxy (`/ws`). `db.js` is all
-  Postgres access plus the migrations runner. Schedulers (`*Scheduler.js`, `nightlyJobs.js`) run inside the server.
+  Postgres access plus the migrations runner.
+- **Scheduled jobs** `server/scheduledJobs.js`: background data work (OI snapshots, OI history, the stock scan, the
+  instrument sync, nightly jobs, signal outcomes; `*Scheduler.js`, `nightlyJobs.js`, `signalOutcomesJob.js`) as plug-ins
+  on their own host (the trade engine's `host.js`, its own advisory lock). A job never writes its own timer or time check:
+  it asks `ctx.market` (`every`, `daily(at, ms, fn)`, `afterClose(ms, fn)`, `repeat`). Add a job by adding it to `JOBS`.
 - **Trade engine** `server/tradeEngine/`: the one runtime for trading, started with the server and alive as long as it.
   - `host.js` is only a host: it starts and stops plug-ins of the shape `{ id, start(ctx), stop?(), status?() }` and gives
-    each a context: `ctx.market` (`market.js`: `onOpen`, `onClose`, `every`, `isOpen` on the IST clock), `ctx.services`
-    (the services by id, the only way plug-ins reach each other) and `ctx.log`. It holds a Postgres advisory lock so one
-    engine runs; a plug-in that fails is logged and shown on Admin Services while the others keep running.
+    each a context: `ctx.market` (`market.js`: `onOpen`, `onClose`, `every`, `daily`, `afterClose`, `repeat`, `isOpen` on the
+    IST clock), `ctx.services` (the services by id, the only way plug-ins reach each other) and `ctx.log`. `createPluginHost`
+    is the generic host (also used by the scheduled jobs); `createTradeEngine` builds the engine's. It holds a Postgres
+    advisory lock so one engine runs; a plug-in that fails is logged and shown on Admin Services while the others keep running.
   - **Services** (`services/`): `orders` (every order, manual or automated, entry or exit), `signals` (a strategy's signals →
     each user's settings and entry rules → orders), `tradeMonitor` (exit rules on open automated positions),
     `sessionSquareOff` (no intraday position outlives its session).

@@ -25,7 +25,7 @@ export function isAfterCloseOnWeekday(now = new Date()) {
 }
 
 /** 08:30 market time: when the nightly jobs run, every day of the week. */
-const NIGHTLY_JOBS_MINUTES = 8 * 60 + 30;
+export const NIGHTLY_JOBS_MINUTES = 8 * 60 + 30;
 
 /**
  * Whether today's nightly jobs are due: at or after 08:30 market time, until

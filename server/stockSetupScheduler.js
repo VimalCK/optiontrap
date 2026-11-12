@@ -1,5 +1,5 @@
 /**
- * After-close stock scan.
+ * After-close stock scan, a scheduled job (server/scheduledJobs.js).
  *
  * On weekdays from 15:45 IST, once the OI history job has finished (both use
  * the admin's Kite historical-data limit), bring every watchlist stock's daily
@@ -17,17 +17,16 @@ import {
   getStockCandles,
   getWatchlistStocks,
 } from './db.js';
-import { istClock, isAfterCloseOnWeekday } from './marketClock.js';
+import { istClock } from './marketClock.js';
 import { OI_HISTORY_JOB, findWorkingAdminSession } from './oiHistoryScheduler.js';
 import { scanStock, syncStockCandles } from './stockCandles.js';
 import { JobRunStatus } from '../shared/appEnums.js';
 
-const STOCK_SETUPS_JOB = 'stock-setups-after-close';
+export const STOCK_SETUPS_JOB ='stock-setups-after-close';
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 /** Gap between Kite calls: Kite allows three historical requests a second. */
 const KITE_GAP_MS = 400;
 
-let running = false;
 let lastDoneDate = null;
 
 const pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -91,19 +90,11 @@ async function runAfterCloseScan(date) {
   }
 }
 
-/** Check now and every five minutes. Safe to call on every server instance. */
-export function startStockSetupScheduler() {
-  const tick = async () => {
-    if (running || !isAfterCloseOnWeekday()) return;
-    running = true;
-    try {
-      await runAfterCloseScan(istClock().date);
-    } catch (err) {
-      console.error(`[Scheduler] ${STOCK_SETUPS_JOB} check failed:`, err.message);
-    } finally {
-      running = false;
-    }
-  };
-  tick();
-  setInterval(tick, CHECK_INTERVAL_MS).unref();
-}
+/** The stock scan plug-in: checks every five minutes after the close until today's run is done. */
+export const stockSetupJob = {
+  id: STOCK_SETUPS_JOB,
+  /** @param {import('./tradeEngine/host.js').PluginContext} ctx */
+  start(ctx) {
+    ctx.market.afterClose(CHECK_INTERVAL_MS, () => runAfterCloseScan(istClock().date));
+  },
+};

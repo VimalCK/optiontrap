@@ -136,3 +136,83 @@ describe('the market clock', () => {
     expect(plugin.isOpen()).toBe(false);
   });
 });
+
+describe('the market clock for scheduled jobs', () => {
+  let now;
+  let market;
+  const HOUR = 60 * 60 * 1000;
+  const NIGHTLY = 8 * 60 + 30; // 08:30 IST
+
+  beforeEach(() => {
+    market = createMarket({ clock: () => now, isOpen: () => false, setTimer: () => 'timer', clearTimer: () => {} });
+  });
+
+  /** Move the clock to `at` and read it, letting the handler before it finish. */
+  const tickAt = async (at) => {
+    await settle();
+    now = at;
+    market.tick();
+  };
+
+  it('runs a daily job from its time of day to midnight at its interval, then again the next day', async () => {
+    const job = vi.fn();
+    market.forPlugin('p').daily(NIGHTLY, HOUR, job);
+    now = new Date('2026-11-12T01:30:00Z'); // Thu 07:00 IST
+    market.start();
+    expect(job).not.toHaveBeenCalled();
+    await tickAt(new Date('2026-11-12T03:00:00Z')); // 08:30 IST
+    expect(job).toHaveBeenCalledTimes(1);
+    await tickAt(new Date('2026-11-12T03:59:00Z')); // 09:29 IST, inside the hour
+    expect(job).toHaveBeenCalledTimes(1);
+    await tickAt(new Date('2026-11-12T04:00:00Z')); // 09:30 IST
+    expect(job).toHaveBeenCalledTimes(2);
+    await tickAt(new Date('2026-11-12T18:31:00Z')); // Fri 00:01 IST: the window is shut
+    await tickAt(new Date('2026-11-13T02:59:00Z')); // Fri 08:29 IST
+    expect(job).toHaveBeenCalledTimes(2);
+    await tickAt(new Date('2026-11-13T03:00:00Z')); // Fri 08:30 IST
+    expect(job).toHaveBeenCalledTimes(3);
+  });
+
+  it('runs a daily job at once when the host starts after its time (a server down at 08:30)', () => {
+    const job = vi.fn();
+    market.forPlugin('p').daily(NIGHTLY, HOUR, job);
+    now = new Date('2026-11-12T04:30:00Z'); // Thu 10:00 IST
+    market.start();
+    expect(job).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs an after-close job on weekdays from 15 minutes after the close, not at weekends', async () => {
+    const job = vi.fn();
+    market.forPlugin('p').afterClose(5 * 60 * 1000, job);
+    now = new Date('2026-11-12T10:14:00Z'); // Thu 15:44 IST
+    market.start();
+    expect(job).not.toHaveBeenCalled();
+    await tickAt(new Date('2026-11-12T10:15:00Z')); // Thu 15:45 IST
+    expect(job).toHaveBeenCalledTimes(1);
+    await tickAt(new Date('2026-11-14T10:30:00Z')); // Sat 16:00 IST
+    expect(job).toHaveBeenCalledTimes(1);
+  });
+
+  it('repeats a job at any time, first at once', async () => {
+    const job = vi.fn();
+    market.forPlugin('p').repeat(HOUR, job);
+    now = new Date('2026-11-14T20:00:00Z'); // Sun 01:30 IST, market shut
+    market.start();
+    expect(job).toHaveBeenCalledTimes(1);
+    await tickAt(new Date('2026-11-14T21:00:00Z'));
+    expect(job).toHaveBeenCalledTimes(2);
+  });
+
+  it('never overlaps a run still going with the next beat', async () => {
+    let finish;
+    const job = vi.fn(() => new Promise((resolve) => { finish = resolve; }));
+    market.forPlugin('p').repeat(1_000, job);
+    now = new Date('2026-11-14T20:00:00Z');
+    market.start();
+    await tickAt(new Date('2026-11-14T20:00:05Z'));
+    expect(job).toHaveBeenCalledTimes(1);
+    finish();
+    await tickAt(new Date('2026-11-14T20:00:06Z'));
+    expect(job).toHaveBeenCalledTimes(2);
+  });
+});

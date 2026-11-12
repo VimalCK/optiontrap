@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { latestNightlyDate, nightlyJobsStatus, selectJobFiles } from './nightlyJobs.js';
 import { isNightlyJobTime } from './marketClock.js';
+import { runPlugin } from './tradeEngine/runPlugin.fixture.js';
 
 // Fake scheduled_job_runs: job -> date -> status (a failed run's error saved as 'boom'). Hoisted so the db.js mock can use it.
 const runs = vi.hoisted(() => new Map());
@@ -37,17 +38,19 @@ describe('isNightlyJobTime', () => {
   });
 });
 
-describe('startNightlyJobs', () => {
-  let startNightlyJobs;
+describe('the nightly jobs plug-in', () => {
+  let nightlyJobsJob;
+  let stop;
 
   beforeEach(async () => {
     runs.clear();
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.resetModules(); // fresh runner state per test
-    ({ startNightlyJobs } = await import('./nightlyJobs.js'));
+    ({ nightlyJobsJob } = await import('./nightlyJobs.js'));
   });
 
   afterEach(() => {
+    stop?.();
     vi.clearAllTimers();
     vi.useRealTimers();
     vi.restoreAllMocks();
@@ -64,7 +67,7 @@ describe('startNightlyJobs', () => {
   it('runs at once when the server starts after a missed 08:30, then not again that day', async () => {
     // Server was down 07:00-10:00 and is started at 10:00.
     vi.useFakeTimers({ now: ist('10:00', '2026-11-04') });
-    startNightlyJobs();
+    stop = await runPlugin(nightlyJobsJob);
     await vi.advanceTimersByTimeAsync(0);
     await settled();
 
@@ -79,7 +82,7 @@ describe('startNightlyJobs', () => {
 
   it('waits for 08:30 when the server starts before it', async () => {
     vi.useFakeTimers({ now: ist('06:30', '2026-11-04') });
-    startNightlyJobs();
+    stop = await runPlugin(nightlyJobsJob);
     await vi.advanceTimersByTimeAsync(0);
     expect(runs.size).toBe(0);
 

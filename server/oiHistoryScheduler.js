@@ -1,5 +1,5 @@
 /**
- * After-close OI history fetch.
+ * After-close OI history fetch, a scheduled job (server/scheduledJobs.js).
  *
  * Every five minutes, on a weekday at or after 15:45 IST, fetch today's OI
  * history for every tracked scrip (stored data in the last 14 days), for the
@@ -20,7 +20,7 @@ import {
   getScheduledJobStatus,
   getStoredOiHistoryExpiryMonths,
 } from './db.js';
-import { daysBefore, istClock, isAfterCloseOnWeekday } from './marketClock.js';
+import { daysBefore, istClock } from './marketClock.js';
 import { fetchOiHistoryMonth } from './oiHistoryFetch.js';
 import { JobRunStatus } from '../shared/appEnums.js';
 
@@ -28,7 +28,6 @@ export const OI_HISTORY_JOB = 'oi-history-after-close';
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const TRACKED_SCRIP_DAYS = 14;
 
-let running = false;
 let lastDoneDate = null;
 let lastWaitingLogDate = null;
 
@@ -114,19 +113,11 @@ async function runAfterCloseFetch(date) {
   }
 }
 
-/** Check now and every five minutes. Safe to call on every server instance. */
-export function startOiHistoryScheduler() {
-  const tick = async () => {
-    if (running || !isAfterCloseOnWeekday()) return;
-    running = true;
-    try {
-      await runAfterCloseFetch(istClock().date);
-    } catch (err) {
-      console.error(`[Scheduler] ${OI_HISTORY_JOB} check failed:`, err.message);
-    } finally {
-      running = false;
-    }
-  };
-  tick();
-  setInterval(tick, CHECK_INTERVAL_MS).unref();
-}
+/** The OI history plug-in: checks every five minutes after the close until today's run is done. */
+export const oiHistoryJob = {
+  id: OI_HISTORY_JOB,
+  /** @param {import('./tradeEngine/host.js').PluginContext} ctx */
+  start(ctx) {
+    ctx.market.afterClose(CHECK_INTERVAL_MS, () => runAfterCloseFetch(istClock().date));
+  },
+};
