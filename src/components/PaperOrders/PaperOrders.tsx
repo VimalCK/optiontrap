@@ -2,7 +2,9 @@
  * PaperOrders — the Pending tab of the paper positions: the paper orders
  * still waiting to fill (limit orders, and positional market orders placed
  * while the market is closed), each with a Cancel button. Filled ones show as
- * positions; cancelled ones (by hand or at the close) leave the list.
+ * positions; cancelled ones (by hand or at the close) leave the list. Each
+ * shows its instrument's last price, live from ticks in market hours (the
+ * page's useLastPrices, shared with the positions).
  *
  * Orders fill on the server (the trade engine's order service), so while any is open
  * in market hours usePaperOrders reloads the list every few seconds; when one
@@ -44,7 +46,16 @@ export function settledSince(openBefore: ReadonlySet<string>, openNow: PaperOrde
 
 const openIds = (orders: PaperOrder[]) => new Set(orders.filter((o) => o.status === OrderStatus.Open).map((o) => o.id));
 
-export const PaperOrdersTable: React.FC<{ orders: PaperOrder[]; onCancel: (id: string) => void }> = ({ orders, onCancel }) => (
+/** Last prices by instrument token, from useLastPrices; an instrument not yet priced is missing. */
+type LastPrices = ReadonlyMap<number, number>;
+
+/** An order's instrument's last price as shown in the LTP column, or a dash until it is priced. */
+export const lastPriceLabel = (order: PaperOrder, prices: LastPrices): string => {
+  const price = prices.get(order.instrumentToken);
+  return price === undefined ? '-' : price.toFixed(2);
+};
+
+export const PaperOrdersTable: React.FC<{ orders: PaperOrder[]; prices: LastPrices; onCancel: (id: string) => void }> = ({ orders, prices, onCancel }) => (
   <div className="positions-table-scroll">
     <table className="positions-table">
       <thead>
@@ -54,6 +65,7 @@ export const PaperOrdersTable: React.FC<{ orders: PaperOrder[]; onCancel: (id: s
           <th>Side</th>
           <th>Qty</th>
           <th>Limit</th>
+          <th>LTP</th>
           <th>Status</th>
           <th aria-label="Actions" />
         </tr>
@@ -68,6 +80,7 @@ export const PaperOrdersTable: React.FC<{ orders: PaperOrder[]; onCancel: (id: s
               <td><span className={`positions-table__side positions-table__side--${order.side.toLowerCase()}`}>{order.side}</span></td>
               <td>{order.quantity}</td>
               <td>{order.limitPrice === null ? 'Market' : order.limitPrice.toFixed(2)}</td>
+              <td>{lastPriceLabel(order, prices)}</td>
               <td><Badge tone={status.tone} dot={order.status === OrderStatus.Open}>{status.text}</Badge></td>
               <td>
                 {order.status === OrderStatus.Open && (
@@ -151,13 +164,13 @@ export function usePaperOrders(onFilled: () => void): PaperOrderBook {
  * The Pending tab, inside the positions card: the orders still waiting to
  * fill, or an empty state when none are.
  */
-const PaperOrders: React.FC<{ orders: PaperOrder[]; error: string | null; onCancel: (id: string) => void }> = ({ orders, error, onCancel }) => {
+const PaperOrders: React.FC<{ orders: PaperOrder[]; prices: LastPrices; error: string | null; onCancel: (id: string) => void }> = ({ orders, prices, error, onCancel }) => {
   const pending = pendingOrders(orders);
   return (
     <div className="paper-orders" role="region" aria-label="Pending orders">
       {error && <p className="paper-orders__error">{error}</p>}
       {pending.length > 0 ? (
-        <PaperOrdersTable orders={pending} onCancel={onCancel} />
+        <PaperOrdersTable orders={pending} prices={prices} onCancel={onCancel} />
       ) : (
         <EmptyState
           icon={<PaperTradingIcon size={64} />}

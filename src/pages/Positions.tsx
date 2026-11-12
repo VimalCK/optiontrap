@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { getPositions, tradeErrorMessage, Position, positionQuoteKey } from '@/services/positions';
+import { getPositions, tradeErrorMessage, Position } from '@/services/positions';
 import { exitPosition } from '@/services/orders';
 
 import { fetchQuotes, KitePosition } from '@/services/kiteApi';
@@ -10,7 +10,8 @@ import { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe } from '@/services/tickerSingleton';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import PositionInstrument from '@/components/PositionInstrument/PositionInstrument';
-import PaperOrders, { pendingCount, usePaperOrders } from '@/components/PaperOrders/PaperOrders';
+import PaperOrders, { pendingCount, pendingOrders, usePaperOrders } from '@/components/PaperOrders/PaperOrders';
+import { useLastPrices } from '@/hooks/useLastPrices';
 import TabBar, { type TabBarItem } from '@/components/TabBar/TabBar';
 import { formatCalendarDate, isMarketLive } from '@/utils/marketStatus';
 import {
@@ -576,7 +577,6 @@ export const RiskTable: React.FC<{ groups: RiskGroup[]; spotPrices: Map<string, 
 
 const PaperPositions: React.FC = () => {
   const [positions, setPositions] = useState<Position[]>([]);
-  const [livePrices, setLivePrices] = useState<Map<number, number>>(new Map());
   const [spotPrices, setSpotPrices] = useState<Map<string, number>>(new Map());
   const [loading, setLoading] = useState(true);
   const [exitError, setExitError] = useState<string | null>(null);
@@ -594,31 +594,8 @@ const PaperPositions: React.FC = () => {
   // Loaded whichever tab shows, so a fill reloads the positions either way.
   const orderBook = usePaperOrders(loadPositions);
 
-  useEffect(() => {
-    if (positions.length === 0) return;
-
-    const tokens = positions.map((p) => p.instrumentToken);
-
-    if (isMarketLive()) {
-      return tickerSubscribe('paper-positions', tokens, (ticks: Tick[]) => {
-        setLivePrices((prev) => {
-          const next = new Map(prev);
-          ticks.forEach((t) => { next.set(t.instrumentToken, t.lastPrice); });
-          return next;
-        });
-      });
-    } else {
-      const instruments = positions.map(positionQuoteKey);
-      fetchQuotes(instruments).then((quotes) => {
-        const priceMap = new Map<number, number>();
-        positions.forEach((p) => {
-          const q = quotes.get(positionQuoteKey(p));
-          if (q) priceMap.set(p.instrumentToken, q.last_price);
-        });
-        setLivePrices(priceMap);
-      }).catch(() => {});
-    }
-  }, [positions]);
+  // One price feed for the positions and the orders waiting to fill, so both show the same LTP.
+  const livePrices = useLastPrices('paper-positions', [...positions, ...pendingOrders(orderBook.orders)]);
 
   useEffect(() => {
     const underlyings = [...new Set(
@@ -724,7 +701,7 @@ const PaperPositions: React.FC = () => {
           ariaLabel="Paper positions and orders"
         />
       </div>
-      {tab === PaperTab.Orders && <PaperOrders orders={orderBook.orders} error={orderBook.error} onCancel={orderBook.cancel} />}
+      {tab === PaperTab.Orders && <PaperOrders orders={orderBook.orders} prices={livePrices} error={orderBook.error} onCancel={orderBook.cancel} />}
       {tab === PaperTab.Risk && <RiskTable groups={riskGroups} spotPrices={spotPrices} />}
       {tab === PaperTab.Positions && positionsView}
     </section>

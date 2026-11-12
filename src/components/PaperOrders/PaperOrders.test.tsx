@@ -33,7 +33,7 @@ describe('settledSince', () => {
 
 describe('PaperOrdersTable', () => {
   const html = renderToStaticMarkup(
-    <PaperOrdersTable orders={[order('a'), order('b', { status: 'Filled', fillPrice: 50, side: 'SELL' })]} onCancel={() => {}} />,
+    <PaperOrdersTable orders={[order('a'), order('b', { status: 'Filled', fillPrice: 50, side: 'SELL' })]} prices={new Map()} onCancel={() => {}} />,
   );
 
   it('lists each order with its instrument, IST time, side, quantity, limit and status', () => {
@@ -45,15 +45,24 @@ describe('PaperOrdersTable', () => {
   });
 
   it('says who placed each order, Auto or Manual, like its position', () => {
-    const auto = renderToStaticMarkup(<PaperOrdersTable orders={[order('c', { source: 'Auto', autoTradeId: 't1' })]} onCancel={() => {}} />);
+    const auto = renderToStaticMarkup(<PaperOrdersTable orders={[order('c', { source: 'Auto', autoTradeId: 't1' })]} prices={new Map()} onCancel={() => {}} />);
     expect(auto).toContain('>Auto</span>');
     expect(auto).not.toContain('>Manual</span>');
     expect(html.match(/>Manual<\/span>/g)).toHaveLength(2);
     expect(html).not.toContain('>Auto</span>');
   });
 
+  it('shows each order\'s last price, or a dash until it is priced', () => {
+    const priced = renderToStaticMarkup(
+      <PaperOrdersTable orders={[order('p'), order('q', { instrumentToken: 202 })]} prices={new Map([[101, 48.35]])} onCancel={() => {}} />,
+    );
+    expect(priced).toContain('<th>LTP</th>');
+    expect(priced).toContain('<td>48.35</td>');
+    expect(priced).toContain('<td>-</td>');
+  });
+
   it('shows Market in the Limit column for a market order', () => {
-    const market = renderToStaticMarkup(<PaperOrdersTable orders={[order('m', { orderType: 'Market', limitPrice: null, horizon: Horizon.Positional })]} onCancel={() => {}} />);
+    const market = renderToStaticMarkup(<PaperOrdersTable orders={[order('m', { orderType: 'Market', limitPrice: null, horizon: Horizon.Positional })]} prices={new Map()} onCancel={() => {}} />);
     expect(market).toContain('<td>Market</td>');
   });
 
@@ -75,14 +84,14 @@ describe('PaperOrders', () => {
   const closed = [order('f', { status: 'Filled', fillPrice: 50 }), order('c', { status: 'Cancelled', statusReason: 'Cancelled at market close' })];
 
   it('lists only the orders still waiting to fill, not those filled or cancelled today', () => {
-    const html = renderToStaticMarkup(<PaperOrders orders={[order('a'), ...closed]} error={null} onCancel={() => {}} />);
+    const html = renderToStaticMarkup(<PaperOrders orders={[order('a'), ...closed]} error={null} prices={new Map()} onCancel={() => {}} />);
     expect(html.match(/title="Cancel order"/g)).toHaveLength(1);
     expect(html).not.toContain('Filled @');
     expect(html).not.toContain('Cancelled at market close');
   });
 
   it('shows the empty state when nothing is pending, and the error when loading failed', () => {
-    const html = renderToStaticMarkup(<PaperOrders orders={closed} error="Failed to load orders" onCancel={() => {}} />);
+    const html = renderToStaticMarkup(<PaperOrders orders={closed} error="Failed to load orders" prices={new Map()} onCancel={() => {}} />);
     expect(html).toContain('No pending orders');
     expect(html).toContain('Failed to load orders');
     expect(html).not.toContain('positions-table');
