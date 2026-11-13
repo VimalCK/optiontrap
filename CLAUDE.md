@@ -9,8 +9,10 @@ It never places real orders. The user is the sole developer; prod (optiontrap.co
   - `pages/` route pages (lazy-loaded in `App.tsx`), `components/<Feature>/` feature components,
     `services/` API clients + pure pricing/analysis logic, `hooks/`, `utils/`, `styles/` (one CSS file per page/area).
   - Import from `src` with the `@/` alias (`@/services/apiClient`). Import `shared/` by relative path (`../../shared/x.js`).
-- **Backend** `server/`: Node 22 + Express (port 3001), plain ESM JavaScript. `index.js` holds the routes, auth
-  middleware, Kite REST proxy (`/api/*` → api.kite.trade) and WebSocket ticker proxy (`/ws`). `db.js` is all
+- **Backend** `server/`: Node 22 + Express (port 3001), plain ESM JavaScript. `index.js` sets up the app, mounts the
+  routers, and holds the Kite REST proxy (`/api/*` → api.kite.trade) and WebSocket ticker proxy (`/ws`). Routes live in
+  `routes/`, one router per resource (`routes/watchlists.js` …), listed in `routes/index.js` (`ROUTERS`); add a router by
+  adding it there. `authMiddleware.js` holds the guards, `serverConfig.js` the environment settings. `db.js` is all
   Postgres access plus the migrations runner.
 - **Scheduled jobs** `server/scheduledJobs.js`: background data work (OI snapshots, OI history, the stock scan, the
   instrument sync, nightly jobs, signal outcomes; `*Scheduler.js`, `nightlyJobs.js`, `signalOutcomesJob.js`) as plug-ins
@@ -191,7 +193,14 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   e.g. `SUBSCRIPTION_REQUIRED`, rule codes), sent through `sendOk` / `sendCreated` / `sendError` (`server/replies.js`),
   never a hand-written envelope. Use 400 for bad input, 401 not logged in, 402 no subscription,
   403 not admin, 404 not found, 500 server failure.
-- Middleware: `requireAuth`, `requireSubscription` (app features), `requireAdmin`. Own routes go **before** the Kite proxy.
+  - A service result `{ ok, code, message }` (orders, subscription changes) is answered with `sendResult`
+    (`server/routes/sendResult.js`), which maps each code to its HTTP status; add a new code to its map.
+  - A route whose failure needs its own message wraps its handler in `withFailureMessage(message, handler, { status })`
+    (`server/asyncRoutes.js`) instead of a try/catch; any other thrown error gets the generic 500. Keep a try/catch only
+    where the route does something with the error (a Kite warning, an SSE error event).
+- Middleware (`server/authMiddleware.js`): `requireAuth`, `requireSubscription` (app features), `requireAdmin`; routes use
+  the `subscriber` (`[requireAuth, requireSubscription]`) and `admin` (`[requireAuth, requireAdmin]`) lists.
+  Routers are built with `asyncRouter()` and mounted **before** the Kite proxy.
 - Validate and parse request bodies in pure functions (in `shared/` when the browser can use them too), returning
   `{ value }`/`{ error }`-style results that routes map to HTTP status codes. Never trust server-owned fields from the body
   (e.g. a paper trade's `source` is set by the caller, never read from input).
