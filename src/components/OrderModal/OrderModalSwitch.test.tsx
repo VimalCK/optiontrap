@@ -17,7 +17,7 @@ describe('OrderModalSwitch', () => {
     expect(market).toContain('aria-pressed="false"');
     expect(market).not.toContain('active');
     expect(limit).toContain('aria-pressed="true"');
-    expect(limit).toContain('oc-order-modal__mode-btn active');
+    expect(limit).toContain('order-modal__mode-btn active');
     expect(limit).toContain('type="button"');
   });
 });

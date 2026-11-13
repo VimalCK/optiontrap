@@ -337,7 +337,8 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   that reaches it, through `openPosition` with the order's source. Orders fill only in market hours; intraday ones are placed
   only then, positional ones any time. Open orders placed in a session are cancelled at its close. The order service and the
   trade monitor share one Kite feed (`server/sharedTickerFeed.js`; Kite allows 3 connections).
-  Only the Option Chain order panel has Limit; the B/S buttons and other screens place market orders (`placeMarketTrade`).
+  Only the order popup (`src/components/OrderModal/`, opened by clicking a premium on the Option Analyzer or OI History) has Limit
+  and Positional; the B/S buttons and other screens place intraday market orders (`placeMarketTrade`).
   The signals service enters through a limit order (source auto, linked by `algo_trade_id`) when the Entry limit offset entry
   rule is on: a buy that % below the LTP, a sell that % above. The trade stays validated while it waits; the order service tells
   listeners (`onSettled`) when it fills (executed) or is cancelled (rejected). Waiting auto orders count in the

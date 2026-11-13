@@ -9,12 +9,12 @@ export interface OrderModalSwitchProps<T extends string | number> {
 }
 
 const OrderModalSwitch = <T extends string | number>({ label, options, value, onChange }: OrderModalSwitchProps<T>): React.ReactElement => (
-  <div className="oc-order-modal__mode" role="group" aria-label={label}>
+  <div className="order-modal__mode" role="group" aria-label={label}>
     {options.map((option) => (
       <button
         key={option.value}
         type="button"
-        className={`oc-order-modal__mode-btn ${value === option.value ? 'active' : ''}`}
+        className={`order-modal__mode-btn ${value === option.value ? 'active' : ''}`}
         aria-pressed={value === option.value}
         onClick={() => onChange(option.value)}
       >

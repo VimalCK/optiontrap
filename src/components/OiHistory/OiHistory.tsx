@@ -8,8 +8,6 @@ import { useKiteSession } from '@/hooks/useKiteSession';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { tradeErrorMessage } from '@/services/positions';
 import { placeMarketTrade, placedOrderMessage, placedOrderRefused } from '@/services/orders';
-import { useTradeHorizon } from '@/hooks/useTradeHorizon';
-import TradeHorizonSelect from '@/components/TradeHorizonSelect/TradeHorizonSelect';
 import { getLotSize } from '@/services/optionChain';
 import { loadInstruments, getLotSizeByToken } from '@/services/instruments';
 import '@/styles/oihistory.css';
@@ -25,11 +23,14 @@ import { findNseStock } from '@/services/stockSetups';
 import { useUnderlyings } from '@/hooks/useUnderlyings';
 import { computeFlowReadings, marketCloseIST, type FlowInput, type FlowReading } from '@/services/oiFlow';
 import { computeFairValues, realizedVol, volVerdict, REALIZED_WINDOW, type FairInput, type FairValueResult } from '@/services/fairValue';
-import { OptionType, Side, isOptionType, type OptionTypeId, type SideId } from '../../../shared/tradeEnums.js';
+import { Horizon, OptionType, Side, isOptionType, type OptionTypeId, type SideId } from '../../../shared/tradeEnums.js';
 import { Bias, OiFlow, RolloverPattern, SellingSetup, TradeSetupStatus, VolVerdict, volVerdictLabel, type TradeSetupStatusId } from '../../../shared/analysisEnums.js';
 import { FetchEvent, SignalOutcome, StrikeMode } from '../../../shared/appEnums.js';
 import { OiHistoryTab, ToastColor, type OiHistoryTabId } from '@/utils/uiEnums';
 import ToastStack from '@/components/Toast/ToastStack';
+import OrderModal from '@/components/OrderModal/OrderModal';
+import { useOrderChoices } from '@/components/OrderModal/useOrderChoices';
+import type { OrderOption } from '@/components/OrderModal/orderTicket';
 import { useToasts } from '@/hooks/useToasts';
 
 const STRIKE_RANGE_KEY = 'optiontrap_strike_range';
@@ -439,9 +440,18 @@ const OiHistory: React.FC = () => {
     }
   }, [scrip]);
 
-  const [tradeHorizon, setTradeHorizon] = useTradeHorizon();
-
   const { toasts, showToast } = useToasts();
+  const orderChoices = useOrderChoices();
+  const [orderTicket, setOrderTicket] = useState<{ option: OrderOption; price: number } | null>(null);
+
+  const openOrder = useCallback((cell: OiCellData, optionType: OptionTypeId, strike: number, expiry: string) => {
+    const token = optionType === OptionType.CE ? cell.ceToken : cell.peToken;
+    const tradingsymbol = optionType === OptionType.CE ? cell.ceTradingsymbol : cell.peTradingsymbol;
+    const historicalClose = optionType === OptionType.CE ? cell.ceClose : cell.peClose;
+    if (!token || !tradingsymbol || !historicalClose) return;
+    const lotSize = getLotSizeByToken(token) ?? getLotSize(token);
+    setOrderTicket({ option: { tradingsymbol, instrumentToken: token, lotSize, strike, optionType, expiry }, price: historicalClose });
+  }, []);
 
   const handleTrade = useCallback(async (
     cell: OiCellData,
@@ -466,13 +476,13 @@ const OiHistory: React.FC = () => {
         side,
         quantity: getLotSizeByToken(token) ?? getLotSize(token),
         expiry,
-        horizon: tradeHorizon,
+        horizon: Horizon.Intraday,
       });
       showToast(placedOrderMessage(placed, `${side} ${strike}${optionType}`), placedOrderRefused(placed) ? ToastColor.Red : ToastColor.Green);
     } catch (err) {
       showToast(tradeErrorMessage(err), ToastColor.Red);
     }
-  }, [showToast, tradeHorizon]);
+  }, [showToast]);
 
   const availableDates = useMemo(() => {
     return [...new Set(data.map((r) => r.date))].sort();
@@ -1148,6 +1158,17 @@ const OiHistory: React.FC = () => {
   return (
     <div className="oi-history">
       <ToastStack toasts={toasts} />
+      {orderTicket && (
+        <OrderModal
+          key={orderTicket.option.tradingsymbol}
+          option={orderTicket.option}
+          initialPrice={orderTicket.price}
+          priceLabel="Day close"
+          choices={orderChoices}
+          onClose={() => setOrderTicket(null)}
+          onToast={showToast}
+        />
+      )}
 
       <div className={`oi-history__controls card${isDataMenuOpen ? ' oi-history__controls--menu-open' : ''}`}>
         <div className="oi-history__control-row">
@@ -1189,11 +1210,6 @@ const OiHistory: React.FC = () => {
               ]}
               onChange={(v) => { const val = Number(v); setStrikeRange(val); localStorage.setItem(STRIKE_RANGE_KEY, String(val)); }}
             />
-          </label>
-
-          <label className="oi-history__label">
-            <span>Trade</span>
-            <TradeHorizonSelect value={tradeHorizon} onChange={setTradeHorizon} />
           </label>
 
           {strikeRange === -1 && (
@@ -1351,6 +1367,7 @@ const OiHistory: React.FC = () => {
           selectedStrike={selectedStrike}
           onSelectStrike={setSelectedStrike}
           onTrade={handleTrade}
+          onOpenOrder={openOrder}
         />
       )}
 

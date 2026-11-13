@@ -16,7 +16,7 @@ import { placeMarketTrade, placedOrderMessage, placedOrderRefused, type PaperOrd
 import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
 import type { FlowReading } from '@/services/oiFlow';
 import '@/styles/sellstrategy.css';
-import { OptionType, OrderStatus, Side, TradingMode, type HorizonId, type OptionTypeId, type TradingModeId } from '../../../shared/tradeEnums.js';
+import { Horizon, OptionType, OrderStatus, Side, TradingMode, type OptionTypeId, type TradingModeId } from '../../../shared/tradeEnums.js';
 import { OptionSetup, optionSetupLabel, setupPatternLabel, type OptionSetupId } from '../../../shared/analysisEnums.js';
 import { STRATEGY_MODES, StrategyMode, strategyModeLabel, type StrategyModeId } from '../../../shared/appEnums.js';
 import { ToastColor, type ToastColorId } from '@/utils/uiEnums';
@@ -32,8 +32,6 @@ interface SellStrategyProps {
   daysToExpiry?: number;
   atmStrike?: number;
   orderMode: TradingModeId;
-  /** Intraday or positional: the trade type the Option Chain has chosen (useTradeHorizon). */
-  horizon: HorizonId;
   expiry: string;
   onToast: (text: string, color: ToastColorId) => void;
   mode: StrategyModeId;
@@ -106,7 +104,6 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
   daysToExpiry,
   atmStrike,
   orderMode,
-  horizon,
   expiry,
   onToast,
   mode,
@@ -185,7 +182,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           side,
           quantity: instrument.lotSize,
           expiry,
-          horizon,
+          horizon: Horizon.Intraday,
           note,
           confidence,
         });
@@ -203,7 +200,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           side,
           quantity: row.ce.lotSize,
           expiry,
-          horizon,
+          horizon: Horizon.Intraday,
           note,
           confidence,
         });
@@ -215,7 +212,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           side,
           quantity: row.pe.lotSize,
           expiry,
-          horizon,
+          horizon: Horizon.Intraday,
           note,
           confidence,
         });
@@ -237,7 +234,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           side,
           quantity: ceRow.ce.lotSize,
           expiry,
-          horizon,
+          horizon: Horizon.Intraday,
           note,
           confidence,
         });
@@ -249,7 +246,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
           side,
           quantity: peRow.pe.lotSize,
           expiry,
-          horizon,
+          horizon: Horizon.Intraday,
           note,
           confidence,
         });
@@ -261,7 +258,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
     } catch (err) {
       onToast(tradeErrorMessage(err), ToastColor.Red);
     }
-  }, [chain, effectivePrices, orderMode, expiry, onToast, mode, horizon, showLegs]);
+  }, [chain, effectivePrices, orderMode, expiry, onToast, mode, showLegs]);
 
   const handleModeChange = useCallback((newMode: StrategyModeId) => {
     onModeChange(newMode);

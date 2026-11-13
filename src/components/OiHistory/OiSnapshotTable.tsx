@@ -9,6 +9,8 @@ import { InfoIcon } from '@/components/icons/Icons';
 import { OptionType, Side, type OptionTypeId, type SideId } from '../../../shared/tradeEnums.js';
 import { OiFlow, oiFlowLabel, rolloverPatternLabel } from '../../../shared/analysisEnums.js';
 
+const premiumLabel = (price: number): string => `₹${price.toFixed(price < 10 ? 2 : price < 100 ? 1 : 0)}`;
+
 /** Strikes shown above and below ATM before the grid scrolls vertically. */
 const STRIKES_EACH_SIDE = 10;
 
@@ -25,6 +27,8 @@ interface OiSnapshotTableProps {
   selectedStrike: number | null;
   onSelectStrike: (strike: number) => void;
   onTrade: (cell: OiCellData, optionType: OptionTypeId, side: SideId, strike: number, expiry: string) => void;
+  /** Opens the order popup for that contract (clicking its cell). */
+  onOpenOrder: (cell: OiCellData, optionType: OptionTypeId, strike: number, expiry: string) => void;
 }
 
 export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
@@ -39,6 +43,7 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
   selectedStrike,
   onSelectStrike,
   onTrade,
+  onOpenOrder,
 }) => {
   const [showPatternInfo, setShowPatternInfo] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -143,11 +148,12 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
                     const cell = cells.get(exp);
                     const { text, chgCls } = formatOiWithChg(cell?.ceOi || 0, cell?.cePrevOi);
                     const closePrice = cell?.ceClose || 0;
+                    const orderable = Boolean(cell?.ceToken) && closePrice > 0;
                     return (
-                      <td key={`ce-${exp}`} title={flowTitle('CE IV flow', flowFor(cell?.ceToken)) || undefined} className={`oi-history__cell--ce oi-history__cell--tradeable ${isCeItm ? 'oi-history__cell--itm-ce' : ''} ${chgCls}`}>
+                      <td key={`ce-${exp}`} title={flowTitle('CE IV flow', flowFor(cell?.ceToken)) || undefined} className={`oi-history__cell--ce oi-history__cell--tradeable ${orderable ? 'oi-history__cell--orderable' : ''} ${isCeItm ? 'oi-history__cell--itm-ce' : ''} ${chgCls}`} onClick={orderable ? () => onOpenOrder(cell!, OptionType.CE, strike, exp) : undefined}>
                         <div className="oi-history__cell-content">
                           <span className="oi-history__cell-primary">{text}</span>
-                          {closePrice > 0 && <span className="oi-history__cell-price">₹{closePrice.toFixed(closePrice < 10 ? 2 : closePrice < 100 ? 1 : 0)}</span>}
+                          {closePrice > 0 && <span className="oi-history__cell-price">{premiumLabel(closePrice)}</span>}
                         </div>
                         {cell?.ceToken && closePrice > 0 && (
                           <div className="oi-history__cell-actions">
@@ -171,11 +177,12 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
                     const cell = cells.get(exp);
                     const { text, chgCls } = formatOiWithChg(cell?.peOi || 0, cell?.pePrevOi);
                     const closePrice = cell?.peClose || 0;
+                    const orderable = Boolean(cell?.peToken) && closePrice > 0;
                     return (
-                      <td key={`pe-${exp}`} title={flowTitle('PE IV flow', flowFor(cell?.peToken)) || undefined} className={`oi-history__cell--pe oi-history__cell--tradeable ${isPeItm ? 'oi-history__cell--itm-pe' : ''} ${chgCls}`}>
+                      <td key={`pe-${exp}`} title={flowTitle('PE IV flow', flowFor(cell?.peToken)) || undefined} className={`oi-history__cell--pe oi-history__cell--tradeable ${orderable ? 'oi-history__cell--orderable' : ''} ${isPeItm ? 'oi-history__cell--itm-pe' : ''} ${chgCls}`} onClick={orderable ? () => onOpenOrder(cell!, OptionType.PE, strike, exp) : undefined}>
                         <div className="oi-history__cell-content">
                           <span className="oi-history__cell-primary">{text}</span>
-                          {closePrice > 0 && <span className="oi-history__cell-price">₹{closePrice.toFixed(closePrice < 10 ? 2 : closePrice < 100 ? 1 : 0)}</span>}
+                          {closePrice > 0 && <span className="oi-history__cell-price">{premiumLabel(closePrice)}</span>}
                         </div>
                         {cell?.peToken && closePrice > 0 && (
                           <div className="oi-history__cell-actions">

@@ -3060,6 +3060,10 @@ span.oi-history__chart-legend-item:hover {
   position: relative;
 }
 
+.oi-history__cell--orderable {
+  cursor: pointer;
+}
+
 .oi-history__cell-content {
   display: flex;
   flex-direction: column;

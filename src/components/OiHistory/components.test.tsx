@@ -83,6 +83,7 @@ describe('OiSnapshotTable', () => {
         selectedStrike={22500}
         onSelectStrike={() => {}}
         onTrade={() => {}}
+        onOpenOrder={() => {}}
       />,
     );
     expect(html).toContain('OI Snapshot');
@@ -93,6 +94,18 @@ describe('OiSnapshotTable', () => {
     expect(html).toContain('oi-history__row--atm');
     expect(html.match(/oi-history__action-btn--buy/g)).toHaveLength(2);
     expect(html).not.toContain('oi-history__flow-label');
+  });
+
+  it('lets only a contract with a token and a premium open the order popup', () => {
+    const untradeable = [{ ...rows[0], cells: new Map([['2026-10-27', cell({ ceOi: 1000, ceClose: 120, ceToken: 11, peOi: 1000, peClose: 0, peToken: 12 })]]) }];
+    const html = renderToStaticMarkup(
+      <OiSnapshotTable rows={untradeable} expiries={['2026-10-27']} isMonthlyExpiry={() => true} filterDate="2026-10-23" atmStrike={22500}
+        spotClose={22450} maxConsolidatedOi={1000} flowByToken={new Map()} selectedStrike={null} onSelectStrike={() => {}}
+        onTrade={() => {}} onOpenOrder={() => {}} />,
+    );
+    const cellTag = (type: string) => html.match(new RegExp(`<td[^>]*oi-history__cell--${type} [^>]*>`))?.[0] ?? '';
+    expect(cellTag('ce')).toContain('oi-history__cell--orderable');
+    expect(cellTag('pe')).not.toContain('oi-history__cell--orderable');
   });
 
   it('shows the IV flow under the pattern with its details on hover', () => {
@@ -114,6 +127,7 @@ describe('OiSnapshotTable', () => {
         selectedStrike={22500}
         onSelectStrike={() => {}}
         onTrade={() => {}}
+        onOpenOrder={() => {}}
       />,
     );
     expect(html).toContain('IV: Writers Adding');
