@@ -35,14 +35,14 @@ const ALLOWED = new Map([
   [path.join('src', 'components', 'Automation', 'autoTradeView.ts'), [{ values: ['Selected', 'Rejected', 'Closed'], reason: "fallback wording of a lifecycle event shown to the user" }]],
   [path.join('src', 'components', 'PaperOrders', 'PaperOrders.tsx'), [{ values: ['Cancelled', 'Market'], reason: "the order badge and price-column wording" }]],
   [path.join('src', 'components', 'Sidebar', 'Sidebar.tsx'), [{ values: ['Admin'], reason: "the collapsed nav item tooltip" }]],
-  [path.join('src', 'components', 'StockSetups', 'StockSetupsPanel.tsx'), [{ values: ['Rejected'], reason: "a zone that turned the price away (Held / Rejected wording)" }]],
+  [path.join('src', 'components', 'StockSetups', 'setupDetails.ts'), [{ values: ['Rejected'], reason: "a zone that turned the price away (Held / Rejected wording)" }]],
   [path.join('src', 'components', 'WinLossPatterns', 'winLossStats.ts'), [{ values: ['Unknown'], reason: "the name shown for trades recorded without a strategy or setup" }]],
   [path.join('src', 'pages', 'AdminUsers.tsx'), [{ values: ['Unknown'], reason: "the name shown for a user without one" }]],
   [path.join('src', 'pages', 'Health.tsx'), [{ values: ['Active', 'Down', 'Idle'], reason: "the Kite connection wording (Active / Offline), the database's (Connected / Down) and the OI feed's (Fresh / Idle)" }]],
-  [path.join('src', 'pages', 'Positions.tsx'), [{ values: ['Profit', 'Loss'], reason: "the payoff marker wording" }]],
+  [path.join('src', 'components', 'Positions', 'PayoffChart.tsx'), [{ values: ['Profit', 'Loss'], reason: "the payoff marker wording" }]],
   [path.join('src', 'pages', 'Profile.tsx'), [{ values: ['Inactive'], reason: "the subscription line shown when there is none" }]],
   [path.join('src', 'pages', 'Settings.tsx'), [{ values: ['Orders'], reason: "the Trading Mode card's eyebrow heading" }]],
-  [path.join('src', 'pages', 'Watchlist.tsx'), [{ values: ['Active', 'Triggered'], reason: "the alert status wording shown in the list" }]],
+  [path.join('src', 'components', 'Watchlist', 'PriceAlertsTable.tsx'), [{ values: ['Active', 'Triggered'], reason: "the alert status wording shown in the list" }]],
   [path.join('server', 'tradeEngine', 'positions.js'), [{ values: ['Exit'], reason: "the algo log source tag" }]],
   [path.join('shared', 'paperOrders.js'), [{ values: ['Cancelled'], reason: "the cancel reason wording stored in status_reason" }]],
 ]);
@@ -52,7 +52,7 @@ const ALLOWED = new Map([
  * @type {Map<string, { expressions: string[], reason: string }[]>}
  */
 const CSS_WORD_HELPERS = new Map([
-  [path.join('src', 'components', 'OptionChain', 'OptionChain.tsx'), [{ expressions: ['sideClass'], reason: "'ce' or 'pe', set just above" }]],
+  [path.join('src', 'components', 'OiHistory', 'StrikeHistoryCard.tsx'), [{ expressions: ['verdictClass(summary.verdict)'], reason: 'rich / cheap / fair, from verdictClass just above' }]],
   [path.join('src', 'components', 'SellStrategy', 'SellStrategy.tsx'), [
     { expressions: ['colorClass'], reason: 'scoreColorClass returns a CSS word' },
     { expressions: ['actionBtnClass(rec.type)'], reason: 'returns the lower-cased option type or a CSS word' },

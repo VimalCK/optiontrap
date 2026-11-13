@@ -1,131 +1,53 @@
-import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { BellIcon, CloseIcon, DragHandleIcon, ResetIcon, TrashIcon } from '@/components/icons/Icons';
-import {
-  fetchWatchlists,
-  fetchWatchlistItems,
-  createWatchlist,
-  renameWatchlist as renameWatchlistApi,
-  deleteWatchlist as deleteWatchlistApi,
-  addWatchlistItem,
-  removeWatchlistItem,
-  reorderWatchlistItems,
-  WatchlistMeta,
-  WatchlistItem,
-} from '@/services/watchlist';
-import { loadInstruments, searchInstruments, getDisplayLabel, Instrument } from '@/services/instruments';
-import { Tick } from '@/services/kiteTicker';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { reorderWatchlistItems, type WatchlistItem } from '@/services/watchlist';
+import { loadInstruments, type Instrument } from '@/services/instruments';
+import type { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe } from '@/services/tickerSingleton';
-import AppSelect from '@/components/AppSelect/AppSelect';
-import TabBar from '@/components/TabBar/TabBar';
-import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
-import {
-  PriceAlert,
-  createPriceAlert,
-  deletePriceAlert,
-  describePriceAlert,
-  fetchPriceAlerts,
-  isPriceAlertTriggered,
-  resetPriceAlert,
-  triggerPriceAlert,
-} from '@/services/priceAlerts';
 import { fetchStockScans, type ScanSummary } from '@/services/stockSetups';
-import { ApiError, isAbortError } from '@/services/apiClient';
+import { isAbortError } from '@/services/apiClient';
 import { isCashStock } from '../../shared/stockSetups.js';
 import StockSetupsPanel from '@/components/StockSetups/StockSetupsPanel';
 import SetupScorecard from '@/components/StockSetups/SetupScorecard';
-import SetupChip from '@/components/StockSetups/SetupChip';
-import { InstrumentType } from '../../shared/tradeEnums.js';
-import { PRICE_ALERT_CONDITIONS, PriceAlertCondition, PriceAlertStatus, priceAlertConditionLabel, type PriceAlertConditionId } from '../../shared/appEnums.js';
+import WatchlistTabs from '@/components/Watchlist/WatchlistTabs';
+import InstrumentSearch from '@/components/Watchlist/InstrumentSearch';
+import WatchlistTable from '@/components/Watchlist/WatchlistTable';
+import PriceAlertsTable from '@/components/Watchlist/PriceAlertsTable';
+import PriceAlertModal, { type AlertPrefill } from '@/components/Watchlist/PriceAlertModal';
+import { useWatchlists } from '@/components/Watchlist/useWatchlists';
+import { failureMessage, usePriceAlerts, useTimedToast } from '@/components/Watchlist/usePriceAlerts';
+import { useDragReorder } from '@/components/Watchlist/useDragReorder';
+import { withPriceTicks, type LivePrice } from '@/components/Watchlist/watchlistRows';
 import '@/styles/watchlist.css';
 
-interface LivePrice {
-  ltp: number;
-  close: number;
-  high: number;
-  low: number;
-}
+const Spinner: React.FC = () => (
+  <div className="wl-loading">
+    <div className="wl-loading__spinner" />
+  </div>
+);
 
 const Watchlist: React.FC = () => {
-  // Tab metadata (no items)
-  const [tabs, setTabs] = useState<WatchlistMeta[]>([]);
-  const [activeTabId, setActiveTabId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  // Active tab's items (loaded on demand)
-  const [items, setItems] = useState<WatchlistItem[]>([]);
-  const [itemsLoading, setItemsLoading] = useState(false);
-  const loadedTabRef = useRef<string | null>(null);
-
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<Instrument[]>([]);
-  const [showDropdown, setShowDropdown] = useState(false);
-  const [highlightIdx, setHighlightIdx] = useState(-1);
+  const lists = useWatchlists();
+  const { activeTab, activeTabId, items, setItems } = lists;
   const [instruments, setInstruments] = useState<Instrument[]>([]);
-  const searchRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState('');
-  // Width of the tab being renamed, so its name box starts the same size and nothing moves.
-  const [renameWidth, setRenameWidth] = useState<number | null>(null);
-  const renameInputRef = useRef<HTMLInputElement>(null);
-
-  const [showNewInput, setShowNewInput] = useState(false);
-  const [newListName, setNewListName] = useState('');
-  const newInputRef = useRef<HTMLInputElement>(null);
-
   const [livePrices, setLivePrices] = useState<Map<number, LivePrice>>(new Map());
-  const [alerts, setAlerts] = useState<PriceAlert[]>([]);
-  // Read by the tick handler, which fires too often to re-create on every alert change.
-  const alertsRef = useRef<PriceAlert[]>([]);
-  const [alertDraftItem, setAlertDraftItem] = useState<WatchlistItem | null>(null);
-  const [alertCondition, setAlertCondition] = useState<PriceAlertConditionId>(PriceAlertCondition.Above);
-  const [alertValue, setAlertValue] = useState('');
-  const [alertNote, setAlertNote] = useState('');
-  const [alertBrowserNotification, setAlertBrowserNotification] = useState(false);
-  const [alertToast, setAlertToast] = useState<string | null>(null);
-  const alertToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  const { toast, showToast } = useTimedToast();
+  const priceAlerts = usePriceAlerts(showToast);
+  const { checkTicks } = priceAlerts;
+  const [alertDraft, setAlertDraft] = useState<{ item: WatchlistItem; prefill?: AlertPrefill } | null>(null);
   const [setupsItem, setSetupsItem] = useState<WatchlistItem | null>(null);
   // The stock row selected to show its setup scorecard; clicking it again hides the card.
   const [scorecardToken, setScorecardToken] = useState<number | null>(null);
-  // Drag to reorder: the row whose handle is pressed (only that row is draggable), the
-  // row being dragged, and the order before the drag to compare against and restore.
-  const [dragArmedId, setDragArmedId] = useState<string | null>(null);
-  const [draggingId, setDraggingId] = useState<string | null>(null);
-  const dragStartOrderRef = useRef<WatchlistItem[] | null>(null);
   const [scans, setScans] = useState<Map<number, ScanSummary>>(new Map());
   const [scansVersion, setScansVersion] = useState(0);
 
-  const activeTab = useMemo(
-    () => tabs.find((t) => t.id === activeTabId) ?? null,
-    [tabs, activeTabId],
-  );
-
-  useEffect(() => {
-    fetchWatchlists()
-      .then((data) => {
-        setTabs(data);
-        if (data.length > 0) setActiveTabId(data[0].id);
-      })
-      .catch((err) => console.error('[Watchlist] Load failed:', err))
-      .finally(() => setLoading(false));
-  }, []);
-
-  useEffect(() => {
-    if (!activeTabId || loadedTabRef.current === activeTabId) return;
-
-    setItemsLoading(true);
-    loadedTabRef.current = activeTabId;
-
-    fetchWatchlistItems(activeTabId)
-      .then((data) => setItems(data.items))
-      .catch((err) => {
-        console.error('[Watchlist] Load items failed:', err);
-        setItems([]);
-      })
-      .finally(() => setItemsLoading(false));
-  }, [activeTabId]);
+  const drag = useDragReorder({
+    items,
+    setItems,
+    save: async (ordered) => {
+      if (activeTabId) await reorderWatchlistItems(activeTabId, ordered.map((i) => i.id));
+    },
+    onSaveFailed: (err) => showToast(failureMessage('save the new order', err)),
+  });
 
   useEffect(() => {
     loadInstruments()
@@ -133,23 +55,7 @@ const Watchlist: React.FC = () => {
       .catch((err) => console.error('[Watchlist] Instruments load failed:', err));
   }, []);
 
-  const instrumentMap = useMemo(() => {
-    const map = new Map<number, Instrument>();
-    for (const inst of instruments) map.set(inst.instrumentToken, inst);
-    return map;
-  }, [instruments]);
-
-  useEffect(() => {
-    alertsRef.current = alerts;
-  }, [alerts]);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    fetchPriceAlerts(controller.signal)
-      .then(setAlerts)
-      .catch((err) => { if (!isAbortError(err)) console.error('[Watchlist] Price alerts load failed:', err); });
-    return () => controller.abort();
-  }, []);
+  const instrumentMap = useMemo(() => new Map(instruments.map((inst) => [inst.instrumentToken, inst])), [instruments]);
 
   // Reload scans on mount and after a panel closes: opening one re-scans that stock.
   useEffect(() => {
@@ -176,646 +82,65 @@ const Watchlist: React.FC = () => {
     setScansVersion((v) => v + 1);
   }, []);
 
-  useEffect(() => () => {
-    if (alertToastTimerRef.current) clearTimeout(alertToastTimerRef.current);
-  }, []);
-
-  const showAlertToast = useCallback((message: string) => {
-    setAlertToast(message);
-    if (alertToastTimerRef.current) clearTimeout(alertToastTimerRef.current);
-    alertToastTimerRef.current = setTimeout(() => setAlertToast(null), 5000);
-  }, []);
-
-  const notifyAlertTriggered = useCallback((alert: PriceAlert, currentPrice: number) => {
-    const message = `${describePriceAlert(alert)} hit. Current: ${formatPrice(currentPrice)}`;
-    showAlertToast(message);
-
-    if (alert.browserNotification && 'Notification' in window && Notification.permission === 'granted') {
-      new Notification('OptionTrap Price Alert', { body: message });
-    }
-  }, [showAlertToast]);
-
   const handleTicks = useCallback((ticks: Tick[]) => {
-    setLivePrices((prev) => {
-      let changed = false;
-      const next = new Map(prev);
-      for (const t of ticks) {
-        const existing = next.get(t.instrumentToken);
-        if (!existing || existing.ltp !== t.lastPrice) {
-          next.set(t.instrumentToken, {
-            ltp: t.lastPrice,
-            close: t.closePrice ?? existing?.close ?? 0,
-            high: t.highPrice ?? existing?.high ?? 0,
-            low: t.lowPrice ?? existing?.low ?? 0,
-          });
-          changed = true;
-        }
-      }
-      return changed ? next : prev;
-    });
+    setLivePrices((prev) => withPriceTicks(prev, ticks));
+    checkTicks(ticks);
+  }, [checkTicks]);
 
-    const priceByToken = new Map(ticks.map((t) => [t.instrumentToken, t.lastPrice]));
-    const hits = new Map<string, number>();
-    for (const alert of alertsRef.current) {
-      const currentPrice = priceByToken.get(alert.instrumentToken);
-      if (currentPrice !== undefined && isPriceAlertTriggered(alert, currentPrice)) hits.set(alert.id, currentPrice);
-    }
-    if (hits.size === 0) return;
-
-    // Mark them triggered here at once so the next tick doesn't fire them again, then save.
-    const triggeredAt = new Date().toISOString();
-    const markHits = (list: PriceAlert[]) => list.map((alert) => (hits.has(alert.id) && alert.status === PriceAlertStatus.Active
-      ? { ...alert, status: PriceAlertStatus.Triggered, triggeredAt, triggeredPrice: hits.get(alert.id) }
-      : alert));
-    for (const alert of alertsRef.current) {
-      const price = hits.get(alert.id);
-      if (price !== undefined) notifyAlertTriggered(alert, price);
-    }
-    alertsRef.current = markHits(alertsRef.current);
-    setAlerts(markHits);
-
-    for (const [id, price] of hits) {
-      triggerPriceAlert(id, price)
-        .then((saved) => setAlerts((prev) => prev.map((alert) => (alert.id === saved.id ? saved : alert))))
-        .catch((err) => {
-          // 404: another tab or device already triggered it, or it was deleted.
-          if (!(err instanceof ApiError && err.status === 404)) console.error('[Watchlist] Saving triggered alert failed:', err);
-        });
-    }
-  }, [notifyAlertTriggered]);
-
-  const activeTokens = useMemo(
-    () => items.map((item) => item.instrumentToken),
-    [items],
-  );
+  const activeTokens = useMemo(() => items.map((item) => item.instrumentToken), [items]);
 
   useEffect(() => {
     if (activeTokens.length === 0) return;
-    const unsub = tickerSubscribe('watchlist', activeTokens, handleTicks);
-    return unsub;
+    return tickerSubscribe('watchlist', activeTokens, handleTicks);
   }, [activeTokens, handleTicks]);
 
-  useEffect(() => {
-    if (!searchQuery.trim()) {
-      setSearchResults([]);
-      setShowDropdown(false);
-      return;
-    }
-    const results = searchInstruments(instruments, searchQuery);
-
-    const existingTokens = new Set(items.map((i) => i.instrumentToken));
-    const filtered = results.filter((r) => !existingTokens.has(r.instrumentToken));
-
-    setSearchResults(filtered);
-    setShowDropdown(filtered.length > 0);
-    setHighlightIdx(-1);
-  }, [searchQuery, instruments, items]);
-
-  useEffect(() => {
-    const handleClick = (e: MouseEvent) => {
-      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
-        setShowDropdown(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, []);
-
-  useEffect(() => {
-    if (renamingId && renameInputRef.current) {
-      renameInputRef.current.focus();
-      renameInputRef.current.select();
-    }
-  }, [renamingId]);
-
-  useEffect(() => {
-    if (showNewInput && newInputRef.current) {
-      newInputRef.current.focus();
-    }
-  }, [showNewInput]);
-
-  const handleTabSwitch = (id: string) => {
+  const openTab = (id: string) => {
     if (id === activeTabId) return;
-    setActiveTabId(id);
-    loadedTabRef.current = null;
+    lists.openTab(id);
     setLivePrices(new Map());
-    setSearchQuery('');
-    setShowDropdown(false);
   };
 
-  const handleCreateList = async () => {
-    const name = newListName.trim();
-    if (!name) return;
-
-    try {
-      const meta = await createWatchlist(name);
-      setTabs((prev) => [...prev, meta]);
-      handleTabSwitch(meta.id);
-      setNewListName('');
-      setShowNewInput(false);
-    } catch (err) {
-      console.error('[Watchlist] Create failed:', err);
-    }
+  const createList = async (name: string) => {
+    const meta = await lists.createList(name);
+    if (meta) openTab(meta.id);
+    return meta !== null;
   };
 
-  const handleRenameSubmit = async () => {
-    if (!renamingId || !renameValue.trim()) {
-      setRenamingId(null);
-      return;
-    }
-
-    try {
-      await renameWatchlistApi(renamingId, renameValue.trim());
-      setTabs((prev) =>
-        prev.map((t) => (t.id === renamingId ? { ...t, name: renameValue.trim() } : t)),
-      );
-    } catch (err) {
-      console.error('[Watchlist] Rename failed:', err);
-    }
-    setRenamingId(null);
-  };
-
-  const handleDeleteList = async (id: string) => {
-    try {
-      await deleteWatchlistApi(id);
-      setTabs((prev) => {
-        const updated = prev.filter((t) => t.id !== id);
-        if (activeTabId === id) {
-          const nextId = updated.length > 0 ? updated[0].id : null;
-          setActiveTabId(nextId);
-          loadedTabRef.current = null;
-          if (!nextId) setItems([]);
-        }
-        return updated;
-      });
-    } catch (err) {
-      console.error('[Watchlist] Delete failed:', err);
-    }
-  };
-
-  const handleAddItem = async (instrument: Instrument) => {
-    if (!activeTabId) return;
-
-    try {
-      const item = await addWatchlistItem(activeTabId, {
-        instrumentToken: instrument.instrumentToken,
-        tradingsymbol: instrument.tradingsymbol,
-        exchange: instrument.exchange,
-      });
-
-      setItems((prev) => [...prev, item]);
-      setTabs((prev) =>
-        prev.map((t) =>
-          t.id === activeTabId ? { ...t, itemCount: t.itemCount + 1 } : t,
-        ),
-      );
-      setSearchQuery('');
-      setShowDropdown(false);
-    } catch (err) {
-      console.error('[Watchlist] Add item failed:', err);
-    }
-  };
-
-  const handleRemoveItem = async (item: WatchlistItem) => {
-    if (!activeTabId) return;
-
-    try {
-      await removeWatchlistItem(activeTabId, item.id);
-      setItems((prev) => prev.filter((i) => i.id !== item.id));
-      setTabs((prev) =>
-        prev.map((t) =>
-          t.id === activeTabId ? { ...t, itemCount: Math.max(0, t.itemCount - 1) } : t,
-        ),
-      );
-    } catch (err) {
-      console.error('[Watchlist] Remove item failed:', err);
-    }
-  };
-
-  // Pressing a handle arms its row for dragging; releasing without a drag disarms it.
-  useEffect(() => {
-    if (!dragArmedId || draggingId) return;
-    const disarm = () => setDragArmedId(null);
-    window.addEventListener('mouseup', disarm);
-    return () => window.removeEventListener('mouseup', disarm);
-  }, [dragArmedId, draggingId]);
-
-  const dragOverItem = (target: WatchlistItem) => {
-    if (!draggingId || draggingId === target.id) return;
-    setItems((prev) => {
-      const from = prev.findIndex((i) => i.id === draggingId);
-      const to = prev.findIndex((i) => i.id === target.id);
-      if (from < 0 || to < 0) return prev;
-      const next = [...prev];
-      next.splice(to, 0, next.splice(from, 1)[0]);
-      return next;
-    });
-  };
-
-  /** Save the new order when a drag ends; put the old one back if saving fails. */
-  const finishDrag = async () => {
-    const before = dragStartOrderRef.current;
-    dragStartOrderRef.current = null;
-    setDraggingId(null);
-    setDragArmedId(null);
-    if (!before || !activeTabId) return;
-    const after = items;
-    if (after.every((item, i) => item.id === before[i]?.id)) return;
-    try {
-      await reorderWatchlistItems(activeTabId, after.map((i) => i.id));
-    } catch (err) {
-      setItems(before);
-      showAlertToast(`Couldn't save the new order: ${err instanceof Error ? err.message : 'request failed'}`);
-    }
-  };
-
-  const openAlertModal = (item: WatchlistItem, prefill?: { condition: PriceAlertConditionId; value: number; note: string }) => {
-    const currentPrice = livePrices.get(item.instrumentToken)?.ltp;
-    setAlertDraftItem(item);
-    setAlertCondition(prefill?.condition ?? PriceAlertCondition.Above);
-    setAlertValue(prefill ? prefill.value.toFixed(2) : currentPrice ? currentPrice.toFixed(2) : '');
-    setAlertNote(prefill?.note ?? '');
-    setAlertBrowserNotification(false);
-  };
-
-  const closeAlertModal = () => {
-    setAlertDraftItem(null);
-    setAlertValue('');
-    setAlertNote('');
-    setAlertBrowserNotification(false);
-  };
-
-  const handleCreateAlert = async () => {
-    if (!alertDraftItem) return;
-    const value = Number(alertValue);
-    if (!Number.isFinite(value) || value <= 0) return;
-
-    let browserNotification = alertBrowserNotification;
-    if (browserNotification && 'Notification' in window && Notification.permission === 'default') {
-      const permission = await Notification.requestPermission();
-      browserNotification = permission === 'granted';
-    }
-
-    try {
-      const alert = await createPriceAlert({
-        instrumentToken: alertDraftItem.instrumentToken,
-        tradingsymbol: alertDraftItem.tradingsymbol,
-        exchange: alertDraftItem.exchange,
-        condition: alertCondition,
-        value,
-        note: alertNote.trim() || undefined,
-        browserNotification,
-      });
-      setAlerts((prev) => [alert, ...prev]);
-      closeAlertModal();
-    } catch (err) {
-      showAlertToast(`Couldn't save the alert: ${err instanceof Error ? err.message : 'request failed'}`);
-    }
-  };
-
-  const adjustAlertValue = (delta: number) => {
-    const current = Number(alertValue) || 0;
-    const next = Math.max(0, current + delta);
-    setAlertValue(next.toFixed(2));
-  };
-
-  const handleDeleteAlert = async (id: string) => {
-    try {
-      await deletePriceAlert(id);
-      setAlerts((prev) => prev.filter((alert) => alert.id !== id));
-    } catch (err) {
-      showAlertToast(`Couldn't delete the alert: ${err instanceof Error ? err.message : 'request failed'}`);
-    }
-  };
-
-  const handleResetAlert = async (id: string) => {
-    try {
-      const saved = await resetPriceAlert(id);
-      setAlerts((prev) => prev.map((alert) => (alert.id === id ? saved : alert)));
-    } catch (err) {
-      showAlertToast(`Couldn't reset the alert: ${err instanceof Error ? err.message : 'request failed'}`);
-    }
-  };
-
-  const handleSearchKeyDown = (e: React.KeyboardEvent) => {
-    if (!showDropdown) return;
-
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      setHighlightIdx((prev) => Math.min(prev + 1, searchResults.length - 1));
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      setHighlightIdx((prev) => Math.max(prev - 1, 0));
-    } else if (e.key === 'Enter' && highlightIdx >= 0) {
-      e.preventDefault();
-      handleAddItem(searchResults[highlightIdx]);
-    } else if (e.key === 'Escape') {
-      setShowDropdown(false);
-    }
-  };
-
-  const formatPrice = (n: number) =>
-    n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-
-  const getChange = (price: LivePrice) => {
-    if (!price.close) return { abs: 0, pct: 0 };
-    const abs = price.ltp - price.close;
-    const pct = (abs / price.close) * 100;
-    return { abs, pct };
-  };
-
-  const formatDateTime = (value?: string) => value
-    ? new Date(value).toLocaleString('en-IN', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
-    : '-';
-
-  const activeAlerts = alerts.filter((alert) => alert.status === PriceAlertStatus.Active);
-  const triggeredAlerts = alerts.filter((alert) => alert.status === PriceAlertStatus.Triggered);
-  const groupedAlerts = alerts.reduce<Array<{ key: string; symbol: string; exchange: string; alerts: PriceAlert[] }>>((groups, alert) => {
-    const key = `${alert.instrumentToken}`;
-    const group = groups.find((g) => g.key === key);
-    if (group) group.alerts.push(alert);
-    else groups.push({ key, symbol: alert.tradingsymbol, exchange: alert.exchange, alerts: [alert] });
-    return groups;
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="wl-loading">
-        <div className="wl-loading__spinner" />
-      </div>
-    );
-  }
+  if (lists.loading) return <Spinner />;
 
   return (
     <div className="wl">
-      {alertToast && (
+      {toast && (
         <div className="wl-alert-toast" role="status">
           <span className="wl-alert-toast__icon">!</span>
-          <span>{alertToast}</span>
+          <span>{toast}</span>
         </div>
       )}
 
-      <TabBar
-        items={tabs.map((tab) => ({
-          id: tab.id,
-          label: <><span className="tab-bar__text">{tab.name}</span><span className="wl-tab__count">{tab.itemCount}</span></>,
-          title: tab.name,
-        }))}
-        activeId={activeTabId}
-        onChange={handleTabSwitch}
-        className="wl-tabs"
-        tabClassName="wl-tab"
-        ariaLabel="Watchlists"
-        foldActiveWhenTight={showNewInput}
-        renderMeasure={(item, active) => {
-          const tab = tabs.find((t) => t.id === item.id);
-          return (
-            <div key={item.id} className={`wl-tab tab-bar__tab${active ? ' wl-tab--active' : ''}`}>
-              <span className="wl-tab__label"><span className="tab-bar__text">{tab?.name}</span></span>
-              <span className="wl-tab__badge"><span className="wl-tab__count">{tab?.itemCount}</span></span>
-            </div>
-          );
-        }}
-        renderTab={(item, active) => {
-          const tab = tabs.find((t) => t.id === item.id);
-          if (renamingId === item.id) {
-            // Editing: only the name box, sized like the tab it replaces. The tab holds the
-            // width (and narrows on a tight row); the box fills it, so its border always shows.
-            return (
-              <div
-                key={item.id}
-                className="wl-tab tab-bar__tab wl-tab--editing"
-                style={renameWidth ? { width: Math.max(renameWidth, 96) } : undefined}
-              >
-                <input
-                  ref={renameInputRef}
-                  className="wl-tab__rename-input"
-                  value={renameValue}
-                  onChange={(e) => setRenameValue(e.target.value)}
-                  onBlur={handleRenameSubmit}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleRenameSubmit();
-                    if (e.key === 'Escape') setRenamingId(null);
-                  }}
-                />
-              </div>
-            );
-          }
-          return (
-            <div key={item.id} className={`wl-tab tab-bar__tab${active ? ' wl-tab--active' : ''}`}>
-              <button
-                className="wl-tab__label"
-                title={item.title}
-                onClick={() => handleTabSwitch(item.id)}
-                onDoubleClick={(e) => {
-                  setRenameWidth((e.currentTarget.closest('.wl-tab') as HTMLElement | null)?.offsetWidth ?? null);
-                  setRenamingId(item.id);
-                  setRenameValue(tab?.name ?? '');
-                }}
-              >
-                <span className="tab-bar__text">{tab?.name}</span>
-              </button>
-              {/* The item count; on hover it turns into the delete button, in the same space. */}
-              <button
-                className="wl-tab__badge"
-                onClick={() => handleDeleteList(item.id)}
-                title={`Delete ${tab?.name ?? 'watchlist'}`}
-                aria-label={`Delete watchlist ${tab?.name ?? ''}`}
-              >
-                <span className="wl-tab__count">{tab?.itemCount}</span>
-                <span className="wl-tab__badge-delete" aria-hidden="true">
-                  <CloseIcon size={10} strokeWidth={3} />
-                </span>
-              </button>
-            </div>
-          );
-        }}
-        trailing={showNewInput ? (
-          <div className="wl-tab wl-tab--new">
-            <input
-              ref={newInputRef}
-              className="wl-tab__rename-input wl-tab__rename-input--new"
-              placeholder="List name"
-              value={newListName}
-              onChange={(e) => setNewListName(e.target.value)}
-              onBlur={() => {
-                if (newListName.trim()) handleCreateList();
-                else setShowNewInput(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCreateList();
-                if (e.key === 'Escape') setShowNewInput(false);
-              }}
-            />
-          </div>
-        ) : (
-          <button
-            className="wl-tab wl-tab--add"
-            onClick={() => setShowNewInput(true)}
-            title="Create new watchlist"
-          >
-            +
-          </button>
-        )}
-      />
+      <WatchlistTabs tabs={lists.tabs} activeId={activeTabId} onOpen={openTab} onCreate={createList} onRename={lists.renameList} onDelete={lists.deleteList} />
 
       {activeTab ? (
         <div className="wl-content">
-          <div className="wl-search" ref={searchRef}>
-            <input
-              ref={inputRef}
-              className="wl-search__input"
-              placeholder="Search & add instrument (e.g. RELIANCE, TCS)"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              onKeyDown={handleSearchKeyDown}
-              onFocus={() => {
-                if (searchResults.length > 0) setShowDropdown(true);
-              }}
+          {/* Keyed by the list, so opening another one clears the search. */}
+          <InstrumentSearch key={activeTab.id} instruments={instruments} items={items} itemCount={activeTab.itemCount} onAdd={lists.addItem} />
+
+          {lists.itemsLoading ? <Spinner /> : items.length > 0 ? (
+            <WatchlistTable
+              items={items}
+              instrumentMap={instrumentMap}
+              livePrices={livePrices}
+              scans={scans}
+              isStockItem={isStockItem}
+              selectedToken={scorecardToken}
+              onSelect={(item) => setScorecardToken((prev) => (prev === item.instrumentToken ? null : item.instrumentToken))}
+              drag={drag}
+              onOpenSetups={setSetupsItem}
+              onAlert={(item) => setAlertDraft({ item })}
+              onRemove={lists.removeItem}
             />
-            <span className="wl-search__count">
-              {activeTab.itemCount}/100
-            </span>
-
-            {showDropdown && (
-              <div className="wl-search__dropdown">
-                {searchResults.map((inst, idx) => (
-                  <button
-                    key={inst.instrumentToken}
-                    className={`wl-search__result ${idx === highlightIdx ? 'wl-search__result--active' : ''}`}
-                    onClick={() => handleAddItem(inst)}
-                    onMouseEnter={() => setHighlightIdx(idx)}
-                  >
-                    <span className="wl-search__result-symbol">{getDisplayLabel(inst)}</span>
-                    <span className="wl-search__result-name">{inst.instrumentType === InstrumentType.EQ ? inst.name : inst.tradingsymbol}</span>
-                    <span className={`wl-search__result-exchange wl-exchange--${inst.exchange.toLowerCase()}`}>{inst.exchange}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {itemsLoading ? (
-            <div className="wl-loading">
-              <div className="wl-loading__spinner" />
-            </div>
-          ) : items.length > 0 ? (
-            <div className="wl-table-wrap">
-              <table className="wl-table">
-                <thead>
-                  <tr>
-                    <th className="wl-table__th wl-table__th--symbol">Symbol</th>
-                    <th className="wl-table__th wl-table__th--num">LTP</th>
-                    <th className="wl-table__th wl-table__th--num">Change</th>
-                    <th className="wl-table__th wl-table__th--num">Change %</th>
-                    <th className="wl-table__th wl-table__th--num">High</th>
-                    <th className="wl-table__th wl-table__th--num">Low</th>
-                    <th className="wl-table__th wl-table__th--setup" title="From the latest after-close scan of daily candles">Setups</th>
-                    <th className="wl-table__th wl-table__th--action">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item) => {
-                    const price = livePrices.get(item.instrumentToken);
-                    const change = price ? getChange(price) : null;
-                    const changeColor = change
-                      ? change.abs > 0
-                        ? 'wl-cell--up'
-                        : change.abs < 0
-                          ? 'wl-cell--down'
-                          : ''
-                      : '';
-
-                    return (
-                      <tr
-                        key={item.id}
-                        className={`wl-table__row${isStockItem(item) ? ' wl-table__row--selectable' : ''}${scorecardToken === item.instrumentToken ? ' wl-table__row--selected' : ''}${draggingId === item.id ? ' wl-table__row--dragging' : ''}`}
-                        draggable={dragArmedId === item.id}
-                        onDragStart={(e) => {
-                          dragStartOrderRef.current = items;
-                          setDraggingId(item.id);
-                          e.dataTransfer.effectAllowed = 'move';
-                          e.dataTransfer.setData('text/plain', item.tradingsymbol);
-                        }}
-                        onDragOver={(e) => {
-                          if (!draggingId) return;
-                          e.preventDefault();
-                          e.dataTransfer.dropEffect = 'move';
-                          dragOverItem(item);
-                        }}
-                        onDrop={(e) => e.preventDefault()}
-                        onDragEnd={finishDrag}
-                        onClick={(e) => {
-                          // Buttons, links and the drag handle in the row keep their own actions.
-                          if (!isStockItem(item) || (e.target as HTMLElement).closest('button, a, .wl-drag-handle')) return;
-                          setScorecardToken((prev) => (prev === item.instrumentToken ? null : item.instrumentToken));
-                        }}
-                        aria-selected={scorecardToken === item.instrumentToken}
-                      >
-                        <td className="wl-table__td wl-table__td--symbol">
-                          <span
-                            className="wl-drag-handle"
-                            onMouseDown={() => setDragArmedId(item.id)}
-                            title="Drag to move"
-                            aria-hidden="true"
-                          >
-                            <DragHandleIcon size={14} />
-                          </span>
-                          <span className="wl-symbol">{instrumentMap.has(item.instrumentToken) ? getDisplayLabel(instrumentMap.get(item.instrumentToken)!) : item.tradingsymbol}</span>
-                          <TradingViewLink symbol={item.tradingsymbol} exchange={item.exchange} />
-                          <span className={`wl-exchange wl-exchange--${item.exchange.toLowerCase()}`}>{item.exchange}</span>
-                        </td>
-                        <td className={`wl-table__td wl-table__td--num ${changeColor}`}>
-                          {price ? formatPrice(price.ltp) : '—'}
-                        </td>
-                        <td className={`wl-table__td wl-table__td--num ${changeColor}`}>
-                          {change ? `${change.abs >= 0 ? '+' : ''}${formatPrice(change.abs)}` : '—'}
-                        </td>
-                        <td className={`wl-table__td wl-table__td--num ${changeColor}`}>
-                          {change
-                            ? `${change.pct >= 0 ? '+' : ''}${change.pct.toFixed(2)}%`
-                            : '—'}
-                        </td>
-                        <td className="wl-table__td wl-table__td--num">
-                          {price && price.high ? formatPrice(price.high) : '—'}
-                        </td>
-                        <td className="wl-table__td wl-table__td--num">
-                          {price && price.low ? formatPrice(price.low) : '—'}
-                        </td>
-                        <td className="wl-table__td wl-table__td--setup">
-                          {isStockItem(item) ? (
-                            <SetupChip scan={scans.get(item.instrumentToken)} onOpen={() => setSetupsItem(item)} />
-                          ) : <span className="wl-setup-chip wl-setup-chip--none">—</span>}
-                        </td>
-                        <td className="wl-table__td wl-table__td--action">
-                          <button
-                            className="wl-alert-btn"
-                            onClick={() => openAlertModal(item)}
-                            title="Create price alert"
-                            aria-label={`Create price alert for ${item.tradingsymbol}`}
-                          >
-                            <BellIcon size={14} />
-                          </button>
-                          <button
-                            className="wl-remove-btn"
-                            onClick={() => handleRemoveItem(item)}
-                            title="Remove from watchlist"
-                            aria-label={`Remove ${item.tradingsymbol} from watchlist`}
-                          >
-                            <TrashIcon size={14} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
           ) : (
             <div className="wl-empty">
-              <p className="wl-empty__text">
-                No instruments in this list. Use the search bar above to add stocks.
-              </p>
+              <p className="wl-empty__text">No instruments in this list. Use the search bar above to add stocks.</p>
             </div>
           )}
         </div>
@@ -831,86 +156,7 @@ const Watchlist: React.FC = () => {
         <SetupScorecard key={scorecardItem.instrumentToken} instrumentToken={scorecardItem.instrumentToken} tradingsymbol={scorecardItem.tradingsymbol} refreshKey={scansVersion} />
       )}
 
-      <div className="wl-alerts">
-        <div className="wl-alerts__header">
-          <div>
-            <h3 className="wl-alerts__title">Price Alerts</h3>
-            <p className="wl-alerts__desc">Triggered alerts stay here until you reset or delete them.</p>
-          </div>
-          <span className="wl-alerts__count">{activeAlerts.length} active / {triggeredAlerts.length} triggered</span>
-        </div>
-
-        {alerts.length === 0 ? (
-          <div className="wl-alerts__empty">No price alerts yet. Use the Alert button on a watchlist item.</div>
-        ) : (
-          <div className="wl-alerts__table-wrap">
-            <table className="wl-alerts-table">
-              <thead>
-                <tr>
-                  <th>Symbol</th>
-                  <th className="wl-alerts-table__center">Condition</th>
-                  <th className="wl-alerts-table__num">Tgt</th>
-                  <th className="wl-alerts-table__num">LTP</th>
-                  <th className="wl-alerts-table__center">Status</th>
-                  <th className="wl-alerts-table__center">Time</th>
-                  <th className="wl-alerts-table__center">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {groupedAlerts.map((group) => {
-                  const groupActiveCount = group.alerts.filter((alert) => alert.status === PriceAlertStatus.Active).length;
-                  const groupTriggeredCount = group.alerts.length - groupActiveCount;
-
-                  return (
-                    <React.Fragment key={group.key}>
-                      <tr className="wl-alert-group-row">
-                        <td colSpan={7}>
-                          <span className="wl-alerts-table__symbol">{group.symbol}</span>
-                          <span className={`wl-alerts-table__exchange wl-exchange--${group.exchange.toLowerCase()}`}>{group.exchange}</span>
-                          <span className="wl-alert-group-row__count">
-                            {groupActiveCount} active / {groupTriggeredCount} triggered
-                          </span>
-                        </td>
-                      </tr>
-                      {group.alerts.map((alert) => {
-                        const price = livePrices.get(alert.instrumentToken);
-                        return (
-                          <tr key={alert.id}>
-                            <td>
-                              {alert.note && <div className="wl-alerts-table__note">{alert.note}</div>}
-                            </td>
-                            <td className="wl-alerts-table__center">{priceAlertConditionLabel(alert.condition)}</td>
-                            <td className="wl-alerts-table__num">{formatPrice(alert.value)}</td>
-                            <td className="wl-alerts-table__num">{price ? formatPrice(price.ltp) : alert.triggeredPrice ? formatPrice(alert.triggeredPrice) : '-'}</td>
-                            <td className="wl-alerts-table__center">
-                              <span className={`wl-alert-status wl-alert-status--${alert.status.toLowerCase()}`}>
-                                {alert.status === PriceAlertStatus.Active ? 'Active' : 'Triggered'}
-                              </span>
-                            </td>
-                            <td className="wl-alerts-table__center">{formatDateTime(alert.triggeredAt)}</td>
-                            <td className="wl-alerts-table__center">
-                              <div className="wl-alert-actions">
-                                {alert.status === PriceAlertStatus.Triggered && (
-                                  <button className="wl-alert-action" onClick={() => handleResetAlert(alert.id)} title="Reset alert" aria-label={`Reset ${alert.tradingsymbol} alert`}>
-                                    <ResetIcon size={14} />
-                                  </button>
-                                )}
-                                <button className="wl-alert-action wl-alert-action--delete" onClick={() => handleDeleteAlert(alert.id)} title="Delete alert" aria-label={`Delete ${alert.tradingsymbol} alert`}>
-                                  <TrashIcon size={14} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+      <PriceAlertsTable alerts={priceAlerts.alerts} livePrices={livePrices} onReset={priceAlerts.resetAlert} onDelete={priceAlerts.deleteAlert} />
 
       {setupsItem && (
         <StockSetupsPanel
@@ -921,79 +167,20 @@ const Watchlist: React.FC = () => {
           onSetAlert={(condition, value, note) => {
             const item = setupsItem;
             closeSetupsPanel();
-            openAlertModal(item, { condition, value, note });
+            setAlertDraft({ item, prefill: { condition, value, note } });
           }}
         />
       )}
 
-      {alertDraftItem && (
-        <div className="wl-alert-modal-overlay" onMouseDown={closeAlertModal}>
-          <div className="wl-alert-modal" onMouseDown={(e) => e.stopPropagation()}>
-            <div className="wl-alert-modal__header">
-              <div>
-                <h3>Create Price Alert</h3>
-                <p>{alertDraftItem.tradingsymbol}</p>
-              </div>
-              <button className="wl-alert-modal__close" onClick={closeAlertModal}>x</button>
-            </div>
-
-            <div className="wl-alert-modal__body">
-              <label className="wl-alert-field">
-                <span>Condition</span>
-                <AppSelect
-                  value={alertCondition}
-                  options={PRICE_ALERT_CONDITIONS.map((condition) => ({ value: condition.id, label: condition.label }))}
-                  onChange={(value) => setAlertCondition(value as PriceAlertConditionId)}
-                  className="wl-alert-select"
-                />
-              </label>
-
-              <label className="wl-alert-field">
-                <span>Price</span>
-                <div className="wl-alert-number">
-                  <input
-                    type="number"
-                    value={alertValue}
-                    onChange={(e) => setAlertValue(e.target.value)}
-                    min={0}
-                    step={0.05}
-                    autoFocus
-                  />
-                  <div className="wl-alert-number__btns">
-                    <button type="button" className="wl-alert-number__btn" onClick={() => adjustAlertValue(0.05)}>▲</button>
-                    <button type="button" className="wl-alert-number__btn" onClick={() => adjustAlertValue(-0.05)}>▼</button>
-                  </div>
-                </div>
-              </label>
-
-              <label className="wl-alert-field">
-                <span>Note</span>
-                <textarea
-                  value={alertNote}
-                  onChange={(e) => setAlertNote(e.target.value)}
-                  rows={3}
-                  maxLength={160}
-                  placeholder="Optional reason or action plan"
-                />
-              </label>
-
-              <label className="wl-alert-check">
-                <input
-                  type="checkbox"
-                  checked={alertBrowserNotification}
-                  onChange={(e) => setAlertBrowserNotification(e.target.checked)}
-                />
-                <span className="wl-alert-check__box" aria-hidden="true" />
-                <span>Browser notification</span>
-              </label>
-            </div>
-
-            <div className="wl-alert-modal__footer">
-              <button className="wl-alert-modal__secondary" onClick={closeAlertModal}>Cancel</button>
-              <button className="wl-alert-modal__primary" onClick={handleCreateAlert} disabled={!Number(alertValue) || Number(alertValue) <= 0}>Create Alert</button>
-            </div>
-          </div>
-        </div>
+      {alertDraft && (
+        <PriceAlertModal
+          key={alertDraft.item.id}
+          item={alertDraft.item}
+          currentPrice={livePrices.get(alertDraft.item.instrumentToken)?.ltp}
+          prefill={alertDraft.prefill}
+          onClose={() => setAlertDraft(null)}
+          onCreate={priceAlerts.createAlert}
+        />
       )}
     </div>
   );

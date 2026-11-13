@@ -1,32 +1,25 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { LevelsIcon } from '@/components/icons/Icons';
 import { useNavigate } from 'react-router-dom';
 import { handleKiteAuthFailure } from '@/services/authSession';
-import { ApiError, apiClient, isAbortError, responseErrorMessage } from '@/services/apiClient';
-import { isKiteLoginEndedReply } from '../../../shared/kiteAuth.js';
+import { apiClient } from '@/services/apiClient';
 import { useAbortSignal } from '@/hooks/useAbortSignal';
 import { useKiteSession } from '@/hooks/useKiteSession';
-import AppSelect from '@/components/AppSelect/AppSelect';
 import { tradeErrorMessage } from '@/services/positions';
 import { placeMarketTrade, placedOrderMessage, placedOrderRefused } from '@/services/orders';
 import { getLotSize } from '@/services/optionChain';
 import { loadInstruments, getLotSizeByToken } from '@/services/instruments';
 import '@/styles/oihistory.css';
-import type { OiHistoryRow, FuturesHistoryRow, FetchProgress, SignalPerformanceSummary, StrikeHistoryEntry, OiCellData, OiTableRow, TradeSignalRow } from './types';
-import { MAX_RECENT_SCRIPS, loadRecentScrips, saveRecentScrips, currentMonthIST, todayIST, addMonths, formatMonthLabel, formatMonthShortLabel, formatFullDateLabel } from './helpers';
-import { summarizePriceTrend, summarizeTradeBias, summarizeTradeLevels, summarizeOptionMomentum, summarizeTradeSetup, summarizePremiumDecay, summarizeSellingSetup, summarizeStrikeBias, classifyPattern, expiryLabel, computeMonthlyExpiries } from './analysis';
+import type { OiCellData } from './types';
+import { currentMonthIST } from './helpers';
+import { computeMonthlyExpiries } from './analysis';
 import { FuturesContext } from './FuturesContext';
 import { OiSnapshotTable } from './OiSnapshotTable';
-import { StrikeOiChart } from './StrikeOiChart';
-import { TradeSetupDashboard } from './TradeSetupDashboard';
 import StockSetupsPanel from '@/components/StockSetups/StockSetupsPanel';
 import { findNseStock } from '@/services/stockSetups';
 import { useUnderlyings } from '@/hooks/useUnderlyings';
-import { computeFlowReadings, marketCloseIST, type FlowInput, type FlowReading } from '@/services/oiFlow';
-import { computeFairValues, realizedVol, volVerdict, REALIZED_WINDOW, type FairInput, type FairValueResult } from '@/services/fairValue';
-import { Horizon, OptionType, Side, isOptionType, type OptionTypeId, type SideId } from '../../../shared/tradeEnums.js';
-import { Bias, OiFlow, RolloverPattern, SellingSetup, TradeSetupStatus, VolVerdict, volVerdictLabel, type TradeSetupStatusId } from '../../../shared/analysisEnums.js';
-import { FetchEvent, SignalOutcome, StrikeMode } from '../../../shared/appEnums.js';
+import { computeFlowReadings, type FlowReading } from '@/services/oiFlow';
+import { computeFairValues, realizedVol, volVerdict, type FairValueResult } from '@/services/fairValue';
+import { Horizon, type OptionTypeId, type SideId } from '../../../shared/tradeEnums.js';
 import { OiHistoryTab, ToastColor, type OiHistoryTabId } from '@/utils/uiEnums';
 import ToastStack from '@/components/Toast/ToastStack';
 import OrderModal from '@/components/OrderModal/OrderModal';
@@ -34,67 +27,44 @@ import { useOrderChoices } from '@/components/OrderModal/useOrderChoices';
 import type { OrderOption } from '@/components/OrderModal/orderTicket';
 import { useToasts } from '@/hooks/useToasts';
 import LoadingState from '@/components/LoadingState/LoadingState';
-
-const STRIKE_RANGE_KEY = 'optiontrap_strike_range';
-const SPECIFIC_STRIKE_KEY = 'optiontrap_specific_strike';
-
-interface FetchEventPayload {
-  message: string;
-  /** On an error event: KITE_LOGIN_ENDED when the Kite login has ended (shared/kiteAuth.js). */
-  code?: string;
-  pct: number;
-  done: number;
-  total: number;
-  batch: number;
-  totalBatches: number;
-}
-
-/** When a day's prices were taken: the close, or now for today's rows, which are a live snapshot until the close. */
-function snapshotTime(date: string): Date {
-  const close = marketCloseIST(date);
-  return date === todayIST() ? new Date(Math.min(Date.now(), close.getTime())) : close;
-}
-
-function fairInputs(rows: OiHistoryRow[], date: string, expiry?: string): FairInput[] {
-  const asOf = snapshotTime(date);
-  const inputs: FairInput[] = [];
-  for (const r of rows) {
-    if (!r.strike || !r.expiry || !isOptionType(r.optionType) || !(r.spotClose > 0) || !(r.close > 0)) continue;
-    if (expiry && r.expiry !== expiry) continue;
-    inputs.push({ token: r.instrumentToken, optionType: r.optionType, strike: r.strike, expiry: r.expiry, price: r.close, spot: r.spotClose, asOf, volume: r.volume });
-  }
-  return inputs;
-}
+import {
+  STRIKE_RANGE, buildOiTable, cellOption, expiryColors as colorsForExpiries, fairInputs, flowInputs, latestVisibleDate,
+  maxConsolidatedOi as largestConsolidatedOi, nearestStrike, oiSeriesByToken, rowsByDate as groupRowsByDate, sortedUnique, strikesInRange,
+} from './oiTable';
+import { buildStrikeChart } from './strikeChart';
+import { setupOrder, signalToLog } from './setupSignals';
+import { useExpiryMonths, useScripChoice, useStrikeChoice } from './useOiHistorySelection';
+import { useOiHistoryData, useOiHistoryFetch } from './useOiHistoryData';
+import { useSignalLogging, useTradeSignals } from './useTradeSignals';
+import OiHistoryControls from './OiHistoryControls';
+import DateBar from './DateBar';
+import StrikeHistoryCard, { type FairSummary } from './StrikeHistoryCard';
+import DeleteScripDialog from './DeleteScripDialog';
 
 const OiHistory: React.FC = () => {
   const navigate = useNavigate();
   // Cancels this tab's in-flight requests when the user navigates away.
   const pageSignal = useAbortSignal();
-  // The F&O name of the scrip shown (e.g. "NIFTY"): the last one opened; none until the user picks one.
-  const [scrip, setScrip] = useState(() => loadRecentScrips()[0] ?? '');
-  const [selectedExpiryMonth, setSelectedExpiryMonth] = useState(currentMonthIST());
-  const [fetching, setFetching] = useState(false);
-  const lastFetchedRef = useRef('');
-  const [progress, setProgress] = useState<FetchProgress | null>(null);
+  const underlyings = useUnderlyings();
+  const { scrip, selectScrip, scripOptions, recentScripOptions } = useScripChoice(underlyings);
   const [fetchResult, setFetchResult] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [data, setData] = useState<OiHistoryRow[]>([]);
-  const [futuresData, setFuturesData] = useState<FuturesHistoryRow[]>([]);
-  const [loading, setLoading] = useState(false);
+  const months = useExpiryMonths(scrip, pageSignal, setFetchError);
+  const { strikeRange, setStrikeRange, specificStrike, setSpecificStrike, specificStrikeValue } = useStrikeChoice();
+  const { data, futuresData, dataScrip, loading, load, clear } = useOiHistoryData(scrip, months.includedExpiryMonths, pageSignal);
+  const { fetching, progress, fetchMonths } = useOiHistoryFetch(scrip, strikeRange, specificStrikeValue, pageSignal);
+
   const [filterDate, setFilterDate] = useState('');
   const [analysisTab, setAnalysisTab] = useState<OiHistoryTabId>(OiHistoryTab.History);
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
-  const [signalPerformance, setSignalPerformance] = useState<SignalPerformanceSummary | null>(null);
-  const [signalRows, setSignalRows] = useState<TradeSignalRow[]>([]);
-  // Bumped after a signal is deleted so the performance stats reload.
-  const [signalsVersion, setSignalsVersion] = useState(0);
-  const loggedSignalKeysRef = useRef(new Set<string>());
-  // Scrip the loaded `data` belongs to. Right after a scrip switch, `scrip` is
-  // already new while `data` still holds the previous scrip's rows.
-  const [dataScrip, setDataScrip] = useState('');
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(() => new Set());
   const [showVolume, setShowVolume] = useState(false);
   const [showFairValue, setShowFairValue] = useState(false);
+  const [fairExpiry, setFairExpiry] = useState<string | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const isAdmin = useKiteSession().session?.isAdmin === true;
+  const lastLoadedRef = useRef('');
+
   // Entry & exit zones of the underlying stock (null for indices).
   const [underlyingStock, setUnderlyingStock] = useState<{ instrumentToken: number; tradingsymbol: string } | null>(null);
   const [showZones, setShowZones] = useState(false);
@@ -110,364 +80,85 @@ const OiHistory: React.FC = () => {
       .catch(() => { /* no zones button */ });
     return () => { stale = true; };
   }, [scrip]);
-  const [fairExpiry, setFairExpiry] = useState<string | null>(null);
-  const [recentScrips, setRecentScrips] = useState<string[]>(() => loadRecentScrips());
-  const underlyings = useUnderlyings();
-  const scripOptions = useMemo(() => underlyings.map((u) => ({ value: u.name, label: u.label })), [underlyings]);
-
-  // Once the list is known, drop recent scrips it no longer has (e.g. a name
-  // saved under an old alias), so the page doesn't open an empty scrip.
-  useEffect(() => {
-    if (underlyings.length === 0) return;
-    const known = new Set(underlyings.map((u) => u.name));
-    const kept = loadRecentScrips().filter((value) => known.has(value));
-    setRecentScrips(kept);
-    saveRecentScrips(kept);
-    setScrip((current) => (current && !known.has(current) ? kept[0] ?? '' : current));
-  }, [underlyings]);
-  const [expiryMonthOptions, setExpiryMonthOptions] = useState<{ value: string; label: string }[]>(() => {
-    const current = currentMonthIST();
-    return [{ value: current, label: formatMonthLabel(current) }];
-  });
-
-  const selectScrip = useCallback((nextScrip: string) => {
-    setScrip(nextScrip);
-    setRecentScrips((prev) => {
-      const next = [nextScrip, ...prev.filter((value) => value !== nextScrip)].slice(0, MAX_RECENT_SCRIPS);
-      saveRecentScrips(next);
-      return next;
-    });
-  }, []);
-
-  const recentScripOptions = useMemo(() => {
-    const labels = new Map(scripOptions.map((option) => [option.value, option.label]));
-    return recentScrips
-      .filter((value) => value !== scrip)
-      .map((value) => ({ value, label: labels.get(value) || value }));
-  }, [recentScrips, scrip, scripOptions]);
-  const [strikeRange, setStrikeRange] = useState<number>(() => {
-    const stored = localStorage.getItem(STRIKE_RANGE_KEY);
-    const val = stored ? parseInt(stored, 10) : 10;
-    return [-1, 0, 5, 10, 20].includes(val) ? val : 10;
-  });
-  const [specificStrike, setSpecificStrike] = useState<string>(() => localStorage.getItem(SPECIFIC_STRIKE_KEY) || '');
-  const specificStrikeValue = useMemo(() => {
-    const value = Number(specificStrike);
-    return Number.isFinite(value) && value > 0 ? value : null;
-  }, [specificStrike]);
 
   // Warm the instruments cache so lot sizes are available for setup trades.
   useEffect(() => {
     loadInstruments().catch(() => { /* lot size falls back to 1 if unavailable */ });
   }, []);
 
-  useEffect(() => {
-    if (!scrip) return;
-    const current = currentMonthIST();
-    let stale = false;
-    let retryTimer: ReturnType<typeof setTimeout> | null = null;
-    setFetchError(null);
-    const requestMonths = () => apiClient.get<string[]>(`/api/oi-history/expiry-months?scrip=${scrip}`, { signal: pageSignal });
-    // Retry once: on the first login of the day the server may still be building
-    // its instruments cache, and a transient failure would otherwise leave only
-    // the current month in the dropdown.
-    requestMonths()
-      .catch((err) => {
-        if (isAbortError(err) || stale) throw err;
-        return new Promise<void>((resolve) => { retryTimer = setTimeout(resolve, 3000); })
-          .then(() => {
-            if (stale) throw new DOMException('Superseded', 'AbortError');
-            return requestMonths();
-          });
-      })
-      .then((fetchedMonths) => {
-        if (stale) return;
-        const months: string[] = fetchedMonths || [];
-        if (months.length > 0) {
-          const selectableMonths = months.filter((month) => month >= current);
-          const selectedMonths = selectableMonths.length > 0 ? selectableMonths : [current];
-          const options = months.map((m) => ({ value: m, label: formatMonthLabel(m) }));
-          setExpiryMonthOptions(options);
-          setSelectedExpiryMonth((prev) => selectedMonths.includes(prev) ? prev : selectedMonths[0]);
-        } else {
-          setExpiryMonthOptions([{ value: current, label: formatMonthLabel(current) }]);
-          setSelectedExpiryMonth(current);
-        }
-      })
-      .catch((err) => {
-        if (isAbortError(err) || stale) return;
-        setExpiryMonthOptions([{ value: current, label: formatMonthLabel(current) }]);
-        setSelectedExpiryMonth(current);
-        setFetchError(err instanceof Error ? err.message : 'Failed to load expiry months');
-      });
-    return () => {
-      // A newer scrip's request supersedes this one.
-      stale = true;
-      if (retryTimer) clearTimeout(retryTimer);
-    };
-  }, [scrip]);
-
-  const selectableExpiryMonthOptions = useMemo(() => {
-    const current = currentMonthIST();
-    const options = expiryMonthOptions.filter((option) => option.value >= current);
-    return options.length > 0 ? options : [{ value: current, label: formatMonthLabel(current) }];
-  }, [expiryMonthOptions]);
-
-  /** Expiry months to include: only M-1 from history, then current month through selected month. */
-  const includedExpiryMonths = useMemo(() => {
-    const current = currentMonthIST();
-    const previous = addMonths(current, -1);
-    return expiryMonthOptions
-      .map((o) => o.value)
-      .filter((m) => m === previous || (m >= current && m <= selectedExpiryMonth))
-      .sort();
-  }, [expiryMonthOptions, selectedExpiryMonth]);
-
-  /** Only current/future expiry months can be fetched from the current instruments cache. */
-  const fetchableExpiryMonths = useMemo(() => {
-    const current = currentMonthIST();
-    return includedExpiryMonths.filter((month) => month >= current);
-  }, [includedExpiryMonths]);
-
   const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const results = await Promise.all(
-        includedExpiryMonths.map(async (month) => {
-          const params = new URLSearchParams({ scrip, expiryMonth: month });
-          return apiClient.get<OiHistoryRow[]>(`/api/oi-history?${params}`, { signal: pageSignal });
-        }),
-      );
-      // Futures follow the same months as OI history, including stored M-1 rows.
-      const futuresResults = await Promise.all(
-        includedExpiryMonths.map(async (month) => {
-          const futuresParams = new URLSearchParams({ scrip, expiryMonth: month });
-          return apiClient.get<FuturesHistoryRow[]>(`/api/oi-history/futures?${futuresParams}`, { signal: pageSignal });
-        }),
-      );
-      const merged = results.flat();
-      setData(merged);
-      setDataScrip(scrip);
-      setFuturesData(futuresResults.flat());
-      if (merged.length > 0) {
-        const dates = [...new Set(merged.map((r) => r.date))].sort();
-        const current = currentMonthIST();
-        const visibleDates = dates.filter((date) => date.slice(0, 7) >= current);
-        setFilterDate((visibleDates[visibleDates.length - 1] || dates[dates.length - 1]) as string);
-      }
-    } catch (err) {
-      if (!isAbortError(err)) console.error('[OiHistory] Load error:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [scrip, includedExpiryMonths, pageSignal]);
-
-  const fetchExpiryMonth = useCallback(async (month: string, monthLabel: string) => {
-    const res = await apiClient.raw('/api/oi-history/fetch', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: {
-        scrip,
-        expiryMonth: month,
-        strikeMode: strikeRange === -1 ? StrikeMode.Specific : strikeRange === 0 ? StrikeMode.AllStored : StrikeMode.AtmRange,
-        specificStrike: strikeRange === -1 ? specificStrikeValue : undefined,
-      },
-      signal: pageSignal,
-    });
-
-    if (!res.ok) {
-      throw new Error(await responseErrorMessage(res));
-    }
-    if (!res.body) {
-      throw new Error('Server returned an empty response');
-    }
-
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-
-    const handleEvent = (eventType: string, dataStr: string) => {
-      if (!eventType || !dataStr) return;
-      let payload: FetchEventPayload;
-      try {
-        payload = JSON.parse(dataStr);
-      } catch {
-        return; // ignore malformed SSE data
-      }
-      switch (eventType) {
-        case FetchEvent.Step:
-          setProgress({ step: `${monthLabel}: ${payload.message}`, pct: 0, detail: '' });
-          break;
-        case FetchEvent.Progress:
-          setProgress((prev) => {
-            if (prev && payload.pct < prev.pct && prev.step.startsWith(monthLabel)) return prev;
-            return {
-              step: `${monthLabel}: Fetching OI data...`,
-              pct: payload.pct,
-              detail: `${payload.done}/${payload.total} instruments (batch ${payload.batch}/${payload.totalBatches})`,
-            };
-          });
-          break;
-        case FetchEvent.Error:
-          throw new ApiError(payload.message, 0, payload);
-      }
-    };
-
-    // Parse complete SSE event blocks (separated by a blank line). Robust to
-    // network chunks splitting anywhere, including between "event:"/"data:".
-    const processBlock = (block: string) => {
-      let eventType = '';
-      let dataStr = '';
-      for (const line of block.split('\n')) {
-        if (line.startsWith('event:')) {
-          eventType = line.slice(6).trim();
-        } else if (line.startsWith('data:')) {
-          dataStr += line.slice(5).replace(/^ /, '');
-        }
-      }
-      handleEvent(eventType, dataStr);
-    };
-
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      let sep: number;
-      while ((sep = buffer.indexOf('\n\n')) !== -1) {
-        const block = buffer.slice(0, sep);
-        buffer = buffer.slice(sep + 2);
-        if (block.trim()) processBlock(block);
-      }
-    }
-    if (buffer.trim()) processBlock(buffer);
-  }, [scrip, strikeRange, specificStrikeValue, pageSignal]);
-
-  /** Fetch current/future included expiry months from Kite. Historical months are loaded from DB only. */
-  const handleFetch = useCallback(async () => {
-    if (strikeRange === -1 && specificStrikeValue === null) {
-      setFetchError('Enter a valid strike to fetch specific OI history.');
-      return;
-    }
-
-    if (fetchableExpiryMonths.length === 0) {
-      setFetchResult('Selected month is historical only. Stored database data is already loaded.');
-      return;
-    }
-
-    setFetching(true);
-    setProgress({ step: 'Connecting...', pct: 0, detail: '' });
-    setFetchResult(null);
-    setFetchError(null);
-
-    try {
-      for (const month of fetchableExpiryMonths) {
-        const label = formatMonthShortLabel(month);
-        await fetchExpiryMonth(month, label);
-      }
-      setProgress(null);
-    } catch (err) {
-      if (isAbortError(err)) return;
-      const message = err instanceof Error ? err.message : 'Network error';
-      if (err instanceof ApiError && isKiteLoginEndedReply(err.body)) {
-        handleKiteAuthFailure();
-        navigate('/login', { replace: true });
-      } else {
-        setFetchError(message);
-      }
-      setProgress(null);
-    } finally {
-      setFetching(false);
-      if (!pageSignal.aborted) loadData();
-    }
-  }, [fetchableExpiryMonths, fetchExpiryMonth, loadData, navigate, strikeRange, specificStrikeValue, pageSignal]);
+    const rows = await load();
+    const latest = rows ? latestVisibleDate(rows, currentMonthIST()) : null;
+    if (latest) setFilterDate(latest);
+  }, [load]);
 
   // When scrip or expiry month changes, load existing data from the DB only.
   // Fetching fresh data from Kite is an explicit action via the Fetch button.
   useEffect(() => {
-    const key = `${scrip}_${selectedExpiryMonth}`;
-    if (lastFetchedRef.current === key) return;
-    lastFetchedRef.current = key;
-
-    setData([]);
-    setDataScrip('');
+    const key = `${scrip}_${months.selectedExpiryMonth}`;
+    if (lastLoadedRef.current === key) return;
+    lastLoadedRef.current = key;
+    clear();
     setSelectedStrike(null);
     setFilterDate('');
     setFetchResult(null);
     setFetchError(null);
-
     if (scrip) loadData();
-  }, [scrip, selectedExpiryMonth, loadData]);
+  }, [scrip, months.selectedExpiryMonth, loadData, clear]);
 
-  /** Delete all OI history for the selected scrip (admins only: the history is shared by every user) */
-  const isAdmin = useKiteSession().session?.isAdmin === true;
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const [isDataMenuOpen, setIsDataMenuOpen] = useState(false);
-  const dataMenuRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (!isDataMenuOpen) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!dataMenuRef.current?.contains(event.target as Node)) {
-        setIsDataMenuOpen(false);
+  /** Fetch current/future included expiry months from Kite. Historical months are loaded from DB only. */
+  const handleFetch = useCallback(async () => {
+    if (strikeRange === STRIKE_RANGE.Specific && specificStrikeValue === null) {
+      setFetchError('Enter a valid strike to fetch specific OI history.');
+      return;
+    }
+    if (months.fetchableExpiryMonths.length === 0) {
+      setFetchResult('Selected month is historical only. Stored database data is already loaded.');
+      return;
+    }
+    setFetchResult(null);
+    setFetchError(null);
+    const outcome = await fetchMonths(months.fetchableExpiryMonths);
+    if (!outcome.ok && 'loginEnded' in outcome) {
+      if (outcome.loginEnded) {
+        handleKiteAuthFailure();
+        navigate('/login', { replace: true });
+      } else {
+        setFetchError(outcome.message);
       }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        setIsDataMenuOpen(false);
-      }
-    };
+    }
+    if (!pageSignal.aborted) loadData();
+  }, [months.fetchableExpiryMonths, fetchMonths, loadData, navigate, strikeRange, specificStrikeValue, pageSignal]);
 
-    document.addEventListener('pointerdown', handlePointerDown);
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown);
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [isDataMenuOpen]);
-
-  const handleDeleteMonth = useCallback(async () => {
+  /** Delete all OI history for the selected scrip (admins only: the history is shared by every user). */
+  const handleDeleteAll = useCallback(async () => {
     setConfirmDelete(false);
-
     try {
-      const params = new URLSearchParams({ scrip });
       // apiClient throws on any error reply, so reaching here means it worked.
-      await apiClient.delete<{ deleted: number }>(`/api/oi-history?${params}`);
-      setData([]);
-      lastFetchedRef.current = '';
+      await apiClient.delete<{ deleted: number }>(`/api/oi-history?${new URLSearchParams({ scrip })}`);
+      clear();
+      lastLoadedRef.current = '';
       setSelectedStrike(null);
       setFilterDate('');
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : 'Network error');
     }
-  }, [scrip]);
+  }, [scrip, clear]);
 
   const { toasts, showToast } = useToasts();
   const orderChoices = useOrderChoices();
   const [orderTicket, setOrderTicket] = useState<{ option: OrderOption; price: number } | null>(null);
 
   const openOrder = useCallback((cell: OiCellData, optionType: OptionTypeId, strike: number, expiry: string) => {
-    const token = optionType === OptionType.CE ? cell.ceToken : cell.peToken;
-    const tradingsymbol = optionType === OptionType.CE ? cell.ceTradingsymbol : cell.peTradingsymbol;
-    const historicalClose = optionType === OptionType.CE ? cell.ceClose : cell.peClose;
-    if (!token || !tradingsymbol || !historicalClose) return;
+    const { token, tradingsymbol, close } = cellOption(cell, optionType);
+    if (!token || !tradingsymbol || !close) return;
     const lotSize = getLotSizeByToken(token) ?? getLotSize(token);
-    setOrderTicket({ option: { tradingsymbol, instrumentToken: token, lotSize, strike, optionType, expiry }, price: historicalClose });
+    setOrderTicket({ option: { tradingsymbol, instrumentToken: token, lotSize, strike, optionType, expiry }, price: close });
   }, []);
 
-  const handleTrade = useCallback(async (
-    cell: OiCellData,
-    optionType: OptionTypeId,
-    side: SideId,
-    strike: number,
-    expiry: string,
-  ) => {
-    const token = optionType === OptionType.CE ? cell.ceToken : cell.peToken;
-    const tradingsymbol = optionType === OptionType.CE ? cell.ceTradingsymbol : cell.peTradingsymbol;
-    const historicalClose = optionType === OptionType.CE ? cell.ceClose : cell.peClose;
-
-    if (!token || !tradingsymbol || !historicalClose) return;
-
+  const handleTrade = useCallback(async (cell: OiCellData, optionType: OptionTypeId, side: SideId, strike: number, expiry: string) => {
+    const { token, tradingsymbol, close } = cellOption(cell, optionType);
+    if (!token || !tradingsymbol || !close) return;
     try {
       // A market order: the server fills it at the live bid / ask, not the grid's historical close.
       const placed = await placeMarketTrade({
@@ -486,133 +177,30 @@ const OiHistory: React.FC = () => {
     }
   }, [showToast]);
 
-  const availableDates = useMemo(() => {
-    return [...new Set(data.map((r) => r.date))].sort();
-  }, [data]);
-
-  const visibleDates = useMemo(() => {
-    return availableDates.filter((date) => date.slice(0, 7) >= currentMonthIST());
-  }, [availableDates]);
-
-  const datesByMonth = useMemo(() => {
-    const groups: { month: string; dates: string[] }[] = [];
-    let current: { month: string; dates: string[] } | null = null;
-    for (const d of visibleDates) {
-      const month = d.slice(0, 7);
-      if (!current || current.month !== month) {
-        current = { month, dates: [] };
-        groups.push(current);
-      }
-      current.dates.push(d);
-    }
-    return groups;
-  }, [visibleDates]);
-
-  const expiries = useMemo(() => {
-    const set = new Set<string>();
-    for (const r of data) {
-      if (r.expiry) set.add(r.expiry);
-    }
-    return [...set].sort();
-  }, [data]);
-
+  const availableDates = useMemo(() => sortedUnique(data.map((r) => r.date)), [data]);
+  const visibleDates = useMemo(() => availableDates.filter((date) => date.slice(0, 7) >= currentMonthIST()), [availableDates]);
+  const expiries = useMemo(() => sortedUnique(data.map((r) => r.expiry)), [data]);
   const monthlyExpirySet = useMemo(() => computeMonthlyExpiries(expiries), [expiries]);
-  const isMonthlyExpiry = useCallback(
-    (expiry: string) => monthlyExpirySet.has(expiry),
-    [monthlyExpirySet],
-  );
-
+  const isMonthlyExpiry = useCallback((expiry: string) => monthlyExpirySet.has(expiry), [monthlyExpirySet]);
   /** Mark only actual contract expiry dates; weekdays can vary around holidays. */
   const expiryMarkerDates = useMemo(() => new Set(expiries), [expiries]);
 
-  const filteredRows = useMemo(() => {
-    if (!filterDate) return [];
-    return data.filter((r) => r.date === filterDate);
-  }, [data, filterDate]);
-
+  const filteredRows = useMemo(() => (filterDate ? data.filter((r) => r.date === filterDate) : []), [data, filterDate]);
   /** Expiries available on the selected date. Expired weekly contracts are not shown after expiry. */
-  const tableExpiries = useMemo(() => {
-    const set = new Set<string>();
-    for (const r of filteredRows) {
-      if (r.expiry) set.add(r.expiry);
-    }
-    return [...set].sort();
-  }, [filteredRows]);
+  const tableExpiries = useMemo(() => sortedUnique(filteredRows.map((r) => r.expiry)), [filteredRows]);
+  const visibleTableExpiries = useMemo(() => tableExpiries.filter((exp) => !hiddenExpiries.has(exp)), [tableExpiries, hiddenExpiries]);
 
-  const visibleTableExpiries = useMemo(() => {
-    return tableExpiries.filter((exp) => !hiddenExpiries.has(exp));
-  }, [tableExpiries, hiddenExpiries]);
+  const prevDate = useMemo(() => {
+    const index = availableDates.indexOf(filterDate);
+    return filterDate && index > 0 ? availableDates[index - 1] : null;
+  }, [availableDates, filterDate]);
+  const prevDateRows = useMemo(() => (prevDate ? data.filter((r) => r.date === prevDate) : []), [data, prevDate]);
 
-  const prevDateRows = useMemo(() => {
-    if (!filterDate || availableDates.length < 2) return [];
-    const idx = availableDates.indexOf(filterDate);
-    if (idx <= 0) return [];
-    const prevDate = availableDates[idx - 1];
-    return data.filter((r) => r.date === prevDate);
-  }, [data, filterDate, availableDates]);
-
-  const prevDayOi = useMemo(() => {
-    const map = new Map<number, number>();
-    for (const r of prevDateRows) {
-      map.set(r.instrumentToken, r.oi);
-    }
-    return map;
-  }, [prevDateRows]);
-
-  const prevDayClose = useMemo(() => {
-    const map = new Map<number, number>();
-    for (const r of prevDateRows) {
-      if (r.close > 0) map.set(r.instrumentToken, r.close);
-    }
-    return map;
-  }, [prevDateRows]);
-
-  /** Daily OI per token, oldest first, for judging how unusual and how recent an OI change is. */
-  const oiSeriesByToken = useMemo(() => {
-    const map = new Map<number, { date: string; oi: number }[]>();
-    for (const r of data) {
-      if (!r.optionType) continue;
-      const list = map.get(r.instrumentToken);
-      if (list) list.push({ date: r.date, oi: r.oi });
-      else map.set(r.instrumentToken, [{ date: r.date, oi: r.oi }]);
-    }
-    for (const list of map.values()) list.sort((a, b) => a.date.localeCompare(b.date));
-    return map;
-  }, [data]);
-
-  const flowByToken = useMemo(() => {
-    const idx = availableDates.indexOf(filterDate);
-    if (idx <= 0) return new Map<number, FlowReading>();
-    const prevDate = availableDates[idx - 1];
-    const prevSpot = prevDateRows.find((r) => r.spotClose > 0)?.spotClose;
-    const asOf = snapshotTime(filterDate);
-    const prevAsOf = marketCloseIST(prevDate);
-
-    const inputs: FlowInput[] = [];
-    for (const r of filteredRows) {
-      if (!r.strike || !r.expiry || !isOptionType(r.optionType) || !(r.spotClose > 0)) continue;
-      const oiHistory = (oiSeriesByToken.get(r.instrumentToken) ?? [])
-        .filter((entry) => entry.date < filterDate)
-        .map((entry) => entry.oi);
-      inputs.push({
-        token: r.instrumentToken,
-        optionType: r.optionType,
-        strike: r.strike,
-        expiry: r.expiry,
-        oi: r.oi,
-        prevOi: prevDayOi.get(r.instrumentToken),
-        price: r.close,
-        prevPrice: prevDayClose.get(r.instrumentToken),
-        spot: r.spotClose,
-        prevSpot,
-        asOf,
-        prevAsOf,
-        volume: r.volume,
-        oiHistory,
-      });
-    }
-    return computeFlowReadings(inputs);
-  }, [filteredRows, prevDateRows, prevDayOi, prevDayClose, oiSeriesByToken, availableDates, filterDate]);
+  const oiSeries = useMemo(() => oiSeriesByToken(data), [data]);
+  const flowByToken = useMemo(
+    () => (prevDate ? computeFlowReadings(flowInputs(filteredRows, prevDateRows, filterDate, prevDate, oiSeries)) : new Map<number, FlowReading>()),
+    [filteredRows, prevDateRows, filterDate, prevDate, oiSeries],
+  );
 
   /** Fair value for every option on the selected date (logged with signals, and the chart summary). */
   const fairToday = useMemo(() => computeFairValues(fairInputs(filteredRows, filterDate)), [filteredRows, filterDate]);
@@ -628,20 +216,8 @@ const OiHistory: React.FC = () => {
     return visibleTableExpiries.find((exp) => exp.slice(0, 10) > filterDate) ?? visibleTableExpiries[0] ?? null;
   }, [showFairValue, fairExpiry, visibleTableExpiries, filterDate]);
 
-  const chartExpiries = useMemo(
-    () => (chartFairExpiry ? [chartFairExpiry] : visibleTableExpiries),
-    [chartFairExpiry, visibleTableExpiries],
-  );
-
-  const rowsByDate = useMemo(() => {
-    const map = new Map<string, OiHistoryRow[]>();
-    for (const r of data) {
-      const list = map.get(r.date);
-      if (list) list.push(r);
-      else map.set(r.date, [r]);
-    }
-    return map;
-  }, [data]);
+  const chartExpiries = useMemo(() => (chartFairExpiry ? [chartFairExpiry] : visibleTableExpiries), [chartFairExpiry, visibleTableExpiries]);
+  const rowsByDate = useMemo(() => groupRowsByDate(data), [data]);
 
   /** Fair values of the chart's expiry on every date; only computed while the fair-value view is on. */
   const fairByDate = useMemo(() => {
@@ -651,7 +227,7 @@ const OiHistory: React.FC = () => {
     return map;
   }, [rowsByDate, chartFairExpiry]);
 
-  const fairSummary = useMemo(() => {
+  const fairSummary = useMemo((): FairSummary | null => {
     if (!chartFairExpiry || !filterDate) return null;
     const stats = fairToday.byExpiry.get(chartFairExpiry) ?? null;
     const spotCloses = availableDates
@@ -662,473 +238,62 @@ const OiHistory: React.FC = () => {
     return { stats, realized, verdict: volVerdict(stats?.atmIv ?? null, realized), spot };
   }, [chartFairExpiry, filterDate, fairToday, availableDates, rowsByDate, filteredRows]);
 
-  const atmStrike = useMemo(() => {
-    if (filteredRows.length === 0) return null;
-    const spot = filteredRows[0].spotClose;
-    const strikes = [...new Set(filteredRows.filter((r) => r.strike).map((r) => r.strike as number))].sort((a, b) => a - b);
-    if (strikes.length === 0) return null;
-    let closest = strikes[0];
-    let minDiff = Math.abs(strikes[0] - spot);
-    for (const s of strikes) {
-      const diff = Math.abs(s - spot);
-      if (diff < minDiff) { minDiff = diff; closest = s; }
-    }
-    return closest;
-  }, [filteredRows]);
-
+  const atmStrike = useMemo(() => nearestStrike(filteredRows), [filteredRows]);
   const selectedSpotClose = filteredRows[0]?.spotClose ?? null;
 
   useEffect(() => {
-    if (strikeRange === -1 && specificStrikeValue !== null) {
+    if (strikeRange === STRIKE_RANGE.Specific && specificStrikeValue !== null) {
       setSelectedStrike(specificStrikeValue);
       return;
     }
-    if (atmStrike) {
-      setSelectedStrike(atmStrike);
-    }
+    if (atmStrike) setSelectedStrike(atmStrike);
   }, [atmStrike, strikeRange, specificStrikeValue]);
 
-  const tableData = useMemo(() => {
-    if (filteredRows.length === 0 || visibleTableExpiries.length === 0) return [];
+  const tableData = useMemo(
+    () => strikesInRange(buildOiTable(filteredRows, prevDateRows, visibleTableExpiries, isMonthlyExpiry), strikeRange, specificStrikeValue, atmStrike),
+    [filteredRows, prevDateRows, visibleTableExpiries, isMonthlyExpiry, strikeRange, specificStrikeValue, atmStrike],
+  );
+  const maxConsolidatedOi = useMemo(() => largestConsolidatedOi(tableData), [tableData]);
 
-    const grid = new Map<number, Map<string, OiCellData>>();
-
-    const visibleExpirySet = new Set(visibleTableExpiries);
-
-    for (const r of filteredRows) {
-      if (!r.strike || !r.optionType || !r.expiry) continue;
-      if (!visibleExpirySet.has(r.expiry)) continue;
-
-      if (!grid.has(r.strike)) grid.set(r.strike, new Map());
-      const strikeMap = grid.get(r.strike)!;
-
-      if (!strikeMap.has(r.expiry)) {
-        strikeMap.set(r.expiry, {
-          ceOi: 0, peOi: 0,
-          cePrevOi: undefined, pePrevOi: undefined,
-          ceClose: 0, peClose: 0,
-          cePrevClose: undefined, pePrevClose: undefined,
-          ceToken: undefined, peToken: undefined,
-          ceTradingsymbol: undefined, peTradingsymbol: undefined,
-          ceExpiry: undefined, peExpiry: undefined,
-        });
-      }
-      const cell = strikeMap.get(r.expiry)!;
-
-      if (r.optionType === OptionType.CE) {
-        cell.ceOi = r.oi;
-        cell.ceClose = r.close;
-        cell.ceToken = r.instrumentToken;
-        cell.ceTradingsymbol = r.tradingsymbol;
-        cell.ceExpiry = r.expiry;
-        cell.cePrevOi = prevDayOi.get(r.instrumentToken);
-        cell.cePrevClose = prevDayClose.get(r.instrumentToken);
-      } else {
-        cell.peOi = r.oi;
-        cell.peClose = r.close;
-        cell.peToken = r.instrumentToken;
-        cell.peTradingsymbol = r.tradingsymbol;
-        cell.peExpiry = r.expiry;
-        cell.pePrevOi = prevDayOi.get(r.instrumentToken);
-        cell.pePrevClose = prevDayClose.get(r.instrumentToken);
-      }
-    }
-
-    // Threshold: 5% of the max OI in the dataset, so it adapts to any scrip (indices have millions, stocks thousands).
-    let maxOiInGrid = 0;
-    for (const expiryMap of grid.values()) {
-      for (const cell of expiryMap.values()) {
-        if (cell.ceOi > maxOiInGrid) maxOiInGrid = cell.ceOi;
-        if (cell.peOi > maxOiInGrid) maxOiInGrid = cell.peOi;
-      }
-    }
-    const oiThreshold = Math.max(1000, maxOiInGrid * 0.05);
-
-    // Build rows sorted by strike
-    const rows = [...grid.entries()]
-      .sort(([a], [b]) => a - b)
-      .map(([strike, expiryMap]) => {
-        let hasSignificantOi = false;
-        for (const cell of expiryMap.values()) {
-          if (cell.ceOi > oiThreshold || cell.peOi > oiThreshold) {
-            hasSignificantOi = true;
-            break;
-          }
-        }
-
-        const ceByExpiry = new Map<string, { oi: number; prevOi: number | undefined; close: number; prevClose: number | undefined }>();
-        const peByExpiry = new Map<string, { oi: number; prevOi: number | undefined; close: number; prevClose: number | undefined }>();
-        for (const [exp, cell] of expiryMap) {
-          if (cell.ceOi > 0) ceByExpiry.set(exp, { oi: cell.ceOi, prevOi: cell.cePrevOi, close: cell.ceClose, prevClose: cell.cePrevClose });
-          if (cell.peOi > 0) peByExpiry.set(exp, { oi: cell.peOi, prevOi: cell.pePrevOi, close: cell.peClose, prevClose: cell.pePrevClose });
-        }
-
-        const cePattern = classifyPattern(ceByExpiry, visibleTableExpiries);
-        const pePattern = classifyPattern(peByExpiry, visibleTableExpiries);
-        const weeklyExpiries = visibleTableExpiries.filter((exp) => !isMonthlyExpiry(exp) && expiryMap.has(exp));
-        const consolidatedExpiries = weeklyExpiries.length > 0 ? weeklyExpiries : visibleTableExpiries;
-        const consolidatedOi = consolidatedExpiries.reduce(
-          (total, exp) => {
-            const cell = expiryMap.get(exp);
-            if (!cell) return total;
-            return {
-              ce: total.ce + cell.ceOi,
-              pe: total.pe + cell.peOi,
-            };
-          },
-          { ce: 0, pe: 0 },
-        );
-
-        return {
-          strike,
-          cells: expiryMap,
-          cePattern,
-          pePattern,
-          ceConsolidatedOi: consolidatedOi.ce,
-          peConsolidatedOi: consolidatedOi.pe,
-          dimmed: !hasSignificantOi,
-        };
-      }) as OiTableRow[];
-
-    if (strikeRange === -1) {
-      return specificStrikeValue === null ? [] : rows.filter((row) => row.strike === specificStrikeValue);
-    }
-
-    if (strikeRange > 0 && atmStrike && rows.length > 0) {
-      const atmIdx = rows.findIndex((r) => r.strike >= atmStrike);
-      const center = atmIdx >= 0 ? atmIdx : Math.floor(rows.length / 2);
-      const start = Math.max(0, center - strikeRange);
-      const end = Math.min(rows.length, center + strikeRange + 1);
-      return rows.slice(start, end);
-    }
-
-    return rows;
-  }, [filteredRows, visibleTableExpiries, prevDayOi, prevDayClose, scrip, atmStrike, strikeRange, specificStrikeValue]);
-
-  const maxConsolidatedOi = useMemo(() => {
-    let max = 0;
-    for (const row of tableData) {
-      if (row.ceConsolidatedOi > max) max = row.ceConsolidatedOi;
-      if (row.peConsolidatedOi > max) max = row.peConsolidatedOi;
-    }
-    return max;
-  }, [tableData]);
-
-  // When the selected strike is no longer visible in the table (e.g. after
-  // narrowing the strike range), fall back to the ATM strike if it's visible,
-  // otherwise clear the selection.
+  // When the selected strike is no longer visible in the table (e.g. after narrowing the strike range),
+  // fall back to the ATM strike if it's visible, otherwise clear the selection.
   useEffect(() => {
-    if (selectedStrike === null) return;
-    if (strikeRange === -1) return;
+    if (selectedStrike === null || strikeRange === STRIKE_RANGE.Specific) return;
     if (tableData.some((r) => r.strike === selectedStrike)) return;
-    if (atmStrike && tableData.some((r) => r.strike === atmStrike)) {
-      setSelectedStrike(atmStrike);
-    } else {
-      setSelectedStrike(null);
-    }
+    setSelectedStrike(atmStrike && tableData.some((r) => r.strike === atmStrike) ? atmStrike : null);
   }, [tableData, selectedStrike, atmStrike, strikeRange]);
 
-  const chartData = useMemo(() => {
-    if (!selectedStrike || availableDates.length === 0 || visibleTableExpiries.length === 0) return null;
+  const chartData = useMemo(() => (selectedStrike ? buildStrikeChart({
+    rows: data,
+    strike: selectedStrike,
+    dates: availableDates,
+    expiries: visibleTableExpiries,
+    drawnExpiries: chartExpiries,
+    fairByDate,
+    tableRows: tableData,
+    spotClose: selectedSpotClose,
+  }) : null), [data, selectedStrike, availableDates, visibleTableExpiries, selectedSpotClose, tableData, fairByDate, chartExpiries]);
 
-    const dateMap = new Map<string, Map<string, StrikeHistoryEntry>>();
-    const spotByDate = new Map<string, number>();
-    const tableExpirySet = new Set(visibleTableExpiries);
+  // Each actionable setup is recorded once per page load, for outcome tracking and backtesting.
+  const setupSignal = useMemo(() => (chartData && selectedStrike && dataScrip === scrip ? signalToLog({
+    scrip, strike: selectedStrike, chart: chartData, rows: data, tableDate: filterDate, tableRows: tableData, flowByToken, fairToday,
+  }) : null), [chartData, data, scrip, dataScrip, selectedStrike, filterDate, tableData, flowByToken, fairToday]);
+  useSignalLogging(setupSignal);
 
-    for (const r of data) {
-      if (r.strike !== selectedStrike || !r.expiry || !tableExpirySet.has(r.expiry)) continue;
-      if (r.spotClose > 0) spotByDate.set(r.date, r.spotClose);
-      if (!dateMap.has(r.date)) dateMap.set(r.date, new Map());
-      const expMap = dateMap.get(r.date)!;
-      if (!expMap.has(r.expiry)) {
-        expMap.set(r.expiry, {
-          ceOi: 0,
-          peOi: 0,
-          ceClose: 0,
-          peClose: 0,
-          ceVolume: 0,
-          peVolume: 0,
-        });
-      }
-      const entry = expMap.get(r.expiry)!;
-      const fair = fairByDate.get(r.date)?.byToken.get(r.instrumentToken);
-      if (r.optionType === OptionType.CE) {
-        entry.ceOi = r.oi;
-        entry.ceClose = r.close;
-        entry.ceVolume = r.volume;
-        entry.ceFair = fair?.fairPrice ?? null;
-        entry.ceRichPct = fair?.richPct ?? null;
-        entry.ceFairLabel = fair?.richness ?? null;
-      } else {
-        entry.peOi = r.oi;
-        entry.peClose = r.close;
-        entry.peVolume = r.volume;
-        entry.peFair = fair?.fairPrice ?? null;
-        entry.peRichPct = fair?.richPct ?? null;
-        entry.peFairLabel = fair?.richness ?? null;
-      }
-    }
+  const onDeleteSignalFailed = useCallback(() => showToast('Failed to delete signal', ToastColor.Red), [showToast]);
+  const { signalRows, signalPerformance, deleteSignal } = useTradeSignals(scrip, chartData, pageSignal, onDeleteSignalFailed);
 
-    const dates = availableDates.filter((d) => dateMap.has(d));
-    if (dates.length === 0) return null;
-    const biasSummary = summarizeStrikeBias(dates, dateMap, visibleTableExpiries, spotByDate);
-    const priceTrend = summarizePriceTrend(dates, spotByDate);
-    const tradeBias = summarizeTradeBias(priceTrend, biasSummary);
-    const latestSpot = priceTrend.endPrice ?? selectedSpotClose;
-    const tradeLevels = summarizeTradeLevels(tableData, latestSpot, selectedStrike);
-    const optionMomentum = summarizeOptionMomentum(dates, dateMap, visibleTableExpiries, priceTrend, tradeLevels);
-    const premiumDecay = summarizePremiumDecay(dates, dateMap, visibleTableExpiries, priceTrend, tradeLevels);
-    const tradeSetup = summarizeTradeSetup(priceTrend, biasSummary, selectedStrike, tradeLevels, optionMomentum);
-    const sellingSetup = summarizeSellingSetup(priceTrend, biasSummary, selectedStrike, tradeLevels, premiumDecay);
-
-    // Prices only over the expiries the chart draws.
-    const drawnExpiries = new Set(chartExpiries);
-    let maxOi = 0;
-    let maxCePrice = 0;
-    let maxPePrice = 0;
-    // False when the expiry never had enough traded strikes to fit an IV curve.
-    let hasFair = false;
-    for (const [, expMap] of dateMap) {
-      for (const [exp, v] of expMap) {
-        if (v.ceOi > maxOi) maxOi = v.ceOi;
-        if (v.peOi > maxOi) maxOi = v.peOi;
-        if (!drawnExpiries.has(exp)) continue;
-        maxCePrice = Math.max(maxCePrice, v.ceClose, v.ceFair ?? 0);
-        maxPePrice = Math.max(maxPePrice, v.peClose, v.peFair ?? 0);
-        if (v.ceFair != null || v.peFair != null) hasFair = true;
-      }
-    }
-
-    return { dates, dateMap, maxOi, maxCePrice, maxPePrice, hasFair, biasSummary, priceTrend, tradeBias, tradeSetup, tradeLevels, optionMomentum, premiumDecay, sellingSetup };
-  }, [data, selectedStrike, availableDates, visibleTableExpiries, selectedSpotClose, tableData, fairByDate, chartExpiries]);
-
-  // Persist each actionable setup once per session/date. This creates the
-  // evidence needed for later outcome tracking and backtesting without
-  // creating another UI section.
-  useEffect(() => {
-    if (!chartData || !selectedStrike || chartData.dates.length === 0 || dataScrip !== scrip) return;
-    const selling = chartData.sellingSetup;
-    const buying = chartData.tradeSetup;
-    let action: SideId | null = null;
-    let optionType: OptionTypeId | null = null;
-    let setupStatus: TradeSetupStatusId = TradeSetupStatus.Avoid;
-
-    if ((selling.type === SellingSetup.CallSell || selling.type === SellingSetup.PutSell) && selling.status !== TradeSetupStatus.Avoid) {
-      action = Side.SELL;
-      optionType = selling.type === SellingSetup.CallSell ? OptionType.CE : OptionType.PE;
-      setupStatus = selling.status;
-    } else if ((buying.direction === Bias.Bullish || buying.direction === Bias.Bearish) && buying.status !== TradeSetupStatus.Avoid) {
-      action = Side.BUY;
-      optionType = buying.direction === Bias.Bullish ? OptionType.CE : OptionType.PE;
-      setupStatus = buying.status;
-    }
-    if (!action || !optionType) return;
-
-    const signalDate = chartData.dates[chartData.dates.length - 1];
-    const expiry = chartData.premiumDecay.nearestExpiry;
-    const side = optionType === OptionType.CE ? chartData.premiumDecay.ce : chartData.premiumDecay.pe;
-
-    // Log one setup per scrip per day: only the ATM strike on the signal date.
-    const signalDayRows = data.filter((row) => row.date === signalDate && row.strike);
-    const signalDaySpot = signalDayRows[0]?.spotClose;
-    if (!signalDaySpot) return;
-    const signalDayAtm = signalDayRows.reduce<number | null>((best, row) => (
-      best === null || Math.abs(row.strike! - signalDaySpot) < Math.abs(best - signalDaySpot) ? row.strike! : best
-    ), null);
-    if (selectedStrike !== signalDayAtm) return;
-
-    // The expiry comes from the selected date's table. When viewing an older
-    // date it can be a contract that has expired by the signal date, so take
-    // the entry premium from the signal date itself and skip if it has none.
-    const signalDayEntry = expiry ? chartData.dateMap.get(signalDate)?.get(expiry) : undefined;
-    const entryPremium = signalDayEntry ? (optionType === OptionType.CE ? signalDayEntry.ceClose : signalDayEntry.peClose) : 0;
-    if (!expiry || expiry < signalDate || !(entryPremium > 0)) return;
-
-    const key = `${scrip}|${signalDate}|${expiry}|${selectedStrike}|${optionType}|${action}`;
-    if (loggedSignalKeysRef.current.has(key)) return;
-    loggedSignalKeysRef.current.add(key);
-
-    // The table shows the selected date, so its OI pattern only describes the
-    // signal when that date is the signal date. Otherwise leave it out; the
-    // server merges details, so a pattern recorded earlier is kept.
-    const strikeRow = filterDate === signalDate ? tableData.find((row) => row.strike === selectedStrike) : undefined;
-    const strikePattern = strikeRow ? (optionType === OptionType.CE ? strikeRow.cePattern : strikeRow.pePattern) : null;
-    const strikeCell = strikeRow?.cells.get(expiry);
-    const flowToken = strikeCell ? (optionType === OptionType.CE ? strikeCell.ceToken : strikeCell.peToken) : undefined;
-    const ivFlow = flowToken !== undefined ? flowByToken.get(flowToken)?.flow : undefined;
-    const fair = flowToken !== undefined ? fairToday.byToken.get(flowToken) : undefined;
-
-    void apiClient.post('/api/oi-history/signals', {
-        scrip,
-        signalDate,
-        expiry,
-        strike: selectedStrike,
-        optionType,
-        action,
-        status: setupStatus,
-        entryPremium,
-        spotPrice: chartData.priceTrend.endPrice ?? null,
-        details: {
-          priceTrend: chartData.priceTrend,
-          sellingType: selling.type,
-          sellingStatus: selling.status,
-          buyingDirection: buying.direction,
-          buyingStatus: buying.status,
-          buyingMomentum: optionType === OptionType.CE ? chartData.optionMomentum.ce : chartData.optionMomentum.pe,
-          decay: side ? { decayPct: side.decayPct, score: side.score, daysToExpiry: side.daysToExpiry, latestVolume: side.latestVolume } : null,
-          flowBias: chartData.biasSummary.bias,
-          ...(strikePattern && strikePattern !== RolloverPattern.None ? { strikePattern } : {}),
-          ...(ivFlow && ivFlow !== OiFlow.None ? { ivFlow } : {}),
-          ...(fair?.richness ? { fairValue: fair.richness, fairRichPct: fair.richPct !== null ? Math.round(fair.richPct * 1000) / 10 : null } : {}),
-        },
-      },
-    ).catch(() => {
-      // Logging must never affect the Trade Setup UI.
-    });
-  }, [chartData, data, scrip, dataScrip, selectedStrike, filterDate, tableData, flowByToken, fairToday]);
-
-  useEffect(() => {
-    if (!chartData || !scrip) return;
-    void (async () => {
-      try {
-        const result = await apiClient.get<TradeSignalRow[]>(
-          `/api/oi-history/signals?scrip=${encodeURIComponent(scrip)}&limit=500`,
-          { signal: pageSignal },
-        );
-        const signals = result || [];
-        setSignalRows(signals);
-        const openSignals = signals.filter((signal) => signal.outcome_status === SignalOutcome.Open || signal.outcome_status === null);
-        const openReturns = openSignals
-          .map((signal) => signal.outcome_return)
-          .filter((value): value is number => value !== null && Number.isFinite(Number(value)))
-          .map(Number);
-        const evaluated = signals.filter((signal) => signal.outcome_status === SignalOutcome.Profit || signal.outcome_status === SignalOutcome.Loss);
-        const wins = evaluated.filter((signal) => signal.outcome_status === SignalOutcome.Profit).length;
-        const average = evaluated.length ? evaluated.reduce((sum, signal) => sum + Number(signal.outcome_return || 0), 0) / evaluated.length : null;
-        const favorableRows = evaluated.filter((signal) => signal.max_favorable_return !== null);
-        const adverseRows = evaluated.filter((signal) => signal.max_adverse_return !== null);
-        const averageMaxFavorable = favorableRows.length
-          ? favorableRows.reduce((sum, signal) => sum + Number(signal.max_favorable_return), 0) / favorableRows.length
-          : null;
-        const averageMaxAdverse = adverseRows.length
-          ? adverseRows.reduce((sum, signal) => sum + Number(signal.max_adverse_return), 0) / adverseRows.length
-          : null;
-        const winningReturns = evaluated.map((signal) => Number(signal.outcome_return || 0)).filter((value) => value > 0);
-        const losingReturns = evaluated.map((signal) => Number(signal.outcome_return || 0)).filter((value) => value < 0);
-        const grossProfit = winningReturns.reduce((sum, value) => sum + value, 0);
-        const grossLoss = Math.abs(losingReturns.reduce((sum, value) => sum + value, 0));
-        const averageWin = winningReturns.length ? grossProfit / winningReturns.length : null;
-        const averageLoss = losingReturns.length ? -grossLoss / losingReturns.length : null;
-        const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : (grossProfit > 0 ? Infinity : null);
-        const byAction = (action: SideId) => {
-          const rows = evaluated.filter((signal) => signal.action === action);
-          return { count: rows.length, wins: rows.filter((signal) => signal.outcome_status === SignalOutcome.Profit).length };
-        };
-        const sells = byAction(Side.SELL);
-        const buys = byAction(Side.BUY);
-        setSignalPerformance({
-          total: signals.length,
-          open: openSignals.length,
-          averageOpenReturn: openReturns.length ? openReturns.reduce((sum, value) => sum + value, 0) / openReturns.length : null,
-          evaluated: evaluated.length,
-          wins,
-          winRate: evaluated.length ? (wins / evaluated.length) * 100 : null,
-          averageReturn: average,
-          averageMaxFavorable,
-          averageMaxAdverse,
-          averageWin,
-          averageLoss,
-          profitFactor,
-          sellEvaluated: sells.count,
-          sellWinRate: sells.count ? (sells.wins / sells.count) * 100 : null,
-          buyEvaluated: buys.count,
-          buyWinRate: buys.count ? (buys.wins / buys.count) * 100 : null,
-        });
-      } catch {
-        // Research metrics are optional and must never block the setup.
-      }
-    })();
-  }, [chartData, scrip, pageSignal, signalsVersion]);
-
-  const deleteSignal = useCallback(async (id: number) => {
-    try {
-      await apiClient.delete(`/api/oi-history/signals/${id}`);
-      setSignalRows((rows) => rows.filter((row) => row.id !== id));
-      setSignalsVersion((version) => version + 1);
-    } catch {
-      showToast('Failed to delete signal', ToastColor.Red);
-    }
-  }, [showToast]);
-
-  /**
-   * Resolve the strike/side/optionType a trade setup recommends and place it.
-   * Reuses handleTrade so token/tradingsymbol/price come from the OI grid.
-   *   side BUY  → CE for Bullish, PE for Bearish
-   *   side SELL → CE for Call Sell, PE for Put Sell
-   * Strike = setup's key level (resistance for CE side, support for PE side),
-   * falling back to ATM / max-OI magnet when the level is missing.
-   */
   const tradeFromSetup = useCallback((side: SideId) => {
     if (!chartData) return;
-    const { tradeSetup, sellingSetup, tradeLevels } = chartData;
-
-    let optionType: OptionTypeId | null = null;
-    if (side === Side.BUY) {
-      if (tradeSetup.direction === Bias.Bullish) optionType = OptionType.CE;
-      else if (tradeSetup.direction === Bias.Bearish) optionType = OptionType.PE;
-    } else {
-      if (sellingSetup.type === SellingSetup.CallSell) optionType = OptionType.CE;
-      else if (sellingSetup.type === SellingSetup.PutSell) optionType = OptionType.PE;
-    }
-
-    if (!optionType) {
-      showToast('No single-leg strike for this setup', ToastColor.Red);
+    const order = setupOrder(side, chartData, atmStrike, tableData, visibleTableExpiries);
+    if (!order.ok) {
+      showToast(order.message, ToastColor.Red);
       return;
     }
-
-    // CE side leans to resistance, PE side to support; fall back to ATM/max-OI.
-    const keyLevel = optionType === OptionType.CE ? tradeLevels.resistanceStrike : tradeLevels.supportStrike;
-    const targetStrike = keyLevel ?? atmStrike ?? tradeLevels.maxOiStrike;
-    if (!targetStrike) {
-      showToast('No tradeable strike found', ToastColor.Red);
-      return;
-    }
-
-    const row = tableData.find((r) => r.strike === targetStrike);
-    if (!row) {
-      showToast(`Strike ${targetStrike} not in table`, ToastColor.Red);
-      return;
-    }
-
-    type RowCell = ReturnType<typeof row.cells.get>;
-    let chosenCell: RowCell;
-    let chosenExpiry: string | undefined;
-    for (const exp of visibleTableExpiries) {
-      const cell = row.cells.get(exp);
-      if (!cell) continue;
-      const token = optionType === OptionType.CE ? cell.ceToken : cell.peToken;
-      const price = optionType === OptionType.CE ? cell.ceClose : cell.peClose;
-      if (token && price) {
-        chosenCell = cell;
-        chosenExpiry = exp;
-        break;
-      }
-    }
-
-    if (!chosenCell || !chosenExpiry) {
-      showToast(`No ${optionType} data at strike ${targetStrike}`, ToastColor.Red);
-      return;
-    }
-
-    void handleTrade(chosenCell, optionType, side, targetStrike, chosenExpiry);
+    void handleTrade(order.cell, order.optionType, side, order.strike, order.expiry);
   }, [chartData, atmStrike, tableData, visibleTableExpiries, handleTrade, showToast]);
 
-  const expiryColors = useMemo(() => {
-    const palette = ['#6366f1', '#f59e0b', '#10b981', '#ec4899', '#8b5cf6', '#06b6d4'];
-    const map = new Map<string, string>();
-    expiries.forEach((exp, i) => map.set(exp, palette[i % palette.length]));
-    return map;
-  }, [expiries]);
+  const expiryColors = useMemo(() => colorsForExpiries(expiries), [expiries]);
 
   /** In the fair-value view the legend picks the one expiry the chart shows. */
   const selectFairExpiry = (expiry: string) => {
@@ -1141,18 +306,14 @@ const OiHistory: React.FC = () => {
     });
   };
 
+  /** Hide or show an expiry in the table and chart; the last one shown stays. */
   const toggleExpiryVisibility = (expiry: string) => {
     setHiddenExpiries((prev) => {
       const isHidden = prev.has(expiry);
-      const visibleCount = tableExpiries.filter((exp) => !prev.has(exp)).length;
-      if (!isHidden && visibleCount <= 1) return prev;
-
+      if (!isHidden && tableExpiries.filter((exp) => !prev.has(exp)).length <= 1) return prev;
       const next = new Set(prev);
-      if (isHidden) {
-        next.delete(expiry);
-      } else {
-        next.add(expiry);
-      }
+      if (isHidden) next.delete(expiry);
+      else next.add(expiry);
       return next;
     });
   };
@@ -1172,180 +333,28 @@ const OiHistory: React.FC = () => {
         />
       )}
 
-      <div className={`oi-history__controls card${isDataMenuOpen ? ' oi-history__controls--menu-open' : ''}`}>
-        <div className="oi-history__control-row">
-          <label className="oi-history__label">
-            <span>Instrument</span>
-            <AppSelect
-              value={scrip}
-              options={scripOptions}
-              onChange={(v) => selectScrip(String(v))}
-              placeholder="Select instrument"
-              searchable
-              disabled={fetching}
-            />
-          </label>
+      <OiHistoryControls
+        scrip={scrip}
+        scripOptions={scripOptions}
+        recentScripOptions={recentScripOptions}
+        onScrip={selectScrip}
+        expiryMonth={months.selectedExpiryMonth}
+        expiryMonthOptions={months.selectableExpiryMonthOptions}
+        onExpiryMonth={months.setSelectedExpiryMonth}
+        strikeRange={strikeRange}
+        onStrikeRange={setStrikeRange}
+        specificStrike={specificStrike}
+        onSpecificStrike={setSpecificStrike}
+        fetchableMonths={months.fetchableExpiryMonths}
+        fetching={fetching}
+        onFetch={handleFetch}
+        onDeleteAll={isAdmin ? () => setConfirmDelete(true) : undefined}
+        progress={progress}
+        status={fetchResult}
+        error={fetchError}
+      />
 
-          <label className="oi-history__label">
-            <span>Expiry month</span>
-            <AppSelect
-              value={selectedExpiryMonth}
-              options={selectableExpiryMonthOptions.map((o) => ({
-                value: o.value,
-                label: o.label,
-              }))}
-              onChange={(v) => setSelectedExpiryMonth(String(v))}
-              disabled={fetching}
-            />
-          </label>
-
-          <label className="oi-history__label">
-            <span>Strikes</span>
-            <AppSelect
-              value={strikeRange}
-              options={[
-                { value: 5, label: '5' },
-                { value: 10, label: '10' },
-                { value: 20, label: '20' },
-                { value: 0, label: 'All' },
-                { value: -1, label: 'Specific' },
-              ]}
-              onChange={(v) => { const val = Number(v); setStrikeRange(val); localStorage.setItem(STRIKE_RANGE_KEY, String(val)); }}
-            />
-          </label>
-
-          {strikeRange === -1 && (
-            <label className="oi-history__label">
-              <input
-                className="app-input oi-history__specific-strike"
-                type="number"
-                min="0"
-                step="50"
-                placeholder="Strike"
-                value={specificStrike}
-                onChange={(event) => {
-                  setSpecificStrike(event.target.value);
-                  localStorage.setItem(SPECIFIC_STRIKE_KEY, event.target.value);
-                }}
-                disabled={fetching}
-              />
-            </label>
-          )}
-
-          <div className="oi-history__primary-actions">
-            <button
-              className="app-btn app-btn--primary"
-              onClick={handleFetch}
-              disabled={fetching || !scrip}
-              title={fetchableExpiryMonths.length > 0
-                ? `Fetch ${scrip} data for ${fetchableExpiryMonths.length} current/future expiry month(s) (${fetchableExpiryMonths.join(', ')}) from Kite`
-                : 'Historical expiry months are loaded from stored database data'}
-            >
-              {fetching ? 'Fetching...' : 'Fetch'}
-            </button>
-
-            {isAdmin && (
-            <div className="oi-history__data-menu" ref={dataMenuRef}>
-              <button
-                type="button"
-                className="app-btn app-btn--secondary oi-history__data-menu-trigger"
-                onClick={() => setIsDataMenuOpen((open) => !open)}
-                aria-expanded={isDataMenuOpen}
-                aria-haspopup="menu"
-                title="Manage stored OI history data"
-              >
-                Data
-              </button>
-              {isDataMenuOpen && (
-              <div className="oi-history__data-menu-panel" role="menu">
-                <button
-                  className="oi-history__data-menu-item oi-history__data-menu-item--danger"
-                  onClick={() => { setIsDataMenuOpen(false); setConfirmDelete(true); }}
-                  disabled={fetching || !scrip}
-                  role="menuitem"
-                  title={`Delete all OI history data for ${scrip}`}
-                >
-                  <strong>Delete All</strong>
-                  <span>Remove all stored months for {scrip}</span>
-                </button>
-              </div>
-              )}
-            </div>
-            )}
-          </div>
-
-        </div>
-
-        {recentScripOptions.length > 0 && (
-          <div className="oi-history__recent-scrips" aria-label="Recently visited scripts">
-            <span className="oi-history__recent-scrips-label">Recent</span>
-            {recentScripOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                className="oi-history__recent-scrip"
-                onClick={() => selectScrip(option.value)}
-                disabled={fetching}
-                title={`Switch to ${option.label}`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {progress && (
-          <div className="oi-history__progress">
-            <div className="oi-history__progress-header">
-              <span className="oi-history__progress-step">{progress.step}</span>
-              {progress.pct > 0 && (
-                <span className="oi-history__progress-pct">{progress.pct}%</span>
-              )}
-            </div>
-            <div className="oi-history__progress-track">
-              <div
-                className="oi-history__progress-fill"
-                style={{ width: `${progress.pct}%` }}
-              />
-            </div>
-            {progress.detail && (
-              <span className="oi-history__progress-detail">{progress.detail}</span>
-            )}
-          </div>
-        )}
-
-        {fetchResult && !progress && (
-          <div className="oi-history__status">{fetchResult}</div>
-        )}
-        {fetchError && !progress && (
-          <div className="oi-history__status oi-history__status--error">{fetchError}</div>
-        )}
-      </div>
-
-      {visibleDates.length > 0 && (
-        <div className="oi-history__date-bar">
-          {datesByMonth.map(({ month, dates }) => (
-            <div key={month} className="oi-history__date-group">
-              <span className="oi-history__date-group-label">{formatMonthShortLabel(month)}</span>
-              <div className="oi-history__date-group-days">
-                {dates.map((d) => {
-                  const isExpiryDay = expiryMarkerDates.has(d);
-                  return (
-                    <button
-                      key={d}
-                      className={`oi-history__date-btn ${filterDate === d ? 'oi-history__date-btn--active' : ''} ${isExpiryDay ? 'oi-history__date-btn--weekly-expiry' : ''}`}
-                      onClick={() => setFilterDate(d)}
-                      title={`${formatFullDateLabel(d)}${isExpiryDay ? ' — Expiry day' : ''}`}
-                    >
-                      {Number(d.slice(8))}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
+      <DateBar dates={visibleDates} selected={filterDate} expiryDates={expiryMarkerDates} onSelect={setFilterDate} />
 
       <FuturesContext futuresData={futuresData} filterDate={filterDate} scrip={scrip} />
 
@@ -1373,155 +382,33 @@ const OiHistory: React.FC = () => {
       )}
 
       {chartData && selectedStrike && (
-        <div className="oi-history__chart-wrap card">
-          <div className="oi-history__chart-header">
-            <span className="oi-history__chart-title">
-              Strike {selectedStrike}
-              {underlyingStock && (
-                <button
-                  type="button"
-                  className="oi-history__zones-btn"
-                  onClick={() => setShowZones(true)}
-                  title={`Entry & exit zones for ${underlyingStock.tradingsymbol}`}
-                  aria-label={`Entry and exit zones for ${underlyingStock.tradingsymbol}`}
-                >
-                  <LevelsIcon size={14} />
-                </button>
-              )}
-            </span>
-            <div className="oi-history__chart-controls">
-              <div className="oi-history__analysis-tabs" role="tablist" aria-label="OI analysis view">
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={analysisTab === OiHistoryTab.History}
-                  className={`oi-history__analysis-tab ${analysisTab === OiHistoryTab.History ? 'oi-history__analysis-tab--active' : ''}`}
-                  onClick={() => setAnalysisTab(OiHistoryTab.History)}
-                >
-                  OI Price History
-                </button>
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={analysisTab === OiHistoryTab.Setup}
-                  className={`oi-history__analysis-tab ${analysisTab === OiHistoryTab.Setup ? 'oi-history__analysis-tab--active' : ''}`}
-                  onClick={() => setAnalysisTab(OiHistoryTab.Setup)}
-                >
-                  Trade Setup
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {analysisTab === OiHistoryTab.History && (
-            <>
-          <div className="oi-history__chart-pair">
-            <StrikeOiChart optionType={OptionType.CE} dates={chartData.dates} dateMap={chartData.dateMap} maxOi={chartData.maxOi} maxPrice={chartData.maxCePrice} expiries={chartExpiries} expiryColors={expiryColors} showVolume={showVolume} showFair={chartFairExpiry !== null} />
-            <StrikeOiChart optionType={OptionType.PE} dates={chartData.dates} dateMap={chartData.dateMap} maxOi={chartData.maxOi} maxPrice={chartData.maxPePrice} expiries={chartExpiries} expiryColors={expiryColors} showVolume={showVolume} showFair={chartFairExpiry !== null} />
-          </div>
-
-          {/* Legend: toggles expiries, or picks the single expiry in the fair-value view */}
-          <div className="oi-history__chart-legend">
-            {tableExpiries.map((exp) => {
-              const label = expiryLabel(exp, isMonthlyExpiry(exp));
-              const isOff = chartFairExpiry !== null ? exp !== chartFairExpiry : hiddenExpiries.has(exp);
-              return (
-              <button
-                key={exp}
-                type="button"
-                className={`oi-history__chart-legend-item ${isOff ? 'oi-history__chart-legend-item--hidden' : ''}`}
-                onClick={() => (chartFairExpiry !== null ? selectFairExpiry(exp) : toggleExpiryVisibility(exp))}
-                aria-pressed={!isOff}
-                title={chartFairExpiry !== null ? `Show fair value for ${label}` : `${isOff ? 'Show' : 'Hide'} ${label} in table and chart`}
-              >
-                <span className="oi-history__chart-legend-swatch" style={{ background: expiryColors.get(exp) }} />
-                {label}
-              </button>
-              );
-            })}
-            {chartFairExpiry === null && (
-              <span className="oi-history__chart-legend-item">
-                <span className="oi-history__chart-legend-bar" /> {showVolume ? 'Volume' : 'OI'}
-              </span>
-            )}
-            {chartFairExpiry !== null && (
-              <>
-                <span className="oi-history__chart-legend-item">
-                  <span className="oi-history__chart-legend-dash" /> Fair value
-                </span>
-                <span className="oi-history__chart-legend-item">
-                  <span className="oi-history__chart-legend-tick oi-history__chart-legend-tick--rich" /> Expensive
-                </span>
-                <span className="oi-history__chart-legend-item">
-                  <span className="oi-history__chart-legend-tick oi-history__chart-legend-tick--cheap" /> Cheap
-                </span>
-              </>
-            )}
-          </div>
-          <div className="oi-history__chart-metric-row">
-            {/* In the fair-value view the bars show rich / cheap %, so the bar metric does not apply */}
-            {!showFairValue && (
-              <div className="oi-history__metric-toggle" role="group" aria-label="Chart bar metric">
-                <button type="button" className={`oi-history__volume-toggle ${!showVolume ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setShowVolume(false)} aria-pressed={!showVolume}>OI</button>
-                <button type="button" className={`oi-history__volume-toggle ${showVolume ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setShowVolume(true)} aria-pressed={showVolume}>Volume</button>
-              </div>
-            )}
-            <div className="oi-history__metric-toggle" role="group" aria-label="Chart view">
-              <button type="button" className={`oi-history__volume-toggle ${!showFairValue ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setShowFairValue(false)} aria-pressed={!showFairValue}>All expiries</button>
-              <button type="button" className={`oi-history__volume-toggle ${showFairValue ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setShowFairValue(true)} aria-pressed={showFairValue} title="Show one expiry with its fair value from the IV curve">Fair value</button>
-            </div>
-          </div>
-          {chartFairExpiry !== null && fairSummary && (
-            <div className="oi-history__fair-summary">
-              <span className="oi-history__fair-stat">
-                <span>ATM IV</span>
-                <strong>{fairSummary.stats?.atmIv != null ? `${(fairSummary.stats.atmIv * 100).toFixed(1)}%` : '-'}</strong>
-              </span>
-              <span className="oi-history__fair-stat">
-                <span>Realised ({REALIZED_WINDOW}d)</span>
-                <strong>{fairSummary.realized !== null ? `${(fairSummary.realized * 100).toFixed(1)}%` : '-'}</strong>
-              </span>
-              {fairSummary.verdict && (
-                <span className={`oi-history__fair-verdict oi-history__fair-verdict--${fairSummary.verdict === VolVerdict.OptionsExpensive ? 'rich' : fairSummary.verdict === VolVerdict.OptionsCheap ? 'cheap' : 'fair'}`}>
-                  {volVerdictLabel(fairSummary.verdict)}
-                </span>
-              )}
-              <span className="oi-history__fair-stat">
-                <span>Expected move</span>
-                <strong>
-                  {fairSummary.stats?.straddle != null
-                    ? `±${Math.round(fairSummary.stats.straddle)}${fairSummary.spot ? ` (${((fairSummary.stats.straddle / fairSummary.spot) * 100).toFixed(1)}%)` : ''}`
-                    : '-'}
-                </strong>
-              </span>
-              {chartData.hasFair ? (
-                <span className="oi-history__fair-note">
-                  Grey line = price at the expiry&apos;s fitted IV curve; the gap to the price is shaded. Above it is expensive, below is cheap.
-                </span>
-              ) : (
-                <span className="oi-history__fair-note oi-history__fair-note--warn">
-                  No fair value for this expiry: on these dates fewer than 5 out-of-the-money strikes traded, too few to fit an IV curve. Far-month stock options are often this thin, and their prices go stale.
-                </span>
-              )}
-            </div>
-          )}
-            </>
-          )}
-
-          {analysisTab === OiHistoryTab.Setup && (
-            <TradeSetupDashboard
-              setup={chartData}
-              selectedStrike={selectedStrike}
-              filterDate={filterDate}
-              expiries={visibleTableExpiries}
-              isMonthlyExpiry={isMonthlyExpiry}
-              signalPerformance={signalPerformance}
-              onTrade={tradeFromSetup}
-              signalRows={signalRows}
-              onDeleteSignal={deleteSignal}
-            />
-          )}
-        </div>
+        <StrikeHistoryCard
+          strike={selectedStrike}
+          chart={chartData}
+          tab={analysisTab}
+          onTab={setAnalysisTab}
+          zonesSymbol={underlyingStock?.tradingsymbol ?? null}
+          onShowZones={() => setShowZones(true)}
+          tableExpiries={tableExpiries}
+          visibleExpiries={visibleTableExpiries}
+          hiddenExpiries={hiddenExpiries}
+          chartExpiries={chartExpiries}
+          fairExpiry={chartFairExpiry}
+          isMonthlyExpiry={isMonthlyExpiry}
+          expiryColors={expiryColors}
+          onToggleExpiry={toggleExpiryVisibility}
+          onPickFairExpiry={selectFairExpiry}
+          showVolume={showVolume}
+          onShowVolume={setShowVolume}
+          showFairValue={showFairValue}
+          onShowFairValue={setShowFairValue}
+          fairSummary={fairSummary}
+          filterDate={filterDate}
+          signalPerformance={signalPerformance}
+          signalRows={signalRows}
+          onTrade={tradeFromSetup}
+          onDeleteSignal={deleteSignal}
+        />
       )}
 
       {data.length === 0 && !loading && !fetching && (
@@ -1532,18 +419,11 @@ const OiHistory: React.FC = () => {
       )}
 
       {confirmDelete && (
-        <div className="oi-confirm-overlay" onClick={() => setConfirmDelete(false)}>
-          <div className="oi-confirm-modal" onClick={(e) => e.stopPropagation()}>
-            <h4 className="oi-confirm-modal__title">Delete Script Data</h4>
-            <p className="oi-confirm-modal__text">
-              Delete ALL OI history data for <strong>{scripOptions.find((o) => o.value === scrip)?.label || scrip}</strong>? This cannot be undone.
-            </p>
-            <div className="oi-confirm-modal__actions">
-              <button className="app-btn app-btn--secondary" onClick={() => setConfirmDelete(false)}>Cancel</button>
-              <button className="app-btn app-btn--danger" onClick={handleDeleteMonth}>Delete</button>
-            </div>
-          </div>
-        </div>
+        <DeleteScripDialog
+          label={scripOptions.find((o) => o.value === scrip)?.label || scrip}
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={handleDeleteAll}
+        />
       )}
 
       {showZones && underlyingStock && (

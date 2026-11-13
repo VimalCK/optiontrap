@@ -9,8 +9,8 @@ const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const ALLOWED: Record<string, string> = {
   'components/OiHistory/FuturesContext.tsx': 'futures price chart',
   'components/OiHistory/StrikeOiChart.tsx': 'strike OI and premium chart',
-  'components/OptionChain/OptionChain.tsx': 'OI move sparkline in the chart tooltip',
-  'pages/Positions.tsx': 'payoff curve',
+  'components/OptionChain/StrikeTooltip.tsx': 'OI move sparkline in the chart tooltip',
+  'components/Positions/PayoffChart.tsx': 'payoff curve',
   'components/icons/Icons.tsx': 'the icons themselves',
 };
 

@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { breakevenLabel, maxLossLabel, maxProfitLabel, paperTabs, RiskTable } from './Positions';
+import RiskTable from './RiskTable';
+import { paperTabs } from './PaperPositions';
+import { breakevenLabel, maxLossLabel, maxProfitLabel } from './riskLabels';
 import type { LegRisk, RiskGroup } from '@/services/positionRisk';
 import { PaperTab } from '@/utils/uiEnums';
 
