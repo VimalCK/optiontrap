@@ -5,8 +5,7 @@
  * open?" or "is it 08:30 IST yet?" check.
  *
  * One timer per host reads the IST clock every second (shared/marketTime.js:
- * trading days, 09:15–15:30 IST; server/marketClock.js: the after-close time)
- * and tells subscribers:
+ * trading days, 09:15–15:30 IST) and tells subscribers:
  *   onOpen(fn)       at each session's open; at once when the host starts
  *                    while the market is open (a restart mid-session)
  *   onClose(fn)      after each session's close; once when the host starts
@@ -27,11 +26,37 @@
  * disposes when it stops the plug-in. A handler that throws is reported for
  * that plug-in (onError) and never stops the clock or anyone else's handlers.
  */
-import { isMarketOpen, marketClock } from '../../shared/marketTime.js';
+import { MARKET_CLOSE_MINUTES, addDays, isMarketOpen, marketClock, marketDateTime } from '../../shared/marketTime.js';
 import { MarketEvent } from '../../shared/tradeEnums.js';
-import { isAfterCloseOnWeekday } from '../marketClock.js';
 
 const TICK_MS = 1000;
+
+/** Fifteen minutes after the close, so the day's candles are final. */
+export const AFTER_CLOSE_MINUTES = MARKET_CLOSE_MINUTES + 15;
+
+/** Exchange holidays need no calendar: Kite returns no candle for the day, so the run stores nothing new. */
+export function isAfterCloseOnWeekday(now = new Date()) {
+  const { weekday, minutes } = marketClock(now);
+  return weekday >= 1 && weekday <= 5 && minutes >= AFTER_CLOSE_MINUTES;
+}
+
+/** 08:30 market time: when the nightly jobs run, every day of the week. */
+export const NIGHTLY_JOBS_MINUTES = 8 * 60 + 30;
+
+/** A server that was down at 08:30 runs them as soon as it's back. */
+export function isNightlyJobTime(now = new Date()) {
+  return marketClock(now).minutes >= NIGHTLY_JOBS_MINUTES;
+}
+
+/** By 08:30 Zerodha has published the day's instrument list. */
+export const INSTRUMENTS_REFRESH_MINUTES = 8 * 60 + 30;
+
+/** A table loaded earlier than this is out of date. */
+export function currentInstrumentListStart(now = new Date()) {
+  const { date, minutes } = marketClock(now);
+  const day = minutes >= INSTRUMENTS_REFRESH_MINUTES ? date : addDays(date, -1);
+  return marketDateTime(day, INSTRUMENTS_REFRESH_MINUTES).getTime();
+}
 
 /**
  * @typedef {() => unknown} Handler

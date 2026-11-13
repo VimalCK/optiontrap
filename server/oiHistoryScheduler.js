@@ -17,7 +17,7 @@ import {
   getRecentOiHistoryScrips,
   getStoredOiHistoryExpiryMonths,
 } from './db.js';
-import { daysBefore, istClock } from './marketClock.js';
+import { addDays, marketClock } from '../shared/marketTime.js';
 import { fetchOiHistoryMonth } from './oiHistoryFetch.js';
 import { createDailyKiteJob } from './dailyKiteJob.js';
 import { kiteClient } from './kiteClient.js';
@@ -71,7 +71,7 @@ async function scoreSignals(scrip) {
 }
 
 async function fetchTrackedScrips({ kite, date, results }) {
-  const scrips = await getRecentOiHistoryScrips(daysBefore(date, TRACKED_SCRIP_DAYS));
+  const scrips = await getRecentOiHistoryScrips(addDays(date, -TRACKED_SCRIP_DAYS));
   console.log(`[Scheduler] ${OI_HISTORY_JOB}: fetching ${date} for ${scrips.join(', ') || 'no tracked scrips'}`);
 
   let loginRefused = false;
@@ -94,6 +94,6 @@ export const oiHistoryJob = {
   id: OI_HISTORY_JOB,
   /** @param {import('./tradeEngine/host.js').PluginContext} ctx */
   start(ctx) {
-    ctx.market.afterClose(CHECK_INTERVAL_MS, () => runAfterCloseFetch(istClock().date));
+    ctx.market.afterClose(CHECK_INTERVAL_MS, () => runAfterCloseFetch(marketClock().date));
   },
 };

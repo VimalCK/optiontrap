@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { latestNightlyDate, nightlyJobsStatus, selectJobFiles } from './nightlyJobs.js';
-import { isNightlyJobTime } from './marketClock.js';
+import { isNightlyJobTime } from './tradeEngine/market.js';
 import { runPlugin } from './tradeEngine/runPlugin.fixture.js';
 
 // Fake scheduled_job_runs: job -> date -> status (a failed run's error saved as 'boom'). Hoisted so the db.js mock can use it.

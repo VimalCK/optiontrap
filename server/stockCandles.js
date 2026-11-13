@@ -13,7 +13,8 @@ import {
   updateStockSetupSignal,
   withNamedAdvisoryLock,
 } from './db.js';
-import { AFTER_CLOSE_MINUTES, daysBefore, istClock } from './marketClock.js';
+import { AFTER_CLOSE_MINUTES } from './tradeEngine/market.js';
+import { addDays, marketClock } from '../shared/marketTime.js';
 import { KiteApiError, kiteClient } from './kiteClient.js';
 import { SETUP_BACKFILL_DAYS, analyzeStock, evaluateSetup, parseKiteCandles, replaySetups, scanSummary } from '../shared/stockSetups.js';
 
@@ -47,12 +48,12 @@ export function candleSyncWarning(err) {
  * weekday 15:45 IST at or before `now`. A stock checked after that needs no new fetch.
  */
 export function lastSettledAt(now = new Date()) {
-  const { date, weekday, minutes } = istClock(now);
+  const { date, weekday, minutes } = marketClock(now);
   let day = date;
   let wd = weekday;
   if (!(wd >= 1 && wd <= 5 && minutes >= AFTER_CLOSE_MINUTES)) {
     do {
-      day = daysBefore(day, 1);
+      day = addDays(day, -1);
       wd = (wd + 6) % 7;
     } while (wd === 0 || wd === 6);
   }
@@ -63,7 +64,7 @@ export function lastSettledAt(now = new Date()) {
 
 /** Completed sessions only: today's candle is dropped until the close has settled. */
 export function completedCandles(candles, now = new Date()) {
-  const { date, weekday, minutes } = istClock(now);
+  const { date, weekday, minutes } = marketClock(now);
   const settledToday = weekday >= 1 && weekday <= 5 && minutes >= AFTER_CLOSE_MINUTES;
   return settledToday ? candles : candles.filter((c) => c.date < date);
 }
@@ -100,9 +101,9 @@ export async function syncStockCandles(instrumentToken, kite, { now = new Date()
     const sync = await getStockCandleSync(instrumentToken);
     if (sync && sync.checkedAt >= lastSettledAt(now)) return { fetched: 0, full: false, skipped: true };
 
-    const today = istClock(now).date;
+    const today = marketClock(now).date;
     if (sync?.latestCandleDate) {
-      const from = daysBefore(sync.latestCandleDate, OVERLAP_DAYS);
+      const from = addDays(sync.latestCandleDate, -OVERLAP_DAYS);
       const fetched = completedCandles(await fetchKiteDaily(instrumentToken, from, today, kite, { signal }), now);
       const stored = (await getStockCandles(instrumentToken)).filter((c) => c.date >= from);
       if (!historyRewritten(stored, fetched)) {
@@ -111,7 +112,7 @@ export async function syncStockCandles(instrumentToken, kite, { now = new Date()
       }
     }
 
-    const all = completedCandles(await fetchKiteDaily(instrumentToken, daysBefore(today, HISTORY_DAYS), today, kite, { signal }), now);
+    const all = completedCandles(await fetchKiteDaily(instrumentToken, addDays(today, -HISTORY_DAYS), today, kite, { signal }), now);
     await saveStockCandles(instrumentToken, all, { replace: true });
     return { fetched: all.length, full: true, skipped: false };
   });
@@ -155,7 +156,7 @@ export async function scanStock(stock, marketCandles) {
 export async function backfillStockSetups(stock) {
   const candles = await getStockCandles(stock.instrumentToken);
   const latest = candles[candles.length - 1];
-  const found = latest ? replaySetups(candles, daysBefore(latest.date, SETUP_BACKFILL_DAYS)) : [];
+  const found = latest ? replaySetups(candles, addDays(latest.date, -SETUP_BACKFILL_DAYS)) : [];
 
   await insertStockSetupSignals(found.map((s) => ({
     instrumentToken: stock.instrumentToken,

@@ -5,7 +5,8 @@
  */
 
 import { getOrFetchInstruments, instrumentsAreFresh } from './instruments.js';
-import { INSTRUMENTS_REFRESH_MINUTES, istClock } from './marketClock.js';
+import { INSTRUMENTS_REFRESH_MINUTES } from './tradeEngine/market.js';
+import { marketClock } from '../shared/marketTime.js';
 import { findWorkingAdminSession } from './oiHistoryScheduler.js';
 
 export const INSTRUMENT_SYNC_JOB_ID = 'instrument-sync';
@@ -18,7 +19,7 @@ async function syncIfStale() {
 
   const kite = await findWorkingAdminSession();
   if (!kite) {
-    const { date } = istClock();
+    const { date } = marketClock();
     if (lastWaitingLogDate !== date) {
       console.log('[Instruments] Waiting for an admin Kite login to sync the instrument list');
       lastWaitingLogDate = date;

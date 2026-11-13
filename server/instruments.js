@@ -4,7 +4,7 @@
  */
 
 import { getInstrumentsDate, getInstruments, saveInstruments, withAdvisoryLock } from './db.js';
-import { currentInstrumentListStart } from './marketClock.js';
+import { currentInstrumentListStart } from './tradeEngine/market.js';
 import { kiteClient } from './kiteClient.js';
 import { Exchange, InstrumentType, OptionType } from '../shared/tradeEnums.js';
 

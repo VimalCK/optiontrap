@@ -22,8 +22,8 @@ import {
   query,
   runSqlScript,
 } from './db.js';
-import { NIGHTLY_JOBS_MINUTES, istClock, isNightlyJobTime } from './marketClock.js';
-import { addDays } from '../shared/marketTime.js';
+import { NIGHTLY_JOBS_MINUTES, isNightlyJobTime } from './tradeEngine/market.js';
+import { addDays, marketClock } from '../shared/marketTime.js';
 import { JobRunStatus } from '../shared/appEnums.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -90,7 +90,7 @@ async function runNightlyJobs(date) {
 }
 
 export function latestNightlyDate(now = new Date()) {
-  const { date } = istClock(now);
+  const { date } = marketClock(now);
   return isNightlyJobTime(now) ? date : addDays(date, -1);
 }
 
@@ -117,6 +117,6 @@ export const nightlyJobsJob = {
   id: NIGHTLY_JOBS_ID,
   /** @param {import('./tradeEngine/host.js').PluginContext} ctx */
   start(ctx) {
-    ctx.market.daily(NIGHTLY_JOBS_MINUTES, CHECK_INTERVAL_MS, () => runNightlyJobs(istClock().date));
+    ctx.market.daily(NIGHTLY_JOBS_MINUTES, CHECK_INTERVAL_MS, () => runNightlyJobs(marketClock().date));
   },
 };

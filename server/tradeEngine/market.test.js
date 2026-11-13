@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createMarket } from './market.js';
+import { createMarket, isAfterCloseOnWeekday } from './market.js';
 
 const OPEN = new Date('2026-11-12T04:00:00Z'); // Thu 09:30 IST
 const settle = () => new Promise((resolve) => setImmediate(resolve));
@@ -214,5 +214,21 @@ describe('the market clock for scheduled jobs', () => {
     finish();
     await tickAt(new Date('2026-11-14T20:00:06Z'));
     expect(job).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('isAfterCloseOnWeekday', () => {
+  const utc = (iso) => new Date(`${iso}Z`);
+
+  it('is due from 15:45 IST on weekdays', () => {
+    expect(isAfterCloseOnWeekday(utc('2026-10-19T10:14:00'))).toBe(false); // Mon 15:44
+    expect(isAfterCloseOnWeekday(utc('2026-10-19T10:15:00'))).toBe(true);  // Mon 15:45
+    expect(isAfterCloseOnWeekday(utc('2026-10-23T18:29:00'))).toBe(true);  // Fri 23:59
+  });
+
+  it('is not due at weekends or before the close', () => {
+    expect(isAfterCloseOnWeekday(utc('2026-10-24T11:00:00'))).toBe(false); // Sat 16:30
+    expect(isAfterCloseOnWeekday(utc('2026-10-25T11:00:00'))).toBe(false); // Sun 16:30
+    expect(isAfterCloseOnWeekday(utc('2026-10-20T04:00:00'))).toBe(false); // Tue 09:30
   });
 });

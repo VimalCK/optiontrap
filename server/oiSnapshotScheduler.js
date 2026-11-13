@@ -6,8 +6,7 @@
 
 import { getAlwaysSnapshotSymbols, getTodayOiSnapshotTokens, getUnderlyings, saveOiSnapshot } from './db.js';
 import { getOrFetchInstruments } from './instruments.js';
-import { istClock, isMarketOpen } from './marketClock.js';
-import { marketDateTime, marketTimeLabel } from '../shared/marketTime.js';
+import { isMarketOpen, marketClock, marketDateTime, marketTimeLabel } from '../shared/marketTime.js';
 import { findWorkingAdminSession } from './oiHistoryScheduler.js';
 import { fetchQuotes } from './kiteQuotes.js';
 import { KiteApiError } from './kiteClient.js';
@@ -118,7 +117,7 @@ async function snapshottedToday(instruments) {
  * best bid/ask and last trade time, so a stale last price can be told apart.
  */
 async function captureSymbols(symbols, kite, instruments, now = new Date()) {
-  const { date } = istClock(now);
+  const { date } = marketClock(now);
   const options = optionsByUnderlying(instruments);
   const spotRows = new Map((await getUnderlyings())
     .filter((u) => symbols.includes(u.name) && u.instrumentToken !== null)
@@ -191,7 +190,7 @@ function capture(date, pickSymbols) {
  */
 export async function watchOiSnapshotSymbol(symbol) {
   if (!isMarketOpen() || (await getAlwaysSnapshotSymbols()).includes(symbol)) return { captured: 0 };
-  const { date } = istClock();
+  const { date } = marketClock();
   const { count } = await capture(date, async (instruments) => (
     (await snapshottedToday(instruments)).has(symbol) ? [] : [symbol]
   ));
@@ -203,7 +202,7 @@ async function captureSlot() {
   const slot = Math.floor(Date.now() / SLOT_MS);
   if (slot === lastSlot) return;
 
-  const { date } = istClock();
+  const { date } = marketClock();
   const { symbols, count } = await capture(date, async (list) => (
     [...new Set([...(await getAlwaysSnapshotSymbols()), ...(await snapshottedToday(list))])]
   ));

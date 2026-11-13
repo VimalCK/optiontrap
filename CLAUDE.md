@@ -96,7 +96,8 @@ It never places real orders. The user is the sole developer; prod (optiontrap.co
    - Browser helpers: `istDateString`, `istTimeLabel`, `istDaysUntil`, `formatCalendarDate`, `getMarketStatus`, `isMarketLive`
      in `src/utils/marketStatus.ts`.
    - Shared helpers: `shared/marketTime.js` (`marketClock`, `marketDate`, `isMarketOpen`, `isTradingDay`, `MARKET_TIME_ZONE`).
-   - Server helpers: `server/marketClock.js` (`istClock`).
+   - The server uses the shared helpers too. When the scheduled jobs run (08:30 IST, after the close) is set in
+     `server/tradeEngine/market.js` (`NIGHTLY_JOBS_MINUTES`, `AFTER_CLOSE_MINUTES`, …).
    - Convert any local time the user mentions to IST before reasoning about it.
 7. **One code path per concept.** When two screens show the same data (e.g. Portfolio and Dashboard holdings), share a
    hook/service, so the screens can't disagree. Extend the shared one; don't fork logic per page.

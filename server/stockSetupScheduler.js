@@ -8,7 +8,7 @@ import {
   getStockCandles,
   getWatchlistStocks,
 } from './db.js';
-import { istClock } from './marketClock.js';
+import { marketClock } from '../shared/marketTime.js';
 import { OI_HISTORY_JOB, findWorkingAdminSession } from './oiHistoryScheduler.js';
 import { scanStock, syncStockCandles } from './stockCandles.js';
 import { createDailyKiteJob } from './dailyKiteJob.js';
@@ -71,6 +71,6 @@ export const stockSetupJob = {
   id: STOCK_SETUPS_JOB,
   /** @param {import('./tradeEngine/host.js').PluginContext} ctx */
   start(ctx) {
-    ctx.market.afterClose(CHECK_INTERVAL_MS, () => runAfterCloseScan(istClock().date));
+    ctx.market.afterClose(CHECK_INTERVAL_MS, () => runAfterCloseScan(marketClock().date));
   },
 };
