@@ -46,7 +46,7 @@ import { checkGeneralSettings, tradeKind } from '../../../shared/automation.js';
 import { checkEntryRules, entryLimitPrice, tradeLots } from '../../../shared/entryRules/index.js';
 import { STRATEGIES } from '../strategies/index.js';
 import { marketDayStartMs } from '../../../shared/marketTime.js';
-import { algoLogger } from '../../algoLog.js';
+import { engineLogger } from '../../engineLog.js';
 import { Horizon, LifecycleStage, OrderStatus, OrderType, TradeSource, isOptionType } from '../../../shared/tradeEnums.js';
 import { HealthStatus } from '../../../shared/appEnums.js';
 import { countLabel, healthTime } from '../../serviceHealth.js';
@@ -156,7 +156,7 @@ export function refusal(trade, config, ctx) {
  *   findKiteSession?: typeof findWorkingAdminSession,
  *   loadInstruments?: typeof getOrFetchInstruments,
  *   clock?: () => Date,
- *   log?: (event: string, details?: import('../../algoLog.js').AlgoDetails) => void,
+ *   log?: (event: string, details?: import('../../engineLog.js').EngineLogDetails) => void,
  * }} [deps]
  */
 export function createSignalsService({
@@ -166,7 +166,7 @@ export function createSignalsService({
   findKiteSession = findWorkingAdminSession,
   loadInstruments = getOrFetchInstruments,
   clock = () => new Date(),
-  log = algoLogger('Signals'),
+  log = engineLogger('Signals'),
 } = {}) {
   /** The order service and trade monitor (from the engine at start), and the order-settled unsubscribe. */
   let orders = null;

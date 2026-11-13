@@ -1,6 +1,6 @@
 import { LIFECYCLE_STAGES } from '../../../shared/automation.js';
 import { marketDate } from '../../../shared/marketTime.js';
-import { paperPnl } from '../../../shared/paperPnl.js';
+import { tradePnl } from '../../../shared/tradePnl.js';
 import { Tone, type ToneId } from '@/utils/uiEnums';
 import type { AutoTrade, AutoTradeEvent } from '@/services/automation';
 import type { StrategyInfo } from '@/services/strategies';
@@ -35,7 +35,7 @@ export { sideLabel } from '../../../shared/tradeEnums.js';
 /** P&L after charges, once closed; null before that. */
 export function closedPnl(trade: AutoTrade): number | null {
   if (trade.stage !== LifecycleStage.Closed || trade.entryPrice == null || trade.exitPrice == null) return null;
-  return paperPnl({ side: trade.side, quantity: trade.quantity, entryPrice: trade.entryPrice }, trade.exitPrice) - (trade.charges ?? 0);
+  return tradePnl({ side: trade.side, quantity: trade.quantity, entryPrice: trade.entryPrice }, trade.exitPrice) - (trade.charges ?? 0);
 }
 
 export interface TradeDay {

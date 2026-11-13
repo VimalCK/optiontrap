@@ -35,8 +35,8 @@ import { openSharedTickerFeed } from '../../sharedTickerFeed.js';
 import { findWorkingAdminSession } from '../../oiHistoryScheduler.js';
 import { marketDate, marketDayStartMs } from '../../../shared/marketTime.js';
 import { checkExitRules } from '../../../shared/exitRules/index.js';
-import { paperPnl, paperPnlPercent } from '../../../shared/paperPnl.js';
-import { algoLogger } from '../../algoLog.js';
+import { tradePnl, tradePnlPercent } from '../../../shared/tradePnl.js';
+import { engineLogger } from '../../engineLog.js';
 import { TradeSource } from '../../../shared/tradeEnums.js';
 import { HealthStatus } from '../../../shared/appEnums.js';
 import { countLabel, healthTime } from '../../serviceHealth.js';
@@ -90,7 +90,7 @@ export function openPnlByUser(positions, lastPrices) {
   const totals = new Map();
   for (const position of positions) {
     const price = lastPrices.get(position.instrumentToken);
-    if (price !== undefined) totals.set(position.userId, (totals.get(position.userId) ?? 0) + paperPnl(position, price));
+    if (price !== undefined) totals.set(position.userId, (totals.get(position.userId) ?? 0) + tradePnl(position, price));
   }
   return totals;
 }
@@ -112,7 +112,7 @@ export function dueExits(positions, { lastPrices, exitRulesByUser, todayPnlByUse
     const rules = exitRulesByUser.get(position.userId);
     if (price === undefined || !rules) continue;
     const ctx = { now, todayAutoPnl: todayPnlByUser.get(position.userId) ?? 0 };
-    const fired = checkExitRules({ ...position, pnl: paperPnl(position, price), pnlPercent: paperPnlPercent(position, price) }, ctx, rules);
+    const fired = checkExitRules({ ...position, pnl: tradePnl(position, price), pnlPercent: tradePnlPercent(position, price) }, ctx, rules);
     if (fired) due.push({ position, exitPrice: price, ...fired });
   }
   return due;
@@ -128,7 +128,7 @@ export function dueExits(positions, { lastPrices, exitRulesByUser, todayPnlByUse
  *   findKiteSession?: typeof findWorkingAdminSession,
  *   createFeed?: typeof openSharedTickerFeed,
  *   clock?: () => Date,
- *   log?: (event: string, details?: import('../../algoLog.js').AlgoDetails) => void,
+ *   log?: (event: string, details?: import('../../engineLog.js').EngineLogDetails) => void,
  * }} [deps]
  */
 export function createTradeMonitor({
@@ -136,7 +136,7 @@ export function createTradeMonitor({
   findKiteSession = findWorkingAdminSession,
   createFeed = openSharedTickerFeed,
   clock = () => new Date(),
-  log = algoLogger('Monitor'),
+  log = engineLogger('Monitor'),
 } = {}) {
   /** @type {Map<string, WatchedPosition>} position id → position */
   const watched = new Map();

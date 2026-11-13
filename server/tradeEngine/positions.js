@@ -2,13 +2,13 @@
  * Positions: what a filled order does to the user's positions. Only the order
  * service (services/orders.js) calls these, after it has decided the fill
  * price, so every trade, manual or automated, entry or exit, goes through one
- * path and is checked against the same rules (shared/paperTradeRules.js).
+ * path and is checked against the same rules (shared/tradeRules.js).
  *
  * - openPosition opens a position at the fill, or merges it with an open one
  *   (bookTrade): the merge rules and the charges are decided here, and db.js
  *   only stores the result.
  * - closePosition closes an open position at the fill and records its charges
- *   (shared/paperCharges.js), dated when it happens. Closing an
+ *   (shared/tradeCharges.js), dated when it happens. Closing an
  *   automated position (source Auto) also closes the automated trades behind
  *   it, with why: the exit rule's reason from the trade monitor, "Exited
  *   manually" (MANUAL_EXIT), or the engine's square-off after the close
@@ -32,12 +32,12 @@ import {
   insertPosition,
   setPositionQuantity,
 } from '../db.js';
-import { checkPaperTrade, normalizeTradeInput } from '../../shared/paperTradeRules.js';
-import { roundTripCharges } from '../../shared/paperCharges.js';
-import { algoLog } from '../algoLog.js';
-import { paperPnl } from '../../shared/paperPnl.js';
+import { checkTrade, normalizeTradeInput } from '../../shared/tradeRules.js';
+import { roundTripCharges } from '../../shared/tradeCharges.js';
+import { engineLog } from '../engineLog.js';
+import { tradePnl } from '../../shared/tradePnl.js';
 import { SESSION_SQUARE_OFF_ID } from '../../shared/exitRules/index.js';
-import { PaperTradeAction, TradeSource, TradingMode, oppositeSide } from '../../shared/tradeEnums.js';
+import { TradeAction, TradeSource, TradingMode, oppositeSide } from '../../shared/tradeEnums.js';
 
 export const NOT_FOUND = 'NOT_FOUND';
 const NOT_FOUND_MESSAGE = 'Position not found or already exited';
@@ -60,13 +60,13 @@ const refused = ({ rule, code, message }) => ({ ok: false, code, message, rule }
  */
 export async function openPosition(userId, input, { now = new Date(), source = TradeSource.Manual } = {}) {
   const trade = normalizeTradeInput(input);
-  const result = checkPaperTrade(PaperTradeAction.Open, { trade, now });
+  const result = checkTrade(TradeAction.Open, { trade, now });
   if (!result.ok) return refused(result.violations[0]);
   return { ok: true, position: await bookTrade(userId, { ...trade, mode: trade.mode || TradingMode.Paper, source }) };
 }
 
 /**
- * A position's charges for closing at `exitPrice` at `exitTime` (shared/paperCharges.js).
+ * A position's charges for closing at `exitPrice` at `exitTime` (shared/tradeCharges.js).
  * @param {{ instrumentType: string, side: any, quantity: number, entryPrice: number, entryTime: string }} position
  * @param {number} exitPrice
  * @param {Date} exitTime
@@ -148,7 +148,7 @@ const closeAt = (position, exitPrice, at) => closeOpenPosition(position.id, {
  * @param {{ reason: string }} exitReason
  */
 export function bookedDetails(userId, position, exited, fill, exitReason) {
-  const pnl = paperPnl({ side: position.side, quantity: Number(position.quantity), entryPrice: Number(position.entryPrice) }, fill);
+  const pnl = tradePnl({ side: position.side, quantity: Number(position.quantity), entryPrice: Number(position.entryPrice) }, fill);
   const charges = exited.charges ?? 0;
   return {
     trade: `${position.side} ${position.quantity} ${position.tradingsymbol}`,
@@ -173,7 +173,7 @@ export function bookedDetails(userId, position, exited, fill, exitReason) {
 export async function closablePosition(userId, positionId, exitPrice, now) {
   const position = await getOpenPosition(positionId, userId);
   if (!position) return { ok: false, code: NOT_FOUND, message: NOT_FOUND_MESSAGE };
-  const result = checkPaperTrade(PaperTradeAction.Exit, { position, exitPrice, now });
+  const result = checkTrade(TradeAction.Exit, { position, exitPrice, now });
   if (!result.ok) return refused(result.violations[0]);
   return { ok: true, position };
 }
@@ -186,7 +186,7 @@ export async function closablePosition(userId, positionId, exitPrice, now) {
  * @param {Date} at
  */
 export function squareOffable(position, exitPrice, at) {
-  const result = checkPaperTrade(PaperTradeAction.SquareOff, { position, exitPrice, now: at });
+  const result = checkTrade(TradeAction.SquareOff, { position, exitPrice, now: at });
   return result.ok ? { ok: true, position } : refused(result.violations[0]);
 }
 
@@ -207,7 +207,7 @@ export async function closePosition(userId, position, fill, { now = new Date(), 
   if (!exited) return { ok: false, code: NOT_FOUND, message: NOT_FOUND_MESSAGE };
   if (position.source === TradeSource.Auto) {
     await closeAutoTradesOf(userId, position, fill, exitReason, now);
-    algoLog('Exit', 'booked', bookedDetails(userId, position, exited, fill, exitReason));
+    engineLog('Exit', 'booked', bookedDetails(userId, position, exited, fill, exitReason));
   }
   return { ok: true, position: exited };
 }

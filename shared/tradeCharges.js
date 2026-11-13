@@ -1,6 +1,6 @@
 /**
- * Paper trade charges: what Zerodha would charge for the same orders, so
- * paper P&L after charges matches what a real trade would have kept.
+ * Trade charges: what Zerodha would charge for the same orders, so
+ * P&L after charges matches what a real trade would have kept.
  *
  * The rates are Zerodha's published NSE charges (zerodha.com/charges, checked
  * November 2026), kept as data: one schedule per segment. A rate change is a

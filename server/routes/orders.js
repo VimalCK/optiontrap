@@ -1,4 +1,4 @@
-// Every paper trade, manual or automated, is an order through the order service (shared/paperOrders.js, shared/paperTradeRules.js).
+// Every paper trade, manual or automated, is an order through the order service (shared/orders.js, shared/tradeRules.js).
 import { asyncRouter, withFailureMessage } from '../asyncRoutes.js';
 import { subscriber } from '../authMiddleware.js';
 import { getOrders, getUserOpenOrders } from '../db.js';

@@ -2,8 +2,8 @@
  * The order service: the one path for every trade, a trade engine service
  * (server/tradeEngine/host.js). Manual orders (POST /api/orders) and the
  * engine's own (the signals service's entries, the trade monitor's exits) are
- * placed, filled and cancelled here; the rules are in shared/paperOrders.js
- * and shared/paperTradeRules.js, orders are kept in the orders table.
+ * placed, filled and cancelled here; the rules are in shared/orders.js
+ * and shared/tradeRules.js, orders are kept in the orders table.
  *
  * - Placing checks the order, prices it from a quote, and records it. In
  *   market hours a market order fills at once at the bid / ask
@@ -32,8 +32,8 @@
  *
  * Every function returns a result instead of throwing for a refused order:
  *   { ok: true, order }               done (an exit also gives the closed position)
- *   { ok: false, code, message }      refused; code is a paper trade rule code
- *     (shared/paperTradeRules.js RULE_CODES), NO_PRICE or NOT_FOUND
+ *   { ok: false, code, message }      refused; code is a trade rule code
+ *     (shared/tradeRules.js RULE_CODES), NO_PRICE or NOT_FOUND
  */
 import {
   cancelOpenOrdersPlacedBefore,
@@ -50,8 +50,8 @@ import { openSharedTickerFeed } from '../../sharedTickerFeed.js';
 import { findWorkingAdminSession } from '../../oiHistoryScheduler.js';
 import { fetchQuotes } from '../../kiteQuotes.js';
 import { isMarketOpen, lastSessionEnd, marketDate } from '../../../shared/marketTime.js';
-import { normalizeTradeInput } from '../../../shared/paperTradeRules.js';
-import { CANCELLED_AT_CLOSE, CANCELLED_BY_USER, canFill, parseOrder } from '../../../shared/paperOrders.js';
+import { normalizeTradeInput } from '../../../shared/tradeRules.js';
+import { CANCELLED_AT_CLOSE, CANCELLED_BY_USER, canFill, parseOrder } from '../../../shared/orders.js';
 import { quotedFillPrice } from '../fillPrice.js';
 import { OrderStatus, OrderType, TradeSource, oppositeSide } from '../../../shared/tradeEnums.js';
 
@@ -276,7 +276,7 @@ export function createOrderService({
    * Record a parsed order and fill it at once when it can fill now;
    * otherwise leave it waiting.
    * @param {string} userId
-   * @param {import('../../../shared/paperOrders.js').Order} parsed
+   * @param {import('../../../shared/orders.js').Order} parsed
    * @param {number} lastPrice
    * @param {Parameters<typeof createOrder>[2]} placedBy
    * @param {PriceSource} source

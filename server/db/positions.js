@@ -94,14 +94,14 @@ function mapPositionRow(row) {
     targetPrice: row.target_price,
     stopLossPrice: row.stop_loss_price,
     confidence: row.confidence === null || row.confidence === undefined ? null : Number(row.confidence),
-    // Set when it closes (shared/paperCharges.js); null while open or if closed before charges were recorded.
+    // Set when it closes (shared/tradeCharges.js); null while open or if closed before charges were recorded.
     charges: row.charges == null ? null : Number(row.charges),
     chargeBreakdown: row.charge_breakdown ?? null,
   };
 }
 
 /**
- * Closes a position with its charges (a shared/paperCharges.js breakdown). Only a position still open closes;
+ * Closes a position with its charges (a shared/tradeCharges.js breakdown). Only a position still open closes;
  * null if it was closed meanwhile.
  * @param {string} id
  * @param {{ exitPrice: number, exitTime: string, charges: { total: number } }} exit

@@ -43,12 +43,12 @@ export interface Position {
   targetPrice?: number | null;
   stopLossPrice?: number | null;
   confidence?: number | null;
-  /** What Zerodha would charge for its entry and exit (shared/paperCharges.js); set when it closes. */
+  /** What Zerodha would charge for its entry and exit (shared/tradeCharges.js); set when it closes. */
   charges?: number | null;
   chargeBreakdown?: ChargeBreakdown | null;
 }
 
-/** Each charge on a closed paper position, in ₹ (shared/paperCharges.js). */
+/** Each charge on a closed paper position, in ₹ (shared/tradeCharges.js). */
 export interface ChargeBreakdown {
   brokerage: number;
   stt: number;

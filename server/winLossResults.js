@@ -1,7 +1,7 @@
 /**
  * Win/Loss Patterns (GET /api/automation/results). All grouping happens in SQL (one GROUPING SETS scan), so the
  * browser gets totals, never the trades. A trade's P&L is (exit − entry) × quantity, sign flipped for a sell, minus
- * its own charges (shared/paperCharges.js; none for trades closed before charges were kept).
+ * its own charges (shared/tradeCharges.js; none for trades closed before charges were kept).
  * Served by algo_trades_user_closed_idx (user_id, created_at) WHERE closed.
  */
 import { MARKET_TIME_ZONE, addDays, marketDateTime } from '../shared/marketTime.js';

@@ -44,7 +44,7 @@ function toOrder(row) {
  * Who placed it is set by the caller, never read from the order: by hand (Manual), or by the trade engine for an
  * automated trade (Auto, with that trade's id).
  * @param {string} userId
- * @param {import('../shared/paperOrders.js').Order} order
+ * @param {import('../shared/orders.js').Order} order
  * @param {{ source?: import('../shared/tradeEnums.js').TradeSourceId, autoTradeId?: string | null }} [placedBy]
  */
 export async function createOrder(userId, order, { source = TradeSource.Manual, autoTradeId = null } = {}) {

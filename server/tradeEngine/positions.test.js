@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { Horizon } from '../../shared/tradeEnums.js';
-import { roundTripCharges } from '../../shared/paperCharges.js';
+import { roundTripCharges } from '../../shared/tradeCharges.js';
 
 vi.mock('../db.js', () => ({
   averageIntoPosition: vi.fn(),
@@ -17,7 +17,7 @@ const db = await import('../db.js');
 const {
   openPosition, closablePosition, closePosition, squareOffable, bookedDetails, averagedIn, positionCharges, autoTradeCharges, NOT_FOUND,
 } = await import('./positions.js');
-const { MARKET_CLOSED_MESSAGE } = await import('../../shared/paperTradeRules.js');
+const { MARKET_CLOSED_MESSAGE } = await import('../../shared/tradeRules.js');
 
 const OPEN = new Date('2026-11-05T06:30:00Z'); // Thu 12:00 IST
 const CLOSED = new Date('2026-11-05T14:30:00Z'); // Thu 20:00 IST

@@ -44,7 +44,7 @@ const ALLOWED = new Map([
   [path.join('src', 'pages', 'Settings.tsx'), [{ values: ['Orders'], reason: "the Trading Mode card's eyebrow heading" }]],
   [path.join('src', 'components', 'Watchlist', 'PriceAlertsTable.tsx'), [{ values: ['Active', 'Triggered'], reason: "the alert status wording shown in the list" }]],
   [path.join('server', 'tradeEngine', 'positions.js'), [{ values: ['Exit'], reason: "the algo log source tag" }]],
-  [path.join('shared', 'paperOrders.js'), [{ values: ['Cancelled'], reason: "the cancel reason wording stored in status_reason" }]],
+  [path.join('shared', 'orders.js'), [{ values: ['Cancelled'], reason: "the cancel reason wording stored in status_reason" }]],
 ]);
 
 /**

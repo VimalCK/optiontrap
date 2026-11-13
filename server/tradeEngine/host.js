@@ -29,7 +29,7 @@
  * trade engine and the jobs never wait on each other.
  */
 import { tryHoldNamedAdvisoryLock } from '../db.js';
-import { algoLogger } from '../algoLog.js';
+import { engineLogger } from '../engineLog.js';
 import { createMarket } from './market.js';
 import { PluginKind, PluginState } from '../../shared/appEnums.js';
 
@@ -37,7 +37,7 @@ const TRADE_ENGINE_LOCK = 'trade-engine';
 const LOCK_RETRY_MS = 10_000;
 
 /**
- * @typedef {{ market: import('./market.js').PluginMarket, services: Record<string, any>, log: (event: string, details?: import('../algoLog.js').AlgoDetails) => void }} PluginContext
+ * @typedef {{ market: import('./market.js').PluginMarket, services: Record<string, any>, log: (event: string, details?: import('../engineLog.js').EngineLogDetails) => void }} PluginContext
  * @typedef {{ id: string, start: (ctx: PluginContext) => unknown, stop?: () => unknown, status?: () => Record<string, unknown>, health?: () => import('../serviceHealth.js').HealthCheck }} Plugin
  *   health  the plug-in's own check (pass / warn / fail) for Admin Services, which folds them without knowing any plug-in
  * @typedef {{ kind: import('../../shared/appEnums.js').PluginKindId, plugins: Plugin[] }} PluginGroup
@@ -73,7 +73,7 @@ export function createPluginHost({
   holdLock = tryHoldNamedAdvisoryLock,
   setTimer = (fn, ms) => setTimeout(fn, ms),
   clearTimer = (timer) => clearTimeout(/** @type {NodeJS.Timeout} */ (timer)),
-  logFor = algoLogger,
+  logFor = engineLogger,
 }) {
   const log = logFor(name);
   /** @type {Map<string, PluginRun>} */

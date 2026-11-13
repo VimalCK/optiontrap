@@ -138,13 +138,13 @@ export const PositionStatus = Object.freeze({ Closed: 'Closed' });
 /** @typedef {typeof PositionStatus[keyof typeof PositionStatus]} PositionStatusId */
 
 /**
- * What a paper trade rule checks (shared/paperTradeRules.js): a trade filling now
+ * What a trade rule checks (shared/tradeRules.js): a trade filling now
  * (Open), a position closing now (Exit), an order being placed (Place), or the
  * engine closing a position its session left open, after the close (SquareOff).
  */
-export const PaperTradeAction = Object.freeze({ Open: 'Open', Exit: 'Exit', Place: 'Place', SquareOff: 'SquareOff' });
+export const TradeAction = Object.freeze({ Open: 'Open', Exit: 'Exit', Place: 'Place', SquareOff: 'SquareOff' });
 
-/** @typedef {typeof PaperTradeAction[keyof typeof PaperTradeAction]} PaperTradeActionId */
+/** @typedef {typeof TradeAction[keyof typeof TradeAction]} TradeActionId */
 
 /** The market session by IST time (shared/marketTime.js): pre-open, live, post-close (30 min after the close) or closed. */
 export const MarketStatus = Object.freeze({ PreOpen: 'PreOpen', Live: 'Live', PostClose: 'PostClose', Closed: 'Closed' });
@@ -199,7 +199,7 @@ export const isHorizon = (value) => HORIZONS.some((h) => h.id === value);
 /** A horizon's label (Intraday, Positional), or the value itself when unknown. */
 export const horizonLabel = (/** @type {unknown} */ horizon) => HORIZONS.find((h) => h.id === horizon)?.label ?? String(horizon);
 
-/** Which Zerodha charge schedule a trade pays (shared/paperCharges.js): options, futures, or stocks held intraday or overnight. */
+/** Which Zerodha charge schedule a trade pays (shared/tradeCharges.js): options, futures, or stocks held intraday or overnight. */
 export const ChargeSegment = Object.freeze({ Option: 'Option', Future: 'Future', EquityIntraday: 'EquityIntraday', EquityDelivery: 'EquityDelivery' });
 
 /** @typedef {typeof ChargeSegment[keyof typeof ChargeSegment]} ChargeSegmentId */
@@ -218,7 +218,7 @@ export const TickerMode = Object.freeze({ ltp: 'ltp', quote: 'quote', full: 'ful
 /** @typedef {typeof TickerMode[keyof typeof TickerMode]} TickerModeId */
 
 /**
- * What a row of the automation results query groups by (server/autoTradeResults.js):
+ * What a row of the automation results query groups by (server/winLossResults.js):
  * one GROUPING SETS column, or All for the summary row.
  */
 export const ResultDimension = Object.freeze({

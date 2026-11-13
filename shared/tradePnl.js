@@ -1,5 +1,5 @@
 /**
- * P&L of a paper trade at a price, shared by the trade monitor and the
+ * P&L of a trade at a price, shared by the trade monitor and the
  * Automation page so both count it the same way. The percentage is of the
  * entry price, so it is the same for any quantity: what the stop-loss and
  * target exit rules compare.
@@ -10,7 +10,7 @@ import { Side } from './tradeEnums.js';
  * @param {{ side: string, quantity: number, entryPrice: number }} trade
  * @param {number} price
  */
-export function paperPnl(trade, price) {
+export function tradePnl(trade, price) {
   const perUnit = trade.side === Side.BUY ? price - trade.entryPrice : trade.entryPrice - price;
   return perUnit * trade.quantity;
 }
@@ -20,7 +20,7 @@ export function paperPnl(trade, price) {
  * @param {{ side: string, entryPrice: number }} trade
  * @param {number} price
  */
-export function paperPnlPercent(trade, price) {
+export function tradePnlPercent(trade, price) {
   const perUnit = trade.side === Side.BUY ? price - trade.entryPrice : trade.entryPrice - price;
   return (perUnit / trade.entryPrice) * 100;
 }

@@ -1,7 +1,7 @@
 /**
  * Orders fill on the server, so while any is open in market hours usePaperOrders
  * reloads the list every few seconds. The page runs the hook whichever tab is
- * showing, so fills reach the positions either way. Rules: shared/paperOrders.js.
+ * showing, so fills reach the positions either way. Rules: shared/orders.js.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Badge from '@/components/Badge/Badge';

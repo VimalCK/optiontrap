@@ -11,7 +11,7 @@ vi.mock('../strategies/index.js', () => ({ STRATEGIES: [] }));
 
 const { createSignalsService, planTrade, refusal, signalsHealth } = await import('./signals.js');
 const { defaultAutomationConfig } = await import('../../../shared/automation.js');
-const { checkPaperTrade, normalizeTradeInput } = await import('../../../shared/paperTradeRules.js');
+const { checkTrade, normalizeTradeInput } = await import('../../../shared/tradeRules.js');
 
 const NOON = new Date('2026-11-05T06:30:00Z'); // Thu 12:00 IST
 const KITE = { apiKey: 'k', accessToken: 't' };
@@ -88,13 +88,13 @@ function setup({ config = userConfig(), users = [{ userId: 'U1', config }], pric
 const moves = (db) => db.advanceAutoTrade.mock.calls.map(([, , from, to]) => `${from}→${to}`);
 
 describe('planTrade', () => {
-  it('plans trades the real paper trade rules accept: options carry their option type', () => {
+  it('plans trades the real trade rules accept: options carry their option type', () => {
     const future = { ...option, instrumentToken: 404, tradingsymbol: 'NIFTY26NOVFUT', instrumentType: 'FUT', strike: null };
     const instruments = new Map([...byToken, [404, future]]);
     for (const signal of [sellOption, { instrumentToken: 404, side: 'BUY', reason: '' }, { instrumentToken: 202, side: 'BUY', reason: '' }]) {
       const config = userConfig();
       const { trade } = planTrade(signal, instruments, indexNames, config);
-      const verdict = checkPaperTrade('Open', { trade: normalizeTradeInput({ ...trade, entryPrice: 100 }), now: NOON });
+      const verdict = checkTrade('Open', { trade: normalizeTradeInput({ ...trade, entryPrice: 100 }), now: NOON });
       expect(verdict).toEqual({ ok: true });
     }
   });

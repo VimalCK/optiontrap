@@ -1,5 +1,5 @@
 /**
- * P&L is after each trade's charges (shared/paperCharges.js), at the bid / ask fills
+ * P&L is after each trade's charges (shared/tradeCharges.js), at the bid / ask fills
  * paper trading uses.
  */
 import React, { useEffect, useState } from 'react';

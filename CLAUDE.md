@@ -34,7 +34,7 @@ It never places real orders. The user is the sole developer; prod (optiontrap.co
     closes paper positions; `fillPrice.js` prices market fills; `automationConfigs.js` completes stored configurations with defaults.
   - **Engines don't know their plug-ins**, and the host holds no trading logic: add a strategy or service by adding it to its
     list, never with an `if` in the host. If a design forces coupling, flag it before building on it.
-- **Shared** `shared/`: plain JS used by **both** server and browser (market time, paper trade rules, automation, stock setups).
+- **Shared** `shared/`: plain JS used by **both** server and browser (market time, trade rules, automation, stock setups).
   Type-checked through JSDoc (`checkJs`), so give it `@typedef`/`@param` annotations and casts until `tsc` is clean.
 - **Database**: Postgres 16 in docker (`optiontrap-postgres`, port 5433, user/db/password `optiontrap`).
 - Vite proxies `/api`, `/auth`, `/ws` to 3001. In the browser, always call relative URLs (`/api/...`).
@@ -210,7 +210,7 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
 - Validate and parse request bodies in pure functions (in `shared/` when the browser can use them too), returning
   `{ value }`/`{ error }`-style results that routes map to HTTP status codes. Never trust server-owned fields from the body
   (e.g. a paper trade's `source` is set by the caller, never read from input).
-- Business rules live as **data** in one place: paper trade rules in `shared/paperTradeRules.js`
+- Business rules live as **data** in one place: trade rules in `shared/tradeRules.js`
   (`{ id, appliesTo, code, check }`), run by `server/tradeEngine/positions.js` and the order service. Change the list, don't add checks in callers.
 - The server calls Kite's REST API only through `server/kiteClient.js` (`kiteClient(login).get/getText/postForm/delete`): it owns the
   base URL, headers and errors (`KiteApiError` with `status`, `errorType`, `authFailure`). Never write the URL or headers by hand.
@@ -332,10 +332,10 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   (`server/jobs/nightly/050_purge_settled_orders.js`); a fill lives on in its position and an automated trade's in `algo_trades`.
 - Paper market orders fill like Zerodha's: a buy at the best ask, a sell at the best bid (`server/tradeEngine/fillPrice.js`, from a
   quote with the user's Kite session, or the server feed's for the engine; the last price when the quote has no bid / ask). Closing a position
-  records Zerodha's charges (`shared/paperCharges.js`: brokerage, STT, exchange, SEBI, stamp, GST, DP) in `positions.charges` /
+  records Zerodha's charges (`shared/tradeCharges.js`: brokerage, STT, exchange, SEBI, stamp, GST, DP) in `positions.charges` /
   `charge_breakdown` and each automated trade's own in `algo_trades.charges`. Positions shows P&L before charges, as Kite does;
   the Journal, Dashboard, Algo Trading, Win/Loss Patterns and the daily loss limit use P&L after them.
-- Paper limit orders (`shared/paperOrders.js`) work like Zerodha's: a buy fills at the limit or lower, a sell at the limit or
+- Paper limit orders (`shared/orders.js`) work like Zerodha's: a buy fills at the limit or lower, a sell at the limit or
   higher. One that can fill when placed fills at once at the last price; otherwise it fills at its limit on the first live tick
   that reaches it, through `openPosition` with the order's source. Orders fill only in market hours; intraday ones are placed
   only then, positional ones any time. Open orders placed in a session are cancelled at its close. The order service and the

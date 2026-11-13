@@ -12,7 +12,7 @@ const POSITION_STATUSES = [PositionStatus.Closed];
 const DEFAULT_TRADE_LIMIT = 100;
 const MAX_TRADE_LIMIT = 500;
 
-// P&L of an exited position after its charges (shared/paperCharges.js; none on positions closed
+// P&L of an exited position after its charges (shared/tradeCharges.js; none on positions closed
 // before charges were recorded); the same formula as the browser's positionToEntry.
 /** A position's charges; 0 for one closed before charges were kept. */
 const CHARGES_SQL = 'COALESCE(charges, 0)';

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resultsParams, toResults } from './autoTradeResults.js';
+import { resultsParams, toResults } from './winLossResults.js';
 
 // Rows as the GROUPING SETS query returns them (numbers already parsed).
 const row = (dimension, key, trades, pnl, extra = {}) => ({

@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import { addDays, marketDateTime } from '../../shared/marketTime.js';
 import { LifecycleStage, Side, TradeSource, TradingMode } from '../../shared/tradeEnums.js';
-import { MAX_DRAWDOWN_SQL, RESULTS_SQL, resultsParams, toResults } from '../autoTradeResults.js';
+import { MAX_DRAWDOWN_SQL, RESULTS_SQL, resultsParams, toResults } from '../winLossResults.js';
 import { sqlEnum } from '../sql.js';
 import { firstRow, pool, rows } from './pool.js';
 

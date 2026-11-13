@@ -10,16 +10,16 @@ const TIME = new Intl.DateTimeFormat('en-GB', {
 });
 
 /**
- * @typedef {Record<string, string | number | null | undefined>} AlgoDetails
+ * @typedef {Record<string, string | number | null | undefined>} EngineLogDetails
  */
 
 /**
  * @param {string} source  which part of the automation (Engine, Monitor, Exit)
  * @param {string} event   what happened ("executed", "rejected", …)
- * @param {AlgoDetails} [details]
+ * @param {EngineLogDetails} [details]
  * @param {Date} [now]
  */
-export function algoEntry(source, event, details = {}, now = new Date()) {
+export function engineLogEntry(source, event, details = {}, now = new Date()) {
   const shown = Object.entries(details).filter(([, value]) => value !== null && value !== undefined && value !== '');
   const width = Math.max(0, ...shown.map(([label]) => label.length)) + LABEL_GAP;
   const lines = [
@@ -29,12 +29,12 @@ export function algoEntry(source, event, details = {}, now = new Date()) {
   return `${PURPLE}${lines.join('\n')}${RESET}`;
 }
 
-export function algoLog(/** @type {string} */ source, /** @type {string} */ event, /** @type {AlgoDetails} */ details = {}) {
-  console.log(algoEntry(source, event, details));
+export function engineLog(/** @type {string} */ source, /** @type {string} */ event, /** @type {EngineLogDetails} */ details = {}) {
+  console.log(engineLogEntry(source, event, details));
 }
 
 /**
  * @param {string} source
- * @returns {(event: string, details?: AlgoDetails) => void}
+ * @returns {(event: string, details?: EngineLogDetails) => void}
  */
-export const algoLogger = (source) => (event, details) => algoLog(source, event, details);
+export const engineLogger = (source) => (event, details) => engineLog(source, event, details);

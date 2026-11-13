@@ -1,5 +1,5 @@
 /**
- * Paper orders, shared by the order service (server/tradeEngine/services/orders.js)
+ * Orders, shared by the order service (server/tradeEngine/services/orders.js)
  * and the browser. Fill rules follow Zerodha's:
  *   limit   a buy fills at the limit or lower, a sell at the limit or higher.
  *           If it can fill when placed it fills at once at the last price
@@ -11,10 +11,10 @@
  * Orders placed during a session are cancelled at its close.
  *
  * An order opens its position through server/tradeEngine/positions.js, so the
- * paper trade rules run again when it fills (PaperTradeAction.Open).
+ * trade rules run again when it fills (TradeAction.Open).
  */
-import { checkPaperTrade, normalizeTradeInput, RULE_CODES } from './paperTradeRules.js';
-import { ORDER_TYPES, OrderType, PaperTradeAction, Side } from './tradeEnums.js';
+import { checkTrade, normalizeTradeInput, RULE_CODES } from './tradeRules.js';
+import { ORDER_TYPES, OrderType, TradeAction, Side } from './tradeEnums.js';
 
 /** Cancel reasons: the close cancels orders the user left open; CANCELLED_BY_USER is the user's own cancel. */
 export const CANCELLED_AT_CLOSE = 'Cancelled at market close';
@@ -47,7 +47,7 @@ export function parseOrder(input, { now = new Date(), lastPrice } = {}) {
   const limitPrice = orderType === OrderType.Limit ? Number(input.limitPrice) : null;
   if (limitPrice !== null && !(limitPrice > 0)) return { error: 'Limit price must be more than 0', code: RULE_CODES.INVALID_TRADE };
   const trade = normalizeTradeInput({ ...input, entryPrice: limitPrice ?? lastPrice });
-  const result = checkPaperTrade(PaperTradeAction.Place, { trade, now });
+  const result = checkTrade(TradeAction.Place, { trade, now });
   if (!result.ok) return { error: result.violations[0].message, code: result.violations[0].code };
   return { order: { ...trade, orderType, limitPrice } };
 }

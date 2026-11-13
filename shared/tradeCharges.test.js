@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { chargeSegment, orderCharges, roundTripCharges } from './paperCharges.js';
+import { chargeSegment, orderCharges, roundTripCharges } from './tradeCharges.js';
 
 describe('orderCharges', () => {
   it('charges an option sell: flat brokerage, STT on the premium, no stamp duty', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { canFill, parseOrder } from './paperOrders.js';
-import { INTRADAY_CLOSED_MESSAGE, RULE_CODES } from './paperTradeRules.js';
+import { canFill, parseOrder } from './orders.js';
+import { INTRADAY_CLOSED_MESSAGE, RULE_CODES } from './tradeRules.js';
 import { Horizon } from './tradeEnums.js';
 
 const OPEN = new Date('2026-11-05T06:30:00Z'); // Thu 12:00 IST
@@ -59,7 +59,7 @@ describe('parseOrder', () => {
     }
   });
 
-  it('applies the paper trade rules: an incomplete order is refused', () => {
+  it('applies the trade rules: an incomplete order is refused', () => {
     expect(parseOrder({ ...input, side: undefined }, { now: OPEN }))
       .toEqual({ error: 'Missing required fields', code: RULE_CODES.INVALID_TRADE });
   });

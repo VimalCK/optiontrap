@@ -11,7 +11,7 @@
  * else on the first tick after the open. Orders fill only in market hours;
  * intraday ones are placed only then, positional ones at any time. Orders
  * placed in a session are cancelled at its close. The rules are in
- * shared/paperOrders.js.
+ * shared/orders.js.
  */
 import { apiClient } from './apiClient';
 import type { NewPosition, Position } from './positions';

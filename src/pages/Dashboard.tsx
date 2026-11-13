@@ -18,7 +18,7 @@ import '@/styles/dashboard.css';
 type DashboardTradeEntry = TradeEntry & { mode: TradingModeId };
 
 interface DashboardMetrics {
-  paperPnl: number;
+  tradePnl: number;
   todayTrades: number;
   watchlistCount: number;
   watchlistLists: number;
@@ -37,7 +37,7 @@ interface DashboardMetrics {
 }
 
 const emptyMetrics: DashboardMetrics = {
-  paperPnl: 0,
+  tradePnl: 0,
   todayTrades: 0,
   watchlistCount: 0,
   watchlistLists: 0,
@@ -162,10 +162,10 @@ const Dashboard: React.FC = () => {
       const watchlists = watchlistsResult.status === 'fulfilled' ? watchlistsResult.value : [];
       const alerts = alertsResult.status === 'fulfilled' ? alertsResult.value : [];
 
-      const paperPnl = paperPositions.reduce((sum, position) => sum + getPaperPositionPnl(position), 0);
+      const tradePnl = paperPositions.reduce((sum, position) => sum + getPaperPositionPnl(position), 0);
 
       setMetrics({
-        paperPnl,
+        tradePnl,
         todayTrades: paperStats.todayTrades,
         watchlistCount: watchlists.reduce((sum, list) => sum + list.itemCount, 0),
         watchlistLists: watchlists.length,
@@ -213,7 +213,7 @@ const Dashboard: React.FC = () => {
   const warning = error
     ?? (holdingsData.error || liveData.error ? 'Some dashboard data could not be loaded. Showing available metrics.' : null);
 
-  const totalPnl = holdingsPnl + metrics.paperPnl + livePnl;
+  const totalPnl = holdingsPnl + metrics.tradePnl + livePnl;
   const portfolioReturn = holdingsInvestment > 0 ? (holdingsPnl / holdingsInvestment) * 100 : 0;
   const openPositions = metrics.openPaperPositions + openLivePositions;
   const tradeEdgeLabel = metrics.closedTrades === 0
@@ -256,7 +256,7 @@ const Dashboard: React.FC = () => {
 
       <section className="dashboard-metrics-row">
         <MetricCard title="Holdings P&L" value={formatCompactMoney(holdingsPnl, true)} detail="Equity portfolio mark-to-market" tone={getTone(holdingsPnl)} loading={holdingsData.loading} onClick={goToHoldings} />
-        <MetricCard title="Paper P&L" value={formatCompactMoney(metrics.paperPnl, true)} detail="Simulator and journal performance" tone={getTone(metrics.paperPnl)} loading={loading} onClick={goToPaperPositions} />
+        <MetricCard title="Paper P&L" value={formatCompactMoney(metrics.tradePnl, true)} detail="Simulator and journal performance" tone={getTone(metrics.tradePnl)} loading={loading} onClick={goToPaperPositions} />
         <MetricCard title="Live P&L" value={formatCompactMoney(livePnl, true)} detail="Broker net positions" tone={getTone(livePnl)} loading={liveData.loading} onClick={goToLivePositions} />
         <MetricCard title="Today Trades" value={String(metrics.todayTrades)} detail="Closed paper trades today" loading={loading} onClick={goToTodayTrades} />
         <MetricCard title="Watchlist" value={String(metrics.watchlistCount)} detail={`${metrics.watchlistLists} watchlist${metrics.watchlistLists === 1 ? '' : 's'}`} loading={loading} onClick={goToWatchlist} />
@@ -273,10 +273,10 @@ const Dashboard: React.FC = () => {
           <div className="dashboard-breakdown">
             {[
               { label: 'Holdings', value: holdingsPnl },
-              { label: 'Paper', value: metrics.paperPnl },
+              { label: 'Paper', value: metrics.tradePnl },
               { label: 'Live', value: livePnl },
             ].map((item) => {
-              const max = Math.max(Math.abs(holdingsPnl), Math.abs(metrics.paperPnl), Math.abs(livePnl), 1);
+              const max = Math.max(Math.abs(holdingsPnl), Math.abs(metrics.tradePnl), Math.abs(livePnl), 1);
               const width = Math.max(4, (Math.abs(item.value) / max) * 100);
               return (
                 <div className="dashboard-breakdown__row" key={item.label}>

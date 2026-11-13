@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   INTRADAY_CLOSED_MESSAGE,
   MARKET_CLOSED_MESSAGE,
-  PAPER_TRADE_RULES,
+  TRADE_RULES,
   RULE_CODES,
-  checkPaperTrade,
+  checkTrade,
   normalizeTradeInput,
-} from './paperTradeRules.js';
+} from './tradeRules.js';
 import { Horizon } from './tradeEnums.js';
 
 /** The instant at `hhmm` IST on `date` (IST is UTC+5:30). */
@@ -31,8 +31,8 @@ const validInput = {
   horizon: Horizon.Intraday,
 };
 
-const open = (input, now = OPEN) => checkPaperTrade('Open', { trade: normalizeTradeInput(input), now });
-const exit = (position, exitPrice, now = OPEN) => checkPaperTrade('Exit', { position, exitPrice, now });
+const open = (input, now = OPEN) => checkTrade('Open', { trade: normalizeTradeInput(input), now });
+const exit = (position, exitPrice, now = OPEN) => checkTrade('Exit', { position, exitPrice, now });
 const rulesHit = (result) => (result.ok ? [] : result.violations.map((v) => v.rule));
 
 describe('normalizeTradeInput', () => {
@@ -157,7 +157,7 @@ describe('exit-price-given rule', () => {
 });
 
 describe('intraday-market-hours rule (placing an order)', () => {
-  const place = (input, now) => checkPaperTrade('Place', { trade: normalizeTradeInput(input), now });
+  const place = (input, now) => checkTrade('Place', { trade: normalizeTradeInput(input), now });
 
   it('places an intraday order only while the market is open', () => {
     expect(place(validInput, OPEN)).toEqual({ ok: true });
@@ -224,7 +224,7 @@ describe('market-open rule', () => {
   });
 });
 
-describe('checkPaperTrade', () => {
+describe('checkTrade', () => {
   it('reports every failing rule, in list order', () => {
     expect(rulesHit(open({}, CLOSED))).toEqual(['required-fields', 'instrument-fields', 'horizon-given', 'market-open']);
     expect(rulesHit(exit({ mode: 'Paper' }, undefined, CLOSED))).toEqual(['exit-price-given', 'market-open']);
@@ -237,7 +237,7 @@ describe('checkPaperTrade', () => {
   });
 
   it("checks the engine's square-off after the close for an exit price only, not for the market being open", () => {
-    const squareOff = (exitPrice) => checkPaperTrade('SquareOff', { position: { id: 'p1', mode: 'Paper' }, exitPrice, now: CLOSED });
+    const squareOff = (exitPrice) => checkTrade('SquareOff', { position: { id: 'p1', mode: 'Paper' }, exitPrice, now: CLOSED });
     expect(squareOff(95)).toEqual({ ok: true });
     expect(rulesHit(squareOff(null))).toEqual(['exit-price-given']);
     // An ordinary exit at the same moment is refused.
@@ -245,7 +245,7 @@ describe('checkPaperTrade', () => {
   });
 
   it('rejects an unknown action', () => {
-    expect(() => checkPaperTrade('modify', {})).toThrow('Unknown paper trade action: modify');
+    expect(() => checkTrade('modify', {})).toThrow('Unknown trade action: modify');
   });
 
   it('accepts a custom rule list', () => {
@@ -255,20 +255,20 @@ describe('checkPaperTrade', () => {
       code: 'TOO_BIG',
       check: ({ trade }) => (trade.quantity > 100 ? 'Too many lots' : null),
     };
-    const rules = [...PAPER_TRADE_RULES, maxQuantity];
+    const rules = [...TRADE_RULES, maxQuantity];
     const ctx = (quantity) => ({ trade: normalizeTradeInput({ ...validInput, quantity }), now: OPEN });
 
-    expect(checkPaperTrade('Open', ctx(75), rules)).toEqual({ ok: true });
-    expect(checkPaperTrade('Open', ctx(150), rules)).toEqual({
+    expect(checkTrade('Open', ctx(75), rules)).toEqual({ ok: true });
+    expect(checkTrade('Open', ctx(150), rules)).toEqual({
       ok: false,
       violations: [{ rule: 'max-quantity', code: 'TOO_BIG', message: 'Too many lots' }],
     });
   });
 
   it('gives every built-in rule a unique id, a code and at least one action', () => {
-    const ids = PAPER_TRADE_RULES.map((r) => r.id);
+    const ids = TRADE_RULES.map((r) => r.id);
     expect(new Set(ids).size).toBe(ids.length);
-    for (const rule of PAPER_TRADE_RULES) {
+    for (const rule of TRADE_RULES) {
       expect(Object.values(RULE_CODES)).toContain(rule.code);
       expect(rule.appliesTo.length).toBeGreaterThan(0);
     }

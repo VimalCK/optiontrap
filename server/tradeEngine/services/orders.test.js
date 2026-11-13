@@ -7,8 +7,8 @@ vi.mock('../positions.js', () => ({ NOT_FOUND: 'NOT_FOUND', MANUAL_EXIT: { ruleI
 vi.mock('../../oiHistoryScheduler.js', () => ({ findWorkingAdminSession: vi.fn() }));
 
 const { createOrderService } = await import('./orders.js');
-const { CANCELLED_AT_CLOSE, CANCELLED_BY_USER } = await import('../../../shared/paperOrders.js');
-const { INTRADAY_CLOSED_MESSAGE, MARKET_CLOSED_MESSAGE } = await import('../../../shared/paperTradeRules.js');
+const { CANCELLED_AT_CLOSE, CANCELLED_BY_USER } = await import('../../../shared/orders.js');
+const { INTRADAY_CLOSED_MESSAGE, MARKET_CLOSED_MESSAGE } = await import('../../../shared/tradeRules.js');
 
 const NOON = new Date('2026-11-05T06:30:00Z'); // Thu 12:00 IST, market open
 const AFTER_CLOSE = new Date('2026-11-05T10:01:00Z'); // Thu 15:31 IST
@@ -330,7 +330,7 @@ describe('the order service', () => {
       expect(positions.openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ entryPrice: 50 }), { now: NOON, source: 'Auto' });
     });
 
-    it('refuses an automated order the paper trade rules refuse, saving nothing', async () => {
+    it('refuses an automated order the trade rules refuse, saving nothing', async () => {
       now = AFTER_CLOSE;
       expect(await service.placeAuto('U1', input(), { lastPrice: 60, autoTradeId: 't1' }))
         .toEqual({ ok: false, code: 'MARKET_CLOSED', message: INTRADAY_CLOSED_MESSAGE });

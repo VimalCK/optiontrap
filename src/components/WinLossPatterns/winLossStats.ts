@@ -1,5 +1,5 @@
 /**
- * Grouping and sums happen on the server (server/autoTradeResults.js); this file
+ * Grouping and sums happen on the server (server/winLossResults.js); this file
  * only derives the ratios and labels from each group's totals.
  */
 import { RESULTS_ENTRY_SLOT_MINUTES } from '../../../shared/automation.js';
