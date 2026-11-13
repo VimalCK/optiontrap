@@ -714,12 +714,6 @@
   background: rgba(239, 68, 68, 0.15);
 }
 
-.settings-error {
-  margin: 0;
-  color: var(--danger);
-  font-size: 13px;
-}
-
 /* Notifications: one row per channel. */
 .settings-rows {
   display: flex;

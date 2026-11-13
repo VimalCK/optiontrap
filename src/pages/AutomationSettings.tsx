@@ -12,9 +12,11 @@ import TabBar from '@/components/TabBar/TabBar';
 import { AutomationConfig, fetchAutomationConfig, saveAutomationConfig } from '@/services/automation';
 import { isAbortError } from '@/services/apiClient';
 import { useStrategies } from '@/hooks/useStrategies';
-import { AutomationSettingsSection, enumFromParam, type AutomationSettingsSectionId } from '@/utils/uiEnums';
+import { AutomationSettingsSection, type AutomationSettingsSectionId, enumFromParam, MessageTone } from '@/utils/uiEnums';
+import Message from '@/components/Message/Message';
 import '@/styles/analytics.css'; // reuse the shared tab-bar CSS
 import '@/styles/automation.css';
+import LoadingState from '@/components/LoadingState/LoadingState';
 
 const errorText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
@@ -70,8 +72,8 @@ const AutomationSettings: React.FC = () => {
 
       <section className="card automation-settings__card">
         <div className="automation-settings__body">
-          {error && <p className="automation-message automation-message--error">{error}</p>}
-          {(!config || !strategies) && !error && <p className="card__description">Loading…</p>}
+          {error && <Message tone={MessageTone.Error}>{error}</Message>}
+          {(!config || !strategies) && !error && <LoadingState />}
           {config && strategies && (
             <AutomationConfigForm
               config={config}

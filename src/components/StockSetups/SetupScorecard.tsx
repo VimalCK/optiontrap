@@ -5,6 +5,7 @@ import { fetchSetupScorecard, type SetupStats, type TrackedSetup } from '@/servi
 import { isAbortError } from '@/services/apiClient';
 import { SetupOutcomeStatus } from '../../../shared/appEnums.js';
 import { sideLabel } from '../../../shared/tradeEnums.js';
+import LoadingState from '@/components/LoadingState/LoadingState';
 
 const STATUS_TEXT: Record<TrackedSetup['status'], string> = {
   [SetupOutcomeStatus.Open]: 'Open',
@@ -45,7 +46,7 @@ const SetupScorecard: React.FC<{
         </div>
       </div>
       {!data ? (
-        <div className="wl-alerts__empty">Loading…</div>
+        <LoadingState />
       ) : data.stats.length === 0 ? (
         <div className="wl-alerts__empty">No setups tracked for {tradingsymbol} yet. They appear when the after-close scan finds one{inSetupsPanel ? '.' : ', or use Backtest 1Y in its entry and exit zones panel to add the past year.'}</div>
       ) : (

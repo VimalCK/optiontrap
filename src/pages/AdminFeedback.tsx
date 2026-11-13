@@ -7,6 +7,9 @@ import {
   FeedbackItem,
 } from '@/services/admin';
 import { FeedbackStatus, FeedbackType, type FeedbackStatusId, type FeedbackTypeId } from '../../shared/appEnums.js';
+import Message from '@/components/Message/Message';
+import { MessageTone } from '@/utils/uiEnums';
+import LoadingState from '@/components/LoadingState/LoadingState';
 
 const TYPE_OPTIONS = [
   { value: '', label: 'All types' },
@@ -108,10 +111,10 @@ const AdminFeedback: React.FC = () => {
         <button className="admin-refresh" onClick={load} disabled={loading}>Refresh</button>
       </div>
 
-      {error && <div className="admin-error">{error}</div>}
+      {error && <Message tone={MessageTone.Error}>{error}</Message>}
 
       {loading ? (
-        <div className="admin-empty">Loading feedback...</div>
+        <LoadingState label="Loading feedback…" />
       ) : feedback.length === 0 ? (
         <div className="admin-empty">No feedback matches the current filters.</div>
       ) : (

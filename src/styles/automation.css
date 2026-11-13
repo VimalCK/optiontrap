@@ -166,18 +166,6 @@
   margin-bottom: 12px;
 }
 
-.automation-message {
-  font-size: 13px;
-}
-
-.automation-message--ok {
-  color: #22c55e;
-}
-
-.automation-message--error {
-  color: #ef4444;
-}
-
 /* ── Tables ── */
 
 .automation-table {

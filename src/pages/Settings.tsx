@@ -8,6 +8,8 @@ import { fetchUnderlyings, setAlwaysSnapshot, type Underlying } from '@/services
 import { TradingMode, type TradingModeId } from '../../shared/tradeEnums.js';
 import { saveTradingMode, storedTradingMode } from '@/utils/tradingModeStorage';
 import '@/styles/settings.css';
+import Message from '@/components/Message/Message';
+import { MessageTone } from '@/utils/uiEnums';
 
 const TRADING_MODE_CHOICES: { id: TradingModeId; label: string; hint: string }[] = [
   { id: TradingMode.Paper, label: 'Paper', hint: 'Orders are simulated: nothing is sent to Kite and no money is used.' },
@@ -106,7 +108,7 @@ const AlwaysSnapshotSetting: React.FC = () => {
           ))}
         </div>
       )}
-      {error && <p className="settings-error">{error}</p>}
+      {error && <Message tone={MessageTone.Error}>{error}</Message>}
     </SettingCard>
   );
 };

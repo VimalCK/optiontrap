@@ -5,8 +5,10 @@ import {
 } from '@/components/icons/Icons';
 import { formatCalendarDate, istDateString, istTimeLabel } from '@/utils/marketStatus';
 import { HealthStatus } from '../../shared/appEnums.js';
-import { HealthTone, type HealthToneId } from '@/utils/uiEnums';
+import { HealthTone, type HealthToneId, MessageTone } from '@/utils/uiEnums';
+import Message from '@/components/Message/Message';
 import '@/styles/admin.css';
+import LoadingState from '@/components/LoadingState/LoadingState';
 
 /** How long ago, roughly: "just now", "12m ago", "3h ago", "2d ago". */
 const timeAgo = (ms: number) => {
@@ -94,10 +96,10 @@ const Health: React.FC = () => {
   }, [load]);
 
   if (loading && !health) {
-    return <div className="admin-empty">Loading diagnostics...</div>;
+    return <LoadingState label="Loading diagnostics…" />;
   }
   if (!health) {
-    return error ? <div className="admin-error">{error}</div> : null;
+    return error ? <Message tone={MessageTone.Error}>{error}</Message> : null;
   }
 
   const healthy = health.db.connected;
@@ -108,7 +110,7 @@ const Health: React.FC = () => {
 
   return (
     <>
-      {error && <div className="admin-error">{error}</div>}
+      {error && <Message tone={MessageTone.Error}>{error}</Message>}
 
       <div className={`hx-hero hx-hero--${(healthy ? HealthTone.Up : HealthTone.Down).toLowerCase()}`}>
         <div className="hx-hero__pulse"><span /></div>

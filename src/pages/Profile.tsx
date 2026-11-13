@@ -8,6 +8,7 @@ import { fetchAppVersion } from '@/services/appVersion';
 import { formatDuration } from '@/services/subscription';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import '@/styles/settings.css';
+import LoadingState from '@/components/LoadingState/LoadingState';
 
 const formatSubscriptionDate = (value: string | null | undefined) => {
   if (!value) return 'No expiry';
@@ -211,7 +212,7 @@ const Profile: React.FC = () => {
               </div>
             </div>
           ) : profileLoading ? (
-            <p className="card__description">Loading profile...</p>
+            <LoadingState label="Loading profile…" />
           ) : null}
         </div>
 

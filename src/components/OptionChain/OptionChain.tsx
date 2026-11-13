@@ -13,7 +13,8 @@ import OrderModal from '@/components/OrderModal/OrderModal';
 import { useOrderChoices } from '@/components/OrderModal/useOrderChoices';
 import { computeLiveFlow, describeFlow, flowColor } from '@/services/oiFlow';
 import { OiChartGuide, SellStrategyGuide, BuyStrategyGuide, PositionAnalyzerGuide } from './AnalyzerGuides';
-import { ToastColor } from '@/utils/uiEnums';
+import { MessageTone, ToastColor } from '@/utils/uiEnums';
+import Message from '@/components/Message/Message';
 import ToastStack from '@/components/Toast/ToastStack';
 import { useToasts } from '@/hooks/useToasts';
 
@@ -41,6 +42,7 @@ import { Horizon, OptionType, type HorizonId, Side, TradingMode, type OptionType
 import { Confidence, MoveDirection, OiFlow, oiFlowLabel, velocityTrendLabel, type ConfidenceId } from '../../../shared/analysisEnums.js';
 import { StrategyMode, type StrategyModeId } from '../../../shared/appEnums.js';
 import '@/styles/optionchain.css';
+import LoadingState from '@/components/LoadingState/LoadingState';
 
 const RECENT_OPTION_SYMBOLS_KEY = 'optiontrap_option_analyzer_recent_symbols';
 const MAX_RECENT_OPTION_SYMBOLS = 5;
@@ -610,18 +612,12 @@ const OptionChain: React.FC = () => {
       <div className="card option-chain-card" ref={chainCardRef}>
 
         {loading && (
-          <div className="holdings-loading">
-            <div className="redirect-spinner" />
-            <p>Loading option chain...</p>
-          </div>
+          <LoadingState label="Loading option chain…" />
         )}
 
         {error && (
-          <div className="holdings-error" style={{ padding: 16 }}>
-            <p>{error}</p>
-            <button className="btn btn--primary" onClick={loadOptions} style={{ marginTop: 12 }}>
-              Retry
-            </button>
+          <div style={{ padding: 16 }}>
+            <Message tone={MessageTone.Error}>{error}</Message>
           </div>
         )}
 

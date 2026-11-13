@@ -26,9 +26,11 @@ import {
 import { loadUnderlyings, type Underlying } from '@/services/underlyings';
 import { Side, TRADING_MODES, TradingMode, type TradingModeId } from '../../shared/tradeEnums.js';
 import { saveTradingMode, storedTradingMode } from '@/utils/tradingModeStorage';
-import { LiveView, PaperTab, type LiveViewId, type PaperTabId } from '@/utils/uiEnums';
+import { LiveView, type LiveViewId, MessageTone, PaperTab, type PaperTabId } from '@/utils/uiEnums';
+import Message from '@/components/Message/Message';
 import '@/styles/analytics.css'; // reuse the shared tab-bar CSS
 import '@/styles/positions.css';
+import LoadingState from '@/components/LoadingState/LoadingState';
 
 /** The paper tabs, each with how many it holds: Open positions, Pending orders still waiting to fill, Position Risk strategies. */
 export const paperTabs = (openPositions: number, pendingOrders: number, riskGroups: number): TabBarItem<PaperTabId>[] => [
@@ -682,7 +684,7 @@ const PaperPositions: React.FC = () => {
     </section>
   );
 
-  if (loading) return <div className="card"><p className="card__description">Loading positions...</p></div>;
+  if (loading) return <div className="card"><LoadingState label="Loading positions…" /></div>;
 
   if (positions.length === 0) {
     return positionsCard(
@@ -696,9 +698,7 @@ const PaperPositions: React.FC = () => {
   return (
     <>
       {exitError && (
-        <div className="card holdings-error" style={{ marginBottom: 'var(--card-gap)' }}>
-          <p>{exitError}</p>
-        </div>
+        <Message tone={MessageTone.Error} className="positions-exit-error">{exitError}</Message>
       )}
 
       <div className="card" style={{ marginBottom: 'var(--card-gap)' }}>
@@ -797,15 +797,10 @@ const LivePositions: React.FC = () => {
   const { positions, loading, error, reload: load } = useLivePositions();
   const [view, setView] = useState<LiveViewId>(LiveView.Net);
 
-  if (loading) return <div className="card"><p className="card__description">Loading live positions...</p></div>;
+  if (loading) return <div className="card"><LoadingState label="Loading live positions…" /></div>;
 
   if (error) {
-    return (
-      <div className="card holdings-error">
-        <p>{error}</p>
-        <button className="btn btn--primary" onClick={load} style={{ marginTop: 12 }}>Retry</button>
-      </div>
-    );
+    return <Message tone={MessageTone.Error}>{error}</Message>;
   }
 
   const rows = view === LiveView.Net ? positions.net : positions.day;

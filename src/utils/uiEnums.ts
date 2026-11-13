@@ -15,6 +15,10 @@
 export const Tone = Object.freeze({ Positive: 'Positive', Negative: 'Negative', Accent: 'Accent', Neutral: 'Neutral' });
 export type ToneId = typeof Tone[keyof typeof Tone];
 
+/** A message box's kind (Message): something failed, or a plain notice. */
+export const MessageTone = Object.freeze({ Error: 'Error', Info: 'Info' });
+export type MessageToneId = typeof MessageTone[keyof typeof MessageTone];
+
 /** A guide row's chip colour (InfoGuide). */
 export const GuideTone = Object.freeze({ Bull: 'Bull', Bear: 'Bear', Warn: 'Warn', Violet: 'Violet', Accent: 'Accent', Muted: 'Muted', Plain: 'Plain' });
 export type GuideToneId = typeof GuideTone[keyof typeof GuideTone];

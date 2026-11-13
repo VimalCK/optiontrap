@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { submitFeedback } from '@/services/feedback';
 import { FeedbackType, type FeedbackTypeId } from '../../../shared/appEnums.js';
 import '@/styles/feedback.css';
+import Message from '@/components/Message/Message';
+import { MessageTone } from '@/utils/uiEnums';
 
 const feedbackTypes: Array<{ id: FeedbackTypeId; label: string }> = [
   { id: FeedbackType.Bug, label: 'Bug' },
@@ -98,7 +100,7 @@ const FeedbackButton: React.FC = () => {
                   />
                 </label>
 
-                {error && <div className="feedback-modal__error">{error}</div>}
+                {error && <Message tone={MessageTone.Error} className="feedback-modal__error">{error}</Message>}
 
                 <div className="feedback-modal__actions">
                   <button type="button" className="feedback-secondary" onClick={close}>Cancel</button>

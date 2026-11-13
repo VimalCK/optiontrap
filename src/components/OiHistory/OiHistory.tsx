@@ -33,6 +33,7 @@ import OrderModal from '@/components/OrderModal/OrderModal';
 import { useOrderChoices } from '@/components/OrderModal/useOrderChoices';
 import type { OrderOption } from '@/components/OrderModal/orderTicket';
 import { useToasts } from '@/hooks/useToasts';
+import LoadingState from '@/components/LoadingState/LoadingState';
 
 const STRIKE_RANGE_KEY = 'optiontrap_strike_range';
 const SPECIFIC_STRIKE_KEY = 'optiontrap_specific_strike';
@@ -1349,9 +1350,8 @@ const OiHistory: React.FC = () => {
       <FuturesContext futuresData={futuresData} filterDate={filterDate} scrip={scrip} />
 
       {(loading || fetching) && data.length === 0 && (
-        <div className="card oi-history__loading-card">
-          <div className="oi-history__loading-spinner" />
-          <span className="oi-history__loading-text">Loading data...</span>
+        <div className="card">
+          <LoadingState label="Loading data…" />
         </div>
       )}
 

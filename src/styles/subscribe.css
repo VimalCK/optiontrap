@@ -67,11 +67,6 @@
 .subscribe-card__intro,
 .subscribe-card__note,
 .subscribe-plan p,
-.subscribe-loading {
-  color: var(--text-secondary);
-  line-height: 1.6;
-}
-
 .subscribe-card__intro {
   max-width: 920px;
   margin: 16px 0 24px;
@@ -235,12 +230,6 @@
 
 .subscribe-error {
   margin: 18px 0;
-  padding: 12px;
-  border: 1px solid rgba(239, 68, 68, 0.35);
-  border-radius: 10px;
-  background: rgba(239, 68, 68, 0.08);
-  color: #ef4444;
-  font-size: 13px;
 }
 
 .subscribe-card__note {

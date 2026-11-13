@@ -1,0 +1,42 @@
+/* LoadingState: a spinner and a short label, centred in the space it fills. */
+.loading-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px 16px;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.loading-state--inline {
+  display: inline-flex;
+  justify-content: flex-start;
+  gap: 8px;
+  padding: 0;
+}
+
+.loading-state__spinner {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--card-border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: loading-state-spin 0.7s linear infinite;
+}
+
+.loading-state--inline .loading-state__spinner {
+  width: 14px;
+  height: 14px;
+}
+
+@keyframes loading-state-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-state__spinner {
+    animation-duration: 2s;
+  }
+}

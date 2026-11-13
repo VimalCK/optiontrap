@@ -15,6 +15,9 @@ import {
   sideName, strategyName, winRate,
 } from './winLossStats';
 import '@/styles/winLoss.css';
+import Message from '@/components/Message/Message';
+import { MessageTone } from '@/utils/uiEnums';
+import LoadingState from '@/components/LoadingState/LoadingState';
 
 const FETCH_DELAY_MS = 400;
 /** The range it opens on: the last 30 IST days, today included. */
@@ -200,8 +203,8 @@ const WinLossPatterns: React.FC = () => {
         </div>
         <DateRangePicker range={range} onChange={setRange} />
       </div>
-      {message && <p className="winloss__message winloss--loss">{message}</p>}
-      {!message && loading && <p className="card__description">Loading…</p>}
+      {message && <Message tone={MessageTone.Error}>{message}</Message>}
+      {!message && loading && <LoadingState />}
       {!message && !loading && results?.summary.trades === 0 && (
         <p className="winloss__empty">No closed automated trades in this range.</p>
       )}

@@ -6,6 +6,8 @@ import { currencySymbol, getPublicPlans, formatDuration } from '@/services/subsc
 import { AnalyticsIcon, CheckIcon, DashboardIcon, LogoIcon, PaperTradingIcon, ShieldIcon, TradesIcon, WatchlistIcon } from '@/components/icons/Icons';
 import { DurationUnit } from '../../shared/appEnums.js';
 import '@/styles/login.css';
+import Message from '@/components/Message/Message';
+import { MessageTone } from '@/utils/uiEnums';
 
 const FEATURES = [
   { icon: <AnalyticsIcon />, title: 'Live Option Chain', text: 'Real-time OI, intraday velocity and Greeks across every strike.' },
@@ -382,7 +384,7 @@ const Login: React.FC = () => {
                 : 'OptionTrap connects to your Zerodha account using Kite Connect.'}</p>
             </div>
 
-            {error && <div className="auth-modal__error">{error}</div>}
+            {error && <Message tone={MessageTone.Error} className="auth-modal__error">{error}</Message>}
 
             {credsSaved ? (
               <>

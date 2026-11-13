@@ -5,6 +5,8 @@
  */
 import React from 'react';
 import './FormFooter.css';
+import Message from '@/components/Message/Message';
+import { MessageTone } from '@/utils/uiEnums';
 
 export interface FormFooterProps {
   onSave: () => void;
@@ -26,7 +28,7 @@ const FormFooter: React.FC<FormFooterProps> = ({ onSave, onCancel, saving, error
   const savedNow = saved && !saving && !error;
   return (
     <div className="form-footer">
-      {error && <span className="form-footer__error" role="alert">{error}</span>}
+      {error && <Message tone={MessageTone.Error} className="form-footer__error">{error}</Message>}
       <button type="button" className="app-btn" onClick={onCancel} disabled={saving}>Cancel</button>
       <button
         type="button"

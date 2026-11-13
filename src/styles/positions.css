@@ -658,6 +658,8 @@
 
 .paper-orders__error {
   margin: 0 0 8px;
-  font-size: 13px;
-  color: #ef4444;
+}
+
+.positions-exit-error {
+  margin-bottom: var(--card-gap);
 }

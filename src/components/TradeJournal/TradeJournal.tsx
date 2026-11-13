@@ -24,8 +24,10 @@ import {
 } from '@/services/tradeJournal';
 import { Segment, TRADING_MODES, TradingMode, type SegmentId, type TradingModeId } from '../../../shared/tradeEnums.js';
 import { saveTradingMode, storedTradingMode } from '@/utils/tradingModeStorage';
-import { AnySegment, JournalRange, type AnySegmentId, type JournalRangeId } from '@/utils/uiEnums';
+import { AnySegment, type AnySegmentId, JournalRange, type JournalRangeId, MessageTone } from '@/utils/uiEnums';
+import Message from '@/components/Message/Message';
 import '@/styles/tradejournal.css';
+import LoadingState from '@/components/LoadingState/LoadingState';
 
 type SegmentFilter = AnySegmentId | SegmentId;
 
@@ -240,7 +242,7 @@ const TradeJournal: React.FC<{
               ))}
             </div>
 
-            {reportLoading && <span className="tj-loading">Loading…</span>}
+            {reportLoading && <LoadingState inline />}
           </>
         )}
       </div>
@@ -258,8 +260,8 @@ const TradeJournal: React.FC<{
 
       {mode === TradingMode.Paper && (
         <>
-          {problem && <div className="tj-notice">{problem}</div>}
-          {reportError && <div className="tj-notice tj-notice--error">{reportError}</div>}
+          {problem && <Message tone={MessageTone.Info}>{problem}</Message>}
+          {reportError && <Message tone={MessageTone.Error}>{reportError}</Message>}
 
           {/* The calendar always shows; it stays empty until a report fills it. */}
           <div className="card tj-heatmap-card">
@@ -340,9 +342,9 @@ const TradeJournal: React.FC<{
                           <tr className="tj-day-status-row">
                             <td colSpan={8}>
                               {loaded.loading ? (
-                                <span className="tj-loading">Loading trades…</span>
+                                <LoadingState label="Loading trades…" inline />
                               ) : loaded.error ? (
-                                <span className="tj-notice--error">{loaded.error}</span>
+                                <Message tone={MessageTone.Error}>{loaded.error}</Message>
                               ) : (
                                 <button
                                   className="tj-preset-btn"

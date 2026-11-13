@@ -5,6 +5,9 @@ import { getUsers, updateUserSubscription, AdminUser } from '@/services/admin';
 import { DurationUnit, SubscriptionAction, type SubscriptionActionId } from '../../shared/appEnums.js';
 import { getPublicPlans, formatDuration } from '@/services/subscription';
 import { SubscriptionPlan } from '@/services/kiteAuth';
+import Message from '@/components/Message/Message';
+import { MessageTone } from '@/utils/uiEnums';
+import LoadingState from '@/components/LoadingState/LoadingState';
 
 const formatDate = (value: string | null) => {
   if (!value) return '—';
@@ -70,10 +73,10 @@ const AdminUsers: React.FC = () => {
         <button className="admin-refresh" onClick={load} disabled={loading}>Refresh</button>
       </div>
 
-      {error && <div className="admin-error">{error}</div>}
+      {error && <Message tone={MessageTone.Error}>{error}</Message>}
 
       {loading ? (
-        <div className="admin-empty">Loading users...</div>
+        <LoadingState label="Loading users…" />
       ) : users.length === 0 ? (
         <div className="admin-empty">No registered users yet.</div>
       ) : (

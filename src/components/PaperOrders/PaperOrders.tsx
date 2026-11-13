@@ -5,7 +5,8 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Badge from '@/components/Badge/Badge';
-import { Tone, type ToneId } from '@/utils/uiEnums';
+import { MessageTone, Tone, type ToneId } from '@/utils/uiEnums';
+import Message from '@/components/Message/Message';
 import EmptyState from '@/components/EmptyState/EmptyState';
 import { PaperTradingIcon } from '@/components/icons/Icons';
 import PositionInstrument from '@/components/PositionInstrument/PositionInstrument';
@@ -145,7 +146,7 @@ const PaperOrders: React.FC<{ orders: PaperOrder[]; prices: LastPrices; error: s
   const pending = pendingOrders(orders);
   return (
     <div className="paper-orders" role="region" aria-label="Pending orders">
-      {error && <p className="paper-orders__error">{error}</p>}
+      {error && <Message tone={MessageTone.Error} className="paper-orders__error">{error}</Message>}
       {pending.length > 0 ? (
         <PaperOrdersTable orders={pending} prices={prices} onCancel={onCancel} />
       ) : (

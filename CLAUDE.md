@@ -250,6 +250,8 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   - `AppSelect` instead of a native `<select>` (supports `searchable` and multi-select).
   - The shared `TabBar` for page tabs. `MarketStrip`.
   - `ToastStack` + `useToasts` for short messages after an action (an order placed or refused).
+  - `Message` (`tone` `MessageTone.Error`/`Info`) for an error or notice that stays on the page; a page class adds only its margin.
+  - `LoadingState` (`label`, `inline` in a row of controls or a table cell) while a section loads, `EmptyState` when it has nothing.
   - `IconButton` for any icon-only button (`icon`, `label` = tooltip + accessible name, `expanded` for toggles).
   - SVG icons in `src/components/icons/Icons.tsx`: add new ones there in the same style (24 viewBox, `currentColor`
     stroke, `aria-hidden`; line icons through its `StrokeIcon`, which takes a `strokeWidth`). Never an inline `<svg>` icon

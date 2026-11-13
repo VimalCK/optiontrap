@@ -6,12 +6,6 @@
   gap: var(--card-gap);
 }
 
-.tj-loading {
-  color: var(--text-secondary);
-  font-size: 13px;
-  padding: 12px 0;
-}
-
 /* ── Controls Bar ── */
 .tj-controls {
   display: flex;
@@ -118,17 +112,6 @@
   color: var(--accent);
   border-color: var(--accent);
   background: var(--sidebar-active);
-}
-
-/* ── Report messages ── */
-.tj-notice {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
-.tj-notice--error {
-  font-size: 13px;
-  color: #ef4444;
 }
 
 .tj-day-status-row td {

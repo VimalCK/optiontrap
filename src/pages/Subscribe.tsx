@@ -5,6 +5,9 @@ import { notifySessionChange } from '@/hooks/useKiteSession';
 import { SubscriptionPlan, SubscriptionStatus } from '@/services/kiteAuth';
 import { activateSubscription, currencySymbol, formatDuration, getSubscriptionPlans, getSubscriptionStatus } from '@/services/subscription';
 import '@/styles/subscribe.css';
+import Message from '@/components/Message/Message';
+import { MessageTone } from '@/utils/uiEnums';
+import LoadingState from '@/components/LoadingState/LoadingState';
 
 const getPlanPriceLabel = (plan: SubscriptionPlan) =>
   `${currencySymbol(plan.currency)}${plan.price.toLocaleString('en-IN')} / ${formatDuration(plan.durationCount, plan.durationUnit)}`;
@@ -75,10 +78,10 @@ const Subscribe: React.FC = () => {
           </p>
         </div>
 
-        {error && <div className="subscribe-error">{error}</div>}
+        {error && <Message tone={MessageTone.Error} className="subscribe-error">{error}</Message>}
 
         {loading ? (
-          <div className="subscribe-loading">Loading plans...</div>
+          <LoadingState label="Loading plans…" />
         ) : plans.length > 0 ? (
           <div className="subscribe-plans">
             {plans.map((plan) => (
@@ -104,7 +107,7 @@ const Subscribe: React.FC = () => {
             ))}
           </div>
         ) : (
-          <div className="subscribe-error">No active plans are available.</div>
+          <Message tone={MessageTone.Error} className="subscribe-error">No active plans are available.</Message>
         )}
 
         <button

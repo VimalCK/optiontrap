@@ -21,8 +21,10 @@ import { useStrategies } from '@/hooks/useStrategies';
 import type { StrategyInfo } from '@/services/strategies';
 import { formatAmount, formatSignedAmount } from '@/utils/formatAmount';
 import { formatCalendarDate, istTimeLabel } from '@/utils/marketStatus';
-import { AnalyticsTab } from '@/utils/uiEnums';
+import { AnalyticsTab, MessageTone } from '@/utils/uiEnums';
+import Message from '@/components/Message/Message';
 import '@/styles/automation.css';
+import LoadingState from '@/components/LoadingState/LoadingState';
 
 const errorText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
@@ -139,8 +141,8 @@ export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean;
         <h3 id="automation-trades-title" className="card__title">Automated trades</h3>
         {controls}
       </div>
-      {error && <p className="automation-message automation-message--error">{error}</p>}
-      {loading && <p className="card__description">Loading…</p>}
+      {error && <Message tone={MessageTone.Error}>{error}</Message>}
+      {loading && <LoadingState />}
       {!loading && !error && trades.length === 0 && (
         <EmptyState
           icon={<AutomationIcon size={64} />}

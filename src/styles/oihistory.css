@@ -3112,33 +3112,6 @@ span.oi-history__chart-legend-item:hover {
   color: #fff;
 }
 
-/* ── Loading card ── */
-.oi-history__loading-card {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 48px 20px;
-}
-
-.oi-history__loading-spinner {
-  width: 24px;
-  height: 24px;
-  border: 3px solid var(--card-border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: oi-spin 0.7s linear infinite;
-}
-
-@keyframes oi-spin {
-  to { transform: rotate(360deg); }
-}
-
-.oi-history__loading-text {
-  font-size: 13px;
-  color: var(--text-secondary);
-}
-
 .oi-history__signal-grid-delete {
   white-space: nowrap;
   text-align: right;

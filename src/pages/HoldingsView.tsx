@@ -5,8 +5,10 @@ import { heldQuantity, isPledged } from '@/services/holdings';
 import { useHoldings } from '@/hooks/useHoldings';
 import { formatAmount, formatSignedAmount } from '@/utils/formatAmount';
 import { MarketStatus } from '../../shared/tradeEnums.js';
-import { AllocationView, type AllocationViewId } from '@/utils/uiEnums';
+import { AllocationView, type AllocationViewId, MessageTone } from '@/utils/uiEnums';
+import Message from '@/components/Message/Message';
 import '@/styles/holdings.css';
+import LoadingState from '@/components/LoadingState/LoadingState';
 
 const PRIVACY_MODE_KEY = 'optiontrap_privacy_mode';
 
@@ -23,7 +25,7 @@ interface AllocationItem {
 }
 
 const HoldingsView: React.FC = () => {
-  const { holdings, totals, loading, error, reload, marketStatus } = useHoldings();
+  const { holdings, totals, loading, error, marketStatus } = useHoldings();
   const [allocationView, setAllocationView] = useState<AllocationViewId>(AllocationView.Bar);
   const [expandedStock, setExpandedStock] = useState<string | null>(null);
   const [privacyMode, setPrivacyMode] = useState(() =>
@@ -78,19 +80,9 @@ const HoldingsView: React.FC = () => {
         </button>
       </div>
 
-      {loading && (
-        <div className="holdings-loading">
-          <div className="redirect-spinner" />
-          <p>Loading holdings...</p>
-        </div>
-      )}
+      {loading && <LoadingState label="Loading holdings…" />}
 
-      {error && (
-        <div className="card holdings-error">
-          <p>{error}</p>
-          <button className="btn btn--primary" onClick={() => reload()} style={{ marginTop: 12 }}>Retry</button>
-        </div>
-      )}
+      {error && <Message tone={MessageTone.Error}>{error}</Message>}
 
       {!loading && !error && holdings.length > 0 && (
         <>
