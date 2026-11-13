@@ -66,9 +66,10 @@
   table-layout: fixed;
 }
 
+/* Room for the instrument on one line: name, strike, type, expiry, source and horizon badges, and the chart link. */
 .positions-table th:first-child,
 .positions-table td:first-child {
-  width: 25%;
+  width: 35%;
 }
 
 .positions-table th {
