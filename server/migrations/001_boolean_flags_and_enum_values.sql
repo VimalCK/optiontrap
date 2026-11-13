@@ -1,4 +1,4 @@
--- Four changes, each safe to run again and on a database with data:
+-- Five changes, each safe to run again and on a database with data:
 --
 -- 1. Yes/no columns stored as INTEGER 0/1 become BOOLEAN, like
 --    sessions.is_admin: users.is_admin, subscription_plans.is_active and
@@ -18,6 +18,9 @@
 --    market relations, the OI setups' patterns, flows and selling setups, the
 --    automated trades' setup patterns, and plan duration units. Every column
 --    holding an enum value gets a CHECK listing its members.
+-- 5. The index rows of the instruments table come with their own settings
+--    (F&O name, label, TradingView symbol, daily snapshot, market reference),
+--    so a new database has them before the first instrument sync.
 --
 -- A migration is a fixed record, so it names the old and new values as text;
 -- the app's SQL names them through sqlEnum (server/sql.js).
@@ -396,3 +399,22 @@ CREATE INDEX IF NOT EXISTS idx_stock_setup_signals_open ON stock_setup_signals (
 -- The plans list and the default plan (getActiveSubscriptionPlans,
 -- activateSubscription): active plans, cheapest first.
 CREATE INDEX IF NOT EXISTS subscription_plans_active_price_idx ON subscription_plans (price, id) WHERE is_active;
+
+-- ── 5. Index rows with their settings ──
+-- A new database starts with an empty instruments table, and the instrument
+-- sync fills only Zerodha's columns, so without these rows no index would be
+-- an underlying (GET /api/underlyings maps an index's F&O name to its row by
+-- fno_name), none would be OI-snapshotted daily and none would be the market
+-- reference. Zerodha's index tokens don't change; the sync upserts by token,
+-- refreshing Zerodha's columns and keeping these settings. A database that
+-- already has the rows keeps them as they are.
+INSERT INTO instruments
+  (instrument_token, exchange_token, tradingsymbol, name, exchange, instrument_type,
+   fno_name, label, tradingview_symbol, always_snapshot, is_market_reference)
+VALUES
+  (256265, 1001, 'NIFTY 50',          'NIFTY 50',                         'NSE', 'EQ', 'NIFTY',      'NIFTY 50',   'NIFTY',            true,  true),
+  (260105, 1016, 'NIFTY BANK',        'NIFTY BANK',                       'NSE', 'EQ', 'BANKNIFTY',  'BANK NIFTY', 'BANKNIFTY',        true,  false),
+  (257801, 1007, 'NIFTY FIN SERVICE', 'NIFTY FIN SERVICE',                'NSE', 'EQ', 'FINNIFTY',   NULL,         'CNXFINANCE',       false, false),
+  (270857, 1058, 'NIFTY NEXT 50',     'NIFTY NEXT 50',                    'NSE', 'EQ', 'NIFTYNXT50', NULL,         'NIFTYNXT50',       false, false),
+  (288009, 1125, 'NIFTY MID SELECT',  'NIFTY MIDCAP SELECT (MIDCPNIFTY)', 'NSE', 'EQ', 'MIDCPNIFTY', NULL,         'NIFTY_MID_SELECT', false, false)
+ON CONFLICT (instrument_token) DO NOTHING;
