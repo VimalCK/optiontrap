@@ -1,10 +1,6 @@
 /**
- * TabBar — a one-line tab bar that never scrolls: the tabs that fit show, the
- * rest are listed under a "+N" button, and picking one there activates it.
- * The active tab always stays visible. Each page keeps its own look through
- * the class names it passes (e.g. "analytics-tabs" / "analytics-tab").
- * Long names are cut with "…" (full name on hover), and when even the active
- * tab and "+N" do not fit, the active tab's name is cut further.
+ * One line that never scrolls: tabs that don't fit go under "+N". The active tab
+ * always stays visible; when even it and "+N" don't fit, its name is cut further.
  */
 
 import React, { useEffect, useRef, useState } from 'react';
@@ -19,7 +15,6 @@ export interface TabBarItem<T extends string> {
   title?: string;
 }
 
-/** The label, with a plain-string name made cuttable with "…". */
 const tabText = (label: React.ReactNode) => (typeof label === 'string' ? <span className="tab-bar__text">{label}</span> : label);
 const tabTitle = <T extends string>(item: TabBarItem<T>) => item.title ?? (typeof item.label === 'string' ? item.label : undefined);
 
@@ -58,7 +53,6 @@ function TabBar<T extends string>({
   const shown = visible ? items.filter((_, i) => visible.has(i)) : items;
   const more = visible ? items.filter((_, i) => !visible.has(i)) : [];
 
-  // Close the "+N" menu on a click elsewhere or Escape.
   useEffect(() => {
     if (!moreOpen) return;
     const onClick = (event: MouseEvent) => { if (!moreRef.current?.contains(event.target as Node)) setMoreOpen(false); };
@@ -78,7 +72,6 @@ function TabBar<T extends string>({
 
   return (
     <div className="tab-bar-row" ref={rowRef}>
-      {/* Hidden copy of every tab and a "+N" button, measured to decide which tabs fit. */}
       <div className="tab-bar__measure-box" aria-hidden="true">
         <div className={`${className} tab-bar--measure`} ref={measureRef}>
           {items.map((item) => measureTab(item, item.id === activeId))}

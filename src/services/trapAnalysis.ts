@@ -22,7 +22,6 @@ const TRAP_POSITIONS: Record<SideId, Record<OptionTypeId, TrapPosition>> = {
   [Side.SELL]: { [OptionType.CE]: OptionSetup.SellCe, [OptionType.PE]: OptionSetup.SellPe },
 };
 
-/** The trap position for a side on a call or a put. */
 export const trapPositionOf = (side: SideId, optionType: OptionTypeId): TrapPosition => TRAP_POSITIONS[side][optionType];
 
 const CALL_POSITIONS: OptionSetupId[] = [OptionSetup.BuyCe, OptionSetup.SellCe];
@@ -74,20 +73,8 @@ export function buildTrapContext(
 }
 
 /**
- * Analyze whether a position at a given strike is likely to get trapped.
- *
- * @param positionType the position: bought or sold, call or put (trapPositionOf)
- * @param strike The strike you're entering
- * @param spotPrice Current NIFTY spot
- * @param chain Full option chain
- * @param oiData Current OI map
- * @param prevDayOi Previous day OI map (for change calculation)
- * @param closePrices Previous close prices (for price change)
- * @param livePrices Current prices
- * @param daysToExpiry Days remaining until expiry (optional)
- * @param ctx Pre-computed shared context from buildTrapContext() — pass this
- *            when analyzing all strikes in a loop to avoid O(n³) recomputation.
- *            If omitted, shared context is computed internally (fine for single-strike use).
+ * Whether a position at a strike is likely to get trapped. In a loop over
+ * strikes, pass `ctx` from buildTrapContext() so the chain isn't recomputed per strike.
  */
 export function analyzeTrap(
   positionType: TrapPosition,
@@ -103,13 +90,11 @@ export function analyzeTrap(
 ): TrapAnalysis {
   const reasons: string[] = [];
 
-  // 1. Max Pain and PCR — use pre-computed context if provided, otherwise compute now
   const { maxPain, pcr, nearestResistance, nearestSupport } =
     ctx ?? buildTrapContext(chain, oiData, spotPrice);
 
   const distanceToMaxPain = Math.abs(strike - maxPain);
 
-  // 2. Get OI signal for the specific strike
   const row = chain.find((r) => r.strike === strike);
   let oiSignal: OiSignalResult = { signal: OiSignal.Neutral, label: 'Neutral', description: 'No data', sentiment: Bias.Neutral };
 
@@ -128,7 +113,6 @@ export function analyzeTrap(
     }
   }
 
-  // 3. Score the position
   let trapScore = 0; // 0 = safe, higher = more trapped
 
   if (positionType === OptionSetup.BuyCe) {
@@ -199,17 +183,14 @@ export function analyzeTrap(
     }
   }
 
-  // 6. Apply Expiry Time Pressure
   // Closer to expiry = trap signals are more dangerous (max pain gravity is stronger,
   // theta decay is faster, OI walls are harder to break with less time)
   if (daysToExpiry !== undefined && daysToExpiry >= 0 && trapScore > 0) {
     let timePressureBonus = 0;
     if (daysToExpiry <= 1) {
-      // Expiry day or next day — maximum pressure
       timePressureBonus = 2;
       reasons.push(`Expiry in ${daysToExpiry}d — max pain gravity and theta decay at peak`);
     } else if (daysToExpiry <= 3) {
-      // Within 3 days — high pressure
       timePressureBonus = 1;
       reasons.push(`Expiry in ${daysToExpiry}d — time pressure increasing significantly`);
     }

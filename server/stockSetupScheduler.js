@@ -1,12 +1,6 @@
 /**
- * After-close stock scan, a scheduled job (server/scheduledJobs.js).
- *
- * On weekdays from 15:45 IST, once the OI history job has finished (both use
- * the admin's Kite historical-data limit), bring every watchlist stock's daily
- * candles up to date, then re-scan each for setups and move open setups
- * forward. The market reference index (is_market_reference) is synced first.
- *
- * One run per IST date, recorded in scheduled_job_runs (dailyKiteJob.js).
+ * Starts once the OI history job has finished, since both use the admin's Kite historical-data limit. The market
+ * reference index (is_market_reference) is synced first.
  */
 
 import {
@@ -42,7 +36,6 @@ async function syncMarketReference(kite, results) {
   return { candles: await getStockCandles(reference.instrumentToken), loginRefused: false };
 }
 
-/** Sync each watchlist stock's candles and re-scan it for setups; stops at a refused login. */
 async function scanWatchlist({ kite, results }) {
   const stocks = await getWatchlistStocks();
   console.log(`[Scheduler] ${STOCK_SETUPS_JOB}: syncing ${stocks.length} watchlist stock(s)`);
@@ -74,7 +67,6 @@ const runAfterCloseScan = createDailyKiteJob({
   work: scanWatchlist,
 });
 
-/** The stock scan plug-in: checks every five minutes after the close until today's run is done. */
 export const stockSetupJob = {
   id: STOCK_SETUPS_JOB,
   /** @param {import('./tradeEngine/host.js').PluginContext} ctx */

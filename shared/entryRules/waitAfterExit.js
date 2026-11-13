@@ -1,4 +1,3 @@
-/** Rule: don't enter an instrument again straight after an automated position in it was exited. */
 import { marketTimeLabel } from '../marketTime.js';
 import { ParamType } from '../tradeEnums.js';
 

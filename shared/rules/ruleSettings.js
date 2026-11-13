@@ -1,9 +1,6 @@
 /**
- * What every plug-in rule list has in common (entry rules in
- * shared/entryRules/, exit rules in shared/exitRules/): the shape of a rule,
- * the user's Active / Inactive setting and values for each rule, checking
- * those settings from the client, bringing stored settings up to date, and
- * running the active rules in order.
+ * Shared by the entry and exit rule lists: the shape of a rule, and the
+ * user's settings for each rule.
  *
  * A rule is { id, label, description, params, check }:
  *   id           stable name, the key of its setting in the user's config
@@ -24,7 +21,6 @@ import { PARAM_TYPES } from './paramTypes.js';
  * @typedef {{ active: boolean, params: Record<string, ParamValue> }} RuleSetting
  * @typedef {Record<string, RuleSetting>} RuleSettings
  * @typedef {{ id: string, label: string, description: string, params: RuleParam[] }} RuleInfo
- *   what the settings page shows of a rule
  */
 
 /**
@@ -36,7 +32,6 @@ import { PARAM_TYPES } from './paramTypes.js';
 const inactive = (rule) => ({ active: false, params: Object.fromEntries(rule.params.map((p) => [p.key, p.default ?? null])) });
 
 /**
- * Every rule in the list inactive, with no values (or the default the user named).
  * @param {RuleInfo[]} rules
  * @returns {RuleSettings}
  */
@@ -73,7 +68,6 @@ function parseRuleSetting(rule, input, field) {
 }
 
 /**
- * Check a list's settings from the client: every rule must be there, and none unknown.
  * @param {RuleInfo[]} rules
  * @param {any} input
  * @param {string} field  where the settings sit in the config, e.g. 'entryRules'
@@ -111,7 +105,7 @@ export function ruleSettingsWithDefaults(rules, stored) {
 }
 
 /**
- * Run the active rules in list order; the first that fires gives its id and reason.
+ * The first active rule in list order that fires gives its id and reason.
  * @template S, C
  * @param {Rule<S, C>[]} rules
  * @param {S} subject

@@ -1,8 +1,7 @@
 /**
- * Rule: at most a set number of automated positions open at once. A trade in
- * an instrument already held merges into that position (auto with auto), so
- * it doesn't open a new one and isn't counted. An automated limit order still
- * waiting counts as the position it will open.
+ * A trade in an instrument already held merges into that position (auto with
+ * auto), so it isn't counted. A waiting automated limit order counts as the
+ * position it will open.
  */
 
 import { ParamType } from '../tradeEnums.js';

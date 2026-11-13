@@ -1,11 +1,7 @@
 /**
- * DateInput — the one date picker used across the app. It replaces the
- * browser's <input type="date">, whose display order follows the browser's
- * locale (month first on an en-US browser), so every date reads day, month,
- * year (DD-MM-YYYY, formatNumericDate in utils/marketStatus) whatever the
- * browser. The value is a YYYY-MM-DD calendar date, or '' when none is picked.
- * Days before `min` or after `max` are shown disabled. Month-grid logic lives
- * in ./calendar.ts.
+ * The one date picker used across the app. It replaces <input type="date">,
+ * whose display order follows the browser locale, so every date reads
+ * DD-MM-YYYY whatever the browser.
  */
 import React, { useEffect, useRef, useState } from 'react';
 import IconButton from '@/components/IconButton/IconButton';
@@ -18,7 +14,6 @@ const WEEKDAYS = ['Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa', 'Su'];
 const PLACEHOLDER = 'DD-MM-YYYY';
 
 interface DateCalendarProps {
-  /** The month on show. */
   month: CalendarMonth;
   value: string;
   min?: string;
@@ -30,7 +25,6 @@ interface DateCalendarProps {
   onClear: () => void;
 }
 
-/** The calendar popup: a month of days with previous/next month buttons. */
 export const DateCalendar: React.FC<DateCalendarProps> = ({ month, value, min, max, today, onPick, onMonthChange, onClear }) => {
   const monthTitle = formatCalendarDate(isoDate(month.year, month.month, 1), { month: 'long', year: 'numeric' });
   return (
@@ -77,7 +71,6 @@ export interface DateInputProps {
   label: string;
 }
 
-/** A button showing the date day first; opens the calendar popup. */
 const DateInput: React.FC<DateInputProps> = ({ value, onChange, min, max, label }) => {
   const [open, setOpen] = useState(false);
   const today = istDateString();

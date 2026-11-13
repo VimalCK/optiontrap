@@ -15,12 +15,10 @@ import { strategyInfos } from './strategies/index.js';
 /** @param {any} stored @returns {AutomationConfig} */
 const complete = (stored) => withDefaults(stored, strategyInfos());
 
-/** The user's automation configuration, or the defaults if none is saved. */
 export async function getAutomationConfig(/** @type {string} */ userId) {
   return complete(await getStoredAutomationConfig(userId));
 }
 
-/** Store a configuration already checked by parseAutomationConfig, and return it as saved. */
 export async function saveAutomationConfig(/** @type {string} */ userId, /** @type {AutomationConfig} */ config) {
   return complete(await storeAutomationConfig(userId, config));
 }
@@ -36,7 +34,6 @@ export async function getAutomationConfigs(userIds) {
 }
 
 /**
- * Users with automation switched on, each with their configuration.
  * @returns {Promise<{ userId: string, config: AutomationConfig }[]>}
  */
 export async function getAutomatedUsers() {

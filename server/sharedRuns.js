@@ -1,9 +1,4 @@
-/**
- * Coordination for work that many callers may ask for at once, kept in memory
- * so that waiting costs nothing (no database connection, no Kite call).
- * Used by OI history fetches (server/oiHistoryFetch.js): users fetching the same
- * scrip and month share one run, and runs for the same month wait their turn.
- */
+/** In memory, so waiting costs nothing: no database connection, no Kite call. */
 
 /**
  * Callers asking for the same `key` while a run is going share that run: its
@@ -70,7 +65,6 @@ export function createSharedRuns() {
   };
 }
 
-/** Runs work for the same key one after another, in the order asked. */
 export function createKeyedQueue() {
   const tails = new Map();
   return {

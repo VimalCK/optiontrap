@@ -1,10 +1,5 @@
 /**
- * TradeHorizonSelect — the trade type picker every screen that places manual
- * trades shows: Intraday (squared off the same day, placed in market hours) or
- * Positional (held over days, placed at any time, filled in market hours).
- * Options come from shared/tradeEnums.js; screens keep the choice with
- * useTradeHorizon, so they all start from the last one picked. Each screen
- * labels it ("Trade") in its own toolbar style.
+ * Screens keep the choice with useTradeHorizon, so they all start from the last one picked.
  */
 import React from 'react';
 import AppSelect from '@/components/AppSelect/AppSelect';
@@ -13,7 +8,7 @@ import { HORIZONS, type HorizonId } from '../../../shared/tradeEnums.js';
 const OPTIONS = HORIZONS.map((h) => ({ value: h.id, label: h.label }));
 const TITLE = 'Intraday trades are placed in market hours and squared off the same day; positional trades can be placed any time and fill in market hours';
 
-/** The horizon an option value stands for (the options are the horizons, so it is always one). */
+/** The options are the horizons, so the fallback is never used. */
 const horizonOf = (value: string | number, fallback: HorizonId): HorizonId => HORIZONS.find((h) => h.id === value)?.id ?? fallback;
 
 const TradeHorizonSelect: React.FC<{ value: HorizonId; onChange: (horizon: HorizonId) => void }> = ({ value, onChange }) => (

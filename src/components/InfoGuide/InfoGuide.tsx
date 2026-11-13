@@ -15,7 +15,6 @@ export interface GuideTerm {
   meaning: React.ReactNode;
 }
 
-/** Explainer panel behind an ⓘ button: a title, an intro and a grid of sections. */
 export const InfoGuide: React.FC<{ title?: string; intro?: React.ReactNode; children: React.ReactNode }> = ({ title, intro, children }) => (
   <div className="info-guide">
     {(title || intro) && (
@@ -42,7 +41,6 @@ export const GuideSection: React.FC<{ title: string; subtitle?: string; wide?: b
   </section>
 );
 
-/** Coloured label chips with an optional rule and a meaning. `twoCol` lays rows out in two columns. */
 export const GuideRows: React.FC<{ rows: GuideRow[]; twoCol?: boolean }> = ({ rows, twoCol }) => {
   const hasRule = rows.some((row) => row.rule);
   return (
@@ -58,7 +56,6 @@ export const GuideRows: React.FC<{ rows: GuideRow[]; twoCol?: boolean }> = ({ ro
   );
 };
 
-/** Term / meaning pairs. */
 export const GuideTerms: React.FC<{ terms: GuideTerm[] }> = ({ terms }) => (
   <dl className="info-guide__terms">
     {terms.map((t) => (

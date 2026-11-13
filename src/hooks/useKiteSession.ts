@@ -2,18 +2,12 @@ import { useState, useEffect, useCallback } from 'react';
 import { getSession, fetchAuthStatus, KiteSession, AuthStatus } from '@/services/kiteAuth';
 import { AUTH_SESSION_EVENT } from '@/services/authSession';
 
-/**
- * Dispatch this after login/logout to notify all listeners
- */
+/** Call after login or logout so every mounted session hook reloads. */
 export function notifySessionChange(): void {
   window.dispatchEvent(new Event(AUTH_SESSION_EVENT));
 }
 
-/**
- * Hook that reactively tracks the Kite session state.
- * On mount, calls /auth/status to check credentials + session.
- * Listens for session change events to re-fetch.
- */
+/** Session state from /auth/status, reloaded on session change events. */
 export function useKiteSession(): { session: KiteSession | null; loading: boolean; credentialsConfigured: boolean } {
   const [session, setSession] = useState<KiteSession | null>(getSession);
   const [loading, setLoading] = useState(true);

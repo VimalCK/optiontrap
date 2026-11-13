@@ -26,7 +26,6 @@ interface StockSetupsPanelProps {
 
 /** Re-run the analysis only when the live price has moved this much: zones don't change tick by tick. */
 const REPRICE_MOVE = 0.005;
-/** Zones drawn on the price ladder on each side of the price. */
 const LADDER_ZONES = 3;
 
 const MARKET_LABEL: Record<MarketRelationId, string> = {
@@ -92,7 +91,6 @@ function historyText(zone: Zone): string {
   return `${verb} ${held} of ${tests}${broke}${move}`;
 }
 
-/** Zones either side of the price on one scale, so their distance and width read at a glance. */
 function PriceLadder({ analysis }: { analysis: StockAnalysis }) {
   const supports = analysis.supports.slice(0, LADDER_ZONES);
   const resistances = analysis.resistances.slice(0, LADDER_ZONES);
@@ -127,18 +125,13 @@ function PriceLadder({ analysis }: { analysis: StockAnalysis }) {
   );
 }
 
-/**
- * Stocks whose 1Y backtest succeeded since the page loaded. Rerunning would only re-add
- * the same setups, so the button opens the scorecard for these instead. In memory only.
- */
+/** Stocks whose 1Y backtest ran since the page loaded. Rerunning would only re-add the same setups; in memory only. */
 const backtestedTokens = new Set<number>();
 
-/** Entry and exit zones, today's setups and a plan for one watchlist stock. */
 const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tradingsymbol, livePrice, onClose, onSetAlert }) => {
   const [data, setData] = useState<StockCandles | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [analysisPrice, setAnalysisPrice] = useState<number | undefined>(livePrice);
-  // The body shows the setup details, the reading guide, or the scorecard after a backtest.
   const [view, setView] = useState<StockSetupsViewId>(StockSetupsView.Details);
   const showGuide = view === StockSetupsView.Guide;
   // Read once for the ATM strike; ticks shouldn't refetch option quotes.
@@ -178,7 +171,6 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
     return () => controller.abort();
   }, [tradingsymbol, data]);
 
-  /** Realised volatility of the daily closes, and the rupee moves it implies at the current price. */
   const volatility = useMemo(() => {
     if (!data || !analysis) return null;
     const annual = realizedVol(data.candles.map((c) => c.close));
@@ -200,7 +192,6 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
     return sessions > 0 ? expectedMove.straddle / Math.sqrt(2 / Math.PI) / Math.sqrt(sessions) : null;
   }, [expectedMove]);
 
-  // Setup history: add the past year's setups, with outcomes, to the scorecard.
   const [history, setHistory] = useState<{ running: boolean; message: string | null; error: boolean }>({ running: false, message: null, error: false });
   const [backtested, setBacktested] = useState(() => backtestedTokens.has(instrumentToken));
   useEffect(() => {

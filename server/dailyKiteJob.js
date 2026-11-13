@@ -1,18 +1,7 @@
 /**
- * A Kite job that runs once per IST date: the after-close OI history fetch
- * (oiHistoryScheduler.js) and stock scan (stockSetupScheduler.js) share it.
- *
- * Each check (the job's plug-in calls it on the market clock) skips a date
- * already done (remembered in memory, and in scheduled_job_runs across
- * restarts and servers), waits until the job it depends on has finished its
- * run for the date (done or failed) and an admin Kite session works (logging
- * the wait once a day), claims the date's run so no
- * other server runs it too, does the job's work, and records the run:
+ * A Kite job that runs once per IST date. A run is claimed in scheduled_job_runs so no other server runs it too.
  *   Done    the work finished; not run again that date
- *   Failed  Kite refused the login part-way, or the work threw; the next
- *           check runs it again
- * with the admin's user id and every result (an `error` on the ones that
- * failed) saved in the run's detail.
+ *   Failed  Kite refused the login part-way, or the work threw; the next check runs it again
  */
 import { claimScheduledJobRun, finishScheduledJobRun, getScheduledJobStatus } from './db.js';
 import { JobRunStatus } from '../shared/appEnums.js';
@@ -24,17 +13,13 @@ import { JobRunStatus } from '../shared/appEnums.js';
  */
 
 /**
- * A check that runs `work` once per IST date.
  * @param {{
  *   job: string,
  *   findSession: () => Promise<AdminKite | null>,
  *   dependsOn?: string,
  *   work: (run: { kite: AdminKite, date: string, results: JobResult[] }) => Promise<JobOutcome>,
  * }} options
- *   job          the job's name in scheduled_job_runs and the log
- *   findSession  the admin Kite session to use, or null while none works
  *   dependsOn    a job whose run for the date must finish first (both use Kite's historical-data limit)
- *   work         the job itself; pushes each item's result to `results`
  * @returns {(date: string) => Promise<void>}
  */
 export function createDailyKiteJob({ job, findSession, dependsOn, work }) {
@@ -43,21 +28,18 @@ export function createDailyKiteJob({ job, findSession, dependsOn, work }) {
   /** @type {string | null} */
   let lastWaitingLogDate = null;
 
-  /** Log once a day that the job waits for an admin login. */
   function logWaiting(/** @type {string} */ date) {
     if (lastWaitingLogDate === date) return;
     console.log(`[Scheduler] ${job}: waiting for an admin Kite login today to run ${date}`);
     lastWaitingLogDate = date;
   }
 
-  /** Whether the job this one depends on (if any) has finished its run for `date`, done or failed. */
   async function dependencyFinished(/** @type {string} */ date) {
     if (!dependsOn) return true;
     const status = await getScheduledJobStatus(dependsOn, date);
     return status === JobRunStatus.Done || status === JobRunStatus.Failed;
   }
 
-  /** Record a run that threw; a failure to record it is logged, not thrown. */
   async function recordFailure(/** @type {string} */ date, /** @type {Error} */ err, /** @type {JobResult[]} */ results) {
     console.error(`[Scheduler] ${job} failed:`, err.message);
     try {

@@ -1,9 +1,7 @@
 /**
- * Rule: enter automated trades through a limit order at a better price than
- * the last traded price, by a set percentage: a buy below it, a sell above it.
- * It never refuses a trade; the trade engine prices the order with it
- * (entryLimitPrice in index.js). The order fills when the price reaches the
- * limit, or is cancelled at the market close and the trade is rejected.
+ * Never refuses a trade: the trade engine prices its limit order with
+ * entryLimitPrice (index.js). The order is cancelled at the market close,
+ * and the trade is then rejected.
  */
 
 import { ParamType } from '../tradeEnums.js';

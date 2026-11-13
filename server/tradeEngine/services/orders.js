@@ -117,7 +117,6 @@ export function createOrderService({
     waiting.get(order.instrumentToken).set(order.id, order);
   }
 
-  /** Take an order out of the waiting list; returns whether it was waiting. */
   function unwait(/** @type {Order} */ order) {
     const orders = waiting.get(order.instrumentToken);
     if (!orders?.delete(order.id)) return false;
@@ -193,7 +192,6 @@ export function createOrderService({
     return canFill(order.side, /** @type {number} */ (order.limitPrice), lastPrice) ? order.limitPrice : null;
   }
 
-  /** Fill each waiting order these ticks reach: a market order on its first tick, a limit order at its limit. */
   function onTicks(/** @type {import('../../../shared/kiteTicks.js').Tick[]} */ ticks) {
     const fills = [];
     for (const tick of ticks) {
@@ -402,7 +400,6 @@ export function createOrderService({
     },
 
     /**
-     * Cancel one of the user's open orders.
      * @param {string} userId
      * @param {string} id
      * @returns {Promise<OrderResult>}

@@ -1,15 +1,6 @@
 /**
- * The automation configuration form, one section at a time (the settings
- * page's tabs pick which):
- *   general      on/off, paper or live, intraday or positional, lots per
- *                trade, and which trade types may buy or sell
- *   strategies   which strategies select trades
- *   entry-rules  the rules every trade must pass to be executed
- *   exit-rules   the rules that close an open automated position
- * (both lists shown by RuleSettingsForm)
  * Save and Cancel belong to the settings page, shared by every section.
- * Options that aren't built yet are shown but can't be chosen. Names and
- * rules: shared/automation.js; strategies come from the server (GET /api/strategies).
+ * Options that aren't built yet are shown but can't be chosen.
  */
 import React from 'react';
 import { EXECUTION_MODES, HORIZONS, TRADE_KINDS } from '../../../shared/automation.js';
@@ -24,7 +15,6 @@ import { AutomationSettingsSection, type AutomationSettingsSectionId } from '@/u
 
 
 
-/** The settings sections, in tab order. */
 export const AUTOMATION_SETTINGS_SECTIONS: { id: AutomationSettingsSectionId; label: string }[] = [
   { id: AutomationSettingsSection.General, label: 'General' },
   { id: AutomationSettingsSection.Strategies, label: 'Strategies' },
@@ -34,7 +24,6 @@ export const AUTOMATION_SETTINGS_SECTIONS: { id: AutomationSettingsSectionId; la
 
 export interface AutomationConfigFormProps {
   config: AutomationConfig;
-  /** The trade engine's strategies, for the Strategies section. */
   strategies: StrategyInfo[];
   section: AutomationSettingsSectionId;
   onChange: (config: AutomationConfig) => void;

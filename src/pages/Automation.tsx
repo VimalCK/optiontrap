@@ -1,14 +1,6 @@
 /**
- * Automation — automated intraday (and later positional) trades.
- *
- * Every trade the automation takes runs through the same lifecycle:
- * selected → validated (or rejected) → executed into paper trading → closed.
- * This page lists the trades (clicking one shows its lifecycle); the gear
- * opens the settings page (AutomationSettings). Trades are taken on the
- * server by the trade engine (active strategies) and closed by the trade
- * monitor (exit rules).
- *
- * Names and rules: shared/automation.js; strategies: GET /api/strategies.
+ * Automated trades and their lifecycle (selected → validated → executed → closed).
+ * Rules: shared/automation.js; strategies: GET /api/strategies.
  */
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -35,12 +27,8 @@ import '@/styles/automation.css';
 const errorText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
 
-// ── Trades ──
-
-/** A fill price, or a dash before there is one. */
 const price = (value: number | null) => (value == null ? '–' : formatAmount(value));
 
-/** A day group's heading, e.g. "Thu, 5 Nov 2026". */
 const dayLabel = (day: string) => formatCalendarDate(day, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
 const tradeCount = (n: number) => `${n} ${n === 1 ? 'trade' : 'trades'}`;
 const eventTime = (at: string) => istTimeLabel(new Date(at));
@@ -52,7 +40,6 @@ const TRADE_COLUMNS = 9;
 /** Columns before P&L, so a day's P&L lines up under it. */
 const PNL_COLUMN = 6;
 
-/** A closed trade's P&L in profit / loss colours; a dash while it is open. */
 const PnlCell: React.FC<{ pnl: number | null }> = ({ pnl }) => {
   const tone = pnl == null ? '' : pnl >= 0 ? ' automation-trades__pnl--profit' : ' automation-trades__pnl--loss';
   return <td className={`automation-trades__num${tone}`}>{pnl == null ? '–' : formatSignedAmount(pnl)}</td>;
@@ -115,7 +102,7 @@ export const TradeRow: React.FC<{ trade: AutoTrade; open: boolean; onToggle: () 
   );
 };
 
-/** A day's heading row: its date, trade count and closed P&L; clicking it (or its chevron) hides or shows the day's trades. */
+/** A day's heading row; clicking it hides or shows that day's trades. */
 export const DayRow: React.FC<{ group: TradeDay; expanded: boolean; onToggle: () => void }> = ({ group, expanded, onToggle }) => (
   <tr className={`automation-trades__day${expanded ? '' : ' automation-trades__day--collapsed'}`} onClick={onToggle}>
     <th scope="colgroup" colSpan={PNL_COLUMN}>
@@ -191,8 +178,6 @@ export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean;
     </section>
   );
 };
-
-// ── Page ──
 
 /** "On" or "Off", and whether anything can trade: a strategy must exist and be active. */
 export function automationStatus(config: AutomationConfig | null, strategies: Pick<StrategyInfo, 'id'>[] | null): string {

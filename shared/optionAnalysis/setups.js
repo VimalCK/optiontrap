@@ -1,13 +1,7 @@
 /**
- * Option setups: the composite scoring behind the Option Analyzer's Strategy
- * card, which evaluates intraday patterns and recommends option sells and buys.
- *
- * Uses OI snapshots (10-min intervals), live OI/price data, max pain,
- * PCR, OI walls, and velocity patterns to produce scored recommendations.
- *
- * Shared, so the card (browser) and the Option Analyzer setups strategy
- * (server/tradeEngine/strategies/optionAnalyzerSetups.js, run by the server's
- * trade engine) score a chain the same way.
+ * Scored option sell and buy recommendations behind the Option Analyzer's
+ * Strategy card. Shared, so the card (browser) and the setups strategy
+ * (server/tradeEngine/strategies/optionAnalyzerSetups.js) score a chain the same way.
  */
 
 import { analyzeVelocityPattern } from './velocityPattern.js';
@@ -24,8 +18,6 @@ import { calculateMaxPain, calculatePCR, findOiWalls, classifyOiSignal } from '.
  * @typedef {import('./chain.js').ChainRow} ChainRow
  * @typedef {import('./velocityPattern.js').OiSnapshot} OiSnapshot
  */
-
-// ── Types ──
 
 /**
  * @typedef {typeof OptionSetup.SellCe | typeof OptionSetup.SellPe | typeof OptionSetup.SellStraddle | typeof OptionSetup.SellStrangle} SellType
@@ -75,8 +67,6 @@ import { calculateMaxPain, calculatePCR, findOiWalls, classifyOiSignal } from '.
  * @property {number} premium
  */
 
-// ── Volume Helper ──
-
 /**
  * Compute a volume multiplier for a token.
  * High volume (>1.5x avg) = 1.3 (boost)
@@ -121,8 +111,6 @@ export function strikeGap(chain) {
   return gap;
 }
 
-// ── Scoring Sub-functions ──
-
 /**
  * Score 1: Pinning Detection (0–25)
  * Checks if spot has been hovering near max pain across snapshots
@@ -148,7 +136,6 @@ function scorePinning(
   const distFromMaxPain = Math.abs(spotPrice - maxPain);
   const gap = strikeGap(chain);
 
-  // Check how many snapshots had spot within one strike of max pain
   let pinnedCount = 0;
   for (const snap of snapshots) {
     if (snap.spot && snap.spot > 0) {
@@ -156,13 +143,11 @@ function scorePinning(
     }
   }
 
-  // Current spot within one strike of max pain
   if (distFromMaxPain <= gap) {
     score += 5;
     reasons.push(`Spot within ${distFromMaxPain.toFixed(0)}pts of max pain ${maxPain}`);
   }
 
-  // Historical pinning across snapshots
   if (pinnedCount >= 3) {
     score += 10;
     reasons.push(`Spot pinned near max pain for ${pinnedCount * 10}+ minutes`);
@@ -232,7 +217,6 @@ function scoreOiWall(
     reasons.push(`Mild ${wallType} at ${bestWall.strike} (${bestWall.strength.toFixed(1)}x avg OI)`);
   }
 
-  // Volume confirmation on the wall
   {
     const wallRow = chain.find((r) => r.strike === bestWall.strike);
     const wallToken = type === OptionType.CE ? wallRow?.ce?.instrumentToken : wallRow?.pe?.instrumentToken;
@@ -245,7 +229,6 @@ function scoreOiWall(
     }
   }
 
-  // Check if wall OI is growing (short buildup confirmation)
   if (snapshots.length > 0) {
     const firstSnap = snapshots[0];
     const row = chain.find((r) => r.strike === bestWall.strike);
@@ -327,7 +310,6 @@ function scoreVelocity(
     score = 2;
   }
 
-  // Apply volume multiplier — high volume buildup is more reliable
   if (score > 0) {
     const volMul = volumeMultiplier(token, volumeData, avgVolume);
     score = Math.round(score * volMul);
@@ -358,7 +340,6 @@ function scorePcrExtreme(
 ) {
   /** @type {string[]} */ const reasons = [];
 
-  // Compute PCR at each snapshot using that snapshot's OI data
   /** @type {number[]} */ const pcrHistory = [];
   for (const snap of snapshots) {
     let totalCeOi = 0;
@@ -382,7 +363,6 @@ function scorePcrExtreme(
     ? (/** @type {number} */ pcr) => pcr < threshold
     : (/** @type {number} */ pcr) => pcr > threshold;
 
-  // Count consecutive favourable readings from the end
   let consecutive = 0;
   for (let i = pcrHistory.length - 1; i >= 0; i--) {
     if (isFavourable(pcrHistory[i])) consecutive++;
@@ -432,8 +412,6 @@ function scoreTimeDecay(daysToExpiry) {
 
   return { score, reasons };
 }
-
-// ── Main Engine ──
 
 /**
  * @typedef {object} StrikeScore
@@ -509,15 +487,12 @@ export function computeSellRecommendations(
     }
   }
 
-  // Market-level scores (same for all strikes)
   const pinningResult = scorePinning(snapshots, chain, oiData, spotPrice);
   const timeDecayResult = scoreTimeDecay(daysToExpiry);
 
-  // Score each OTM strike for CE and PE selling
   /** @type {StrikeScore[]} */ const strikeScores = [];
 
   for (const row of chain) {
-    // CE selling: strikes above spot (OTM calls)
     if (row.ce && row.strike > spotPrice) {
       const ceToken = row.ce.instrumentToken;
       const currentOi = oiData.get(ceToken) || 0;
@@ -545,7 +520,6 @@ export function computeSellRecommendations(
       strikeScores.push({ strike: row.strike, type: OptionType.CE, score: totalScore, pattern, reasons, breakdown, pop, premium });
     }
 
-    // PE selling: strikes below spot (OTM puts)
     if (row.pe && row.strike < spotPrice) {
       const peToken = row.pe.instrumentToken;
       const currentOi = oiData.get(peToken) || 0;
@@ -591,7 +565,6 @@ export function computeSellRecommendations(
     }
   }
 
-  // Straddle: same strike, both CE and PE (near ATM, within 100pts)
   const ceScores = strikeScores.filter((s) => s.type === OptionType.CE);
   const peScores = strikeScores.filter((s) => s.type === OptionType.PE);
 
@@ -621,7 +594,6 @@ export function computeSellRecommendations(
     }
   }
 
-  // Strangle: top CE + top PE at different strikes
   const topCe = ceScores.filter((s) => s.score >= 40).sort((a, b) => b.score - a.score)[0];
   const topPe = peScores.filter((s) => s.score >= 40).sort((a, b) => b.score - a.score)[0];
 
@@ -652,7 +624,6 @@ export function computeSellRecommendations(
 }
 
 /**
- * Determine the dominant pattern from the score breakdown.
  * @param {ScoreBreakdown} breakdown
  * @returns {import('../analysisEnums.js').SetupPatternId}
  */
@@ -668,10 +639,6 @@ function getDominantPattern(breakdown) {
   entries.sort((a, b) => b[1] - a[1]);
   return entries[0][1] > 0 ? entries[0][0] : SetupPattern.Mixed;
 }
-
-// ══════════════════════════════════════════════════════════════════════════
-// Buy Strategy Engine
-// ══════════════════════════════════════════════════════════════════════════
 
 /**
  * Buy Score 1: Breakout Detection (0–25)
@@ -732,7 +699,6 @@ function scoreBreakout(
 
     const signal = classifyOiSignal(oiChangePct, priceChangePct);
 
-    // Wall cracking: OI decreasing (short covering or long unwinding)
     if (oiChangePct < -10) {
       score += 15;
       reasons.push(`${wallType} wall at ${wall.strike} breaking down (OI ${oiChangePct.toFixed(1)}%)`);
@@ -741,7 +707,6 @@ function scoreBreakout(
       reasons.push(`${wallType} wall at ${wall.strike} weakening (OI ${oiChangePct.toFixed(1)}%)`);
     }
 
-    // Short covering confirmation at the wall
     if (signal.signal === OiSignal.ShortCovering) {
       score += 10;
       reasons.push(`Short covering at ${wall.strike} — sellers exiting, ${type === OptionType.CE ? 'upside' : 'downside'} opening`);
@@ -750,7 +715,6 @@ function scoreBreakout(
       reasons.push(`Long unwinding at ${wall.strike} — ${wallType} weakening`);
     }
 
-    // Volume confirmation on breakout
     const volMul = volumeMultiplier(token, volumeData, avgVolume);
     if (volMul >= 1.3 && score > 0) {
       score += 5;
@@ -792,7 +756,6 @@ function scoreDirectionalOi(
 
   if (snapshots.length < 2) return { score: 0, reasons };
 
-  // Check directional signal across ATM and nearby strikes
   const nearStrikes = chain.filter((r) => Math.abs(r.strike - spotPrice) <= 200);
   let longBuildupCount = 0;
   let totalChecked = 0;
@@ -1013,7 +976,7 @@ function scoreRiskReward(
   const distance = type === OptionType.CE ? strike - spotPrice : spotPrice - strike;
   const distanceFraction = distance / expectedMove;
 
-  // ATM or slightly OTM (0-0.5 SD) is best for buying
+  // ATM or slightly OTM is best for buying
   if (distanceFraction >= 0 && distanceFraction <= 0.3) {
     score += 10;
     reasons.push(`Near ATM — high delta, strong directional exposure`);
@@ -1039,7 +1002,6 @@ function scoreRiskReward(
 }
 
 /**
- * Determine the dominant buy pattern from the buy score breakdown.
  * @param {BuyScoreBreakdown} breakdown
  * @returns {import('../analysisEnums.js').SetupPatternId}
  */
@@ -1203,7 +1165,6 @@ export function computeBuyRecommendations(
     }
   }
 
-  // Straddle: same strike, both CE and PE (ATM, within one strike of spot)
   const ceScores = strikeScores.filter((s) => s.type === OptionType.CE);
   const peScores = strikeScores.filter((s) => s.type === OptionType.PE);
   const gap = strikeGap(chain);
@@ -1233,7 +1194,6 @@ export function computeBuyRecommendations(
     }
   }
 
-  // Strangle: top CE + top PE at different strikes
   const topCe = ceScores.filter((s) => s.score >= 35).sort((a, b) => b.score - a.score)[0];
   const topPe = peScores.filter((s) => s.score >= 35).sort((a, b) => b.score - a.score)[0];
 

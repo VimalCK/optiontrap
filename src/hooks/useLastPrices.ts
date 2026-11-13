@@ -1,8 +1,7 @@
 /**
- * Last traded prices of a set of instruments by instrument token: priced
- * from a quote when the set changes, then from every live tick while the
- * market is open. Used by the paper positions and the pending paper orders
- * on the Positions page, so both show the same price for an instrument.
+ * Last prices by instrument token: quoted when the set changes, then ticked
+ * while the market is open. Paper positions and pending orders share it, so
+ * both show the same price.
  */
 import { useEffect, useId, useState } from 'react';
 import type { Tick } from '@/services/kiteTicker';
@@ -13,7 +12,6 @@ import { isAbortError } from '@/services/apiClient';
 import { useMarketStatus } from './useMarketStatus';
 import { MarketStatus } from '../../shared/tradeEnums.js';
 
-/** An instrument to price: its ticker token and its quote key parts. */
 export interface PricedInstrument {
   instrumentToken: number;
   exchange: string;
@@ -30,14 +28,13 @@ const parseInstrumentsKey = (key: string): Array<{ token: number; quoteKey: stri
     return { token: Number(token), quoteKey: quote };
   }) : [];
 
-/** Prices from ticks, over the prices before them. */
 export function applyPriceTicks(prices: ReadonlyMap<number, number>, ticks: Tick[]): Map<number, number> {
   const next = new Map(prices);
   ticks.forEach((tick) => next.set(tick.instrumentToken, tick.lastPrice));
   return next;
 }
 
-/** Prices from a quote, only for instruments a tick hasn't priced yet (a tick is newer). */
+/** A quote only fills gaps: a tick is newer than a quote. */
 export function applyQuotedPrices(prices: ReadonlyMap<number, number>, quoted: ReadonlyMap<number, number>): Map<number, number> {
   const next = new Map(prices);
   quoted.forEach((price, token) => { if (!next.has(token)) next.set(token, price); });

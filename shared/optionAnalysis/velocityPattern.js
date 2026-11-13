@@ -1,7 +1,6 @@
 /**
- * Intraday OI snapshots (taken every 10 minutes by the server) and the OI
- * pattern of one option across them. Shared by the Option Analyzer
- * (browser) and the Option Analyzer setups strategy (server).
+ * OI pattern of one option across the intraday OI snapshots (taken every 10
+ * minutes in market hours). Shared by the Option Analyzer and the setups strategy.
  */
 import { marketTimeLabel } from '../marketTime.js';
 import { MoveDirection, VelocityTrend } from '../analysisEnums.js';
@@ -18,9 +17,7 @@ import { MoveDirection, VelocityTrend } from '../analysisEnums.js';
  */
 
 /**
- * Snapshots with `spot` set to one symbol's spot price. The server stores
- * each snapshotted symbol's spot in `prices` under its price instrument's
- * token, so this picks the analysed symbol's out (undefined if not captured).
+ * Sets `spot` from `prices` under the symbol's price instrument token (undefined if not captured).
  * @param {OiSnapshot[]} snapshots
  * @param {number | null} spotToken
  * @returns {OiSnapshot[]}
@@ -39,10 +36,7 @@ export function withSpot(snapshots, spotToken) {
  */
 
 /**
- * Analyzes the full intraday OI history for a token across all snapshots and
- * classifies the pattern: buildup/unwinding trend, acceleration, volatility.
- *
- * Returns null if fewer than 2 data points exist (no meaningful pattern).
+ * Classifies the intraday OI history of a token. Null with fewer than 2 data points.
  * @param {number} token
  * @param {number} currentOi
  * @param {OiSnapshot[]} snapshots
@@ -53,7 +47,6 @@ export function analyzeVelocityPattern(
   currentOi,
   snapshots,
 ) {
-  // Build time-series: each snapshot + current value
   const key = String(token);
   /** @type {{ oi: number, timeLabel: string }[]} */ const points = [];
 
@@ -62,7 +55,6 @@ export function analyzeVelocityPattern(
     if (oi > 0) points.push({ oi, timeLabel: snap.timeLabel });
   }
 
-  // Append current OI as the latest point (with "now" label)
   if (currentOi > 0) {
     points.push({ oi: currentOi, timeLabel: marketTimeLabel() });
   }
@@ -72,7 +64,6 @@ export function analyzeVelocityPattern(
   const rawSeries = points.map((p) => p.oi);
   const timeLabels = points.map((p) => p.timeLabel);
 
-  // Normalize to 0–1 for sparkline
   const minOi = Math.min(...rawSeries);
   const maxOi = Math.max(...rawSeries);
   const range = maxOi - minOi;
@@ -80,7 +71,6 @@ export function analyzeVelocityPattern(
     ? rawSeries.map((v) => (v - minOi) / range)
     : rawSeries.map(() => 0.5);
 
-  // Compute per-interval deltas as % change
   /** @type {number[]} */ const deltas = [];
   for (let i = 1; i < rawSeries.length; i++) {
     const prev = rawSeries[i - 1];
@@ -96,7 +86,6 @@ export function analyzeVelocityPattern(
   const totalDelta = rawSeries[rawSeries.length - 1] - rawSeries[0];
   const totalPct = rawSeries[0] > 0 ? (totalDelta / rawSeries[0]) * 100 : 0;
 
-  // Determine dominant direction
   const isMostlyUp = positiveDeltas.length > negativeDeltas.length && positiveDeltas.length > neutralDeltas.length;
   const isMostlyDown = negativeDeltas.length > positiveDeltas.length && negativeDeltas.length > neutralDeltas.length;
   const isVolatile = positiveDeltas.length > 0 && negativeDeltas.length > 0
@@ -112,7 +101,6 @@ export function analyzeVelocityPattern(
     trend = VelocityTrend.Stable;
     direction = MoveDirection.Neutral;
   } else if (isMostlyUp) {
-    // Check acceleration: are the deltas growing or shrinking?
     if (deltas.length >= 3) {
       const firstHalf = deltas.slice(0, Math.floor(deltas.length / 2));
       const secondHalf = deltas.slice(Math.floor(deltas.length / 2));
@@ -139,7 +127,6 @@ export function analyzeVelocityPattern(
     }
     direction = MoveDirection.Down;
   } else {
-    // Leaning mixed
     trend = totalPct > STABLE_THRESHOLD ? VelocityTrend.MildBuildup : totalPct < -STABLE_THRESHOLD ? VelocityTrend.MildUnwind : VelocityTrend.Stable;
     direction = movedDirection(totalPct, STABLE_THRESHOLD);
   }
@@ -148,7 +135,6 @@ export function analyzeVelocityPattern(
 }
 
 /**
- * Up or down when `changePct` moved past `threshold` either way, else neutral.
  * @param {number} changePct
  * @param {number} threshold
  * @returns {import('../analysisEnums.js').MoveDirectionId}

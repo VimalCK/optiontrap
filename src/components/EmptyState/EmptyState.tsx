@@ -1,10 +1,3 @@
-/**
- * EmptyState — the one "nothing here yet" panel for cards and lists, so an
- * empty area shows a friendly picture and a line of text instead of blank
- * space, and looks the same on every screen. The icon (from
- * components/icons/Icons.tsx) floats gently inside an accent glow, over a
- * shadow; the motion stops for users who ask for reduced motion.
- */
 import React from 'react';
 import './EmptyState.css';
 

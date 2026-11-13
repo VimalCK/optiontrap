@@ -31,7 +31,6 @@ import { isMarketOpen, marketClock } from '../../shared/marketTime.js';
 import { MarketEvent } from '../../shared/tradeEnums.js';
 import { isAfterCloseOnWeekday } from '../marketClock.js';
 
-/** How often the clock is read. */
 const TICK_MS = 1000;
 
 /**
@@ -56,7 +55,6 @@ const whileOpen = (_now, open) => open;
 const always = () => true;
 /** @type {DueCheck} */
 const afterCloseOnWeekday = (now) => isAfterCloseOnWeekday(now);
-/** From `atMinutes` after midnight IST to midnight. */
 const fromTimeOfDay = (/** @type {number} */ atMinutes) => /** @type {DueCheck} */ ((now) => marketClock(now).minutes >= atMinutes);
 
 /**
@@ -122,7 +120,6 @@ export function createMarket({
   }
 
   return {
-    /** Start reading the clock: the first tick now, then every second. */
     start() {
       if (timer !== null) return;
       tick();

@@ -1,11 +1,4 @@
-/**
- * PostgreSQL Session Store for express-session
- *
- * Persists sessions to the same PostgreSQL database used by the app.
- * Sessions survive server restarts.
- *
- * Expired sessions are pruned every 15 minutes automatically.
- */
+/** Expired sessions are pruned every 15 minutes. */
 
 import session from 'express-session';
 import {

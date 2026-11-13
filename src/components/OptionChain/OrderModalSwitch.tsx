@@ -1,7 +1,3 @@
-/**
- * OrderModalSwitch — the order panel's two-way choices (Paper / Live,
- * Market / Limit, Intraday / Positional): one row of buttons, the chosen one highlighted.
- */
 import React from 'react';
 
 export interface OrderModalSwitchProps<T extends string | number> {

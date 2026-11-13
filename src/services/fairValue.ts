@@ -59,7 +59,6 @@ export interface FairInput {
 export interface FairReading {
   price: number;
   iv: number | null;
-  /** IV of the fitted curve at this strike. */
   curveIv: number | null;
   /** Black-76 price at the curve IV, on the expiry's forward. */
   fairPrice: number | null;
@@ -69,7 +68,6 @@ export interface FairReading {
   ivGap: number | null;
   /** Rich or cheap against the fitted curve; null without an IV or curve. */
   richness: RichnessId | null;
-  /** Market-implied chance of finishing in the money. */
   itmProb: number | null;
   /** CE IV − PE IV at the same strike and expiry; near zero when put-call parity holds. */
   pairIvGap: number | null;
@@ -83,7 +81,6 @@ export interface ExpiryStats {
   atmIv: number | null;
   /** ATM CE + PE premium: the move the market prices in by expiry. */
   straddle: number | null;
-  /** Forward price the expiry is priced on. */
   forward: number;
   /** Parity when implied from CE/PE prices, Carry when it fell back to spot × e^(rT). */
   forwardSource: ForwardSourceId;
@@ -242,7 +239,6 @@ export function fitSmile(points: SmilePoint[]): ((k: number) => number | null) |
 const liquid = (option: FairInput | undefined): option is FairInput =>
   option !== undefined && option.price >= MIN_FIT_PRICE && option.volume !== 0;
 
-/** Fair value, richness and context for every option in one day's chain. */
 export function computeFairValues(inputs: FairInput[]): FairValueResult {
   const byExpiryInputs = new Map<string, FairInput[]>();
   for (const input of inputs) {
@@ -258,7 +254,6 @@ export function computeFairValues(inputs: FairInput[]): FairValueResult {
     const spot = list[0].spot;
     const t = yearsToExpiry(list[0].asOf, expiry);
 
-    // Options per strike, to pair CE with PE.
     const byStrike = new Map<number, { CE?: FairInput; PE?: FairInput }>();
     for (const input of list) {
       const entry = byStrike.get(input.strike) ?? {};
@@ -282,7 +277,6 @@ export function computeFairValues(inputs: FairInput[]): FairValueResult {
     }
     const smile = fitSmile(points);
 
-    // ATM: strike nearest spot.
     let atmStrike = list[0].strike;
     for (const strike of byStrike.keys()) {
       if (Math.abs(strike - spot) < Math.abs(atmStrike - spot)) atmStrike = strike;
@@ -367,7 +361,6 @@ function rupees(value: number): string {
   return `₹${value < 10 ? value.toFixed(2) : value < 100 ? value.toFixed(1) : value.toFixed(0)}`;
 }
 
-/** Short lines explaining a fair-value reading, for tooltips. */
 export function describeFair(reading: FairReading): string[] {
   const lines: string[] = [];
   if (reading.fairPrice !== null && reading.curveIv !== null && reading.richPct !== null) {

@@ -68,7 +68,6 @@ export function fetchOpenOrders(signal?: AbortSignal): Promise<PaperOrder[]> {
   return apiClient.get(`/api/orders?status=${OrderStatus.Open}`, { signal });
 }
 
-/** Cancel an open order. */
 export function cancelOrder(id: string): Promise<PaperOrder> {
   return apiClient.patch(`/api/orders/${id}`, { status: OrderStatus.Cancelled });
 }

@@ -7,11 +7,6 @@ export interface ChartXAxisProps {
   h: number;
 }
 
-/**
- * X-axis for the OI Price History chart: renders day-of-month numbers on top
- * and a colored month band with month-name labels underneath, so the axis
- * doesn't get crowded even when spanning many days across months.
- */
 export const ChartXAxis: React.FC<ChartXAxisProps> = ({ dates, padL, plotW, h }) => {
   const n = dates.length;
   if (n === 0) return null;
@@ -29,7 +24,6 @@ export const ChartXAxis: React.FC<ChartXAxisProps> = ({ dates, padL, plotW, h })
 
   return (
     <g>
-      {/* Day-of-month labels */}
       {dates.map((d, i) => (
         <text key={d} x={centerX(i)} y={h - 20} textAnchor="middle" fontSize="5.5" fill="var(--text-secondary)">
           {d.slice(8)}

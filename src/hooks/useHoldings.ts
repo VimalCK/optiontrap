@@ -1,8 +1,6 @@
 /**
- * The one source of holdings for every screen (Portfolio, Dashboard): loaded
- * once, priced from quotes, then kept live from ticks while the market is
- * open. Every figure comes from src/services/holdings.ts, so two screens
- * showing holdings always agree.
+ * Holdings for every screen (Portfolio, Dashboard), so they always agree.
+ * Figures come from src/services/holdings.ts.
  */
 import { useMemo } from 'react';
 import type { Holding } from '@/services/kiteApi';

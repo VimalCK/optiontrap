@@ -1,7 +1,3 @@
-/**
- * Server-side OI snapshot behaviour, end to end through the module's public
- * functions, with Kite, the database and the clock faked.
- */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { marketDayStartMs } from '../shared/marketTime.js';
 import { SnapshotContractType } from '../shared/analysisEnums.js';
@@ -67,7 +63,6 @@ async function fakeKiteFetch(url) {
   return { ok: true, status: 200, json: async () => ({ data }) };
 }
 
-/** Underlyings whose options are in a saved snapshot. */
 const symbolsIn = (snapshot) => [...new Set(Object.keys(snapshot.data).map((t) => tokenSymbol.get(t)))].sort();
 
 // IST is UTC+05:30. Tue 3 Nov 2026 is a trading day.
@@ -96,7 +91,6 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-/** Start the scheduler and let its first check finish. */
 async function startScheduler() {
   stop = await runPlugin(scheduler.oiSnapshotJob);
   await vi.advanceTimersByTimeAsync(0);

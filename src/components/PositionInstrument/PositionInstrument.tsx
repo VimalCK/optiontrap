@@ -1,10 +1,5 @@
 /**
- * PositionInstrument — a paper trade's instrument as the positions tables show
- * it: name, strike (options), type, expiry (options and futures), who placed
- * it (Auto or Manual, TradeSource), how long it's held (Intraday or Positional,
- * TradeHorizon), then any extras (e.g. the TradingView
- * link). Used by the paper positions and the paper orders, so both name an
- * instrument the same way.
+ * Used by the paper positions and the paper orders, so both name an instrument the same way.
  */
 import React from 'react';
 import { instrumentName, type Position } from '@/services/positions';

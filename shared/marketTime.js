@@ -60,7 +60,6 @@ export function marketDate(now = new Date()) {
   return marketClock(now).date;
 }
 
-/** Market-zone month, 'YYYY-MM'. */
 export function marketMonth(now = new Date()) {
   return marketDate(now).slice(0, 7);
 }
@@ -82,27 +81,25 @@ function zoneOffsetMs(at) {
 }
 
 /**
- * The instant at `minutes` past midnight, market time, on `date`.
  * @param {string} date 'YYYY-MM-DD'
  * @param {number} [minutes]
  */
 export function marketDateTime(date, minutes = 0) {
   const [y, m, d] = date.slice(0, 10).split('-').map(Number);
   const wall = Date.UTC(y, m - 1, d, 0, minutes);
-  // Not a date (e.g. '' before a page has data): an Invalid Date, as new Date() gives, not a throw.
+  // An empty date (before a page has data) gives an Invalid Date, not a throw.
   if (Number.isNaN(wall)) return new Date(NaN);
   return new Date(wall - zoneOffsetMs(new Date(wall)));
 }
 
-/** When the session closes on `date`. @param {string} date */
+/** @param {string} date */
 export function marketCloseTime(date) {
   return marketDateTime(date, MARKET_CLOSE_MINUTES);
 }
 
 /**
- * When the latest session before `now` ended: the first instant after its
- * closing minute (15:31 IST, since the session runs to the end of 15:30), today's
- * once it has passed on a trading day, else the previous trading day's.
+ * When the latest session before `now` ended: the instant after its closing
+ * minute (15:31 IST), today's once it has passed on a trading day, else the previous one's.
  * @param {Date} [now]
  */
 export function lastSessionEnd(now = new Date()) {
@@ -129,7 +126,6 @@ export function addDays(date, days) {
 }
 
 /**
- * Whole calendar days from `from` to `to` (both 'YYYY-MM-DD').
  * @param {string} from
  * @param {string} to
  */
@@ -146,7 +142,7 @@ export function daysUntil(date, now = new Date()) {
   return daysBetween(marketDate(now), date);
 }
 
-/** Whether `date` is a weekday that isn't an exchange holiday. @param {string} date */
+/** @param {string} date */
 export function isTradingDay(date) {
   const weekday = new Date(Date.parse(date.slice(0, 10))).getUTCDay();
   return weekday >= 1 && weekday <= 5 && !MARKET_HOLIDAYS_2026.includes(date.slice(0, 10));

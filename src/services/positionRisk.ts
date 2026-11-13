@@ -18,7 +18,6 @@
 
 import { Position } from './positions';
 
-/** An option position: always has a strike, CE/PE and an expiry. */
 export type OptionPosition = Position & { optionType: OptionTypeId; strike: number; expiry: string };
 
 function isOptionPosition(pos: Position): pos is OptionPosition {
@@ -95,9 +94,6 @@ function legPayoffAtExpiry(pos: OptionPosition, underlyingPrice: number): number
   return perUnit * pos.quantity;
 }
 
-/**
- * Live P&L for a single leg given its current LTP.
- */
 function legLivePnL(pos: OptionPosition, ltp: number): number {
   return pos.side === Side.BUY
     ? (ltp - pos.entryPrice) * pos.quantity
@@ -169,14 +165,11 @@ export function computeRiskGroups(
     const netCallQty = signedQty(legsPos, OptionType.CE);
     const netPutQty = signedQty(legsPos, OptionType.PE);
 
-    // Profit unbounded upward if net long calls; loss unbounded upward if net short calls.
     const profitUnboundedUp = netCallQty > 0;
     const lossUnboundedUp = netCallQty < 0;
-    // Profit unbounded downward if net long puts; loss unbounded downward if net short puts.
     const profitUnboundedDown = netPutQty > 0;
     const lossUnboundedDown = netPutQty < 0;
 
-    // Evaluate payoff at the kink points (strikes) and at price 0.
     const candidatePrices = [0, ...strikes];
     let finiteMax = -Infinity;
     let finiteMin = Infinity;
@@ -193,8 +186,6 @@ export function computeRiskGroups(
       ? null
       : Number(finiteMin.toFixed(2));
 
-    // Breakevens: scan between 0 and just past the highest strike for zero
-    // crossings of the piecewise-linear payoff.
     const breakevens = findBreakevens(legsPos, strikes);
 
     result.push({
@@ -213,7 +204,6 @@ export function computeRiskGroups(
   return result.sort((a, b) => a.expiry.localeCompare(b.expiry));
 }
 
-/** Combined payoff of all legs in a group at an underlying expiry price. */
 function groupPayoff(legs: OptionPosition[], underlyingPrice: number): number {
   let total = 0;
   for (const leg of legs) total += legPayoffAtExpiry(leg, underlyingPrice);
@@ -221,9 +211,7 @@ function groupPayoff(legs: OptionPosition[], underlyingPrice: number): number {
 }
 
 export interface PayoffPoint {
-  /** Underlying price */
   price: number;
-  /** Net P&L at expiry for that price */
   payoff: number;
 }
 
@@ -284,9 +272,7 @@ export function samplePayoffCurve(
   return { points, minPrice: lo, maxPrice: hi, minPayoff, maxPayoff };
 }
 
-/**
- * Net signed contract quantity for one option type (BUY positive, SELL negative).
- */
+/** Net contract quantity for one option type: BUY positive, SELL negative. */
 function signedQty(legs: OptionPosition[], type: OptionTypeId): number {
   return legs
     .filter((l) => l.optionType === type)

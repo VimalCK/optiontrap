@@ -15,7 +15,6 @@ const FRI_NOON = new Date('2026-11-06T06:30:00Z'); // Fri 12:00 IST, market open
 const SATURDAY = new Date('2026-11-07T06:30:00Z'); // Sat 12:00 IST
 const ADMIN_KITE = { apiKey: 'key', accessToken: 'admin-token' };
 
-/** An open intraday position as the database returns it. */
 const position = (id, extra = {}) => ({
   id, userId: 'U1', tradingsymbol: `NIFTY26N10${id}CE`, instrumentToken: 101, instrumentType: 'CE', exchange: 'NFO',
   side: 'BUY', quantity: 75, entryPrice: 50, horizon: Horizon.Intraday, source: 'Manual', mode: 'Paper', ...extra,

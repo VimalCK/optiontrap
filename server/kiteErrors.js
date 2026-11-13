@@ -1,14 +1,8 @@
-/**
- * Reading a proxied Kite error reply, so the proxy can tell whether it ended
- * the login (shared/kiteAuth.js: a 403 TokenException does, a 403
- * PermissionException doesn't).
- */
+/** A 403 TokenException ends the login (shared/kiteAuth.js); a 403 PermissionException doesn't. */
 import zlib from 'node:zlib';
 
 /**
- * The parsed JSON body of a Kite response stream, decompressed as its
- * content-encoding says; null if it can't be read. Listens alongside the
- * proxy's own piping, so the browser still gets the response unchanged.
+ * Listens alongside the proxy's own piping, so the browser still gets the response unchanged.
  * @param {import('node:http').IncomingMessage} res
  */
 export function readKiteBody(res) {

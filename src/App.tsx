@@ -32,7 +32,6 @@ const App: React.FC = () => {
   // Admins are the ultimate role — full access without a subscription.
   const hasAccess = session?.subscription?.active === true || isAdmin;
 
-  // Connect/disconnect the singleton ticker when session changes
   useEffect(() => {
     if (isAuthenticated && hasAccess) {
       tickerConnect();
@@ -60,12 +59,10 @@ const App: React.FC = () => {
   return (
     <Suspense fallback={null}>
     <Routes>
-      {/* Public routes — no sidebar, no auth required */}
       <Route path="/login" element={isAuthenticated ? <Navigate to={hasAccess ? '/portfolio' : '/subscribe'} replace /> : <Login />} />
       <Route path="/redirect" element={<Redirect />} />
       <Route path="/subscribe" element={isAuthenticated ? (hasAccess ? <Navigate to="/portfolio" replace /> : <><Subscribe /><FeedbackButton /></>) : <Navigate to="/login" replace />} />
 
-      {/* Protected routes — require valid session cookie */}
       <Route
         path="*"
         element={

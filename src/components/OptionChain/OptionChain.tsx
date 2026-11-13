@@ -21,8 +21,6 @@ import { useToasts } from '@/hooks/useToasts';
 const ORDER_MODE_OPTIONS: { value: TradingModeId; label: string }[] = [{ value: TradingMode.Paper, label: 'Paper' }, { value: TradingMode.Live, label: 'Live' }];
 /** Market fills at once at the bid / ask; limit waits for the price (shared/paperOrders.js). */
 const ORDER_TYPE_OPTIONS: { value: OrderTypeId; label: string }[] = [{ value: OrderType.Market, label: 'Market' }, { value: OrderType.Limit, label: 'Limit' }];
-/** Intraday or positional (shared/tradeEnums.js): every trade placed here uses the one chosen (useTradeHorizon). */
-/** How the strike tooltip words a signal's volume confidence. */
 const VOLUME_CONFIDENCE_LABELS: Record<ConfidenceId, string> = {
   [Confidence.High]: 'Confirmed',
   [Confidence.Medium]: 'Normal',
@@ -226,7 +224,6 @@ const OptionChain: React.FC = () => {
   }, []);
 
   const handleTicks = useCallback((ticks: Tick[]) => {
-    // Update spot price eagerly (not a Map, no clone needed)
     const spotTick = ticks.find((t) => t.instrumentToken === spotToken);
     if (spotTick) {
       setSpotPrice(spotTick.lastPrice);
@@ -267,7 +264,6 @@ const OptionChain: React.FC = () => {
     });
   }, [spotToken]);
 
-  // Load the F&O underlyings (names, labels, price instruments) on mount
   useEffect(() => {
     fetchUnderlyings(signal).then(setUnderlyings).catch((err) => {
       if (!isAbortError(err)) console.error('[Option Analyzer] Could not load symbols:', err);
@@ -312,7 +308,6 @@ const OptionChain: React.FC = () => {
   // height never jumps as ATM changes.
   const visibleChain = useMemo(() => strikeWindow(chain, atmStrike), [chain, atmStrike]);
 
-  // Compute max OI across visible chain for bar width scaling
   const maxOi = useMemo(() => {
     let max = 0;
     visibleChain.forEach((row) => {
@@ -324,7 +319,6 @@ const OptionChain: React.FC = () => {
     return max;
   }, [visibleChain, oiData]);
 
-  // Compute average volume for volume-confirmation threshold
   const avgVolume = useMemo(() => averageVolume(visibleChain, volumeData), [visibleChain, volumeData]);
 
   // IV-based flow per option against the previous close (shown alongside OI + Price, not scored)
@@ -348,12 +342,10 @@ const OptionChain: React.FC = () => {
     [visibleChain, atmStrike, livePrices],
   );
 
-  // Fetch previous day's closing OI for visible strikes (one-time on load)
   const prevOiFetchedRef = useRef<string>('');
   useEffect(() => {
     if (visibleChain.length === 0) return;
 
-    // Build a key to avoid re-fetching for the same set
     const tokens: number[] = [];
     visibleChain.forEach((row) => {
       if (row.ce) tokens.push(row.ce.instrumentToken);
@@ -381,13 +373,12 @@ const OptionChain: React.FC = () => {
     });
 
     return () => {
-      // Cancel in-flight fetch if visibleChain changes before it completes
       abortController.abort();
       prevOiFetchedRef.current = '';
     };
   }, [visibleChain]);
 
-  // Subscribe to singleton ticker when visible chain changes (only during market hours)
+  // Subscribe only during market hours.
   useEffect(() => {
     if (visibleChain.length === 0 || !isMarketLive()) return;
 
@@ -397,7 +388,7 @@ const OptionChain: React.FC = () => {
       if (row.pe) tokens.push(row.pe.instrumentToken);
     });
 
-    // If tokens haven't changed, just update the callback ref (no reconnect needed)
+    // Reconnect only when the token set changes.
     const prevTokens = subscribedTokensRef.current;
     const tokensChanged = tokens.length !== prevTokens.length ||
       tokens.some((t, i) => t !== prevTokens[i]);
@@ -455,7 +446,6 @@ const OptionChain: React.FC = () => {
     }
   }, [visibleChain.length]);
 
-  // Recalculate velocity when OI data changes significantly
   useEffect(() => {
     if (snapshots.length > 0 && oiData.size > 0) {
       setOiVelocity(calculateVelocity(oiData, snapshots));
@@ -469,7 +459,6 @@ const OptionChain: React.FC = () => {
   useEffect(() => {
     if (chain.length === 0 || isMarketLive()) return;
 
-    // Build a key from the visible strikes to detect when ATM shifts
     const atmIndex = chain.findIndex((r) => r.strike === atmStrike);
     const start = Math.max(0, atmIndex - 15);
     const end = Math.min(chain.length, atmIndex + 16);
@@ -543,7 +532,6 @@ const OptionChain: React.FC = () => {
     });
   }, [chain, atmStrike, selectedExpiry, spotQuoteKey]);
 
-  // The live price, once a quote or tick has arrived.
   const getPrice = (instrument: OptionInstrument | null): number | null => {
     if (!instrument) return null;
     const live = livePrices.get(instrument.instrumentToken);
@@ -571,7 +559,6 @@ const OptionChain: React.FC = () => {
     return { pct, color };
   };
 
-  // One CE or PE section of the OI chart tooltip.
   const renderTooltipSide = (
     side: OptionTypeId,
     option: OptionChainRow['ce'],
@@ -639,7 +626,6 @@ const OptionChain: React.FC = () => {
   return (
     <div>
       <ToastStack toasts={toasts} />
-      {/* Global Expiry Selector */}
       {(expiries.length > 0 || !selectedSymbol) && (
         <div className="oc-expiry-panel">
           <div className="oc-expiry-bar">
@@ -690,7 +676,6 @@ const OptionChain: React.FC = () => {
         </div>
       )}
 
-      {/* Option Chain Card */}
       <div className="card option-chain-card" ref={chainCardRef}>
 
         {loading && (
@@ -805,7 +790,6 @@ const OptionChain: React.FC = () => {
         )}
       </div>
 
-      {/* Order Modal */}
       {orderForm && (() => {
         const row = visibleChain.find((r) => r.strike === orderForm.strike);
         if (!row) return null;
@@ -899,7 +883,6 @@ const OptionChain: React.FC = () => {
         );
       })()}
 
-      {/* OI Bar Chart Card */}
       {!loading && !error && visibleChain.length > 0 && (
         <div className={`card oc-chart-card ${selectedChartStrike !== null ? 'oc-chart-card--tooltip-open' : ''}`} style={{ marginTop: 'var(--card-gap)' }}>
           <div className="trap-card-header">
@@ -930,7 +913,6 @@ const OptionChain: React.FC = () => {
                     <div key={i} className="oc-chart__gridline" style={{ top: `${(i / 8) * 100}%` }} />
                   ))}
                 </div>
-                {/* Expected Range Overlay */}
                 {expectedMove > 0 && spotPrice > 0 && (() => {
                   const totalStrikes = visibleChain.length;
                   if (totalStrikes < 2) return null;
@@ -975,7 +957,6 @@ const OptionChain: React.FC = () => {
                 return (
                   <div key={row.strike} className={`oc-chart__col ${isAtm ? 'oc-chart__col--atm' : ''} ${selectedChartStrike === row.strike ? 'oc-chart__col--selected' : ''}`} onClick={(e) => { e.stopPropagation(); setSelectedChartStrike(selectedChartStrike === row.strike ? null : row.strike); }}>
                     {selectedChartStrike === row.strike && (() => {
-                      // Find the tallest bar % in the chart for consistent tooltip position
                       let maxBarPct = 0;
                       visibleChain.forEach((r) => {
                         const ce = r.ce ? oiData.get(r.ce.instrumentToken) || 0 : 0;
@@ -1044,7 +1025,6 @@ const OptionChain: React.FC = () => {
                       </div>
                       );
                     })()}
-                    {/* Velocity indicators */}
                     {(ceVelocity?.isHigh || peVelocity?.isHigh) && (
                       <div className="oc-chart__velocity-stack">
                         {ceVelocity?.isHigh && (
@@ -1108,7 +1088,6 @@ const OptionChain: React.FC = () => {
         </div>
       )}
 
-      {/* Strategy (Sell / Buy / Analyzer) */}
       {!loading && !error && visibleChain.length > 0 && (
         <div className="card" style={{ marginTop: 'var(--card-gap)' }}>
           <div className="trap-card-header">

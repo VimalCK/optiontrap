@@ -30,7 +30,6 @@ const SCORE_SCALE: GuideRow[] = [
   { label: '80–100', tone: GuideTone.Bull, meaning: 'Very strong' },
 ];
 
-/** ⓘ panel for the OI bar chart. */
 export const OiChartGuide: React.FC = () => {
   const bars: GuideTerm[] = [
     { term: 'Green bars (left)', meaning: 'CE (call) open interest' },
@@ -104,7 +103,6 @@ export const OiChartGuide: React.FC = () => {
   );
 };
 
-/** ⓘ panel for the Sell strategy. */
 export const SellStrategyGuide: React.FC = () => (
   <InfoGuide
     title="How Sell Strategy works"
@@ -136,7 +134,6 @@ export const SellStrategyGuide: React.FC = () => (
   </InfoGuide>
 );
 
-/** ⓘ panel for the Buy strategy. */
 export const BuyStrategyGuide: React.FC = () => (
   <InfoGuide
     title="How Buy Strategy works"
@@ -168,7 +165,6 @@ export const BuyStrategyGuide: React.FC = () => (
   </InfoGuide>
 );
 
-/** ⓘ panel for the trap (position) analyzer. */
 export const PositionAnalyzerGuide: React.FC = () => (
   <InfoGuide
     title="How Position Analyzer works"

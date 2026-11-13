@@ -1,7 +1,6 @@
 /**
- * The kinds of value a rule's setting can be (entry and exit rules alike).
- * Each kind says how the settings page asks for it and how the server checks
- * what was sent, so a new rule only names a kind; nothing else needs to change.
+ * The kinds of value a rule's setting can be. A new rule only names a kind;
+ * the settings page and the server check both follow from it.
  */
 
 import { ParamType } from '../tradeEnums.js';
@@ -11,7 +10,6 @@ import { ParamType } from '../tradeEnums.js';
  * @typedef {{ input: 'number' | 'time', step?: string, mustBe: string, parse: (value: unknown) => number | string | undefined }} ParamType
  */
 
-/** 'HH:MM', 24-hour. */
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 /** @type {Record<ParamTypeId, ParamType>} */

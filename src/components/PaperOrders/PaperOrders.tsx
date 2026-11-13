@@ -1,16 +1,7 @@
 /**
- * PaperOrders — the Pending tab of the paper positions: the paper orders
- * still waiting to fill (limit orders, and positional market orders placed
- * while the market is closed), each with a Cancel button. Filled ones show as
- * positions; cancelled ones (by hand or at the close) leave the list. Each
- * shows its instrument's last price, live from ticks in market hours (the
- * page's useLastPrices, shared with the positions).
- *
- * Orders fill on the server (the trade engine's order service), so while any is open
- * in market hours usePaperOrders reloads the list every few seconds; when one
- * leaves it, `onFilled` lets the positions reload too. The page runs the hook
- * whichever tab is showing, so fills reach the positions either way. The rules
- * are in shared/paperOrders.js.
+ * Orders fill on the server, so while any is open in market hours usePaperOrders
+ * reloads the list every few seconds. The page runs the hook whichever tab is
+ * showing, so fills reach the positions either way. Rules: shared/paperOrders.js.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import Badge from '@/components/Badge/Badge';
@@ -25,10 +16,8 @@ import { istTimeLabel, isMarketLive } from '@/utils/marketStatus';
 import { OrderStatus } from '../../../shared/tradeEnums.js';
 import '@/styles/positions.css';
 
-/** How often open orders are reloaded in market hours, to show fills. */
 const ORDER_REFRESH_MS = 5000;
 
-/** An order's status as a badge: open (waiting), filled at its price, or why it was cancelled. */
 export function orderStatus(order: PaperOrder): { tone: ToneId; text: string } {
   if (order.status === OrderStatus.Open) return { tone: Tone.Accent, text: 'Open' };
   if (order.status === OrderStatus.Filled) return { tone: Tone.Positive, text: `Filled @ ${(order.fillPrice ?? order.limitPrice ?? 0).toFixed(2)}` };
@@ -46,10 +35,8 @@ export function settledSince(openBefore: ReadonlySet<string>, openNow: PaperOrde
 
 const openIds = (orders: PaperOrder[]) => new Set(orders.filter((o) => o.status === OrderStatus.Open).map((o) => o.id));
 
-/** Last prices by instrument token, from useLastPrices; an instrument not yet priced is missing. */
 type LastPrices = ReadonlyMap<number, number>;
 
-/** An order's instrument's last price as shown in the LTP column, or a dash until it is priced. */
 export const lastPriceLabel = (order: PaperOrder, prices: LastPrices): string => {
   const price = prices.get(order.instrumentToken);
   return price === undefined ? '-' : price.toFixed(2);
@@ -97,10 +84,8 @@ export const PaperOrdersTable: React.FC<{ orders: PaperOrder[]; prices: LastPric
   </div>
 );
 
-/** The orders still waiting to fill. */
 export const pendingOrders = (orders: PaperOrder[]) => orders.filter((o) => o.status === OrderStatus.Open);
 
-/** How many orders are still waiting to fill (the Pending tab's count). */
 export const pendingCount = (orders: PaperOrder[]) => pendingOrders(orders).length;
 
 export interface PaperOrderBook {
@@ -109,10 +94,6 @@ export interface PaperOrderBook {
   cancel: (id: string) => Promise<void>;
 }
 
-/**
- * The open paper orders, whenever placed, reloaded every few seconds while any
- * is open in market hours; `onFilled` runs when one that was open has left.
- */
 export function usePaperOrders(onFilled: () => void): PaperOrderBook {
   const [orders, setOrders] = useState<PaperOrder[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -160,10 +141,6 @@ export function usePaperOrders(onFilled: () => void): PaperOrderBook {
   return { orders, error, cancel };
 }
 
-/**
- * The Pending tab, inside the positions card: the orders still waiting to
- * fill, or an empty state when none are.
- */
 const PaperOrders: React.FC<{ orders: PaperOrder[]; prices: LastPrices; error: string | null; onCancel: (id: string) => void }> = ({ orders, prices, error, onCancel }) => {
   const pending = pendingOrders(orders);
   return (

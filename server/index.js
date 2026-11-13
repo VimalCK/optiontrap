@@ -1,18 +1,5 @@
 /**
- * OptionTrap Backend Server
- *
- * Multi-user server. Credentials (apiKey + apiSecret) are stored ONLY in
- * the client browser's localStorage — the server never persists them.
- * They are sent during OAuth token exchange and immediately discarded.
- *
- * Endpoints:
- *   GET  /auth/status      — session active?
- *   GET  /auth/login-url   — Kite OAuth URL (apiKey from query param)
- *   POST /auth/token       — exchange request_token (apiKey + apiSecret from body)
- *   POST /auth/logout      — invalidate session
- *   GET  /auth/me          — current session info
- *   ALL  /api/*            — proxy to api.kite.trade with per-user auth
- *   WS   /ws               — proxy to wss://ws.kite.trade with per-user auth
+ * Credentials (apiKey + apiSecret) are sent with the OAuth token exchange and discarded; the server never stores them.
  */
 
 import 'dotenv/config';
@@ -141,8 +128,6 @@ if (sessionSecret.error) throw new Error(sessionSecret.error);
 const SESSION_SECRET = sessionSecret.value;
 const APP_VERSION = (process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || 'local').slice(0, 7);
 
-// ---------- Log colours ----------
-
 const GREY = '\x1b[90m';
 const GREEN = '\x1b[32m';
 const YELLOW = '\x1b[33m';
@@ -153,8 +138,6 @@ const RESET = '\x1b[0m';
 function ts() {
   return `${GREY}${new Date().toLocaleTimeString()}${RESET}`;
 }
-
-// ---------- Express App ----------
 
 const app = express();
 const server = createServer(app);
@@ -172,8 +155,7 @@ async function getSafeSession(kiteSession) {
   if (!kiteSession) return null;
 
   const { accessToken, apiKey, ...safe } = kiteSession;
-  // Read the role live from the DB so the client reflects admin status
-  // immediately, even for sessions created before the flag existed.
+  // Read live from the DB, so sessions created before the admin flag existed still reflect it.
   safe.isAdmin = await isUserAdmin(kiteSession.userId);
   safe.subscription = await getSubscriptionSummary(kiteSession.userId);
 
@@ -200,8 +182,6 @@ const sessionMiddleware = session({
   },
 });
 
-// ---------- Middleware ----------
-
 app.disable('x-powered-by');
 app.use(securityHeaders);
 app.use(cookieParser(SESSION_SECRET));
@@ -214,9 +194,6 @@ app.use(cors({
 }));
 
 app.use(sessionMiddleware);
-
-// ---------- Rate Limiting ----------
-// Three tiers: auth (strict), API proxy (per-user), general (catch-all)
 
 // Auth endpoints: 10 requests/minute per IP — brute-force protection
 const authLimiter = createRateLimiter({
@@ -242,7 +219,6 @@ const generalLimiter = createRateLimiter({
 app.use(generalLimiter);
 app.use('/auth', authLimiter);
 
-// Request logger
 app.use((req, res, next) => {
   const start = Date.now();
   const { method, originalUrl } = req;
@@ -260,9 +236,6 @@ app.use((req, res, next) => {
   next();
 });
 
-// ---------- Auth Routes ----------
-
-// Session status check
 app.get('/auth/status', (req, res) => {
   const activeSession = req.session?.kiteSession || null;
 
@@ -278,14 +251,13 @@ app.get('/auth/status', (req, res) => {
   }
 });
 
-// Get Kite OAuth login URL — apiKey comes from client (stored in localStorage)
+// apiKey comes from the client (stored in localStorage)
 app.get('/auth/login-url', (req, res) => {
   const { url, error } = kiteLoginUrl(req.query.api_key);
   if (error) return sendError(res, 400, error);
   sendOk(res, { url });
 });
 
-// Check session (backward compat with useKiteSession)
 app.get('/auth/me', (req, res) => {
   if (req.session?.kiteSession) {
     getSafeSession(req.session.kiteSession)
@@ -299,8 +271,6 @@ app.get('/auth/me', (req, res) => {
   }
 });
 
-// Exchange request_token for access_token
-// Credentials come from client body (stored in browser localStorage)
 app.post('/auth/token', async (req, res) => {
   const { request_token, apiKey, apiSecret } = req.body;
 
@@ -308,7 +278,6 @@ app.post('/auth/token', async (req, res) => {
     return sendError(res, 400, 'request_token, apiKey, and apiSecret are required');
   }
 
-  // Clear any stale session before exchanging a new token
   if (req.session?.kiteSession) {
     delete req.session.kiteSession;
     await new Promise((resolve) => req.session.save(resolve));
@@ -329,13 +298,12 @@ app.post('/auth/token', async (req, res) => {
       return sendError(res, err.status, err.kiteMessage ?? `Kite token exchange failed (${err.status})`);
     }
 
-    // 1. Record user identity (no credentials stored)
     await upsertUser(data.user_id, data.user_name);
 
-    // 2. Resolve role (admins bypass subscription and unlock the admin inbox)
+    // Admins bypass subscription checks and unlock the admin inbox.
     const isAdmin = await isUserAdmin(data.user_id);
 
-    // 3. Start the logged-in session under a new session ID (see loginSession.js)
+    // A new session ID per login (see loginSession.js).
     const kiteSession = {
       apiKey,
       accessToken: data.access_token,
@@ -358,7 +326,6 @@ app.post('/auth/token', async (req, res) => {
   }
 });
 
-// Logout — destroy session (credentials remain in browser localStorage)
 app.post('/auth/logout', async (req, res) => {
   const kiteSession = req.session?.kiteSession;
 
@@ -376,7 +343,6 @@ app.post('/auth/logout', async (req, res) => {
   });
 });
 
-// Delete account — remove user, destroy session
 app.delete('/auth/account', async (req, res) => {
   const kiteSession = req.session?.kiteSession;
   const userId = kiteSession?.userId;
@@ -385,23 +351,18 @@ app.delete('/auth/account', async (req, res) => {
     return sendError(res, 400, 'No account found to delete');
   }
 
-  // Invalidate Kite token if we have one
   if (kiteSession?.accessToken) {
     kiteClient(kiteSession).delete('/session/token').catch(() => {}); // Kite-side errors don't stop the deletion
   }
 
-  // Delete user
   await deleteUser(userId);
 
-  // Destroy session
   req.session.destroy(() => {
     res.clearCookie('optiontrap_sid');
     console.log(`${ts()} ${RED}AUTH${RESET} account deleted: ${userId}`);
     sendOk(res);
   });
 });
-
-// ---------- Auth guard ----------
 
 const requireAuth = (req, res, next) => {
   if (!req.session?.kiteSession?.apiKey) {
@@ -450,9 +411,7 @@ const requireSubscription = async (req, res, next) => {
   }
 };
 
-// Public: active plans for the pre-login landing page (no auth, no secrets).
-// Cached in memory for 30 minutes — plans change rarely, and this shields the
-// DB from unauthenticated traffic floods (single-flight prevents stampedes).
+// Plans change rarely, and the cache shields the DB from unauthenticated traffic.
 const getCachedPlans = cached(getActiveSubscriptionPlans, 30 * 60_000);
 
 app.get('/api/version', (_req, res) => {
@@ -479,13 +438,12 @@ app.get('/api/subscription/status', requireAuth, async (req, res) => {
   sendOk(res, subscription);
 });
 
-/** Reply to a failed subscription change: 400 for an unknown plan, otherwise a generic 500. */
+/** 400 for an unknown plan, otherwise a generic 500. */
 const sendSubscriptionFailure = (res, err, log) => {
   if (err instanceof SubscriptionPlanNotFoundError) return sendError(res, 400, err.message);
   sendFailure(res, err, { log, message: 'Failed to update the subscription' });
 };
 
-// Activate a plan for the signed-in user: creates a subscription.
 app.post('/api/subscriptions', requireAuth, async (req, res) => {
   const { planId } = req.body || {};
 
@@ -519,10 +477,8 @@ app.post('/api/feedback', requireAuth, async (req, res) => {
   sendCreated(res, feedback);
 });
 
-// ---------- Admin Routes ----------
 // Auth + admin role required. No subscription needed — admins have full access.
 
-// Recent runs of the after-close OI history fetch, newest first.
 app.get('/api/admin/scheduled-jobs/oi-history', requireAuth, requireAdmin, async (req, res) => {
   try {
     sendOk(res, await getScheduledJobRuns(OI_HISTORY_JOB, 14));
@@ -532,7 +488,6 @@ app.get('/api/admin/scheduled-jobs/oi-history', requireAuth, requireAdmin, async
   }
 });
 
-// Recent runs of the nightly jobs (server/jobs/nightly/), newest first.
 app.get('/api/admin/scheduled-jobs/nightly', requireAuth, requireAdmin, async (req, res) => {
   try {
     sendOk(res, await getScheduledJobRunsByPrefix(NIGHTLY_JOB_PREFIX, 100));
@@ -654,8 +609,6 @@ app.post('/api/admin/users/:userId/subscription', requireAuth, requireAdmin, asy
   }
 });
 
-// ---------- Watchlist Routes ----------
-
 app.get('/api/watchlists', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const lists = await getWatchlists(userId);
@@ -685,7 +638,6 @@ app.post('/api/watchlists', requireAuth, requireSubscription, async (req, res) =
   sendCreated(res, list);
 });
 
-// Rename (the only field a watchlist has to change).
 app.patch('/api/watchlists/:id', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { name } = req.body;
@@ -734,7 +686,6 @@ app.post('/api/watchlists/:id/items', requireAuth, requireSubscription, async (r
   sendCreated(res, item);
 });
 
-// Save the order of a watchlist's items after the user drags one to a new position.
 app.put('/api/watchlists/:id/items/order', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { itemIds } = req.body || {};
@@ -764,8 +715,6 @@ app.delete('/api/watchlists/:id/items/:itemId', requireAuth, requireSubscription
   sendOk(res);
 });
 
-// ---------- Trade automation ----------
-
 app.get('/api/automation/config', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   sendOk(res, await getAutomationConfig(userId));
@@ -780,7 +729,6 @@ app.put('/api/automation/config', requireAuth, requireSubscription, async (req, 
   sendOk(res, saved);
 });
 
-// The trade engine's strategies, as the Automation page shows and configures them.
 app.get('/api/strategies', requireAuth, requireSubscription, (req, res) => {
   sendOk(res, strategyInfos());
 });
@@ -800,8 +748,6 @@ app.get('/api/automation/results', requireAuth, requireSubscription, async (req,
   if (range.error) return sendError(res, 400, range.error);
   sendOk(res, await getAutoTradeResults(userId, range));
 });
-
-// ---------- Price alerts ----------
 
 app.get('/api/price-alerts', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
@@ -850,8 +796,6 @@ app.delete('/api/price-alerts/:id', requireAuth, requireSubscription, async (req
   sendOk(res);
 });
 
-// ---------- Positions ----------
-
 app.get('/api/positions', requireAuth, requireSubscription, async (req, res) => {
   const userId = req.session.kiteSession.userId;
   const { filter, error } = parsePositionsQuery(req.query);
@@ -874,14 +818,10 @@ app.get('/api/positions/stats', requireAuth, requireSubscription, async (req, re
   sendOk(res, await getPositionStats(userId, filter));
 });
 
-// ---------- Orders (the trade engine's order service, server/tradeEngine/services/orders.js) ----------
-
-// Every paper trade, manual or automated, entry or exit, is an order through the order
-// service, which applies shared/paperOrders.js and shared/paperTradeRules.js.
+// Every paper trade, manual or automated, is an order through the order service (shared/paperOrders.js, shared/paperTradeRules.js).
 // NO_PRICE: Kite gave no last price to price the order with.
 const ORDER_HTTP_STATUS = { INVALID_TRADE: 400, MARKET_CLOSED: 409, NOT_FOUND: 404, NO_PRICE: 502 };
 
-/** Reply with an order result: the order, or the refusal with its status. */
 const sendOrderResult = (res, result, sendSuccess = sendOk) => {
   if (result.ok) return sendSuccess(res, result.order);
   return sendError(res, ORDER_HTTP_STATUS[result.code] ?? 400, result.message, { code: result.code });
@@ -926,8 +866,6 @@ app.patch('/api/orders/:id', requireAuth, requireSubscription, async (req, res) 
   sendOrderResult(res, await tradeEngine.services.orders.cancel(req.session.kiteSession.userId, req.params.id));
 });
 
-// ---------- OI Snapshots (shared) ----------
-
 app.get('/api/oi-snapshots', requireAuth, requireSubscription, async (req, res) => {
   try {
     const snapshots = await getTodayOiSnapshots();
@@ -962,22 +900,14 @@ app.post('/api/oi-snapshots/watched-symbols', requireAuth, requireSubscription, 
   }
 });
 
-// ---------- OI History (historical daily OI) ----------
-
 /**
- * POST /api/oi-history/fetch — Fetch historical daily OI candles from Kite.
- * Fetches missing dates from the current month and always refreshes today.
- * Streams progress via Server-Sent Events (SSE).
- * Body: { scrip: 'NIFTY', expiryMonth: 'YYYY-MM' }
- *
- * SSE events:
+ * POST /api/oi-history/fetch. Body: { scrip: 'NIFTY', expiryMonth: 'YYYY-MM' }. Streams progress as SSE:
  *   step     — { step, message }
  *   progress — { done, total, pct, batch, totalBatches, symbol }
  *   done     — { rowCount, tradingDays, skippedDays, fetchedDays, uniqueTokens }
  *   error    — { message }
  *
- * One fetch at a time per user (429 otherwise): each makes many Kite calls and
- * large writes, and the OI History page runs its months one after another.
+ * One fetch at a time per user (429 otherwise): each makes many Kite calls and large writes.
  */
 const oiHistoryFetches = createConcurrencyLimit(1);
 
@@ -993,9 +923,7 @@ app.post('/api/oi-history/fetch', requireAuth, requireSubscription, async (req, 
   }
 });
 
-/** Run one OI history fetch, streaming its progress to `res` as SSE. */
 async function streamOiHistoryFetch(req, res) {
-  // Set up SSE headers
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache',
@@ -1006,9 +934,7 @@ async function streamOiHistoryFetch(req, res) {
     res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
   };
 
-  // The browser cancels the request when the user leaves the OI History tab.
-  // Stop calling Kite and skip the save — a partial save would mark those
-  // dates as already fetched and leave gaps on the next fetch.
+  // A cancel stops Kite calls and skips the save: a partial save would mark those dates as fetched and leave gaps.
   const cancel = new AbortController();
   res.on('close', () => {
     if (!res.writableEnded) cancel.abort();
@@ -1021,7 +947,7 @@ async function streamOiHistoryFetch(req, res) {
       scrip, expiryMonth, strikeMode: strikeModeFrom(strikeMode), specificStrike, apiKey, accessToken, send, signal: cancel.signal,
     });
 
-    // New prices may settle open signals; score them before the client reloads.
+    // Score open signals before the client reloads, since new prices may settle them.
     try {
       await evaluateTradeSetupSignalOutcomes(scrip);
     } catch (err) {
@@ -1051,7 +977,6 @@ async function streamOiHistoryFetch(req, res) {
 
 /**
  * GET /api/oi-history/expiry-months?scrip=NIFTY
- * Returns list of future expiry months available in current instruments.
  */
 app.get('/api/oi-history/expiry-months', requireAuth, requireSubscription, async (req, res) => {
   try {
@@ -1115,15 +1040,11 @@ app.get('/api/oi-history/futures', requireAuth, requireSubscription, async (req,
   }
 });
 
-// ---------- Watchlist stock setups ----------
-
 /** Candles as compact [date, open, high, low, close, volume] rows: about half the JSON of objects. */
 const compactCandles = (candles) => candles.map((c) => [c.date, c.open, c.high, c.low, c.close, c.volume]);
 
-// One stock's stored daily candles plus the market reference index's (none when
-// no index is marked is_market_reference), brought up to date with the user's
-// own Kite session first. If Kite fails but candles are stored, they are
-// returned with a warning rather than an error.
+// Candles are brought up to date with the user's own Kite session first. If Kite fails but candles are stored,
+// they are returned with a warning rather than an error.
 app.get('/api/stocks/:token/candles', requireAuth, requireSubscription, async (req, res) => {
   try {
     const token = Number(req.params.token);
@@ -1148,7 +1069,7 @@ app.get('/api/stocks/:token/candles', requireAuth, requireSubscription, async (r
       const message = warning ? `Couldn't load daily candles from Kite (${warning})` : 'Kite returned no daily candles for this stock';
       return sendError(res, 502, message);
     }
-    // Keep the watchlist's Setups column in step with what the panel shows.
+    // Keeps the watchlist's Setups column in step with the panel.
     if (synced) await scanStock(stock, market).catch((err) => console.warn(`[Stocks] Scan failed for ${stock.tradingsymbol}:`, err.message));
 
     sendOk(res, { stock, candles: compactCandles(candles), market: compactCandles(market), marketLabel: reference?.label ?? null, warning });
@@ -1157,8 +1078,7 @@ app.get('/api/stocks/:token/candles', requireAuth, requireSubscription, async (r
   }
 });
 
-// Fill the setup scorecard from one stock's past year, so a newly added stock
-// doesn't wait weeks for the nightly scan. Candles are brought up to date first.
+// Fills the setup scorecard from one stock's past year, so a new stock doesn't wait weeks for the nightly scan.
 app.post('/api/stocks/:token/setup-history', requireAuth, requireSubscription, async (req, res) => {
   try {
     const token = Number(req.params.token);
@@ -1182,7 +1102,6 @@ app.post('/api/stocks/:token/setup-history', requireAuth, requireSubscription, a
   }
 });
 
-// Latest scan summary for every stock in the user's watchlists (the Setups column).
 app.get('/api/stocks/scans', requireAuth, requireSubscription, async (req, res) => {
   try {
     sendOk(res, await getStockScansForUser(req.session.kiteSession.userId));
@@ -1191,7 +1110,6 @@ app.get('/api/stocks/scans', requireAuth, requireSubscription, async (req, res) 
   }
 });
 
-// Setup scorecard for one stock: outcomes per setup type, plus its recent setups.
 app.get('/api/stocks/:token/setups', requireAuth, requireSubscription, async (req, res) => {
   try {
     const token = Number(req.params.token);
@@ -1308,8 +1226,6 @@ app.delete('/api/oi-history', requireAuth, requireAdmin, async (req, res) => {
   }
 });
 
-// ---------- F&O Symbols ----------
-
 app.get('/api/fno-symbols', requireAuth, requireSubscription, async (req, res) => {
   try {
     const symbols = await getFnoSymbols();
@@ -1350,8 +1266,6 @@ app.patch('/api/admin/underlyings/:name', requireAuth, requireAdmin, async (req,
   }
 });
 
-// ---------- Instruments (shared cache) ----------
-
 app.get('/api/instruments', requireAuth, requireSubscription, async (req, res) => {
   try {
     const { apiKey, accessToken } = req.session.kiteSession;
@@ -1361,8 +1275,6 @@ app.get('/api/instruments', requireAuth, requireSubscription, async (req, res) =
     sendFailure(res, err, { log: '[Instruments] Error', message: 'Failed to load instruments from Kite', status: 502 });
   }
 });
-
-// ---------- API Proxy ----------
 
 app.use('/api', requireAuth, requireSubscription, apiLimiter, allowOnlyKnownKiteCalls, createProxyMiddleware({
   target: KITE_API_URL,
@@ -1404,8 +1316,6 @@ app.use('/api', requireAuth, requireSubscription, apiLimiter, allowOnlyKnownKite
     },
   },
 }));
-
-// ---------- WebSocket Proxy ----------
 
 const wss = new WebSocketServer({ noServer: true, maxPayload: MAX_CLIENT_MESSAGE_BYTES });
 const wsConnections = createConcurrencyLimit(MAX_CONNECTIONS_PER_USER);
@@ -1563,8 +1473,6 @@ wss.on('connection', (clientWs) => {
   });
 });
 
-// ---------- Static Files (Production) ----------
-
 if (IS_PROD) {
   const distPath = path.resolve(__dirname, '../dist');
   app.use(express.static(distPath));
@@ -1577,10 +1485,7 @@ if (IS_PROD) {
 
 app.use(sendServerError);
 
-// ---------- Start ----------
-
 async function start() {
-  // Initialise PostgreSQL
   await initDb();
 
   // The scheduled jobs (server/scheduledJobs.js): OI snapshots, OI history, the stock scan,
@@ -1597,7 +1502,6 @@ async function start() {
   });
 }
 
-// Graceful shutdown
 async function shutdown() {
   authLimiter.close();
   apiLimiter.close();

@@ -1,8 +1,3 @@
-/**
- * HoldingsView — equity holdings content (no page header).
- * Rendered inside the Holdings & Positions tabbed page.
- */
-
 import React, { useState } from 'react';
 import { HoldingsIcon } from '@/components/icons/Icons';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
@@ -13,7 +8,6 @@ import { MarketStatus } from '../../shared/tradeEnums.js';
 import { AllocationView, type AllocationViewId } from '@/utils/uiEnums';
 import '@/styles/holdings.css';
 
-/** Browser storage key for the privacy toggle (amounts hidden). */
 const PRIVACY_MODE_KEY = 'optiontrap_privacy_mode';
 
 
@@ -63,7 +57,6 @@ const HoldingsView: React.FC = () => {
 
   return (
     <div>
-      {/* Sub-header row: market status + privacy toggle */}
       <div className="holdings-subheader">
         <div className="holdings-status-row">
           {marketStatus === MarketStatus.Live && <span className="live-badge">● LIVE</span>}
@@ -107,7 +100,6 @@ const HoldingsView: React.FC = () => {
 
       {!loading && !error && holdings.length > 0 && (
         <>
-          {/* Summary */}
           <div className="card-grid card-grid--two-col">
             <div className="card holdings-stat">
               <span className="holdings-stat__label">Total P&L</span>
@@ -124,7 +116,6 @@ const HoldingsView: React.FC = () => {
             </div>
           </div>
 
-          {/* Allocation */}
           <div className="card" style={{ marginTop: 'var(--card-gap)' }}>
             <div className="allocation-header">
               <div>
@@ -199,7 +190,6 @@ const HoldingsView: React.FC = () => {
             )}
           </div>
 
-          {/* Holdings Table */}
           <div className="card holdings-table-card" style={{ marginTop: 'var(--card-gap)', overflow: 'auto' }}>
             <h3 className="card__title" style={{ marginBottom: 16 }}>All Holdings</h3>
             <table className="holdings-table">
@@ -260,8 +250,6 @@ const HoldingsView: React.FC = () => {
     </div>
   );
 };
-
-// ── Treemap ────────────────────────────────────────────────────────────────────
 
 function computeTreemapLayout(
   items: { value: number; index: number }[],

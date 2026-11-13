@@ -22,7 +22,6 @@ export function loadStrategies(): Promise<StrategyInfo[]> {
   return shared;
 }
 
-/** The shared list if it has loaded, else null. */
 export function loadedStrategies(): StrategyInfo[] | null {
   return sharedValue;
 }

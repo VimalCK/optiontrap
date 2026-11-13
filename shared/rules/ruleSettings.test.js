@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { defaultRuleSettings, firstRuleThatFires, parseRuleSettings, ruleSettingsWithDefaults } from './ruleSettings.js';
 
-// A small list of made-up rules, to test the settings logic on its own.
 const RULES = [
   { id: 'max-size', label: 'Max size', description: '', params: [{ key: 'max', label: 'Size', type: 'Count' }], check: (s, _c, { max }) => (s.size > max ? 'too big' : null) },
   { id: 'loss', label: 'Loss', description: '', params: [{ key: 'amount', label: 'Loss (₹)', type: 'Amount' }], check: (s, _c, { amount }) => (s.pnl <= -amount ? 'too much loss' : null) },

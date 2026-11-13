@@ -1,15 +1,10 @@
 /**
- * Delete stored candles and sync rows for stocks no longer in any watchlist.
- * The market reference index (instruments.is_market_reference) is kept: every
- * stock's market check compares against it.
- *
- * Open setups of those stocks would stay open forever (only watchlist stocks
- * are scanned), so they go too. Finished setups stay for the scorecard.
+ * The market reference index (instruments.is_market_reference) is kept: every stock's market check compares against it.
+ * Open setups of unwatched stocks would stay open forever (only watchlist stocks are scanned), so they go too.
  */
 import { sqlEnum } from '../../sql.js';
 import { SetupOutcomeStatus } from '../../../shared/appEnums.js';
 
-/** Purge the unwatched stocks' candles, sync rows and open setups in one transaction. */
 export default async function run({ runSql }) {
   const rowCount = await runSql(`
     DELETE FROM stock_daily_candles c

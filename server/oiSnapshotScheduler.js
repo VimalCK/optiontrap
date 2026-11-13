@@ -1,19 +1,7 @@
 /**
- * Intraday option-chain OI snapshots, taken by the server as a scheduled job
- * (server/scheduledJobs.js).
- *
- * Every 10 minutes while the market is open (09:15–15:30 IST, trading days),
- * quote the nearest-expiry option chain around ATM for the symbols marked
- * always_snapshot (Settings), plus any symbol someone opened in the Option Analyzer today (i.e. already in
- * today's snapshots), and store one shared snapshot row. Nobody needs to keep
- * the analyzer open.
- *
- * Each snapshot also says what every token in it is (`contracts`: the option's
- * symbol, underlying, type, strike and expiry, or an underlying's spot row), so
- * an exported snapshot can be analysed on its own.
- *
- * Uses the newest admin Kite session (see findWorkingAdminSession). With no
- * admin login today it waits and logs once.
+ * Every 10 minutes in market hours (09:15–15:30 IST, trading days), quotes the nearest-expiry chain around ATM for the
+ * always_snapshot underlyings and any symbol opened in the Option Analyzer today, and stores one shared snapshot row.
+ * Each snapshot's `contracts` say what every token is, so an exported snapshot can be analysed on its own.
  */
 
 import { getAlwaysSnapshotSymbols, getTodayOiSnapshotTokens, getUnderlyings, saveOiSnapshot } from './db.js';
@@ -45,7 +33,6 @@ function enqueue(fn) {
   return run;
 }
 
-/** Today's admin Kite session, cached for the day; null if none works. */
 async function getAdminKite(date) {
   if (adminKite?.date === date) return adminKite.kite;
   const kite = await findWorkingAdminSession();
@@ -102,7 +89,6 @@ const optionContract = (option) => ({
 /** What an underlying's price token is, for the snapshot's `contracts` map. */
 const spotContract = (underlying, symbol) => ({ symbol, underlying, type: SnapshotContractType.SPOT });
 
-/** Option chains of each underlying in the instrument list, by underlying name. */
 function optionsByUnderlying(instruments) {
   const byName = new Map();
   for (const i of instruments) {
@@ -128,10 +114,8 @@ async function snapshottedToday(instruments) {
 }
 
 /**
- * Quote the chains for `symbols` and store them in the current 10-minute
- * snapshot row. Each symbol's spot price goes in `prices` (and `close`) under
- * its price instrument's token, beside its options' prices. Options also get
- * their best bid/ask and last trade time, so a stale last price can be told apart.
+ * Each symbol's spot price goes in `prices` (and `close`) under its price instrument's token. Options also get their
+ * best bid/ask and last trade time, so a stale last price can be told apart.
  */
 async function captureSymbols(symbols, kite, instruments, now = new Date()) {
   const { date } = istClock(now);
@@ -183,11 +167,7 @@ async function captureSymbols(symbols, kite, instruments, now = new Date()) {
   return Object.keys(data).length;
 }
 
-/**
- * With today's admin session, let `pickSymbols` choose from the instrument
- * list what to capture, then capture it. Drops the cached session if Kite
- * rejects it.
- */
+/** Drops the cached session if Kite rejects it. */
 function capture(date, pickSymbols) {
   return enqueue(async () => {
     const kite = await getAdminKite(date);
@@ -219,7 +199,6 @@ export async function watchOiSnapshotSymbol(symbol) {
   return { captured: count };
 }
 
-/** Take this 10-minute slot's snapshot, unless it was already taken. */
 async function captureSlot() {
   const slot = Math.floor(Date.now() / SLOT_MS);
   if (slot === lastSlot) return;
@@ -234,7 +213,6 @@ async function captureSlot() {
   }
 }
 
-/** The OI snapshot plug-in: checks every minute, snapshots once per 10-minute slot while the market is open. */
 export const oiSnapshotJob = {
   id: OI_SNAPSHOT_JOB_ID,
   /** @param {import('./tradeEngine/host.js').PluginContext} ctx */

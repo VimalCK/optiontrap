@@ -1,12 +1,7 @@
 /**
- * Fetch one scrip + expiry month of daily OI history from Kite and store it.
- * Used by POST /api/oi-history/fetch (which streams progress to the browser)
- * and by the after-close scheduler (which has no browser).
- *
- * OI history is shared by every user, so callers asking for the same scrip,
- * month and strikes at once share one fetch (server/sharedRuns.js), and fetches
- * for the same month wait their turn in memory before taking the database lock,
- * so waiting never holds one of the pool's connections.
+ * OI history is shared by every user, so callers asking for the same scrip, month and strikes at once share one fetch
+ * (server/sharedRuns.js). Fetches for the same month wait in memory before taking the database lock, so waiting never
+ * holds one of the pool's connections.
  */
 
 import {
@@ -28,7 +23,6 @@ import { marketDate } from '../shared/marketTime.js';
 import { Exchange, InstrumentType } from '../shared/tradeEnums.js';
 import { FetchEvent, StrikeMode, isStrikeMode } from '../shared/appEnums.js';
 
-/** Get current date in IST as YYYY-MM-DD */
 export function todayIST() {
   return marketDate();
 }
@@ -47,7 +41,6 @@ export class OiHistoryFetchError extends Error {
 }
 
 /**
- * One instrument's daily candles with OI, through the Kite client.
  * @returns {Promise<unknown[][] | undefined>} Kite's candle rows: [time, open, high, low, close, volume, oi]
  */
 async function fetchDailyCandles(kite, instrumentToken, from, to, signal) {
@@ -58,13 +51,11 @@ async function fetchDailyCandles(kite, instrumentToken, from, to, signal) {
 const sharedFetches = createSharedRuns();
 const monthQueue = createKeyedQueue();
 
-/** Requests with the same key fetch the same rows, so they can share one run. */
 export function oiHistoryFetchKey({ scrip, expiryMonth, strikeMode = StrikeMode.AtmRange, specificStrike }) {
   return [scrip, expiryMonth, strikeMode, strikeMode === StrikeMode.Specific ? Number(specificStrike) : ''].join('|');
 }
 
 /**
- * Fetch one month of OI history, or join the same fetch if one is already running.
  * A joined run that fails (e.g. on its starter's Kite login) is run again with this
  * caller's own login, so one user's error never reaches another.
  * Options and result are those of fetchOiHistoryMonthNow.

@@ -1,8 +1,3 @@
-/**
- * Rule: no second automated trade in an instrument while a position in it is
- * open, or an automated limit order in it is still waiting to fill.
- */
-
 /** This entry rule's id: stored in users' settings and trade records, so it never changes. */
 export const ONE_TRADE_PER_INSTRUMENT_RULE_ID = 'one-trade-per-instrument';
 

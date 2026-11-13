@@ -1,14 +1,7 @@
 /**
- * Trade Journal
- * P&L heatmap and per-day trade log for exited paper positions.
- *
- * Nothing loads when the page opens. A 1M / 3M / 6M / 1Y button fetches that
- * many months up to today; after that, changing From, To or the segment
- * fetches the new range. Each fetch is one P&L total per day from the server. A day's trades are fetched
- * only when that day is expanded, a page at a time, so the browser never
- * loads the full trade history.
- *
- * Mode: Paper (exited paper positions) | Live (coming soon)
+ * Opens on the last 12 months. Changing From, To or the segment fetches the new range.
+ * Each fetch is one P&L total per day from the server. A day's trades are fetched only
+ * when that day is expanded, a page at a time, so the browser never loads the full trade history.
  */
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -39,7 +32,6 @@ type SegmentFilter = AnySegmentId | SegmentId;
 /** Wait after the last filter change before fetching, so typing a date fetches once. */
 const FETCH_DELAY_MS = 400;
 
-/** Trades fetched per request when a day is expanded. */
 const DAY_PAGE_SIZE = 100;
 
 interface ReportFilters {
@@ -128,7 +120,6 @@ const TradeJournal: React.FC<{
       const days = await getPaperDailyPnl(filters.from, filters.to, segmentParam(filters.segment));
       if (reportId !== reportIdRef.current) return;
       setReport({ filters, days });
-      // Reload the trades of days that were open and are still in the report.
       for (const day of days) {
         if (expand.has(day.date)) loadDay(filters, day.date, 0);
       }
@@ -193,9 +184,7 @@ const TradeJournal: React.FC<{
 
   return (
     <div className="tj-container">
-      {/* Top Controls */}
       <div className="tj-controls">
-        {/* Live / Paper toggle */}
         <div className="tj-mode-tabs">
           {TRADING_MODES.map((m) => (
             <button
@@ -256,7 +245,6 @@ const TradeJournal: React.FC<{
         )}
       </div>
 
-      {/* Live — Coming Soon */}
       {mode === TradingMode.Live && (
         <div className="card tj-coming-soon">
           <div className="tj-coming-soon__icon">📡</div>
@@ -306,7 +294,6 @@ const TradeJournal: React.FC<{
                     const shown = loaded?.trades.length ?? 0;
                     return (
                       <React.Fragment key={day.date}>
-                        {/* Date group header — clickable */}
                         <tr className="tj-group-row" onClick={() => toggleDate(day.date)}>
                           <td className="tj-group-date">
                             <span className="tj-group-chevron">{isExpanded ? '▾' : '▸'}</span>
@@ -322,7 +309,6 @@ const TradeJournal: React.FC<{
                           <td className={`tj-group-pnl tj-num ${pnlClass(day.pnl)}`}>{formatPnl(day.pnl)}</td>
                         </tr>
 
-                        {/* Individual trades — fetched when the day is expanded */}
                         {isExpanded && loaded?.trades.map((t) => (
                           <tr key={t.id} className={`tj-trade-row ${initialTradeId === t.id ? 'tj-trade-row--highlighted' : ''}`}>
                             <td className="tj-symbol">

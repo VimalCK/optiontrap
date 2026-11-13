@@ -37,7 +37,6 @@ import { InstrumentType } from '../../shared/tradeEnums.js';
 import { PRICE_ALERT_CONDITIONS, PriceAlertCondition, PriceAlertStatus, priceAlertConditionLabel, type PriceAlertConditionId } from '../../shared/appEnums.js';
 import '@/styles/watchlist.css';
 
-// ── Price data stored per instrument token ──
 interface LivePrice {
   ltp: number;
   close: number;
@@ -86,7 +85,6 @@ const Watchlist: React.FC = () => {
   const [alertToast, setAlertToast] = useState<string | null>(null);
   const alertToastTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Entry & exit zones: the open panel, and the latest scan per stock for the Setups column.
   const [setupsItem, setSetupsItem] = useState<WatchlistItem | null>(null);
   // The stock row selected to show its setup scorecard; clicking it again hides the card.
   const [scorecardToken, setScorecardToken] = useState<number | null>(null);
@@ -103,7 +101,6 @@ const Watchlist: React.FC = () => {
     [tabs, activeTabId],
   );
 
-  // ── Load tab metadata on mount ──
   useEffect(() => {
     fetchWatchlists()
       .then((data) => {
@@ -114,7 +111,6 @@ const Watchlist: React.FC = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  // ── Load items when active tab changes ──
   useEffect(() => {
     if (!activeTabId || loadedTabRef.current === activeTabId) return;
 
@@ -130,14 +126,12 @@ const Watchlist: React.FC = () => {
       .finally(() => setItemsLoading(false));
   }, [activeTabId]);
 
-  // ── Load instruments for search ──
   useEffect(() => {
     loadInstruments()
       .then(setInstruments)
       .catch((err) => console.error('[Watchlist] Instruments load failed:', err));
   }, []);
 
-  // ── Lookup map for display labels ──
   const instrumentMap = useMemo(() => {
     const map = new Map<number, Instrument>();
     for (const inst of instruments) map.set(inst.instrumentToken, inst);
@@ -200,7 +194,6 @@ const Watchlist: React.FC = () => {
     }
   }, [showAlertToast]);
 
-  // ── Ticker subscription ──
   const handleTicks = useCallback((ticks: Tick[]) => {
     setLivePrices((prev) => {
       let changed = false;
@@ -250,7 +243,6 @@ const Watchlist: React.FC = () => {
     }
   }, [notifyAlertTriggered]);
 
-  // Subscribe to ticks for the active tab's items only
   const activeTokens = useMemo(
     () => items.map((item) => item.instrumentToken),
     [items],
@@ -262,7 +254,6 @@ const Watchlist: React.FC = () => {
     return unsub;
   }, [activeTokens, handleTicks]);
 
-  // ── Search logic ──
   useEffect(() => {
     if (!searchQuery.trim()) {
       setSearchResults([]);
@@ -279,7 +270,6 @@ const Watchlist: React.FC = () => {
     setHighlightIdx(-1);
   }, [searchQuery, instruments, items]);
 
-  // Close dropdown on outside click
   useEffect(() => {
     const handleClick = (e: MouseEvent) => {
       if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
@@ -303,13 +293,11 @@ const Watchlist: React.FC = () => {
     }
   }, [showNewInput]);
 
-  // ── Handlers ──
-
   const handleTabSwitch = (id: string) => {
     if (id === activeTabId) return;
     setActiveTabId(id);
-    loadedTabRef.current = null; // force reload
-    setLivePrices(new Map()); // clear stale prices from previous tab
+    loadedTabRef.current = null;
+    setLivePrices(new Map());
     setSearchQuery('');
     setShowDropdown(false);
   };
@@ -411,7 +399,6 @@ const Watchlist: React.FC = () => {
     return () => window.removeEventListener('mouseup', disarm);
   }, [dragArmedId, draggingId]);
 
-  /** While dragging, move the dragged row to wherever the pointer is. */
   const dragOverItem = (target: WatchlistItem) => {
     if (!draggingId || draggingId === target.id) return;
     setItems((prev) => {
@@ -526,8 +513,6 @@ const Watchlist: React.FC = () => {
     }
   };
 
-  // ── Helpers ──
-
   const formatPrice = (n: number) =>
     n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -552,8 +537,6 @@ const Watchlist: React.FC = () => {
     return groups;
   }, []);
 
-  // ── Render ──
-
   if (loading) {
     return (
       <div className="wl-loading">
@@ -571,7 +554,6 @@ const Watchlist: React.FC = () => {
         </div>
       )}
 
-      {/* ── Tab bar ── */}
       <TabBar
         items={tabs.map((tab) => ({
           id: tab.id,
@@ -678,10 +660,8 @@ const Watchlist: React.FC = () => {
         )}
       />
 
-      {/* ── Content ── */}
       {activeTab ? (
         <div className="wl-content">
-          {/* Search bar */}
           <div className="wl-search" ref={searchRef}>
             <input
               ref={inputRef}
@@ -716,7 +696,6 @@ const Watchlist: React.FC = () => {
             )}
           </div>
 
-          {/* Items loading indicator */}
           {itemsLoading ? (
             <div className="wl-loading">
               <div className="wl-loading__spinner" />

@@ -66,7 +66,6 @@ const INDICATORS: GuideTerm[] = [
   { term: '20 / 50 / 200d avg', meaning: 'Average close: short, medium and long-term trend. Price above = trend up' },
 ];
 
-/** Explains the entry & exit zone rules: states, setups, zone scoring and history. */
 const StockSetupsGuide: React.FC = () => (
   <InfoGuide>
     <GuideGrid>

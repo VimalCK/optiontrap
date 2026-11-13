@@ -1,5 +1,3 @@
-/** Rule: stop taking automated trades once today's automated loss reaches a set amount. */
-
 import { ParamType } from '../tradeEnums.js';
 
 /** This entry rule's id: stored in users' settings and trade records, so it never changes. */

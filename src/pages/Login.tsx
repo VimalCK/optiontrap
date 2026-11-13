@@ -10,8 +10,6 @@ import {
 import { DurationUnit } from '../../shared/appEnums.js';
 import '@/styles/login.css';
 
-// ─── Feature highlights ─────────────────────────────────────────────────────
-
 const FEATURES = [
   { icon: <AnalyticsIcon />, title: 'Live Option Chain', text: 'Real-time OI, intraday velocity and Greeks across every strike.' },
   { icon: <ShieldIcon />, title: 'Trap Analyzer', text: 'Spot option traps forming before they spring.' },
@@ -50,8 +48,6 @@ const monthsOf = (p: SubscriptionPlan): number => {
 // The redirect URL that must be registered in the user's Kite Connect app.
 const REDIRECT_URL = 'https://optiontrap.com/redirect';
 
-// ─── Animated app showcase (CSS/JS mockup, replaced by real screenshots later) ─
-
 const STRIKES = [
   { strike: 24300, ce: 42, pe: 78 },
   { strike: 24400, ce: 58, pe: 64 },
@@ -71,7 +67,6 @@ const MockChain: React.FC = () => {
   const [edge, setEdge] = useState(72);
   const [rows, setRows] = useState(STRIKES);
 
-  // Light "live" ticking so the mock feels alive
   useEffect(() => {
     const id = setInterval(() => {
       setSpot((prev) => +(prev + (Math.random() - 0.5) * 6).toFixed(2));
@@ -133,7 +128,7 @@ const Showcase: React.FC = () => {
   const [slide, setSlide] = useState(0);
   // Only include screenshots that actually exist so we never show blank slides.
   const [shots, setShots] = useState<typeof SHOTS>([]);
-  const total = shots.length + 1; // mock + available screenshots
+  const total = shots.length + 1;
 
   useEffect(() => {
     let active = true;
@@ -199,8 +194,6 @@ const Showcase: React.FC = () => {
     </div>
   );
 };
-
-// ─── Login / landing page ─────────────────────────────────────────────────────
 
 const Login: React.FC = () => {
   const [searchParams] = useSearchParams();

@@ -28,14 +28,12 @@ interface Subscriber {
 let ticker: KiteTicker | null = null;
 const subscribers = new Map<string, Subscriber>();
 
-/** Merge all tokens across all subscribers into one flat set */
 function allTokens(): number[] {
   const merged = new Set<number>();
   subscribers.forEach((sub) => sub.tokens.forEach((t) => merged.add(t)));
   return Array.from(merged);
 }
 
-/** Fan out incoming ticks to every subscriber that cares about each token */
 function handleTicks(ticks: Tick[]): void {
   subscribers.forEach((sub) => {
     const relevant = ticks.filter((t) => sub.tokens.has(t.instrumentToken));
@@ -50,7 +48,7 @@ function handleTicks(ticks: Tick[]): void {
  * Safe to call multiple times — reconnects only if not already connected.
  */
 export function tickerConnect(): void {
-  if (ticker) return; // already connected
+  if (ticker) return;
   ticker = new KiteTicker();
   const tokens = allTokens();
   if (tokens.length > 0) {
@@ -68,14 +66,7 @@ export function tickerDisconnect(): void {
   }
 }
 
-/**
- * Subscribe to ticks for the given tokens.
- *
- * @param id        Unique subscriber ID (e.g. component name + instance key)
- * @param tokens    Instrument tokens to receive ticks for
- * @param callback  Called with filtered ticks on every tick batch
- * @returns         Cleanup function — call on component unmount
- */
+/** Subscribes to ticks; returns the function that unsubscribes (call it on unmount). */
 export function tickerSubscribe(
   id: string,
   tokens: number[],
@@ -96,17 +87,13 @@ export function tickerSubscribe(
 
   return () => {
     subscribers.delete(id);
-    // Unsubscribe tokens no longer needed by any subscriber
     if (ticker) {
       ticker.updateSubscriptions(allTokens());
     }
   };
 }
 
-/**
- * Update the token set for an existing subscriber without re-registering the callback.
- * Triggers a reconnect to re-subscribe with the new merged token set.
- */
+/** Replaces the token set of an existing subscriber, keeping its callback. */
 export function tickerUpdateTokens(id: string, tokens: number[]): void {
   const sub = subscribers.get(id);
   if (!sub) return;

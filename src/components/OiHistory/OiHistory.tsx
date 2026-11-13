@@ -32,11 +32,9 @@ import { OiHistoryTab, ToastColor, type OiHistoryTabId } from '@/utils/uiEnums';
 import ToastStack from '@/components/Toast/ToastStack';
 import { useToasts } from '@/hooks/useToasts';
 
-/** Browser storage keys for the fetch form's last strike choice. */
 const STRIKE_RANGE_KEY = 'optiontrap_strike_range';
 const SPECIFIC_STRIKE_KEY = 'optiontrap_specific_strike';
 
-/** What the fetch's server-sent events carry: Step and Error a message, Progress the counts. */
 interface FetchEventPayload {
   message: string;
   /** On an error event: KITE_LOGIN_ENDED when the Kite login has ended (shared/kiteAuth.js). */
@@ -54,7 +52,6 @@ function snapshotTime(date: string): Date {
   return date === todayIST() ? new Date(Math.min(Date.now(), close.getTime())) : close;
 }
 
-/** Fair-value inputs for one day's rows, optionally limited to one expiry. */
 function fairInputs(rows: OiHistoryRow[], date: string, expiry?: string): FairInput[] {
   const asOf = snapshotTime(date);
   const inputs: FairInput[] = [];
@@ -94,7 +91,6 @@ const OiHistory: React.FC = () => {
   const [dataScrip, setDataScrip] = useState('');
   const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(() => new Set());
   const [showVolume, setShowVolume] = useState(false);
-  // Fair-value view: the strike chart shows one expiry with its fair-value line.
   const [showFairValue, setShowFairValue] = useState(false);
   // Entry & exit zones of the underlying stock (null for indices).
   const [underlyingStock, setUnderlyingStock] = useState<{ instrumentToken: number; tradingsymbol: string } | null>(null);
@@ -162,7 +158,6 @@ const OiHistory: React.FC = () => {
     loadInstruments().catch(() => { /* lot size falls back to 1 if unavailable */ });
   }, []);
 
-  // Fetch available future expiry months for the selected scrip from instruments
   useEffect(() => {
     if (!scrip) return;
     const current = currentMonthIST();
@@ -231,7 +226,6 @@ const OiHistory: React.FC = () => {
     return includedExpiryMonths.filter((month) => month >= current);
   }, [includedExpiryMonths]);
 
-  /** Load stored data from server — includes M-1 if stored, then current month through selected month. */
   const loadData = useCallback(async () => {
     setLoading(true);
     try {
@@ -265,7 +259,6 @@ const OiHistory: React.FC = () => {
     }
   }, [scrip, includedExpiryMonths, pageSignal]);
 
-  /** Stream a single expiry-month fetch from Kite via SSE. Returns on stream end. */
   const fetchExpiryMonth = useCallback(async (month: string, monthLabel: string) => {
     const res = await apiClient.raw('/api/oi-history/fetch', {
       method: 'POST',
@@ -392,7 +385,6 @@ const OiHistory: React.FC = () => {
     if (lastFetchedRef.current === key) return;
     lastFetchedRef.current = key;
 
-    // Clear old data immediately so stale content isn't shown
     setData([]);
     setDataScrip('');
     setSelectedStrike(null);
@@ -451,7 +443,6 @@ const OiHistory: React.FC = () => {
 
   const { toasts, showToast } = useToasts();
 
-  // Handle buy/sell from OI history cells
   const handleTrade = useCallback(async (
     cell: OiCellData,
     optionType: OptionTypeId,
@@ -483,7 +474,6 @@ const OiHistory: React.FC = () => {
     }
   }, [showToast, tradeHorizon]);
 
-  /** Unique dates in the loaded data */
   const availableDates = useMemo(() => {
     return [...new Set(data.map((r) => r.date))].sort();
   }, [data]);
@@ -492,7 +482,6 @@ const OiHistory: React.FC = () => {
     return availableDates.filter((date) => date.slice(0, 7) >= currentMonthIST());
   }, [availableDates]);
 
-  /** Dates grouped by month (YYYY-MM) for a clearer date bar */
   const datesByMonth = useMemo(() => {
     const groups: { month: string; dates: string[] }[] = [];
     let current: { month: string; dates: string[] } | null = null;
@@ -507,7 +496,6 @@ const OiHistory: React.FC = () => {
     return groups;
   }, [visibleDates]);
 
-  /** Unique expiries in the loaded data for the selected expiry month, sorted */
   const expiries = useMemo(() => {
     const set = new Set<string>();
     for (const r of data) {
@@ -525,7 +513,6 @@ const OiHistory: React.FC = () => {
   /** Mark only actual contract expiry dates; weekdays can vary around holidays. */
   const expiryMarkerDates = useMemo(() => new Set(expiries), [expiries]);
 
-  /** Rows for the selected date */
   const filteredRows = useMemo(() => {
     if (!filterDate) return [];
     return data.filter((r) => r.date === filterDate);
@@ -544,7 +531,6 @@ const OiHistory: React.FC = () => {
     return tableExpiries.filter((exp) => !hiddenExpiries.has(exp));
   }, [tableExpiries, hiddenExpiries]);
 
-  /** Rows for the previous date (for OI change computation) */
   const prevDateRows = useMemo(() => {
     if (!filterDate || availableDates.length < 2) return [];
     const idx = availableDates.indexOf(filterDate);
@@ -553,7 +539,6 @@ const OiHistory: React.FC = () => {
     return data.filter((r) => r.date === prevDate);
   }, [data, filterDate, availableDates]);
 
-  /** Map: instrumentToken → previous day OI */
   const prevDayOi = useMemo(() => {
     const map = new Map<number, number>();
     for (const r of prevDateRows) {
@@ -583,7 +568,6 @@ const OiHistory: React.FC = () => {
     return map;
   }, [data]);
 
-  /** IV-based flow for every option on the selected date, keyed by instrument token. */
   const flowByToken = useMemo(() => {
     const idx = availableDates.indexOf(filterDate);
     if (idx <= 0) return new Map<number, FlowReading>();
@@ -637,7 +621,6 @@ const OiHistory: React.FC = () => {
     [chartFairExpiry, visibleTableExpiries],
   );
 
-  /** Rows and spot close per date. */
   const rowsByDate = useMemo(() => {
     const map = new Map<string, OiHistoryRow[]>();
     for (const r of data) {
@@ -656,7 +639,6 @@ const OiHistory: React.FC = () => {
     return map;
   }, [rowsByDate, chartFairExpiry]);
 
-  /** Chain context for the fair-value view: ATM IV vs realised vol and the expected move. */
   const fairSummary = useMemo(() => {
     if (!chartFairExpiry || !filterDate) return null;
     const stats = fairToday.byExpiry.get(chartFairExpiry) ?? null;
@@ -668,11 +650,9 @@ const OiHistory: React.FC = () => {
     return { stats, realized, verdict: volVerdict(stats?.atmIv ?? null, realized), spot };
   }, [chartFairExpiry, filterDate, fairToday, availableDates, rowsByDate, filteredRows]);
 
-  /** ATM strike for the selected date */
   const atmStrike = useMemo(() => {
     if (filteredRows.length === 0) return null;
     const spot = filteredRows[0].spotClose;
-    // Find the closest strike to spot price from the actual data
     const strikes = [...new Set(filteredRows.filter((r) => r.strike).map((r) => r.strike as number))].sort((a, b) => a - b);
     if (strikes.length === 0) return null;
     let closest = strikes[0];
@@ -686,7 +666,6 @@ const OiHistory: React.FC = () => {
 
   const selectedSpotClose = filteredRows[0]?.spotClose ?? null;
 
-  // Auto-select ATM strike to show chart on load
   useEffect(() => {
     if (strikeRange === -1 && specificStrikeValue !== null) {
       setSelectedStrike(specificStrikeValue);
@@ -697,11 +676,9 @@ const OiHistory: React.FC = () => {
     }
   }, [atmStrike, strikeRange, specificStrikeValue]);
 
-  /** Build table data: rows = strikes, columns = expiries */
   const tableData = useMemo(() => {
     if (filteredRows.length === 0 || visibleTableExpiries.length === 0) return [];
 
-    // Index: strike → expiry → { ce, pe }
     const grid = new Map<number, Map<string, OiCellData>>();
 
     const visibleExpirySet = new Set(visibleTableExpiries);
@@ -745,8 +722,7 @@ const OiHistory: React.FC = () => {
       }
     }
 
-    // Compute dynamic OI threshold: show strikes with OI > 10% of the max OI in the dataset
-    // This adapts to any scrip (indices have millions, stocks have thousands)
+    // Threshold: 5% of the max OI in the dataset, so it adapts to any scrip (indices have millions, stocks thousands).
     let maxOiInGrid = 0;
     for (const expiryMap of grid.values()) {
       for (const cell of expiryMap.values()) {
@@ -760,7 +736,6 @@ const OiHistory: React.FC = () => {
     const rows = [...grid.entries()]
       .sort(([a], [b]) => a - b)
       .map(([strike, expiryMap]) => {
-        // Check if strike has significant OI (above 5% of max)
         let hasSignificantOi = false;
         for (const cell of expiryMap.values()) {
           if (cell.ceOi > oiThreshold || cell.peOi > oiThreshold) {
@@ -769,7 +744,6 @@ const OiHistory: React.FC = () => {
           }
         }
 
-        // Classify CE and PE patterns
         const ceByExpiry = new Map<string, { oi: number; prevOi: number | undefined; close: number; prevClose: number | undefined }>();
         const peByExpiry = new Map<string, { oi: number; prevOi: number | undefined; close: number; prevClose: number | undefined }>();
         for (const [exp, cell] of expiryMap) {
@@ -808,7 +782,6 @@ const OiHistory: React.FC = () => {
       return specificStrikeValue === null ? [] : rows.filter((row) => row.strike === specificStrikeValue);
     }
 
-    // Limit strikes around ATM based on selected range
     if (strikeRange > 0 && atmStrike && rows.length > 0) {
       const atmIdx = rows.findIndex((r) => r.strike >= atmStrike);
       const center = atmIdx >= 0 ? atmIdx : Math.floor(rows.length / 2);
@@ -843,11 +816,9 @@ const OiHistory: React.FC = () => {
     }
   }, [tableData, selectedStrike, atmStrike, strikeRange]);
 
-  /** Chart data for selected strike across all dates */
   const chartData = useMemo(() => {
     if (!selectedStrike || availableDates.length === 0 || visibleTableExpiries.length === 0) return null;
 
-    // Group data by date+expiry for the selected strike
     const dateMap = new Map<string, Map<string, StrikeHistoryEntry>>();
     const spotByDate = new Map<string, number>();
     const tableExpirySet = new Set(visibleTableExpiries);
@@ -898,7 +869,7 @@ const OiHistory: React.FC = () => {
     const tradeSetup = summarizeTradeSetup(priceTrend, biasSummary, selectedStrike, tradeLevels, optionMomentum);
     const sellingSetup = summarizeSellingSetup(priceTrend, biasSummary, selectedStrike, tradeLevels, premiumDecay);
 
-    // Find max values for axis scaling (prices only over the expiries the chart draws)
+    // Prices only over the expiries the chart draws.
     const drawnExpiries = new Set(chartExpiries);
     let maxOi = 0;
     let maxCePrice = 0;
@@ -1117,7 +1088,6 @@ const OiHistory: React.FC = () => {
       return;
     }
 
-    // Pick the nearest visible expiry that has a live cell for this option type.
     type RowCell = ReturnType<typeof row.cells.get>;
     let chosenCell: RowCell;
     let chosenExpiry: string | undefined;
@@ -1141,7 +1111,6 @@ const OiHistory: React.FC = () => {
     void handleTrade(chosenCell, optionType, side, targetStrike, chosenExpiry);
   }, [chartData, atmStrike, tableData, visibleTableExpiries, handleTrade, showToast]);
 
-  /** Expiry colors for chart lines */
   const expiryColors = useMemo(() => {
     const palette = ['#6366f1', '#f59e0b', '#10b981', '#ec4899', '#8b5cf6', '#06b6d4'];
     const map = new Map<string, string>();
@@ -1180,7 +1149,6 @@ const OiHistory: React.FC = () => {
     <div className="oi-history">
       <ToastStack toasts={toasts} />
 
-      {/* Controls */}
       <div className={`oi-history__controls card${isDataMenuOpen ? ' oi-history__controls--menu-open' : ''}`}>
         <div className="oi-history__control-row">
           <label className="oi-history__label">
@@ -1308,7 +1276,6 @@ const OiHistory: React.FC = () => {
           </div>
         )}
 
-        {/* Progress bar */}
         {progress && (
           <div className="oi-history__progress">
             <div className="oi-history__progress-header">
@@ -1329,7 +1296,6 @@ const OiHistory: React.FC = () => {
           </div>
         )}
 
-        {/* Result / Error */}
         {fetchResult && !progress && (
           <div className="oi-history__status">{fetchResult}</div>
         )}
@@ -1338,7 +1304,6 @@ const OiHistory: React.FC = () => {
         )}
       </div>
 
-      {/* Date filter — grouped by month */}
       {visibleDates.length > 0 && (
         <div className="oi-history__date-bar">
           {datesByMonth.map(({ month, dates }) => (
@@ -1366,7 +1331,6 @@ const OiHistory: React.FC = () => {
 
       <FuturesContext futuresData={futuresData} filterDate={filterDate} scrip={scrip} />
 
-      {/* Loading indicator */}
       {(loading || fetching) && data.length === 0 && (
         <div className="card oi-history__loading-card">
           <div className="oi-history__loading-spinner" />
@@ -1374,7 +1338,6 @@ const OiHistory: React.FC = () => {
         </div>
       )}
 
-      {/* Expiry-pivoted table */}
       {tableData.length > 0 && (
         <OiSnapshotTable
           rows={tableData}
@@ -1391,7 +1354,6 @@ const OiHistory: React.FC = () => {
         />
       )}
 
-      {/* Dual-axis chart for selected strike */}
       {chartData && selectedStrike && (
         <div className="oi-history__chart-wrap card">
           <div className="oi-history__chart-header">
@@ -1554,7 +1516,6 @@ const OiHistory: React.FC = () => {
         </div>
       )}
 
-      {/* Delete confirmation modal */}
       {confirmDelete && (
         <div className="oi-confirm-overlay" onClick={() => setConfirmDelete(false)}>
           <div className="oi-confirm-modal" onClick={(e) => e.stopPropagation()}>

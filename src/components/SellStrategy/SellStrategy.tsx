@@ -51,7 +51,6 @@ function scoreColorClass(score: number): string {
   return 'low';
 }
 
-/** The option a single-option setup trades. */
 const SINGLE_OPTION_SETUPS: Partial<Record<OptionSetupId, OptionTypeId>> = {
   [OptionSetup.SellCe]: OptionType.CE,
   [OptionSetup.BuyCe]: OptionType.CE,
@@ -59,10 +58,8 @@ const SINGLE_OPTION_SETUPS: Partial<Record<OptionSetupId, OptionTypeId>> = {
   [OptionSetup.BuyPe]: OptionType.PE,
 };
 
-/** Setups that trade a CE and a PE at one strike. */
 const STRADDLE_SETUPS: OptionSetupId[] = [OptionSetup.SellStraddle, OptionSetup.BuyStraddle];
 
-/** Setups that trade a CE and a PE at two strikes. */
 const STRANGLE_SETUPS: OptionSetupId[] = [OptionSetup.SellStrangle, OptionSetup.BuyStrangle];
 
 function strikeLabel(strikes: number[]): string {
@@ -70,14 +67,12 @@ function strikeLabel(strikes: number[]): string {
   return String(strikes[0]);
 }
 
-/** The trade button's colour class for a setup: its option, or straddle / strangle. */
 function actionBtnClass(type: OptionSetupId): string {
   const optionType = SINGLE_OPTION_SETUPS[type];
   if (optionType) return optionType.toLowerCase();
   return STRADDLE_SETUPS.includes(type) ? 'straddle' : 'strangle';
 }
 
-/** A score breakdown item: its label, its key in the breakdown, and its maximum points. */
 interface BreakdownItem<Breakdown> {
   label: string;
   key: keyof Breakdown;

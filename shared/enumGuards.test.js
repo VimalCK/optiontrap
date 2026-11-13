@@ -1,29 +1,3 @@
-/**
- * Guards for the enums in every shared/*Enums.js file (tradeEnums, appEnums,
- * analysisEnums) and the browser's own in src/utils/uiEnums.ts; read from those
- * files, so a new enum or shared enum file is checked without touching this one:
- *
- * 1. No enum value typed by hand: code names `OrderStatus.Open`, never `'Open'`,
- *    and SQL writes `${sqlEnum(OrderStatus.Open)}` (server/sql.js), never a
- *    `'Open'` literal. Words that only happen to equal a value (a CSS class, a
- *    socket event) are listed in ALLOWED with the reason.
- * 2. No enum member inside string text: written in a SQL template without
- *    `${…}`, `Exchange.NFO` reaches Postgres as a table reference ("missing
- *    FROM-clause entry for table exchange").
- *
- * 3. No enum value in a .sql file the app runs (the nightly jobs): plain SQL
- *    can't call sqlEnum, so SQL that names a value is a .js job.
- * 4. Every CSS class modifier built from a value (`badge--${…}`) is lower-cased
- *    with .toLowerCase(), since enum values are capitalised and the stylesheets
- *    are not: `badge--${tone.toLowerCase()}`. A modifier that can only be a
- *    lower-case quoted word (`${on ? 'up' : 'down'}`) is fine; a helper that
- *    returns CSS words is listed in CSS_WORD_HELPERS with the reason.
- *
- * Checked: code in src, server and shared, outside comments, and every .sql
- * file outside server/migrations. Not checked: tests (they assert the stored
- * text) and migrations (a frozen, checksummed record of the schema, which
- * must name the values it writes).
- */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';

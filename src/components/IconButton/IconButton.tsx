@@ -1,9 +1,3 @@
-/**
- * IconButton — the one icon-only button used across the app (the settings
- * gear, the "explain this" info buttons, …), so every icon button looks and
- * behaves the same. Its label is both the tooltip and the accessible name.
- * Icons come from components/icons/Icons.tsx.
- */
 import React from 'react';
 import './IconButton.css';
 

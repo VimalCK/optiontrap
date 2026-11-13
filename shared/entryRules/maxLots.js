@@ -1,7 +1,6 @@
 /**
- * Rule: a trade may not be bigger than a set number of lots (quantity ÷ the
- * instrument's lot size). The trade engine also sizes automated trades with
- * it (tradeLots in index.js): this many lots while it is active, 1 while it is off.
+ * Lots are quantity ÷ the instrument's lot size. The trade engine also sizes
+ * automated trades with this value (tradeLots in index.js).
  */
 
 import { ParamType } from '../tradeEnums.js';

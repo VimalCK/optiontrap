@@ -1,13 +1,5 @@
 /**
- * Request parsing and SQL for the positions endpoints, kept free of the
- * database driver so it can be unit-tested.
- *
- *   GET /api/positions                 open positions plus today's exits
- *   GET /api/positions?status=Closed   exited positions, filtered and paged
- *   GET /api/positions/daily-pnl       P&L and trade count per exit day
- *   GET /api/positions/stats           all-time win/loss figures
- *
- * Dates in requests are market-zone (IST) days, 'YYYY-MM-DD', matched against
+ * Kept free of the database driver so it can be unit-tested. Dates in requests are market-zone (IST) days, 'YYYY-MM-DD', matched against
  * the exit time. exit_time is stored as an ISO-8601 UTC string, which sorts
  * chronologically, so comparing it as text against the ISO instants of
  * market-zone midnights selects whole market days.
@@ -62,7 +54,6 @@ export function parseRange(from, to, { required }) {
 }
 
 /**
- * Validate the query of GET /api/positions.
  * @returns {{ filter: object } | { error: string }}
  */
 export function parsePositionsQuery(query = {}) {
@@ -112,14 +103,12 @@ export function parseDailyPnlQuery(query = {}) {
   return { filter: { mode: mode.mode, from: range.from, to: range.to, segment: segment.segment } };
 }
 
-/** Validate the query of GET /api/positions/stats. */
 export function parseStatsQuery(query = {}) {
   const mode = parseMode(query.mode);
   if (mode.error) return mode;
   return { filter: { mode: mode.mode } };
 }
 
-/** Collects conditions and numbered parameters for one query. */
 function whereBuilder(userId) {
   const params = [userId];
   const conditions = ['user_id = $1'];
@@ -163,10 +152,7 @@ export function buildPositionsQuery(userId, { mode = null, status, from, to, seg
   return { sql, params: where.params };
 }
 
-/**
- * SQL for GET /api/positions/daily-pnl: one row per market-zone exit day,
- * newest first, with columns date ('YYYY-MM-DD'), pnl and trades.
- */
+/** Columns: date ('YYYY-MM-DD'), pnl and trades. */
 export function buildDailyPnlQuery(userId, { mode = null, from, to, segment }) {
   const where = whereBuilder(userId);
   closedConditions(where, { mode, from, to, segment });

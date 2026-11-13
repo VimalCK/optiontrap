@@ -1,7 +1,4 @@
-/**
- * Rule: exit every intraday automated position at a time of day (IST).
- * Positional positions are held over days, so this rule leaves them alone.
- */
+/** Positional positions are held over days, so this rule leaves them alone. */
 import { marketTimeLabel } from '../marketTime.js';
 import { Horizon, ParamType } from '../tradeEnums.js';
 

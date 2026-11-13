@@ -1,14 +1,7 @@
 /**
- * SQL and row mapping for GET /api/automation/results (Win/Loss Patterns in
- * Analytics), kept free of the database driver so it can be unit-tested.
- *
- * It measures a user's closed automated trades entered in a range of market
- * (IST) days: a summary, the same figures grouped by strategy, setup, exit
- * rule, entry time (30-minute IST slots), side and entry day, and the max
- * drawdown. All grouping happens in SQL (one GROUPING SETS scan), so the
- * browser gets totals, never the trades. A trade's P&L is
- * (exit − entry) × quantity, sign flipped for a sell, minus its own charges
- * (shared/paperCharges.js; none for trades closed before charges were kept).
+ * Win/Loss Patterns (GET /api/automation/results). All grouping happens in SQL (one GROUPING SETS scan), so the
+ * browser gets totals, never the trades. A trade's P&L is (exit − entry) × quantity, sign flipped for a sell, minus
+ * its own charges (shared/paperCharges.js; none for trades closed before charges were kept).
  * Served by algo_trades_user_closed_idx (user_id, created_at) WHERE closed.
  */
 import { MARKET_TIME_ZONE, addDays, marketDateTime } from '../shared/marketTime.js';
@@ -27,7 +20,6 @@ const CLOSED_TRADES_SQL = `
   FROM algo_trades
   WHERE user_id = $1 AND stage = ${sqlEnum(LifecycleStage.Closed)} AND created_at >= $2 AND created_at < $3`;
 
-// Which column each GROUPING SETS row is grouped by (All is the summary).
 // Each row groups by one column at most, so COALESCE picks its value.
 export const RESULTS_SQL = `
   WITH closed AS (${CLOSED_TRADES_SQL})
@@ -49,8 +41,7 @@ export const RESULTS_SQL = `
   FROM closed
   GROUP BY GROUPING SETS ((), (strategy_id), (setup), (exit_rule_id), (slot), (side), (day))`;
 
-// The largest fall from a peak of the running P&L, trade by trade in exit
-// order, counting from zero (a first losing trade is a drawdown too).
+// Counted from zero, so a first losing trade is a drawdown too.
 export const MAX_DRAWDOWN_SQL = `
   WITH closed AS (${CLOSED_TRADES_SQL}),
   running AS (SELECT updated_at, id, SUM(pnl) OVER (ORDER BY updated_at, id) AS total FROM closed),
@@ -58,8 +49,7 @@ export const MAX_DRAWDOWN_SQL = `
   SELECT COALESCE(MAX(peak - total), 0) AS max_drawdown FROM peaks`;
 
 /**
- * One group's figures. `key` is the strategy id, setup, exit rule id (null:
- * exited manually), entry slot (minutes after IST midnight), side or day.
+ * `key` is the strategy id, setup, exit rule id (null: exited manually), entry slot (minutes after IST midnight), side or day.
  * @typedef {{ key: string | number | null, trades: number, wins: number, losses: number, pnl: number,
  *             grossProfit: number, grossLoss: number, best: number | null, worst: number | null,
  *             charges: number }} ResultGroup
@@ -93,10 +83,7 @@ function toGroup(row) {
 
 const EMPTY_SUMMARY = toGroup({ dimension: ResultDimension.All, key: null, trades: 0, wins: 0, losses: 0, pnl: 0, gross_profit: 0, gross_loss: 0, charges: 0 });
 
-/**
- * The reply from the two queries' rows: the summary, max drawdown, and each
- * breakdown — time and day in order, the others by P&L, best first.
- */
+/** Time and day breakdowns are in order; the others are by P&L, best first. */
 export function toResults(groupRows, maxDrawdown) {
   /** @type {Record<string, ResultGroup[]>} */
   const groups = Object.fromEntries(Object.values(DIMENSIONS).map((field) => [field, []]));
@@ -119,7 +106,7 @@ export function toResults(groupRows, maxDrawdown) {
   };
 }
 
-/** The query parameters for a range of market days (inclusive). */
+/** Query parameters for a range of market days (inclusive). */
 export function resultsParams(userId, { from, to }) {
   return [userId, marketDateTime(from).toISOString(), marketDateTime(addDays(to, 1)).toISOString(), MARKET_TIME_ZONE];
 }

@@ -12,10 +12,8 @@ export function formatDuration(count: number, unit: string): string {
   return n === 1 ? label : `${n} ${label}s`;
 }
 
-/** The currency plans are priced in, shown as ₹. */
 const RUPEE = 'INR';
 
-/** A plan price's currency prefix: ₹ for rupees, otherwise the code and a space. */
 export const currencySymbol = (code: string) => (code === RUPEE ? '₹' : `${code} `);
 
 export async function getSubscriptionPlans(): Promise<SubscriptionPlan[]> {

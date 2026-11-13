@@ -1,10 +1,3 @@
-/**
- * PnLHeatmap
- * GitHub-style P&L heatmap. Stretches full width.
- * Months are grouped with a visible gap between them.
- * Green = profit, Red = loss, Gray = no trade.
- */
-
 import React, { useMemo } from 'react';
 import { formatNumericDate } from '@/utils/marketStatus';
 import { formatAmount, formatSignedAmount } from '@/utils/formatAmount';
@@ -52,7 +45,6 @@ function addDays(d: Date, n: number): Date {
   return copy;
 }
 
-/** Profit green, loss red, zero plain. */
 const toneClass = (value: number) => (value > 0 ? 'heatmap-positive' : value < 0 ? 'heatmap-negative' : '');
 
 function intensityLevel(pnl: number, maxAbs: number): number {
@@ -74,17 +66,15 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, totals, endDate, mont
   const { monthGroups, winDays, lossDays, totalDays } = useMemo(() => {
     const todayStr = toDateStr(today);
 
-    // Always start from January of the current year, show all 12 months
     const startYear = today.getFullYear();
 
     const groups: MonthGroup[] = [];
 
     for (let m = 0; m < 12; m++) {
       const monthStart = new Date(startYear, m, 1);
-      const monthEnd = new Date(startYear, m + 1, 0); // last day of month
+      const monthEnd = new Date(startYear, m + 1, 0);
       const label = MONTH_NAMES[m];
 
-      // Find the Monday on or before the 1st of this month
       let cursor = new Date(monthStart);
       const dow = cursor.getDay(); // 0=Sun
       const backTo = dow === 0 ? 6 : dow - 1;
@@ -102,7 +92,7 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, totals, endDate, mont
           const inRange = dateStr <= todayStr && inMonth;
 
           if (!inMonth) {
-            week.push(null); // outside this month — empty placeholder
+            week.push(null);
           } else {
             week.push({
               date: dateStr,
@@ -119,7 +109,7 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, totals, endDate, mont
       groups.push({ label, weeks });
     }
 
-    // Stats — only over the filtered dailyPnL passed in
+    // Only over the filtered dailyPnL passed in.
     let wins = 0, losses = 0, traded = 0;
     dailyPnL.forEach((pnl) => {
       traded++;
@@ -177,7 +167,6 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, totals, endDate, mont
 
   return (
     <div className="heatmap-wrapper">
-      {/* Stats */}
       <div className="heatmap-stats">
         <div className="heatmap-stat">
           <span className="heatmap-stat__label" title="Before charges">Total P&L</span>
@@ -211,9 +200,7 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, totals, endDate, mont
         </div>
       </div>
 
-      {/* Chart — full width, months as groups with gap */}
       <div className="heatmap-chart-outer">
-        {/* Day labels column */}
         <div className="heatmap-day-col">
           <div className="heatmap-month-label-spacer" />
           {DAY_LABELS.map((d) => (
@@ -221,13 +208,10 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, totals, endDate, mont
           ))}
         </div>
 
-        {/* Month groups */}
         <div className="heatmap-months-row">
           {monthGroups.map((group, gi) => (
             <div key={gi} className="heatmap-month-group">
-              {/* Month name */}
               <div className="heatmap-month-name">{group.label}</div>
-              {/* Rows: one per day of week */}
               {DAY_LABELS.map((_, dayIdx) => (
                 <div key={dayIdx} className="heatmap-row">
                   {group.weeks.map((week, wi) =>

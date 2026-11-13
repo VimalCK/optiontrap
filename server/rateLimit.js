@@ -1,13 +1,4 @@
-/**
- * In-memory sliding-window rate limiter.
- *
- * Each limiter tracks request counts per key (IP or user) within a
- * configurable time window. When a key exceeds its budget, subsequent
- * requests receive 429 Too Many Requests until the window slides forward.
- *
- * Cleanup runs every 5 minutes to evict expired entries so memory stays
- * bounded even under sustained traffic.
- */
+/** Cleanup every 5 minutes evicts expired entries, so memory stays bounded under sustained traffic. */
 
 import { sendError } from './replies.js';
 
@@ -20,8 +11,6 @@ export function clientIp(req) {
 }
 
 /**
- * Create a rate-limiting middleware.
- *
  * @param {object}   opts
  * @param {number}   opts.windowMs   - Time window in milliseconds (default 60 000)
  * @param {number}   opts.max        - Max requests per key per window (default 60)

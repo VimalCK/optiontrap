@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { loadUnderlyings, loadedUnderlyings, onUnderlyingsChange, type Underlying } from '@/services/underlyings';
 
-/** The F&O underlyings (shared, fetched once, updated when a setting changes); empty until they load. */
+/** F&O underlyings: shared and fetched once, updated when a setting changes; empty until loaded. */
 export function useUnderlyings(): Underlying[] {
   const [list, setList] = useState<Underlying[]>(() => loadedUnderlyings() ?? []);
   useEffect(() => {

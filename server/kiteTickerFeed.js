@@ -1,18 +1,10 @@
 /**
- * The server's own Kite ticker feed: live last prices for a set of
- * instruments, with no browser involved. Used through sharedTickerFeed.js by
- * the trade engine's order service and trade monitor (server/tradeEngine/services/).
+ * Server-side Kite ticker feed in LTP mode (the smallest packet). Prices are market data, the same for every user, so
+ * one feed serves all users.
  *
- * Opens WebSocket connections to wss://ws.kite.trade with one Kite session
- * (the admin's, as the OI snapshots use) and subscribes in LTP mode, the
- * smallest packet: only the last traded price is needed. Prices are market
- * data, the same for every user, so one feed serves all users.
- *
- * Kite allows 3 connections per API key and 3000 instruments per connection,
- * so the instruments are spread over up to 3 connections; any beyond 9000
- * aren't watched and are logged. A dropped connection reconnects; a 403 (the
- * session expired) calls onAuthError instead, since retrying can't help.
- * Ticks are read with the parser shared with the browser (shared/kiteTicks.js).
+ * Kite allows 3 connections per API key and 3000 instruments per connection, so the instruments are spread over up
+ * to 3 connections; any beyond 9000 aren't watched and are logged. A 403 (the session expired) calls onAuthError
+ * instead of reconnecting, since retrying can't help.
  */
 import { WebSocket } from 'ws';
 import { parseTicks } from '../shared/kiteTicks.js';
@@ -26,8 +18,6 @@ const RECONNECT_DELAY_MS = 5000;
 const KITE_TICKER_URL = 'wss://ws.kite.trade';
 
 /**
- * Kite's ticker URL for one Kite login, with the key and token encoded as query values.
- * Used by this feed and by the browser proxy (`/ws` in server/index.js).
  * @param {{ apiKey: string, accessToken: string }} kite
  */
 export function kiteTickerUrl(kite) {
@@ -41,7 +31,6 @@ export function kiteTickerUrl(kite) {
  */
 
 /**
- * Split the instruments into one group per connection, Kite's limits applied.
  * @param {number[]} tokens
  * @returns {{ groups: number[][], unwatched: number[] }}
  */
@@ -54,11 +43,9 @@ export function groupTokens(tokens) {
   return { groups, unwatched: sorted.slice(MAX_CONNECTIONS * MAX_TOKENS_PER_CONNECTION) };
 }
 
-/** A Node Buffer's bytes as the ArrayBuffer the shared parser reads. */
 const toArrayBuffer = (/** @type {Buffer} */ data) => data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
 
 /**
- * One connection and the instruments it is subscribed to.
  * @param {{ url: string, openSocket: OpenSocket, onTicks: (ticks: Tick[]) => void, onAuthError: () => void, log: (message: string) => void }} options
  */
 function createConnection({ url, openSocket, onTicks, onAuthError, log }) {
@@ -122,7 +109,6 @@ function createConnection({ url, openSocket, onTicks, onAuthError, log }) {
 }
 
 /**
- * A feed of last prices for whatever instruments it is told to watch.
  * @param {{
  *   kite: KiteSession,
  *   onTicks: (ticks: Tick[]) => void,

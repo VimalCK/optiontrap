@@ -19,7 +19,6 @@ function winRate(s: SetupStats): string {
   return decided ? `${Math.round((s.target / decided) * 100)}%` : '—';
 }
 
-/** How each setup type has actually played out on one stock since tracking began. */
 const SetupScorecard: React.FC<{
   instrumentToken: number;
   tradingsymbol: string;

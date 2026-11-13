@@ -99,9 +99,6 @@ export function saveCredentials(apiKey: string, apiSecret: string): void {
   localStorage.setItem(CREDS_KEY, JSON.stringify({ apiKey, apiSecret }));
 }
 
-/**
- * Get saved credentials from localStorage
- */
 export function getCredentials(): { apiKey: string; apiSecret: string } | null {
   try {
     const raw = localStorage.getItem(CREDS_KEY);
@@ -114,16 +111,10 @@ export function getCredentials(): { apiKey: string; apiSecret: string } | null {
   }
 }
 
-/**
- * Clear credentials from localStorage
- */
 function clearCredentials(): void {
   localStorage.removeItem(CREDS_KEY);
 }
 
-/**
- * Check if credentials are configured (synchronous, checks localStorage)
- */
 export function hasCredentials(): boolean {
   return getCredentials() !== null;
 }
@@ -142,9 +133,6 @@ export function clearSession(): void {
   cachedSession = null;
 }
 
-/**
- * Get Kite OAuth login URL from server
- */
 export async function getLoginUrl(): Promise<string> {
   const creds = getCredentials();
   if (!creds) throw new Error('No credentials configured');
@@ -230,9 +218,6 @@ export async function logout(): Promise<void> {
   cachedSession = null;
 }
 
-/**
- * Delete account — removes user from server, clears localStorage credentials.
- */
 export async function deleteAccount(): Promise<void> {
   await fetch('/auth/account', {
     method: 'DELETE',

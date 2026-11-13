@@ -26,7 +26,6 @@ export const OI_HISTORY_JOB = 'oi-history-after-close';
 const CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const TRACKED_SCRIP_DAYS = 14;
 
-/** The newest admin session whose Kite token still works, or null. */
 export async function findWorkingAdminSession() {
   const sessions = await getAdminKiteSessions();
   for (const kite of sessions.slice(0, 3)) {
@@ -40,14 +39,12 @@ export async function findWorkingAdminSession() {
   return null;
 }
 
-/** Expiry months to fetch for a scrip: the current month plus any later stored months. */
 async function monthsToFetch(scrip, currentMonth) {
   const stored = await getStoredOiHistoryExpiryMonths(scrip);
   return [...new Set([currentMonth, ...stored.filter((month) => month >= currentMonth)])].sort();
 }
 
 /**
- * Fetch one scrip's months; stops at a refused login.
  * @returns {Promise<boolean>} whether Kite refused the login
  */
 async function fetchScrip(scrip, date, kite, results) {
@@ -65,7 +62,6 @@ async function fetchScrip(scrip, date, kite, results) {
   return false;
 }
 
-/** Re-score a scrip's open trade setup signals with the prices just fetched. */
 async function scoreSignals(scrip) {
   try {
     await evaluateTradeSetupSignalOutcomes(scrip);
@@ -74,7 +70,6 @@ async function scoreSignals(scrip) {
   }
 }
 
-/** Fetch every tracked scrip for `date`, scoring each one's signals after it. */
 async function fetchTrackedScrips({ kite, date, results }) {
   const scrips = await getRecentOiHistoryScrips(daysBefore(date, TRACKED_SCRIP_DAYS));
   console.log(`[Scheduler] ${OI_HISTORY_JOB}: fetching ${date} for ${scrips.join(', ') || 'no tracked scrips'}`);
@@ -95,7 +90,6 @@ const runAfterCloseFetch = createDailyKiteJob({
   work: fetchTrackedScrips,
 });
 
-/** The OI history plug-in: checks every five minutes after the close until today's run is done. */
 export const oiHistoryJob = {
   id: OI_HISTORY_JOB,
   /** @param {import('./tradeEngine/host.js').PluginContext} ctx */

@@ -1,13 +1,6 @@
 /**
- * WinLossPatterns — the Analytics tab that measures closed automated trades,
- * so it shows which strategies, setups, exits and entry times make money.
- *
- * For a range of IST days (by entry): the headline figures, each day's P&L
- * as bars (with a running total), then the same figures grouped by setup,
- * exit, entry time, strategy and side. The server does the grouping
- * (GET /api/automation/results); ratios and names come from winLossStats.ts.
  * P&L is after each trade's charges (shared/paperCharges.js), at the bid / ask fills
- * paper trading uses; the summary also shows the charges paid.
+ * paper trading uses.
  */
 import React, { useEffect, useState } from 'react';
 import { addDays, marketDate } from '../../../shared/marketTime.js';
@@ -23,7 +16,6 @@ import {
 } from './winLossStats';
 import '@/styles/winLoss.css';
 
-/** Wait this long after the last range change before fetching. */
 const FETCH_DELAY_MS = 400;
 /** The range it opens on: the last 30 IST days, today included. */
 const DEFAULT_RANGE_DAYS = 30;
@@ -33,10 +25,9 @@ const amount = (value: number | null) => (value === null ? dash : formatSignedAm
 const percent = (value: number | null) => (value === null ? dash : `${value.toFixed(1)}%`);
 const ratio = (value: number | null) => (value === null ? dash : value.toFixed(2));
 
-/** Profit / loss colour for an amount; none for zero or no value. */
 const toneClass = (value: number | null) => (value === null || value === 0 ? '' : value > 0 ? 'winloss--profit' : 'winloss--loss');
 
-/** Wins against losses as one thin bar: the green share, then the red share (breakeven trades are the rest). */
+/** Wins and losses as one thin bar; breakeven trades are the rest. */
 const WinLossBar: React.FC<{ group: ResultGroup<unknown> }> = ({ group }) => {
   const share = (n: number) => (group.trades > 0 ? (n / group.trades) * 100 : 0);
   return (
@@ -62,7 +53,6 @@ const Stat: React.FC<{ label: string; value: string; tone?: number | null }> = (
   </div>
 );
 
-/** The headline figures, then the supporting ones in a quieter row. */
 const ResultsSummary: React.FC<{ results: AutoTradeResults }> = ({ results: { summary, maxDrawdown } }) => (
   <div className="winloss-summary">
     <div className="winloss-kpis">
@@ -82,7 +72,6 @@ const ResultsSummary: React.FC<{ results: AutoTradeResults }> = ({ results: { su
   </div>
 );
 
-/** One breakdown panel: a row per group with its trades, win rate (and bar), P&L and average P&L. */
 function BreakdownTable<K>({ title, column, groups, label }: {
   title: string; column: string; groups: ResultGroup<K>[]; label: (key: K) => string;
 }) {
@@ -111,7 +100,6 @@ function BreakdownTable<K>({ title, column, groups, label }: {
   );
 }
 
-/** Each day's P&L as a bar from the zero line (hover for the figures), and the same figures as a table on demand. */
 export const DailyPnl: React.FC<{ days: AutoTradeResults['byDay'] }> = ({ days }) => {
   const bars = dailyBars(days);
   const hasLosses = days.some((d) => d.pnl < 0);
@@ -163,7 +151,6 @@ export const DailyPnl: React.FC<{ days: AutoTradeResults['byDay'] }> = ({ days }
   );
 };
 
-/** The figures for a range: the summary, the daily P&L, then every breakdown. */
 export const ResultsView: React.FC<{ results: AutoTradeResults }> = ({ results }) => {
   const { strategies } = useStrategies();
   return (

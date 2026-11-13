@@ -1,6 +1,4 @@
-// Shared access rule for paid features, used by both the HTTP
-// requireSubscription middleware and the /ws live-tick upgrade handler so the
-// two gates cannot drift apart. DB lookups are injected to keep this testable.
+// Shared by the HTTP requireSubscription middleware and the /ws upgrade handler, so the two gates can't drift apart.
 import { AccessDenial, SubscriptionState } from '../shared/appEnums.js';
 
 /** The error code a 402 reply carries when the user has no active subscription. */

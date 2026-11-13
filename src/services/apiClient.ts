@@ -78,7 +78,6 @@ async function request<T>(url: string, options: ApiRequestOptions = {}): Promise
   return parsedBody as T;
 }
 
-/** Request a JSON API response and return its decoded body. */
 export const apiClient = {
   get: <T>(url: string, options?: ApiRequestOptions) => request<T>(url, { ...options, method: 'GET' }),
   post: <T>(url: string, body?: ApiRequestOptions['body'], options?: ApiRequestOptions) => request<T>(url, { ...options, method: 'POST', body }),

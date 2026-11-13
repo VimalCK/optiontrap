@@ -4,7 +4,6 @@
  */
 import { apiClient } from './apiClient';
 
-/** The server's build version. */
 export async function fetchAppVersion(signal?: AbortSignal): Promise<string> {
   const result = await apiClient.get<{ version: string }>('/api/version', { signal });
   return result.version;

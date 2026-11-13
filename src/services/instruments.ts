@@ -1,6 +1,4 @@
 /**
- * Instrument Search Service
- *
  * Fetches the instrument list from the server: NSE equities, NFO F&O, and the
  * BSE stocks that aren't on NSE. The server caches it daily, shared across all users.
  * Provides a fast prefix-match search for the watchlist "add instrument" UI.
@@ -20,7 +18,6 @@ export interface Instrument {
   lotSize: number | null;
 }
 
-/** In-memory cache to avoid repeated server calls within same session */
 let memoryCache: Instrument[] | null = null;
 
 /**
@@ -35,7 +32,6 @@ export async function loadInstruments(): Promise<Instrument[]> {
   return memoryCache;
 }
 
-/** Token → lot size map, built lazily from the loaded instruments cache. */
 let lotSizeByToken: Map<number, number> | null = null;
 
 /**
@@ -54,9 +50,6 @@ export function getLotSizeByToken(instrumentToken: number): number | null {
   return lotSizeByToken.get(instrumentToken) ?? null;
 }
 
-/**
- * Format a short expiry label from a date string (e.g. "2025-06-26" → "26Jun").
- */
 function formatExpiry(expiry: string): string {
   // Parsed as UTC and read back as UTC, so the browser's time zone can't shift the day.
   const d = new Date(Date.parse(expiry.slice(0, 10)));

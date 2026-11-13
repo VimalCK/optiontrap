@@ -1,8 +1,5 @@
 /**
- * ToastStack — the short-lived messages a screen shows after an action (an order
- * placed or refused, a delete that failed), stacked at the top of the window.
- * Screens hold the messages with `useToasts` (src/hooks/useToasts.ts) and render
- * them here, so every screen's toasts look and time out the same way.
+ * Screens hold the messages with `useToasts` (src/hooks/useToasts.ts).
  */
 import React from 'react';
 import './Toast.css';

@@ -26,13 +26,11 @@ const input = (extra = {}) => ({
 });
 const positional = (extra = {}) => input({ horizon: Horizon.Positional, ...extra });
 const positionalMarket = (extra = {}) => positional({ orderType: 'Market', limitPrice: undefined, ...extra });
-/** An order as the database returns it. */
 const stored = (id, extra = {}) => ({
   id, userId: 'U1', tradingsymbol: 'NIFTY26N1024000CE', instrumentToken: 101, instrumentType: 'CE', exchange: 'NFO', strike: 24000,
   optionType: 'CE', expiry: '2026-11-10', side: 'BUY', quantity: 75, orderType: 'Limit', limitPrice: 50, status: 'Open', fillPrice: null, positionId: null,
   closesPosition: false, source: 'Manual', horizon: Horizon.Intraday, autoTradeId: null, ...extra,
 });
-/** An open position as the database returns it. */
 const openPositionRow = (extra = {}) => ({
   id: 'pos9', userId: 'U1', tradingsymbol: 'NIFTY26N1024000CE', instrumentToken: 101, instrumentType: 'CE', exchange: 'NFO',
   side: 'BUY', quantity: 75, entryPrice: 50, horizon: Horizon.Intraday, source: 'Manual', mode: 'Paper', ...extra,

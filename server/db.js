@@ -1,15 +1,4 @@
-/**
- * PostgreSQL Database Manager
- *
- * Persistent storage for OptionTrap backed by PostgreSQL (via `pg`).
- * All exported functions are async.
- *
- * Connection is configured via DATABASE_URL, e.g.
- *   postgres://optiontrap:optiontrap@localhost:5433/optiontrap
- *
- * Credentials (apiKey + apiSecret) are stored ONLY in the client browser's
- * localStorage. The server never persists them.
- */
+/** Credentials (apiKey + apiSecret) live only in the browser's localStorage; the server never persists them. */
 
 import crypto from 'crypto';
 import path from 'path';
@@ -37,34 +26,22 @@ pg.types.setTypeParser(1700, (val) => (val === null ? null : parseFloat(val))); 
 /** @type {pg.Pool | null} */
 let pool = null;
 
-/**
- * Run a query against the pool. Returns the pg result.
- */
 async function query(text, params = []) {
   if (!pool) throw new Error('Database not initialised');
   return pool.query(text, params);
 }
 
-/**
- * Convenience: return all rows for a query.
- */
 async function rows(text, params = []) {
   const res = await query(text, params);
   return res.rows;
 }
 
-/**
- * Convenience: return the first row (or null).
- */
 async function firstRow(text, params = []) {
   const res = await query(text, params);
   return res.rows[0] || null;
 }
 
-/**
- * Initialise the database: create the connection pool and apply pending SQL
- * migrations. Safe to call multiple times.
- */
+/** Safe to call multiple times. */
 export async function initDb() {
   if (pool) return;
 
@@ -89,9 +66,6 @@ export async function initDb() {
 /** Run a query against the pool. For nightly JS jobs; app code uses the named helpers. */
 export { query };
 
-/**
- * Close the pool cleanly. Call on process exit.
- */
 export async function closeDb() {
   if (pool) {
     await pool.end();
@@ -100,14 +74,9 @@ export async function closeDb() {
 }
 
 /**
- * Run `fn` while holding a transaction-scoped Postgres advisory lock.
+ * Cross-process; the lock is released when the transaction ends, even if the process crashes.
  *
- * The lock is cross-process (works across multiple app replicas), so only one
- * caller anywhere runs the critical section at a time; others block until it is
- * released, then proceed. The lock is released automatically when the
- * transaction ends (commit/rollback), even if the process crashes.
- *
- * @param {number} lockKey - Arbitrary constant identifying the lock.
+ * @param {number} lockKey
  * @param {() => Promise<T>} fn
  * @returns {Promise<T>}
  * @template T
@@ -131,22 +100,17 @@ export async function withAdvisoryLock(lockKey, fn) {
 }
 
 /**
- * Hash an arbitrary string into a signed 64-bit BigInt suitable for use as a
- * Postgres advisory-lock key. Uses SHA-256 truncated to 8 bytes.
+ * SHA-256 truncated to 8 bytes, read as a signed 64-bit key.
  *
  * @param {string} value
  * @returns {bigint}
  */
 function advisoryLockKey(value) {
   const hash = crypto.createHash('sha256').update(value).digest();
-  // Read the first 8 bytes as a signed BigInt (pg advisory keys are bigint).
   return hash.readBigInt64BE(0);
 }
 
 /**
- * Run `fn` while holding a transaction-scoped advisory lock derived from a
- * string name. Different names lock independently; the same name serializes.
- *
  * @param {string} name
  * @param {() => Promise<T>} fn
  * @returns {Promise<T>}
@@ -157,9 +121,7 @@ export async function withNamedAdvisoryLock(name, fn) {
 }
 
 /**
- * Take a named advisory lock for as long as this process wants it (the trade
- * engine: one running engine across servers), on a connection of its own.
- * Returns null when another process holds it. `onLost` is called if the
+ * Held on a connection of its own until released (one trade engine across servers). `onLost` runs if that
  * connection drops, which frees the lock for another process.
  * @param {string} name
  * @param {() => void} onLost
@@ -199,10 +161,6 @@ export async function tryHoldNamedAdvisoryLock(name, onLost) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// User CRUD
-// ---------------------------------------------------------------------------
-
 export async function upsertUser(userId, userName) {
   await query(
     `INSERT INTO users (user_id, user_name, updated_at)
@@ -218,18 +176,11 @@ export async function deleteUser(userId) {
   await query('DELETE FROM users WHERE user_id = $1', [userId]);
 }
 
-/**
- * Whether a user has the admin role. Admins bypass subscription checks and
- * can access the admin-only endpoints.
- */
+/** Admins bypass subscription checks. */
 export async function isUserAdmin(userId) {
   const row = await firstRow('SELECT is_admin FROM users WHERE user_id = $1', [userId]);
   return Boolean(row?.is_admin);
 }
-
-// ---------------------------------------------------------------------------
-// Subscription CRUD
-// ---------------------------------------------------------------------------
 
 function mapPlan(row) {
   if (!row) return null;
@@ -273,7 +224,6 @@ function formatDbTimestamp(date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-/** Add a plan's duration to a base date and return a new Date. */
 function addPlanDuration(fromDate, durationCount, durationUnit) {
   const d = new Date(fromDate.getTime());
   const count = Math.max(1, parseInt(durationCount, 10) || 1);
@@ -303,7 +253,6 @@ function getPlanExpiryDate(durationCount, durationUnit) {
   return addPlanDuration(new Date(), durationCount, durationUnit);
 }
 
-/** Parse a stored 'YYYY-MM-DD HH:MI:SS' timestamp into a Date. */
 function parseDbTimestamp(value) {
   if (!value) return null;
   const d = new Date(value.replace(' ', 'T'));
@@ -341,7 +290,7 @@ export async function getUserSubscription(userId) {
   return mapSubscription(row);
 }
 
-/** The asked-for plan doesn't exist or isn't active; the message is safe to show the user. */
+/** The message is safe to show the user. */
 export class SubscriptionPlanNotFoundError extends Error {
   constructor() {
     super('Subscription plan not found');
@@ -355,7 +304,6 @@ async function defaultPlanId() {
   return row?.id;
 }
 
-/** Activate a plan for a user (the default plan when `planId` is left out). */
 export async function activateSubscription(userId, planId, provider = SubscriptionProvider.Internal) {
   const plan = await requirePlan(planId ?? await defaultPlanId());
 
@@ -394,11 +342,6 @@ export async function activateSubscription(userId, planId, provider = Subscripti
   return getUserSubscription(userId);
 }
 
-// ---------------------------------------------------------------------------
-// Admin: subscription management & user listing
-// ---------------------------------------------------------------------------
-
-/** Upsert the user's single subscription row with explicit dates/status. */
 async function setUserSubscription(userId, planId, startsAt, expiresAt, status, provider = SubscriptionProvider.Admin) {
   const existing = await firstRow(
     'SELECT id FROM subscriptions WHERE user_id = $1 ORDER BY updated_at DESC LIMIT 1',
@@ -433,7 +376,6 @@ async function requirePlan(planId) {
   return plan;
 }
 
-/** Activate a fresh subscription from now. */
 export async function adminActivateSubscription(userId, planId) {
   const plan = await requirePlan(planId);
   const startsAt = formatDbTimestamp(new Date());
@@ -470,7 +412,6 @@ export async function adminCancelSubscription(userId) {
   return getUserSubscription(userId);
 }
 
-/** List all registered users with subscription, last login and feedback count. */
 export async function getAdminUsers() {
   const result = await rows(
     `SELECT
@@ -519,10 +460,6 @@ export async function getAdminUsers() {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Feedback
-// ---------------------------------------------------------------------------
-
 export async function createFeedback({ userId, type, message, pageUrl, userAgent }) {
   const id = crypto.randomUUID();
 
@@ -559,10 +496,6 @@ function mapFeedback(row) {
   };
 }
 
-/**
- * List feedback for the admin inbox, newest first. Optional filters by type
- * and status. Joins users so the admin sees who submitted each item.
- */
 export async function getFeedbackList({ type, status } = {}) {
   const conditions = [];
   const params = [];
@@ -594,9 +527,6 @@ export async function getFeedbackList({ type, status } = {}) {
   return result.map(mapFeedback);
 }
 
-/**
- * Update a feedback item's status. Returns true if a row was updated.
- */
 export async function updateFeedbackStatus(id, status) {
   const result = await query(
     `UPDATE feedback
@@ -618,11 +548,6 @@ export async function getFeedbackCounts() {
   return { total: row?.total || 0, open: row?.open || 0 };
 }
 
-// ---------------------------------------------------------------------------
-// Diagnostics (admin health page)
-// ---------------------------------------------------------------------------
-
-/** Simple connectivity probe — resolves true if the DB answers a trivial query. */
 export async function pingDb() {
   try {
     await query('SELECT 1');
@@ -632,7 +557,6 @@ export async function pingDb() {
   }
 }
 
-/** Total registered users and count of currently-active (non-expired) sessions. */
 export async function getUsageStats() {
   const sessions = await firstRow(
     'SELECT COUNT(*) FILTER (WHERE expires > $1)::int AS active FROM sessions',
@@ -645,10 +569,6 @@ export async function getUsageStats() {
     totalUsers: users?.total || 0,
   };
 }
-
-// ---------------------------------------------------------------------------
-// Session CRUD (for express-session store)
-// ---------------------------------------------------------------------------
 
 export async function getSessionById(sid) {
   const row = await firstRow('SELECT data, expires FROM sessions WHERE sid = $1', [sid]);
@@ -692,10 +612,6 @@ export async function cleanExpiredSessions() {
   const res = await query('DELETE FROM sessions WHERE expires < $1', [Date.now()]);
   return res.rowCount;
 }
-
-// ---------------------------------------------------------------------------
-// Watchlist CRUD
-// ---------------------------------------------------------------------------
 
 export async function createWatchlist(userId, name) {
   const id = crypto.randomUUID();
@@ -773,7 +689,6 @@ export async function deleteWatchlist(id, userId) {
   const owner = await firstRow('SELECT id FROM watchlists WHERE id = $1 AND user_id = $2', [id, userId]);
   if (!owner) return false;
 
-  // watchlist_items has ON DELETE CASCADE, but delete explicitly to mirror old behavior.
   await query('DELETE FROM watchlist_items WHERE watchlist_id = $1', [id]);
   await query('DELETE FROM watchlists WHERE id = $1', [id]);
   return true;
@@ -807,10 +722,7 @@ export async function addWatchlistItem(watchlistId, userId, { instrumentToken, t
   return { id, instrumentToken, tradingsymbol, exchange: exchange || Exchange.NSE, sortOrder };
 }
 
-/**
- * Put a watchlist's items in the given order. `itemIds` must list every item in
- * the list exactly once; returns false otherwise or when the list isn't the user's.
- */
+/** `itemIds` must list every item exactly once; false otherwise, or when the list isn't the user's. */
 export async function reorderWatchlistItems(watchlistId, userId, itemIds) {
   const owner = await firstRow('SELECT id FROM watchlists WHERE id = $1 AND user_id = $2', [watchlistId, userId]);
   if (!owner) return false;
@@ -841,10 +753,6 @@ export async function removeWatchlistItem(itemId, userId) {
   return true;
 }
 
-// ---------------------------------------------------------------------------
-// Price alerts (per user)
-// ---------------------------------------------------------------------------
-
 const PRICE_ALERT_COLUMNS = `id, instrument_token, tradingsymbol, exchange, condition, value, note,
   browser_notification, status, triggered_at, triggered_price, created_at`;
 
@@ -865,7 +773,6 @@ function toPriceAlert(row) {
   };
 }
 
-/** The user's alerts, newest first. */
 export async function getPriceAlerts(userId) {
   const result = await rows(
     `SELECT ${PRICE_ALERT_COLUMNS} FROM price_alerts WHERE user_id = $1 ORDER BY created_at DESC`,
@@ -911,13 +818,6 @@ export async function deletePriceAlert(id, userId) {
   return res.rowCount > 0;
 }
 
-// ---------------------------------------------------------------------------
-// Trade automation (per user; see shared/automation.js). These return the
-// configuration as stored; server/tradeEngine/automationConfigs.js completes it
-// with the defaults.
-// ---------------------------------------------------------------------------
-
-/** The user's stored automation configuration, or undefined if none is saved. */
 export async function getStoredAutomationConfig(userId) {
   const row = await firstRow('SELECT config FROM algo_configuration WHERE user_id = $1', [userId]);
   return row?.config;
@@ -935,8 +835,7 @@ export async function storeAutomationConfig(userId, config) {
 }
 
 /**
- * The stored automation configurations of these users who saved one, by user
- * id. Served by the algo_configuration primary key.
+ * Served by the algo_configuration primary key.
  * @param {string[]} userIds
  * @returns {Promise<Map<string, any>>}
  */
@@ -946,8 +845,7 @@ export async function getStoredAutomationConfigs(userIds) {
 }
 
 /**
- * Users with automation switched on, each with their stored configuration, for
- * the trade engine. Served by algo_configuration_enabled_idx.
+ * Served by algo_configuration_enabled_idx.
  * @returns {Promise<{ userId: string, config: any }[]>}
  */
 export async function getStoredAutomatedUsers() {
@@ -956,8 +854,6 @@ export async function getStoredAutomatedUsers() {
 }
 
 /**
- * Record a newly selected automated trade (LifecycleStage.Selected) with its first
- * event, in one transaction. Returns the new trade's id.
  * @param {string} userId
  * @param {{ horizon: import('../shared/tradeEnums.js').HorizonId, kind: string, mode: string, tradingsymbol: string, instrumentToken: number, side: string, quantity: number }} trade
  * @param {{ strategyId: string, setup?: string | null, reason: string }} detail  why it was selected; the
@@ -987,11 +883,8 @@ export async function createAutoTrade(userId, trade, detail) {
 }
 
 /**
- * Move one of the user's automated trades from stage `from` to `to`, with an
- * event, in one transaction. Only a trade still at `from` moves, so a stage
- * is never skipped or applied twice (the allowed moves are canMoveTo in
- * shared/automation.js). Optionally sets the reason, entry price and position.
- * Returns whether it moved. Served by the algo_trades primary key.
+ * Only a trade still at `from` moves, so a stage is never skipped or applied twice (allowed moves: canMoveTo in
+ * shared/automation.js). Served by the algo_trades primary key.
  * @param {string} userId
  * @param {string} id
  * @param {string} from
@@ -1023,8 +916,7 @@ export async function advanceAutoTrade(userId, id, from, to, fields, detail) {
 }
 
 /**
- * The user's booked P&L today, after charges, from automated paper positions
- * exited since `todayStart` (ISO). Served by positions_closed_idx (user_id, mode, exit_time).
+ * Served by positions_closed_idx (user_id, mode, exit_time).
  * @param {string} userId
  * @param {string} todayStart
  */
@@ -1040,9 +932,7 @@ export async function getTodayAutoRealisedPnl(userId, todayStart) {
 }
 
 /**
- * Each instrument's latest automated paper exit since `todayStart` (ISO), for
- * the Wait after exit entry rule. Served by positions_closed_idx (user_id,
- * mode, exit_time).
+ * For the Wait after exit entry rule. Served by positions_closed_idx (user_id, mode, exit_time).
  * @param {string} userId
  * @param {string} todayStart
  * @returns {Promise<{ instrumentToken: number, exitTime: Date }[]>}
@@ -1059,9 +949,7 @@ export async function getTodayAutoExits(userId, todayStart) {
 }
 
 /**
- * Every user's open intraday paper positions opened before `before` (sessions
- * that have ended), oldest first, for the session square-off. Served by
- * positions_open_intraday_idx.
+ * Served by positions_open_intraday_idx.
  * @param {string} before  ISO timestamp
  */
 export async function getOpenIntradayPositionsBefore(before) {
@@ -1072,13 +960,13 @@ export async function getOpenIntradayPositionsBefore(before) {
   return result.map(mapPositionRow);
 }
 
-/** Every user's open automated paper positions, for the trade monitor. Served by positions_open_auto_idx. */
+/** Served by positions_open_auto_idx. */
 export async function getAllOpenAutoPositions() {
   const result = await rows(`SELECT * FROM positions WHERE source = ${sqlEnum(TradeSource.Auto)} AND NOT exited AND mode = ${sqlEnum(TradingMode.Paper)}`);
   return result.map(mapPositionRow);
 }
 
-/** One user's open automated paper positions, for the trade monitor. Served by positions_open_auto_idx. */
+/** Served by positions_open_auto_idx. */
 export async function getOpenAutoPositions(userId) {
   const result = await rows(
     `SELECT * FROM positions WHERE user_id = $1 AND source = ${sqlEnum(TradeSource.Auto)} AND NOT exited AND mode = ${sqlEnum(TradingMode.Paper)}`,
@@ -1088,13 +976,9 @@ export async function getOpenAutoPositions(userId) {
 }
 
 /**
- * Close the user's executed automated trades behind a position that was just
- * exited: each gets the exit price and stage Closed, with an event saying
- * why (`detail`; its ruleId is kept as exit_rule_id), and its own charges:
- * its entry and exit at its own prices (shared/paperCharges.js), since merged
- * trades share one position at the average price. One transaction, so a trade
- * is never closed without its event. Served by algo_trades_position_idx.
- * Returns the ids closed.
+ * Each trade's own charges: its entry and exit at its own prices (shared/paperCharges.js), since merged trades share
+ * one position at the average price. One transaction, so a trade is never closed without its event.
+ * Served by algo_trades_position_idx.
  * @param {string} userId
  * @param {{ id: string, instrumentType: string }} position  the position just exited
  * @param {number} exitPrice
@@ -1158,7 +1042,6 @@ function toAutoTrade(row) {
     reason: row.reason,
     entryPrice: row.entry_price,
     exitPrice: row.exit_price,
-    /** Its own charges once closed (entry and exit at its own prices). */
     charges: row.charges == null ? null : Number(row.charges),
     positionId: row.position_id,
     createdAt: row.created_at.toISOString(),
@@ -1167,11 +1050,7 @@ function toAutoTrade(row) {
   };
 }
 
-/**
- * The user's automated trades created from `from` to `to` (market days,
- * inclusive), newest first, each with its lifecycle events in order. Served by
- * algo_trades_user_created_idx (user_id, created_at DESC).
- */
+/** Served by algo_trades_user_created_idx (user_id, created_at DESC). */
 export async function getAutoTrades(userId, { from, to }) {
   const result = await rows(
     `SELECT t.*,
@@ -1185,20 +1064,12 @@ export async function getAutoTrades(userId, { from, to }) {
   return result.map(toAutoTrade);
 }
 
-/**
- * Win/Loss Patterns: the user's closed automated trades entered from `from`
- * to `to` (market days, inclusive), measured and grouped in SQL
- * (server/autoTradeResults.js). Served by algo_trades_user_closed_idx.
- */
+/** Served by algo_trades_user_closed_idx. */
 export async function getAutoTradeResults(userId, range) {
   const params = resultsParams(userId, range);
   const [groups, drawdown] = await Promise.all([rows(RESULTS_SQL, params), firstRow(MAX_DRAWDOWN_SQL, params)]);
   return toResults(groups, drawdown.max_drawdown);
 }
-
-// ---------------------------------------------------------------------------
-// Instruments (shared across all users)
-// ---------------------------------------------------------------------------
 
 /** The instruments_meta key holding the IST date the instrument list was last fetched. */
 const INSTRUMENTS_FETCHED_DATE_KEY = 'last_fetched_date';
@@ -1226,10 +1097,7 @@ export async function getInstruments() {
 }
 
 /**
- * Insert rows with multi-row INSERT statements (one round trip per batch rather
- * than per row). `rowValues` is an array of per-row value arrays in column order;
- * `suffix` is the trailing ON CONFLICT clause. With ON CONFLICT DO UPDATE the
- * caller must de-duplicate rows by the conflict key first — Postgres rejects a
+ * With ON CONFLICT DO UPDATE the caller must de-duplicate rows by the conflict key first: Postgres rejects a
  * statement that would update the same row twice.
  */
 async function insertInBatches(client, insertPrefix, suffix, rowValues, batchSize = 1000) {
@@ -1258,9 +1126,8 @@ function firstPerKey(items, keyOf) {
 }
 
 /**
- * Our own columns on an underlying's price row (the instruments table in 000_base_schema.sql). The sync keeps
- * them, and resets them to their defaults when Zerodha gives a token to a
- * different tradingsymbol, so a setting never moves to another instrument.
+ * Reset to their defaults when Zerodha gives a token to a different tradingsymbol, so a setting never moves to
+ * another instrument.
  */
 const UNDERLYING_COLUMN_DEFAULTS = {
   fno_name: 'NULL',
@@ -1271,10 +1138,7 @@ const UNDERLYING_COLUMN_DEFAULTS = {
 };
 
 /**
- * Sync the instruments table to Zerodha's latest list, in one transaction:
- * update rows whose token is still listed, add new tokens, and delete tokens
- * no longer listed (expired contracts, delisted stocks). Rows are updated in
- * place rather than the table being wiped, so readers never see it empty.
+ * Rows are updated in place rather than the table being wiped, so readers never see it empty.
  * `stamp` is stored as the load marker (see instruments.js).
  *
  * @returns {Promise<{ added: number, updated: number, removed: number }>}
@@ -1352,15 +1216,7 @@ export async function saveInstruments(instruments, stamp) {
   }
 }
 
-// ---------------------------------------------------------------------------
-// Positions CRUD
-// ---------------------------------------------------------------------------
-
-/**
- * List a user's positions. By default, open positions plus those exited
- * today; with status Closed, a filtered page of exited positions. The
- * filter comes from parsePositionsQuery (positionsQuery.js).
- */
+/** The filter comes from parsePositionsQuery (positionsQuery.js). */
 export async function getPositions(userId, filter = {}) {
   const todayStart = new Date(getTodayMidnight()).toISOString();
   const { sql, params } = buildPositionsQuery(userId, { ...filter, todayStart });
@@ -1369,7 +1225,6 @@ export async function getPositions(userId, filter = {}) {
 }
 
 /**
- * P&L and trade count per market-zone exit day, newest first.
  * The filter comes from parseDailyPnlQuery (positionsQuery.js).
  * @returns {Promise<{ date: string, pnl: number, trades: number }[]>}
  */
@@ -1379,7 +1234,6 @@ export async function getDailyPnl(userId, filter) {
   return result.map((row) => ({ date: row.date, pnl: Number(row.pnl), charges: Number(row.charges), trades: Number(row.trades) }));
 }
 
-/** All-time win/loss figures over a user's exited positions. */
 export async function getPositionStats(userId, { mode = null } = {}) {
   const todayStart = new Date(getTodayMidnight()).toISOString();
   const queries = buildStatsQueries(userId, { mode, todayStart });
@@ -1431,11 +1285,7 @@ function mapPositionRow(row) {
   };
 }
 
-/**
- * Close an open position row at `exitPrice` with its charges (its entry and
- * exit orders, shared/paperCharges.js). Only a row still open closes; returns
- * the closed row, or null if it was closed meanwhile.
- */
+/** Only a row still open closes; null if it was closed meanwhile. */
 async function closePositionRow(row, exitPrice, exitTime) {
   const charges = roundTripCharges({
     instrumentType: row.instrument_type,
@@ -1476,7 +1326,6 @@ function instrumentColumns(position) {
   };
 }
 
-/** Insert one new open position of `quantity` and return it. */
 async function insertPosition(userId, mode, position, quantity, now) {
   const { strike, optionType, expiry } = instrumentColumns(position);
   const row = await firstRow(
@@ -1511,7 +1360,6 @@ export async function addPosition(userId, position) {
     [userId, mode, position.instrumentToken, side, source, position.horizon],
   );
 
-  // Same-side existing → average in
   const sameSide = await openSameSource(position.side);
 
   if (sameSide) {
@@ -1539,7 +1387,6 @@ export async function addPosition(userId, position) {
     });
   }
 
-  // Opposite-side existing → net out
   const opposite = await openSameSource(oppositeSide(position.side));
 
   if (opposite) {
@@ -1557,25 +1404,19 @@ export async function addPosition(userId, position) {
       return mapPositionRow({ ...opposite, quantity: oppQty - position.quantity });
     }
 
-    // Over-close — close existing, open remainder in new side
     await closePositionRow(opposite, position.entryPrice, now);
     return insertPosition(userId, mode, position, position.quantity - oppQty, now);
   }
 
-  // No existing — open fresh
   return insertPosition(userId, mode, position, position.quantity, now);
 }
 
-/** One of a user's open positions, or null if there's no such open position. */
 export async function getOpenPosition(id, userId) {
   const row = await firstRow('SELECT * FROM positions WHERE id = $1 AND user_id = $2 AND NOT exited', [id, userId]);
   return row ? mapPositionRow(row) : null;
 }
 
-/**
- * Exit one of a user's open positions at `exitPrice`, with its charges.
- * Returns the exited position, or null if it is not open (any more).
- */
+/** Null if it is not open (any more). */
 export async function exitPositionById(id, userId, exitPrice, exitTime = new Date()) {
   const row = await firstRow('SELECT * FROM positions WHERE id = $1 AND user_id = $2 AND NOT exited', [id, userId]);
   if (!row) return null;
@@ -1583,11 +1424,6 @@ export async function exitPositionById(id, userId, exitPrice, exitTime = new Dat
   return closed ? mapPositionRow(closed) : null;
 }
 
-// ---------------------------------------------------------------------------
-// Orders (see shared/paperOrders.js and server/tradeEngine/services/orders.js)
-// ---------------------------------------------------------------------------
-
-/** An orders row as the app's order object. */
 function toOrder(row) {
   return {
     id: row.id,
@@ -1624,10 +1460,8 @@ function toOrder(row) {
 }
 
 /**
- * Record a new open order (limit or market) for the user and return it. Who
- * placed it is set by the caller, never read from the order: by hand
- * (Manual), or by the trade engine for an automated trade (Auto, with that
- * trade's id).
+ * Who placed it is set by the caller, never read from the order: by hand (Manual), or by the trade engine for an
+ * automated trade (Auto, with that trade's id).
  * @param {string} userId
  * @param {import('../shared/paperOrders.js').Order} order
  * @param {{ source?: import('../shared/tradeEnums.js').TradeSourceId, autoTradeId?: string | null }} [placedBy]
@@ -1646,9 +1480,7 @@ export async function createOrder(userId, order, { source = TradeSource.Manual, 
 }
 
 /**
- * Record the filled order that closed one of the user's positions (an exit):
- * the opposite side for the whole quantity, at `fillPrice`. Who placed it is
- * set by the caller: by hand (Manual) or an exit rule (Auto).
+ * Who placed it is set by the caller: by hand (Manual) or an exit rule (Auto).
  * @param {string} userId
  * @param {{ id: string, tradingsymbol: string, instrumentToken: number, instrumentType: string, exchange: string,
  *           strike: number | null, optionType: string | null, expiry: string | null, side: string, quantity: number,
@@ -1670,9 +1502,7 @@ export async function recordClosingOrder(userId, position, fillPrice, source) {
 }
 
 /**
- * The user's automated limit orders still waiting to fill, for the entry
- * rules (each counts as the position it will open). Served by
- * orders_open_auto_idx.
+ * Each counts as the position it will open, for the entry rules. Served by orders_open_auto_idx.
  * @param {string} userId
  * @returns {Promise<{ instrumentToken: number }[]>}
  */
@@ -1681,10 +1511,7 @@ export async function getWaitingAutoOrders(userId) {
   return result.map((row) => ({ instrumentToken: Number(row.instrument_token) }));
 }
 
-/**
- * The user's orders placed from `from` to `to` (market days, inclusive),
- * newest first. Served by orders_user_created_idx (user_id, created_at DESC).
- */
+/** Served by orders_user_created_idx (user_id, created_at DESC). */
 export async function getOrders(userId, { from, to }) {
   const result = await rows(
     `SELECT * FROM orders
@@ -1695,29 +1522,19 @@ export async function getOrders(userId, { from, to }) {
   return result.map(toOrder);
 }
 
-/**
- * The user's open orders, whenever they were placed, newest first (the
- * Pending tab). Served by orders_user_open_idx.
- */
+/** Served by orders_user_open_idx. */
 export async function getUserOpenOrders(userId) {
   const result = await rows(`SELECT * FROM orders WHERE user_id = $1 AND status = ${sqlEnum(OrderStatus.Open)} ORDER BY created_at DESC`, [userId]);
   return result.map(toOrder);
 }
 
-/**
- * Every user's open orders placed at or after `since` (an ISO time), oldest
- * first, for the order book. Served by orders_open_idx.
- */
+/** Served by orders_open_idx. */
 export async function getOpenOrders(since) {
   const result = await rows(`SELECT * FROM orders WHERE status = ${sqlEnum(OrderStatus.Open)} AND created_at >= $1 ORDER BY created_at`, [since]);
   return result.map(toOrder);
 }
 
-/**
- * Mark an open order filled at `fillPrice`, only if it is still open, so an
- * order fills once even when a cancel or another tick races it. Returns the
- * filled order, or null when it was no longer open. Served by the primary key.
- */
+/** Only if still open, so an order fills once even when a cancel or another tick races it. Served by the primary key. */
 export async function claimOrderFill(id, fillPrice) {
   const row = await firstRow(
     `UPDATE orders SET status = ${sqlEnum(OrderStatus.Filled)}, fill_price = $2, updated_at = now()
@@ -1733,12 +1550,7 @@ export async function setOrderPosition(id, positionId) {
   await query('UPDATE orders SET position_id = $2, updated_at = now() WHERE id = $1', [id, positionId]);
 }
 
-/**
- * Cancel an order that was claimed for a fill but whose trade was refused
- * (e.g. the market closed in between), with the refusal as the reason.
- * Returns the cancelled order, or null when it wasn't such an order.
- * Served by the primary key.
- */
+/** For an order claimed for a fill whose trade was then refused (e.g. the market closed in between). Served by the primary key. */
 export async function cancelUnfilledOrder(id, reason) {
   const row = await firstRow(
     `UPDATE orders SET status = ${sqlEnum(OrderStatus.Cancelled)}, status_reason = $2, fill_price = NULL, updated_at = now()
@@ -1749,10 +1561,7 @@ export async function cancelUnfilledOrder(id, reason) {
   return row ? toOrder(row) : null;
 }
 
-/**
- * Cancel one of the user's orders if it is still open. Returns the cancelled
- * order, or null when there is no such open order. Served by the primary key.
- */
+/** Served by the primary key. */
 export async function cancelOrder(userId, id, reason) {
   const row = await firstRow(
     `UPDATE orders SET status = ${sqlEnum(OrderStatus.Cancelled)}, status_reason = $3, updated_at = now()
@@ -1763,11 +1572,7 @@ export async function cancelOrder(userId, id, reason) {
   return row ? toOrder(row) : null;
 }
 
-/**
- * Cancel every user's open orders placed before `before` (an ISO time), with
- * `reason`: at the market close, and any left open from an earlier day.
- * Returns the cancelled orders. Served by orders_open_idx.
- */
+/** Run at the market close, and for any order left open from an earlier day. Served by orders_open_idx. */
 export async function cancelOpenOrdersPlacedBefore(before, reason) {
   const result = await rows(
     `UPDATE orders SET status = ${sqlEnum(OrderStatus.Cancelled)}, status_reason = $2, updated_at = now()
@@ -1777,10 +1582,6 @@ export async function cancelOpenOrdersPlacedBefore(before, reason) {
   );
   return result.map(toOrder);
 }
-
-// ---------------------------------------------------------------------------
-// OI Snapshots (shared across all users)
-// ---------------------------------------------------------------------------
 
 /** Epoch ms of market-zone midnight starting the day that contains `timestamp` (default: now). */
 function getTodayMidnight(timestamp = Date.now()) {
@@ -1792,7 +1593,6 @@ function roundTo10Min(timestamp) {
   return Math.floor(timestamp / TEN_MIN) * TEN_MIN;
 }
 
-/** The per-token maps a snapshot row holds beside OI (`data`): field → column. */
 const OI_SNAPSHOT_MAPS = {
   prices: 'prices',
   close: 'close',
@@ -1876,16 +1676,12 @@ export async function getLatestOiSnapshotTimestamp() {
   return row && row.ts !== null ? Number(row.ts) : null;
 }
 
-/**
- * The time (ms) of the newest OI snapshot whatever its day, or null with none,
- * for Admin Services. Served by the unique index on timestamp (one entry read).
- */
+/** Served by the unique index on timestamp (one entry read). */
 export async function getNewestOiSnapshotTimestamp() {
   const row = await firstRow('SELECT MAX(timestamp) AS ts FROM oi_snapshots');
   return row && row.ts !== null ? Number(row.ts) : null;
 }
 
-/** Instrument tokens (as strings) with OI in any of today's snapshots. */
 export async function getTodayOiSnapshotTokens() {
   const result = await rows(
     'SELECT DISTINCT jsonb_object_keys(data::jsonb) AS token FROM oi_snapshots WHERE timestamp >= $1',
@@ -1893,10 +1689,6 @@ export async function getTodayOiSnapshotTokens() {
   );
   return result.map((r) => r.token);
 }
-
-// ===========================================================================
-// OI History
-// ===========================================================================
 
 export async function createOiHistoryTable() {
   await query(`
@@ -2085,7 +1877,7 @@ export async function getTradeSetupSignals(userId, { scrip = null, limit = 100 }
   );
 }
 
-/** Hide one of the user's signals from the grid and stats. Returns false if it wasn't theirs or is already deleted. */
+/** Returns false if it wasn't theirs or is already deleted. */
 export async function deleteTradeSetupSignal(userId, signalId) {
   const row = await firstRow(
     `UPDATE trade_setup_signals SET deleted_at = to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
@@ -2110,15 +1902,9 @@ export async function updateTradeSetupSignalOutcome(userId, signalId, outcome) {
 }
 
 /**
- * Mark-to-market every open trade setup signal (all users) from stored OI
- * history. Runs on the server so signals are scored even when nobody opens
- * that strike in the browser.
- *
- * The price path starts at the signal date's close. Once the latest stored
- * date for the scrip reaches the expiry, the signal is final. If the option's
- * own expiry-day close was never stored (the contract drops out of the
- * instruments list after expiry, so a later fetch can't get it), the expiry
- * price falls back to intrinsic value from that day's stored spot close.
+ * Runs on the server so signals are scored even when nobody opens that strike. If the option's own expiry-day close
+ * was never stored (the contract drops out of the instruments list after expiry), the expiry price falls back to
+ * intrinsic value from that day's stored spot close.
  */
 export async function evaluateTradeSetupSignalOutcomes(scrip = null) {
   const signals = await rows(
@@ -2168,7 +1954,6 @@ export async function evaluateTradeSetupSignalOutcomes(scrip = null) {
       }
     }
 
-    // The first point is the entry day; without a later price there is nothing to measure.
     if (path.length < 2) continue;
 
     const entry = Number(signal.entry_premium);
@@ -2308,7 +2093,6 @@ export async function getStoredOiHistoryExpiryMonths(scrip) {
   return result.map((r) => r.month);
 }
 
-/** Scrips with OI history stored on or after `sinceDate` (YYYY-MM-DD) — the ones being tracked. */
 export async function getRecentOiHistoryScrips(sinceDate) {
   const result = await rows(
     'SELECT DISTINCT scrip FROM oi_history_options WHERE date >= $1 ORDER BY scrip',
@@ -2317,14 +2101,7 @@ export async function getRecentOiHistoryScrips(sinceDate) {
   return result.map((r) => r.scrip);
 }
 
-// ---------------------------------------------------------------------------
-// Scheduled jobs
-// ---------------------------------------------------------------------------
-
-/**
- * Kite sessions of admins that haven't expired, newest login first. Scheduled
- * jobs fetch shared market data with an admin's token, never another user's.
- */
+/** Scheduled jobs fetch shared market data with an admin's token, never another user's. */
 export async function getAdminKiteSessions() {
   // Only admin sessions are read (sessions_admin_idx), not every user's.
   const result = await rows('SELECT data FROM sessions WHERE is_admin AND expires > $1', [Date.now()]);
@@ -2410,7 +2187,6 @@ export async function getScheduledJobRunsOn(jobs, runDate) {
   return found.map((row) => ({ job: row.job, status: row.status, detail: row.detail }));
 }
 
-/** Runs of every job whose name starts with `prefix`, newest first. */
 export async function getScheduledJobRunsByPrefix(prefix, limit = 50) {
   return rows(
     `SELECT job, run_date, status, detail, started_at, finished_at FROM scheduled_job_runs
@@ -2491,12 +2267,10 @@ async function queryUnderlyings(name = null) {
   }));
 }
 
-/** Every F&O underlying, by name. */
 export async function getUnderlyings() {
   return queryUnderlyings();
 }
 
-/** One F&O underlying by its F&O name ("NIFTY", "RELIANCE"), or null. */
 export async function getUnderlying(name) {
   return (await queryUnderlyings(name))[0] ?? null;
 }
@@ -2510,16 +2284,11 @@ export async function getMarketReference() {
   return row ? { instrumentToken: Number(row.instrument_token), label: row.label || row.tradingsymbol } : null;
 }
 
-/** F&O names of the underlyings marked always_snapshot. */
 export async function getAlwaysSnapshotSymbols() {
   const result = await rows('SELECT COALESCE(fno_name, tradingsymbol) AS name FROM instruments WHERE always_snapshot ORDER BY 1');
   return result.map((r) => r.name);
 }
 
-/**
- * Set always_snapshot on an underlying's price row. Returns the updated
- * underlying, or null when the name has no price row.
- */
 export async function setAlwaysSnapshot(name, alwaysSnapshot) {
   const underlying = await getUnderlying(name);
   if (!underlying?.instrumentToken) return null;
@@ -2551,8 +2320,6 @@ export async function getStrikeStepSize(scripName) {
   return bestGap;
 }
 
-// ---------- Stock candles and setups (watchlist) ----------
-
 /** An NSE or BSE cash stock by token, or null for anything else (indices are stored as NSE EQ but contain a space). */
 export async function getCashStock(instrumentToken) {
   const row = await firstRow(
@@ -2563,7 +2330,6 @@ export async function getCashStock(instrumentToken) {
   return row ? { instrumentToken: Number(row.instrument_token), tradingsymbol: row.tradingsymbol } : null;
 }
 
-/** Every distinct NSE or BSE cash stock in any user's watchlist. */
 export async function getWatchlistStocks() {
   const result = await rows(
     `SELECT DISTINCT ON (instrument_token) instrument_token, tradingsymbol
@@ -2587,10 +2353,7 @@ export async function getStockCandleSync(instrumentToken) {
   return row ? { latestCandleDate: row.latest_candle_date, checkedAt: Number(row.checked_at), fullFetchedAt: Number(row.full_fetched_at) } : null;
 }
 
-/**
- * Store fetched candles and record the check. `replace` drops the stock's stored
- * history first (a full refetch, e.g. after a split rewrote past prices).
- */
+/** `replace` drops the stock's stored history first (a full refetch, e.g. after a split rewrote past prices). */
 export async function saveStockCandles(instrumentToken, candles, { replace = false } = {}) {
   const client = await pool.connect();
   try {
@@ -2621,10 +2384,7 @@ export async function saveStockCandles(instrumentToken, candles, { replace = fal
   } finally { client.release(); }
 }
 
-/**
- * Store a stock's latest scan summary on its sync row. Scans run on stored
- * candles, and storing candles creates the row, so it always exists.
- */
+/** Storing candles creates the sync row, so it always exists. */
 export async function saveStockScan(instrumentToken, summary) {
   await query(
     'UPDATE stock_candle_sync SET scan_summary = $2 WHERE instrument_token = $1',
@@ -2632,7 +2392,6 @@ export async function saveStockScan(instrumentToken, summary) {
   );
 }
 
-/** Latest scan for each stock in the user's watchlists. */
 export async function getStockScansForUser(userId) {
   const result = await rows(
     `SELECT s.instrument_token, s.scan_summary
@@ -2688,7 +2447,6 @@ export async function updateStockSetupSignal(id, outcome) {
   );
 }
 
-/** Outcome counts per setup type for one stock. */
 export async function getStockSetupStats(instrumentToken) {
   const result = await rows(
     `SELECT setup_type, direction,
@@ -2713,7 +2471,6 @@ export async function getStockSetupStats(instrumentToken) {
   }));
 }
 
-/** One stock's recent setups, newest first. */
 export async function getStockSetupSignals(instrumentToken, limit = 50) {
   const result = await rows(
     `SELECT s.id, s.instrument_token, s.tradingsymbol, s.signal_date, s.setup_type, s.direction,

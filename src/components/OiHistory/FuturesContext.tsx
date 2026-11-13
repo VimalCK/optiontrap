@@ -13,7 +13,6 @@ interface FuturesContextProps {
   scrip: string;
 }
 
-/** Futures Context card: every month's contract on the selected date (table) or across dates (chart). */
 export const FuturesContext: React.FC<FuturesContextProps> = ({ futuresData, filterDate, scrip }) => {
   const [showFuturesInfo, setShowFuturesInfo] = useState(false);
   const [futuresView, setFuturesView] = useState<FuturesViewId>(FuturesView.Table);
@@ -37,14 +36,12 @@ export const FuturesContext: React.FC<FuturesContextProps> = ({ futuresData, fil
     return byContract;
   }, [futuresData, futuresContracts]);
 
-  /** Table view shows every contract on the selected date, like the OI Snapshot. */
   const futuresDateRows = useMemo(() => {
     return futuresContracts
       .map(({ expiry }) => futuresRowsByContract.get(expiry)?.find((row) => row.date === filterDate))
       .filter((row): row is NonNullable<typeof row> => Boolean(row));
   }, [futuresContracts, futuresRowsByContract, filterDate]);
 
-  /** Chart view plots every month's price on a shared date axis; bars are total OI/volume across months. */
   const futuresChart = useMemo(() => {
     const dates = [...new Set(futuresData.map((row) => row.date))].sort();
     if (dates.length === 0) return null;

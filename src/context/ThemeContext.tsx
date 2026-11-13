@@ -23,7 +23,6 @@ const STORAGE_KEY = 'optiontrap_accent';
  */
 const accentWord = (accent: AccentThemeId) => accent.toLowerCase();
 
-/** The saved accent, matched on its lower-case word (Indigo when none or unknown). */
 const storedAccent = (stored: string | null): AccentThemeId =>
   ACCENT_THEMES.find((t) => accentWord(t.id) === stored?.toLowerCase())?.id ?? AccentTheme.Indigo;
 

@@ -1,9 +1,3 @@
-/**
- * Badge — the one small status pill (a trade's side, a lifecycle stage, …),
- * so every screen shows statuses the same way. The tone (Tone) picks the colour:
- * Positive green, Negative red, Accent (the theme's accent) or Neutral grey;
- * `dot` adds a leading dot for live states.
- */
 import React from 'react';
 import './Badge.css';
 import type { ToneId } from '@/utils/uiEnums';

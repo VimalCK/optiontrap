@@ -1,11 +1,6 @@
 /**
- * Automation settings — the full configuration page, opened from the gear on
- * the Automation screen. Its tabs (General, Strategies, Entry rules, Exit rules; ?tab= in the URL)
- * show one section at a time in a card that fills the page's height. One
- * Save / Cancel at the bottom of the card serves every tab: Save stores the
- * whole configuration and stays on the page ("Saved"), so other tabs can be
- * changed next; Cancel goes back to Automation without saving. If saving
- * fails, the reason shows beside the buttons.
+ * Algo Trading settings. One Save / Cancel serves every tab: Save stores the
+ * whole configuration and stays on the page ("Saved"); Cancel leaves unsaved.
  */
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
@@ -23,7 +18,6 @@ import '@/styles/automation.css';
 
 const errorText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
-/** The tab named in the URL, or General. */
 export const sectionFromParams = (params: URLSearchParams): AutomationSettingsSectionId =>
   enumFromParam(AutomationSettingsSection, params.get('tab'), AutomationSettingsSection.General);
 

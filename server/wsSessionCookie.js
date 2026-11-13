@@ -6,7 +6,6 @@
  */
 import cookieParser from 'cookie-parser';
 
-/** The raw value of the named cookie in a Cookie header, or null when absent. */
 function readCookie(cookieHeader, name) {
   for (const part of (cookieHeader || '').split(';')) {
     const [key, ...rest] = part.trim().split('=');
@@ -15,7 +14,6 @@ function readCookie(cookieHeader, name) {
   return null;
 }
 
-/** The URI-decoded cookie value, or null when it holds a malformed escape. */
 function decodeCookieValue(raw) {
   try {
     return decodeURIComponent(raw);

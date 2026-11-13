@@ -49,15 +49,13 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
 
   const strikes = useMemo(() => chain.map((r) => r.strike), [chain]);
 
-  // Shared context — computed ONCE per tick for the entire chain.
-  // Avoids O(n³): previously each analyzeTrap() call recomputed maxPain (O(n²)),
-  // PCR (O(n)), and OI walls (O(n log n)) independently for every strike.
+  // Built once per tick and shared: otherwise each analyzeTrap() call would recompute max pain,
+  // PCR and OI walls for every strike (O(n³) overall).
   const trapCtx = useMemo(
     () => (chain.length > 0 && spotPrice > 0 ? buildTrapContext(chain, oiData, spotPrice) : null),
     [chain, oiData, spotPrice],
   );
 
-  // Run analysis for single view — both CE and PE
   const analysisCe: TrapAnalysis | null = useMemo(() => {
     if (!trapCtx) return null;
     return analyzeTrap(trapPositionOf(positionSide, OptionType.CE), selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
@@ -68,8 +66,6 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
     return analyzeTrap(trapPositionOf(positionSide, OptionType.PE), selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx);
   }, [positionSide, selectedStrike, spotPrice, chain, oiData, prevDayOi, closePrices, livePrices, daysToExpiry, trapCtx]);
 
-  // Run analysis for all strikes (map view) — both CE and PE.
-  // Each call reuses the pre-computed trapCtx — only per-strike OI signal is computed per strike.
   const mapDataCe = useMemo(() => {
     if (!trapCtx) return [];
     return chain.map((row) => {
@@ -164,17 +160,14 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
       <div className="trap-map__butterfly">
         <div className="trap-map__body">
           <div className="trap-map__yaxis">
-            {/* Top half: key levels from center to top */}
             {[9, 4, 2, 0].map((value) => (
               <span key={`top-${value}`} style={{ top: `${((9 - value) / 18) * 100}%` }}>{value}</span>
             ))}
-            {/* Bottom half: key levels from center to bottom */}
             {[2, 4, 9].map((value) => (
               <span key={`bot-${value}`} style={{ top: `${((9 + value) / 18) * 100}%` }}>{value}</span>
             ))}
           </div>
           <div className="trap-map__chart">
-            {/* CE bars (grow upward from center) */}
             <div className="trap-map__bars trap-map__bars--top">
               <div className="trap-map__gridlines">
                 {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((value) => (
@@ -209,9 +202,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
                 );
               })}
             </div>
-            {/* Center axis line */}
             <div className="trap-map__center-axis" />
-            {/* PE bars (grow downward from center) */}
             <div className="trap-map__bars trap-map__bars--bottom">
               <div className="trap-map__gridlines">
                 {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((value) => (
@@ -246,7 +237,6 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
                 );
               })}
             </div>
-            {/* X-axis labels */}
             <div className="trap-map__xaxis">
               {mapDataCe.map((item) => (
                 <span key={item.strike} className="trap-map__strike-label">
@@ -255,7 +245,6 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
               ))}
             </div>
           </div>
-          {/* CE/PE labels on right side */}
           <div className="trap-map__side-labels">
             <span className="trap-map__side-label trap-map__side-label--ce">CE</span>
             <span className="trap-map__side-label trap-map__side-label--pe">PE</span>
@@ -267,7 +256,6 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
 
   return (
     <div className="trap-analyzer">
-      {/* View Toggle + Position Selector */}
       <div className="trap-input">
         <div className="trap-input__row">
           <div className="trap-input__group">
@@ -308,7 +296,6 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
         </div>
       </div>
 
-      {/* Single View - CE and PE side by side */}
       {view === AnalyzerView.Single && analysisCe && analysisPe && (
         <div className="trap-verdict-grid">
           {renderVerdict(analysisCe, OptionType.CE)}
@@ -316,7 +303,6 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
         </div>
       )}
 
-      {/* Map View - CE and PE bars in same chart */}
       {view === AnalyzerView.Map && mapDataCe.length > 0 && (
         <div className="trap-map">
           {renderMapChart()}

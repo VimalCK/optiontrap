@@ -1,10 +1,8 @@
 /**
  * Kite ticker binary messages → ticks.
  *
- * Kite's WebSocket ticker (wss://ws.kite.trade) sends prices as binary
- * messages. Both the browser (src/services/kiteTicker.ts, through the /ws
- * proxy) and the server's own feed (server/kiteTickerFeed.js, for the trade
- * monitor) read them with this one parser, so they agree on every price.
+ * Parser for Kite's binary ticker messages, shared by the browser and the
+ * server's feed so both read every price the same way.
  *
  * Message: int16 packet count, then per packet an int16 length and the packet.
  * Packet sizes: 8 (ltp mode), 28 / 32 (index quote / full), 44 (quote),
@@ -44,7 +42,6 @@ const PAISE_DIVISOR = 100;
 const priceDivisor = (instrumentToken) => (CURRENCY_SEGMENTS.includes(instrumentToken & 0xff) ? CURRENCY_DIVISOR : PAISE_DIVISOR);
 
 /**
- * One packet as a tick, or null when it's too short to hold a price.
  * @param {DataView} data
  * @param {number} start
  * @param {number} length
@@ -58,7 +55,6 @@ function parsePacket(data, start, length) {
   /** @type {Tick} */
   const tick = { instrumentToken, lastPrice: data.getInt32(start + 4) / divisor };
 
-  // Index quote / full: OHLC only, no volume or OI.
   if (length === INDEX_QUOTE_PACKET || length === INDEX_FULL_PACKET) {
     tick.highPrice = data.getInt32(start + 8) / divisor;
     tick.lowPrice = data.getInt32(start + 12) / divisor;
@@ -87,7 +83,7 @@ function parsePacket(data, start, length) {
 }
 
 /**
- * Every tick in one binary ticker message; a cut-off packet ends the list.
+ * A cut-off packet ends the list.
  * @param {ArrayBuffer} buffer
  * @returns {Tick[]}
  */

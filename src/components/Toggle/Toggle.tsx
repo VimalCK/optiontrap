@@ -1,10 +1,3 @@
-/**
- * Toggle — the one on/off switch used across the app (automation on/off, each
- * entry rule's Active/Inactive, …), so every switch looks and behaves the
- * same. It is a button with role="switch": a sliding knob, then the text for
- * the current state (left out when that text is empty, e.g. a toggle in a
- * table cell under a column heading). `label` is the accessible name and tooltip.
- */
 import React from 'react';
 import './Toggle.css';
 

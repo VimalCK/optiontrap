@@ -35,9 +35,6 @@ interface StanceConfig {
   weak: boolean;
 }
 
-/**
- * Look up the combined stance from CE + PE individual signals.
- */
 function combineSignals(ceSignal: OiSignalId, peSignal: OiSignalId): StanceConfig {
   const key = `${ceSignal}|${peSignal}`;
 
@@ -55,7 +52,6 @@ function combineSignals(ceSignal: OiSignalId, peSignal: OiSignalId): StanceConfi
 
   if (bothLeg[key]) return bothLeg[key];
 
-  // Single-leg: CE active, PE neutral
   if (peSignal === OiSignal.Neutral) {
     switch (ceSignal) {
       case OiSignal.LongBuildup:   return { stance: CombinedStance.BullishWeak, label: 'Bullish (weak)',  color: '#4ade80', weak: true };
@@ -65,7 +61,6 @@ function combineSignals(ceSignal: OiSignalId, peSignal: OiSignalId): StanceConfi
     }
   }
 
-  // Single-leg: PE active, CE neutral
   if (ceSignal === OiSignal.Neutral) {
     switch (peSignal) {
       case OiSignal.LongBuildup:   return { stance: CombinedStance.BearishWeak, label: 'Bearish (weak)',  color: '#f87171', weak: true };
@@ -162,7 +157,7 @@ export function computeStrikeSignals(
     }
   }
 
-  if (!refSnapshot) return result; // No snapshot with prices yet — no signals
+  if (!refSnapshot) return result;
 
   const volData = volumeData ?? new Map<number, number>();
   const avgVol = avgVolume ?? 0;

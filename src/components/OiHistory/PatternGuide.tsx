@@ -54,7 +54,6 @@ const FAIR_VALUE: GuideTerm[] = [
   { term: 'Expected move', meaning: 'ATM straddle price: the move the market prices in by expiry' },
 ];
 
-/** Explains the OI Snapshot pattern labels, IV flow and hover measures. */
 export const PatternGuide: React.FC = () => (
   <InfoGuide
     title="Reading the patterns"

@@ -20,7 +20,6 @@ interface StrikeOiChartProps {
   showFair?: boolean;
 }
 
-/** OI (or volume) bars per expiry with price lines, for one option type of the selected strike. */
 export const StrikeOiChart: React.FC<StrikeOiChartProps> = ({ optionType, dates, dateMap, maxOi, maxPrice, expiries, expiryColors, showVolume, showFair = false }) => {
   const oiKey = optionType === OptionType.CE ? 'ceOi' : 'peOi';
   const closeKey = optionType === OptionType.CE ? 'ceClose' : 'peClose';
@@ -74,7 +73,6 @@ export const StrikeOiChart: React.FC<StrikeOiChartProps> = ({ optionType, dates,
     .map((p) => ({ ...p, color: richnessColor(p.label) }));
   const maxRichPct = Math.max(0.1, ...richPoints.map((p) => Math.abs(p.pct)));
 
-  // Grey shading between the price line and the fair-value line
   const gapAreas = fairLines.flatMap(({ exp, pts }) => {
     const paired = pts.filter((p): p is typeof p & { priceY: number } => p.priceY !== null);
     if (paired.length < 2) return [];
@@ -86,11 +84,9 @@ export const StrikeOiChart: React.FC<StrikeOiChartProps> = ({ optionType, dates,
     <div className="oi-history__chart-panel">
       <div className={`oi-history__chart-label${optionType === OptionType.PE ? ' oi-history__chart-label--pe' : ''}`}>{optionType}</div>
       <svg viewBox={`0 0 ${W} ${H}`} className="oi-history__chart-svg">
-        {/* Grid lines */}
         {[0.25, 0.5, 0.75].map((frac) => (
           <line key={frac} x1={PAD_L} x2={W - PAD_R} y1={PAD_T + plotH * (1 - frac)} y2={PAD_T + plotH * (1 - frac)} stroke="var(--card-border)" strokeWidth="0.5" />
         ))}
-        {/* X-axis baseline */}
         <line x1={PAD_L} x2={W - PAD_R} y1={PAD_T + plotH} y2={PAD_T + plotH} stroke="var(--text-secondary)" strokeWidth="0.5" opacity="0.5" />
 
         {/* Rich / cheap bars: height is the size of the gap, amber expensive, blue cheap */}
@@ -107,7 +103,7 @@ export const StrikeOiChart: React.FC<StrikeOiChartProps> = ({ optionType, dates,
           );
         })}
 
-        {/* OI bars (stacked per expiry) */}
+        {/* One bar per expiry, side by side. */}
         {!showFair && dates.map((d, i) => {
           const x = xAt(i);
           const expiryBars = expiries
@@ -128,7 +124,6 @@ export const StrikeOiChart: React.FC<StrikeOiChartProps> = ({ optionType, dates,
           <polygon key={`gap-${a.key}`} points={a.points} fill={FAIR_LINE_COLOR} opacity={0.18} stroke="none" />
         ))}
 
-        {/* Fair-value line, under the price line */}
         {fairLines.map(({ exp, pts, points }) => (
           <g key={`fair-${exp}`}>
             <polyline points={points} fill="none" stroke={FAIR_LINE_COLOR} strokeWidth="1" opacity="0.9" />
@@ -138,7 +133,6 @@ export const StrikeOiChart: React.FC<StrikeOiChartProps> = ({ optionType, dates,
           </g>
         ))}
 
-        {/* Price lines + data points with price labels */}
         {priceLines.map(({ exp, points, pts }) => (
           <g key={exp}>
             <polyline points={points} fill="none" stroke={expiryColors.get(exp)} strokeWidth="1.2" strokeLinejoin="round" />
@@ -153,7 +147,6 @@ export const StrikeOiChart: React.FC<StrikeOiChartProps> = ({ optionType, dates,
           </g>
         ))}
 
-        {/* Average price line */}
         {(() => {
           const allPrices = priceLines.flatMap((l) => l.pts.map((p) => p.price));
           if (allPrices.length === 0) return null;
@@ -167,21 +160,18 @@ export const StrikeOiChart: React.FC<StrikeOiChartProps> = ({ optionType, dates,
           );
         })()}
 
-        {/* Left axis labels (price) */}
         {[0, 0.5, 1].map((frac) => (
           <text key={frac} x={PAD_L - 4} y={PAD_T + plotH * (1 - frac) + 3} textAnchor="end" fontSize="6" fill="var(--text-secondary)">
             ₹{Math.round(safeMaxPrice * frac)}
           </text>
         ))}
 
-        {/* Right axis labels (OI, volume, or the rich / cheap % in the fair-value view) */}
         {[0, 0.5, 1].map((frac) => (
           <text key={frac} x={W - PAD_R + 4} y={PAD_T + plotH * (1 - frac) + 3} textAnchor="start" fontSize="6" fill="var(--text-secondary)">
             {showFair ? `${Math.round(maxRichPct * frac * 100)}%` : formatOiCompact(Math.round(maxBarValue * frac))}
           </text>
         ))}
 
-        {/* X-axis: day numbers + month band */}
         <ChartXAxis dates={dates} padL={PAD_L} plotW={plotW} h={H} />
       </svg>
     </div>

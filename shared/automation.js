@@ -1,9 +1,7 @@
 /**
  * Trade automation: what can be traded automatically, the stages every
- * automated trade goes through, and the user's configuration.
- *
- * Shared by the server (which will run the automation) and the browser (the
- * Automation page), so both agree on the same names and rules.
+ * automated trade goes through, and the user's configuration. Shared by the
+ * server and the browser.
  *
  * An automated trade's lifecycle, recorded stage by stage:
  *   selected   a signal picked it (intraday: from the server's OI snapshots)
@@ -47,11 +45,7 @@ export const TRADE_KINDS = [
   { id: TradeKind.IndexFuture, label: 'Index future' },
 ];
 
-/**
- * Where trades come from. Intraday trades follow the OI snapshots; positional
- * trades will follow OI history and are not built yet. Defined in
- * shared/tradeEnums.js, which positions and orders share.
- */
+/** Intraday trades follow the OI snapshots; positional trades are not built yet. */
 export { HORIZONS };
 
 /** Where executed trades go. Live trading places real orders and is not built yet. */
@@ -92,7 +86,6 @@ export function canMoveTo(from, to) {
 }
 
 /**
- * Every trade type and side off, so nothing trades until the user chooses.
  * @returns {AutomationConfig['kinds']}
  */
 function noKinds() {
@@ -100,8 +93,6 @@ function noKinds() {
 }
 
 /**
- * The configuration of a user who hasn't saved one: off, paper, intraday,
- * nothing chosen, every strategy and entry and exit rule inactive.
  * @param {RuleInfo[]} strategies  the trade engine's strategies (GET /api/strategies)
  * @returns {AutomationConfig}
  */
@@ -118,9 +109,8 @@ export function defaultAutomationConfig(strategies) {
 }
 
 /**
- * Check a configuration from the client. Returns `{ config }` ready to store,
- * or `{ error }` with a message for the user. Every field is required, so a
- * saved configuration is always complete.
+ * Returns `{ config }` ready to store, or `{ error }` for the user. Every field
+ * is required, so a saved configuration is always complete.
  * @param {any} input
  * @param {RuleInfo[]} strategyInfos  the trade engine's strategies
  * @returns {{ config: AutomationConfig, error?: undefined } | { error: string, config?: undefined }}
@@ -177,9 +167,8 @@ export function parseAutomationConfig(input, strategyInfos) {
 }
 
 /**
- * A stored configuration brought up to date: trade types or horizons added
- * since it was saved come in switched off, and any that no longer exist are
- * dropped. The same goes for strategies and entry and exit rules.
+ * A stored configuration brought up to date: trade types or horizons added since
+ * it was saved come in switched off; removed ones are dropped.
  * @param {any} stored
  * @param {RuleInfo[]} strategies  the trade engine's strategies
  * @returns {AutomationConfig}
@@ -230,8 +219,7 @@ export function tradeKind(instrumentType, isIndex) {
 const kindLabel = (/** @type {string} */ id) => TRADE_KINDS.find((k) => k.id === id)?.label ?? id;
 
 /**
- * What the General tab allows, checked on every selected trade before the
- * entry rules: a trade the user hasn't switched on is rejected with the reason.
+ * Checked on every selected trade before the entry rules.
  * @type {GeneralCheck[]}
  */
 const GENERAL_CHECKS = [
@@ -244,7 +232,6 @@ const GENERAL_CHECKS = [
 ];
 
 /**
- * The first General setting that refuses this trade, or null.
  * @param {GeneralTrade} trade
  * @param {AutomationConfig} config
  */

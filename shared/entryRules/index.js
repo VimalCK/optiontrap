@@ -1,16 +1,10 @@
 /**
- * Automation entry rules: the plug-in list every automated trade is checked
- * against before it is executed (selected → validated or rejected).
+ * Automation entry rules: every automated trade is checked against them before
+ * it is executed (selected → validated or rejected).
  *
- * Each rule is its own file in this folder; the shape of a rule and the
- * settings logic are shared with the exit rules (shared/rules/ruleSettings.js).
- * To add a rule, add its file and put it in ENTRY_RULES. The settings page,
- * the stored config and the runner pick it up from this list; nothing else
- * changes. A rule only reads `ctx`; a fact a new rule needs is added to
- * EntryRuleContext once, where the engine builds it.
- *
- * Users switch each rule between active and inactive. Rules start inactive
- * with no values, so nothing is limited until the user sets it.
+ * A rule only reads `ctx`; a fact a new rule needs is added to EntryRuleContext
+ * once, where the engine builds it. Rules start inactive with no values, so
+ * nothing is limited until the user sets it.
  */
 import { firstRuleThatFires } from '../rules/ruleSettings.js';
 import maxLots from './maxLots.js';
@@ -77,7 +71,6 @@ export function entryLimitPrice(settings, side, lastPrice) {
 export const ENTRY_RULES = [maxLots, maxOpenPositions, maxDailyLoss, waitAfterExit, oneTradePerInstrument, entryLimitOffset];
 
 /**
- * Run the user's active entry rules on a trade; the first that refuses it gives the reason.
  * @param {CandidateTrade} trade
  * @param {EntryRuleContext} ctx
  * @param {RuleSettings} settings

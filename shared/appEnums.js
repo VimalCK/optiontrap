@@ -17,7 +17,6 @@ export const PriceAlertCondition = Object.freeze({ Above: 'Above', Below: 'Below
 
 /** @typedef {typeof PriceAlertCondition[keyof typeof PriceAlertCondition]} PriceAlertConditionId */
 
-/** Both conditions, with their labels. */
 export const PRICE_ALERT_CONDITIONS = /** @type {{ id: PriceAlertConditionId, label: string }[]} */ ([
   { id: PriceAlertCondition.Above, label: 'Above' },
   { id: PriceAlertCondition.Below, label: 'Below' },
@@ -43,7 +42,6 @@ export const FeedbackType = Object.freeze({ Bug: 'Bug', Feature: 'Feature', Gene
 
 /** @typedef {typeof FeedbackType[keyof typeof FeedbackType]} FeedbackTypeId */
 
-/** Every feedback type. */
 export const FEEDBACK_TYPES = /** @type {FeedbackTypeId[]} */ (Object.values(FeedbackType));
 
 /**
@@ -58,7 +56,6 @@ export const FeedbackStatus = Object.freeze({ Open: 'Open', Reviewed: 'Reviewed'
 
 /** @typedef {typeof FeedbackStatus[keyof typeof FeedbackStatus]} FeedbackStatusId */
 
-/** Every feedback status. */
 export const FEEDBACK_STATUSES = /** @type {FeedbackStatusId[]} */ (Object.values(FeedbackStatus));
 
 /**
@@ -118,14 +115,12 @@ export const StrategyMode = Object.freeze({ Sell: 'Sell', Buy: 'Buy', Analyzer: 
 
 /** @typedef {typeof StrategyMode[keyof typeof StrategyMode]} StrategyModeId */
 
-/** Every strategy mode with its label. */
 export const STRATEGY_MODES = /** @type {{ id: StrategyModeId, label: string }[]} */ ([
   { id: StrategyMode.Sell, label: 'Sell' },
   { id: StrategyMode.Buy, label: 'Buy' },
   { id: StrategyMode.Analyzer, label: 'Analyzer' },
 ]);
 
-/** A strategy mode's label (Sell, Buy, Analyzer). */
 export const strategyModeLabel = (/** @type {unknown} */ mode) => STRATEGY_MODES.find((m) => m.id === mode)?.label ?? String(mode);
 
 /** What an admin does to a user's subscription on Admin Users (POST /api/admin/users/:userId/subscription). */

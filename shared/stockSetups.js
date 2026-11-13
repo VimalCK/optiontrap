@@ -67,12 +67,9 @@ const SETUP_LABELS = /** @type {Record<StockSetupTypeId, string>} */ ({
   [StockSetupType.Breakdown]: 'Breakdown',
 });
 
-/** Human label for a setup type. */
 export function setupLabel(/** @type {StockSetupTypeId} */ type) {
   return SETUP_LABELS[type];
 }
-
-// ── Candles ──────────────────────────────────────────────────────────────
 
 /**
  * Kite historical rows ([timestamp, open, high, low, close, volume, ...]) to candles,
@@ -102,8 +99,6 @@ export function isCashStock(instrument) {
     && (instrument.instrumentType === undefined || instrument.instrumentType === InstrumentType.EQ)
     && !/\s/.test(instrument.tradingsymbol);
 }
-
-// ── Indicators ───────────────────────────────────────────────────────────
 
 /** Mean of the last `n` values ending before index `end`, or null without enough data. */
 function sma(/** @type {number[]} */ values, /** @type {number} */ n, end = values.length) {
@@ -164,8 +159,6 @@ function indicatorsOf(candles) {
     avgVolume20: sma(candles.map((c) => c.volume), 20),
   };
 }
-
-// ── Levels and zones ─────────────────────────────────────────────────────
 
 /**
  * Swing lows and highs: a session whose low (high) is the lowest (highest) of the
@@ -350,8 +343,6 @@ export function zoneHistory(candles, zone, side, movePct, failPct) {
     avgMovePct: moves.length ? (moves.reduce((a, b) => a + b, 0) / moves.length) * 100 : null,
   };
 }
-
-// ── Market, state, setups ────────────────────────────────────────────────
 
 /**
  * The stock's move over the last MARKET_WINDOW sessions against the market reference index over the same dates.
@@ -550,7 +541,6 @@ export function analyzeStock(candles, options = {}) {
   };
 }
 
-/** Rupee price with two decimals. */
 const rs = (/** @type {number} */ v) => `₹${v.toFixed(2)}`;
 
 /**
@@ -578,8 +568,6 @@ function planText(state, price, supports, resistances, atr, last) {
   }
   return `${where}${held}. Buy dips into the zone that close strong; stop below ${rs(stop)}.${exit}`;
 }
-
-// ── Outcomes ─────────────────────────────────────────────────────────────
 
 /**
  * Follow a setup through the sessions after its signal date. The stop wins when one
@@ -636,7 +624,6 @@ export function replaySetups(candles, fromDate) {
 }
 
 /**
- * The compact per-stock summary the watchlist's Setups column shows.
  * @param {StockAnalysis} analysis
  */
 export function scanSummary(analysis) {

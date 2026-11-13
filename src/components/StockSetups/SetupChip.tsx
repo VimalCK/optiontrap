@@ -3,7 +3,6 @@ import { formatNumericDate } from '@/utils/marketStatus';
 import type { ScanSummary } from '@/services/stockSetups';
 import { sideLabel } from '../../../shared/tradeEnums.js';
 
-/** The watchlist's Setups cell: the latest scan's setup, else the stock's state. */
 const SetupChip: React.FC<{ scan: ScanSummary | undefined; onOpen: () => void }> = ({ scan, onOpen }) => {
   if (!scan) {
     return (

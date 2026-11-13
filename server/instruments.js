@@ -1,15 +1,6 @@
 /**
- * Instruments Service — shared instrument cache with a cross-process fetch lock.
- *
- * Fetches three datasets from Kite:
- *   1. NSE instruments (EQ: stocks, ETFs and indices)
- *   2. NFO instruments (all CE/PE/FUT)
- *   3. BSE stocks that aren't listed on NSE, so no stock appears twice
- *
- * Ensures only ONE fetch cycle happens per day, regardless of how many
- * concurrent users (or app replicas) request instruments simultaneously.
- * A cross-process Postgres advisory lock serializes the fetch; late callers
- * find the freshly-cached data and skip the Kite call.
+ * Shared instrument cache. A cross-process Postgres advisory lock allows one Kite fetch per published list, across
+ * users and app replicas; late callers read the freshly saved rows.
  */
 
 import { getInstrumentsDate, getInstruments, saveInstruments, withAdvisoryLock } from './db.js';
@@ -17,26 +8,16 @@ import { currentInstrumentListStart } from './marketClock.js';
 import { kiteClient } from './kiteClient.js';
 import { Exchange, InstrumentType, OptionType } from '../shared/tradeEnums.js';
 
-// Arbitrary constant identifying the instruments-fetch advisory lock.
 const INSTRUMENTS_FETCH_LOCK = 573210;
 
 // Stored with the load time; bump it when the instrument mix changes so the
 // stored list is refetched instead of served until the next refresh.
 const CACHE_VERSION = 'v4-bse-scrip-code';
 
-// ---------------------------------------------------------------------------
-// CSV Parsing
-// ---------------------------------------------------------------------------
-
 /**
- * Parse a Kite instruments CSV and return matching rows based on a filter.
- *
  * @param {string} csv - Raw CSV text
  * @param {(cols: string[], indices: Record<string, number>) => object | null} rowFilter
  *   Called for each data row. Return an instrument object to include it, or null to skip.
- */
-/**
- * Split a CSV line respecting quoted fields (handles commas inside quotes).
  */
 function splitCSVLine(line) {
   const fields = [];
@@ -87,10 +68,8 @@ function parseCSV(csv, rowFilter) {
 const NSE_DEBT_SERIES = new Set(['SG', 'GS', 'TB', 'GB']);
 
 /**
- * Kite lists bonds, T-bills, gold bonds and mutual fund units as EQ alongside
- * stocks. Tell them apart from stocks, ETFs, REITs/InvITs and indices: NSE by
- * the series suffix, BSE by the scrip code (exchangeToken), whose equity range
- * is 500000–599999 — bonds, gold bonds and commercial paper sit at 7xxxxx–9xxxxx.
+ * Kite lists bonds, T-bills, gold bonds and mutual fund units as EQ alongside stocks. NSE is told apart by the
+ * series suffix; BSE by the scrip code, whose equity range is 500000–599999 (bonds sit at 7xxxxx–9xxxxx).
  */
 export function isDebtOrFund({ exchange, exchangeToken, tradingsymbol, name }) {
   // Corporate bonds, iNAVs and fund schemes carry no company name.
@@ -101,9 +80,6 @@ export function isDebtOrFund({ exchange, exchangeToken, tradingsymbol, name }) {
   return exchangeToken < 500000 || exchangeToken > 599999;
 }
 
-/**
- * Filter for NSE CSV — EQ rows: stocks, ETFs and indices, without debt and fund units.
- */
 function nseFilter(cols, idx) {
   const type = cols[idx.instrument_type]?.trim();
   if (type !== InstrumentType.EQ) return null;
@@ -125,9 +101,6 @@ function nseFilter(cols, idx) {
   };
 }
 
-/**
- * Filter for BSE CSV — stocks and ETFs. Indices, debt and fund units are skipped.
- */
 function bseFilter(cols, idx) {
   if (cols[idx.instrument_type]?.trim() !== InstrumentType.EQ || cols[idx.segment]?.trim() !== Exchange.BSE) return null;
 
@@ -152,15 +125,11 @@ function bseFilter(cols, idx) {
 /** NSE marks a stock's trading series with a suffix (`-BE`, `-SM`) and BSE its group (`-B`); compare without it. */
 const baseSymbol = (symbol) => symbol.replace(/-[A-Z0-9]{1,2}$/, '');
 
-/** Company name without punctuation or a trailing (possibly truncated) "Limited". */
 const companyKey = (name) => name.toUpperCase()
   .replace(/\b(LIMITED|LIMITE|LIMIT|LIMI|LIM|LTD|LI|L)\b\.?\s*$/, '')
   .replace(/[^A-Z0-9]/g, '');
 
-/**
- * The BSE stocks not also listed on NSE. Kite's lists carry no ISIN, so a BSE
- * stock counts as listed on NSE when its symbol or company name matches an NSE stock.
- */
+/** Kite's lists carry no ISIN, so a BSE stock counts as listed on NSE when its symbol or company name matches. */
 export function bseOnlyStocks(nseStocks, bseStocks) {
   const nseSymbols = new Set(nseStocks.flatMap((s) => [s.tradingsymbol, baseSymbol(s.tradingsymbol)]));
   const nseCompanies = new Set(nseStocks.map((s) => companyKey(s.name)).filter(Boolean));
@@ -169,9 +138,6 @@ export function bseOnlyStocks(nseStocks, bseStocks) {
     && !nseCompanies.has(companyKey(s.name)));
 }
 
-/**
- * Filter for NFO CSV — all F&O options (CE/PE) and futures (FUT).
- */
 function nfoFilter(cols, idx) {
   const type = cols[idx.instrument_type]?.trim();
   if (type !== OptionType.CE && type !== OptionType.PE && type !== InstrumentType.FUT) return null;
@@ -199,13 +165,6 @@ function nfoFilter(cols, idx) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Kite API fetch
-// ---------------------------------------------------------------------------
-
-/**
- * Fetch and parse one exchange's instrument list (a CSV) from Kite.
- */
 async function fetchAndParse(exchange, filter, apiKey, accessToken) {
   const path = `/instruments/${exchange}`;
   const csv = await kiteClient({ apiKey, accessToken }).getText(path);
@@ -214,9 +173,6 @@ async function fetchAndParse(exchange, filter, apiKey, accessToken) {
   return parseCSV(csv, filter);
 }
 
-/**
- * Fetch NSE, NFO and BSE instruments in parallel.
- */
 async function fetchFromKite(apiKey, accessToken) {
   const [nse, nfo, bse] = await Promise.all([
     fetchAndParse(Exchange.NSE, nseFilter, apiKey, accessToken),
@@ -227,7 +183,6 @@ async function fetchFromKite(apiKey, accessToken) {
 
   console.log(`[Instruments] Parsed: ${nse.length} NSE stocks, ${nfo.length} NFO F&O, ${bseOnly.length} BSE-only stocks (of ${bse.length})`);
 
-  // Log unique NFO names for debugging
   const nfoNames = new Set(nfo.map((i) => i.name));
   console.log(`[Instruments] NFO unique names (${nfoNames.size}): ${[...nfoNames].slice(0, 20).join(', ')}${nfoNames.size > 20 ? '...' : ''}`);
 
@@ -240,14 +195,9 @@ async function fetchFromKite(apiKey, accessToken) {
   return combined;
 }
 
-// ---------------------------------------------------------------------------
-// Public API
-// ---------------------------------------------------------------------------
-
 /**
- * Whether a stored load stamp (`<ISO load time>|<CACHE_VERSION>`) is current:
- * same version, and loaded after the instrument list in use at `now` was
- * published. Older date-only stamps parse as midnight UTC and so count as stale.
+ * Whether a stored load stamp (`<ISO load time>|<CACHE_VERSION>`) is current. Older date-only stamps parse as
+ * midnight UTC and so count as stale.
  */
 export function isInstrumentStampFresh(stamp, now = new Date()) {
   if (!stamp) return false;
@@ -262,26 +212,19 @@ export async function instrumentsAreFresh() {
 }
 
 /**
- * Get instruments — from the database cache or Kite API.
- *
  * The table is refreshed once per published list (from 08:30 IST each day).
- * A cross-process advisory lock ensures only one fetch happens even across
- * multiple app replicas; concurrent callers block on the lock and then read
- * the freshly-saved rows instead of calling Kite again.
  *
  * @param {string} apiKey - Caller's API key (used only if fetch is needed)
  * @param {string} accessToken - Caller's access token
  * @returns {Promise<any[]>} Array of instrument objects
  */
 export async function getOrFetchInstruments(apiKey, accessToken) {
-  // 1. Fast path — the stored list is current, no locking.
   if (await instrumentsAreFresh()) {
     const cached = await getInstruments();
     if (cached.length > 0) return cached;
   }
 
-  // 2. Within this process, concurrent callers share one in-flight load rather
-  //    than each holding a pooled connection while blocked on the advisory lock.
+  // Concurrent callers in this process share one load, so none holds a pooled connection while blocked on the lock.
   const listStart = currentInstrumentListStart();
   if (!inFlightLoad || inFlightLoad.listStart !== listStart) {
     const promise = loadWithLock(apiKey, accessToken)
@@ -295,9 +238,7 @@ export async function getOrFetchInstruments(apiKey, accessToken) {
 let inFlightLoad = null;
 
 async function loadWithLock(apiKey, accessToken) {
-  // 3. Serialize the fetch across replicas.
   return withAdvisoryLock(INSTRUMENTS_FETCH_LOCK, async () => {
-    // Re-check inside the lock — another caller may have just fetched.
     if (await instrumentsAreFresh()) {
       const cached = await getInstruments();
       if (cached.length > 0) return cached;

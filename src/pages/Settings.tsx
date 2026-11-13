@@ -13,7 +13,6 @@ const TRADING_MODE_CHOICES: { id: TradingModeId; label: string; hint: string }[]
   { id: TradingMode.Live, label: 'Live', hint: 'Orders are sent to Kite and placed with real money.' },
 ];
 
-/** One setting: a card with a small label, a title, a line on what it does, then its control. */
 const SettingCard: React.FC<{
   eyebrow: string;
   title: string;

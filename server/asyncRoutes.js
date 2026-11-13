@@ -1,14 +1,12 @@
 /**
- * Error replies for Express routes: async errors go to the error handler instead of
- * crashing the process, and a failure reply never carries the error's own text
- * (a Postgres or Kite message can expose SQL, table names or upstream details).
+ * A failure reply never carries the error's own text: a Postgres or Kite message can expose SQL, table names or upstream details.
  */
 
 import { sendError } from './replies.js';
 
 const ROUTE_METHODS = ['get', 'post', 'put', 'patch', 'delete'];
 
-/** A handler whose thrown error or rejected promise goes to `next` instead of crashing the process. */
+/** Thrown errors and rejected promises go to `next` instead of crashing the process. */
 function passErrorsToNext(handler) {
   if (typeof handler !== 'function' || handler.length === 4) return handler;
   return (req, res, next) => {
@@ -21,7 +19,6 @@ function passErrorsToNext(handler) {
   };
 }
 
-/** Make every route added to `app` from now on pass its errors to `next`. */
 export function catchAsyncErrors(app) {
   for (const method of ROUTE_METHODS) {
     const register = app[method].bind(app);
@@ -32,13 +29,12 @@ export function catchAsyncErrors(app) {
   }
 }
 
-/** Log a route's caught error in full and reply with the route's fixed `message`, never the error's text. */
 export function sendFailure(res, err, { log, message, status = 500 }) {
   console.error(`${log}:`, err);
   sendError(res, status, message);
 }
 
-/** The last middleware: a JSON error reply (body-parser 4xx kept, anything else 500). */
+/** Body-parser 4xx errors keep their status; anything else is a 500. */
 export function sendServerError(err, req, res, _next) {
   const status = Number.isInteger(err?.status) && err.status >= 400 && err.status < 500 ? err.status : 500;
   if (status === 500) console.error(`[Server] ${req.method} ${req.originalUrl} failed:`, err);

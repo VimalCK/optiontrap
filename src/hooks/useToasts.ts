@@ -1,12 +1,7 @@
-/**
- * useToasts — the messages a screen shows in its ToastStack
- * (src/components/Toast/): `showToast(text, color)` adds one, and it disappears
- * after TOAST_DURATION_MS.
- */
+/** Messages for a screen's ToastStack (src/components/Toast/); each disappears after TOAST_DURATION_MS. */
 import { useCallback, useRef, useState } from 'react';
 import type { ToastColorId } from '@/utils/uiEnums';
 
-/** How long a toast stays on screen. */
 const TOAST_DURATION_MS = 2000;
 
 export interface Toast {
@@ -15,7 +10,6 @@ export interface Toast {
   color: ToastColorId;
 }
 
-/** The screen's current toasts, and the function that shows a new one. */
 export function useToasts() {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const nextId = useRef(0);

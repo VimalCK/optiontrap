@@ -90,12 +90,10 @@ export class KiteTicker {
     }
   }
 
-  /** Whether the WebSocket is open and ready to send messages */
   get connected(): boolean {
     return this.ws !== null && this.ws.readyState === WebSocket.OPEN;
   }
 
-  /** Whether a WebSocket exists (open, connecting, or closing) */
   get active(): boolean {
     return this.ws !== null;
   }

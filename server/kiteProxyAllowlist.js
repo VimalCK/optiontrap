@@ -1,10 +1,6 @@
 /**
- * The Kite calls the browser may make through the /api proxy (server/index.js).
- * The proxy adds the user's own Kite login, and Kite's API can also place, change
- * and cancel real orders, so only the read-only calls the app uses get through.
- * OptionTrap never places real orders; this makes the server enforce it.
- * When the app needs another Kite call, add it here (src/services/kiteApi.ts and
- * src/pages/Profile.tsx make the current ones).
+ * Kite's API can place, change and cancel real orders, and OptionTrap never does: only the read-only calls the app
+ * uses get through. When the app needs another Kite call, add it here.
  */
 
 import { sendError } from './replies.js';
@@ -24,10 +20,7 @@ export function isAllowedKiteRequest(method, path) {
   return method === 'GET' && ALLOWED_KITE_PATHS.some((pattern) => pattern.test(path));
 }
 
-/**
- * Middleware in front of the Kite proxy: refuses any other call with 404 (not 403,
- * which the browser's apiClient reads as an ended Kite login).
- */
+/** Refuses other calls with 404, not 403: the browser's apiClient reads 403 as an ended Kite login. */
 export function allowOnlyKnownKiteCalls(req, res, next) {
   if (isAllowedKiteRequest(req.method, req.path)) return next();
   sendError(res, 404, 'Not available through OptionTrap');

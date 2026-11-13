@@ -12,19 +12,14 @@ interface Price { last: number; close: number }
 /** Account pages, where market prices are not needed. */
 const HIDDEN_ON = ['/admin', '/settings', '/profile'];
 
-/** At most this many symbols show in the corner (fewer when the row is narrow); the rest open from "+N". */
+/** Symbols shown in the corner; fewer when the row is narrow. The rest open from "+N". */
 const INLINE_COUNT = 2;
 
-/** Space kept between a page's tab bar and the strip. */
 const STRIP_GAP = 24;
 
 const formatPrice = (value: number) => value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-/**
- * The always-snapshot symbols (Settings) with their price and day change, top right
- * of every page. Starts from a quote, then follows live ticks while the market is open.
- * The first few show inline, as many as fit in half the row; the rest are listed in a dropdown.
- */
+/** Starts from a quote, then follows live ticks while the market is open. */
 const MarketStripSymbols: React.FC = () => {
   const underlyings = useUnderlyings();
   const symbols = useMemo(
@@ -73,7 +68,6 @@ const MarketStripSymbols: React.FC = () => {
     // Re-run only when the set of tokens changes, not on every underlyings reload.
   }, [tokensKey]);
 
-  // Close the dropdown on a click elsewhere or Escape.
   useEffect(() => {
     if (!open) return;
     const onClick = (event: MouseEvent) => { if (!rootRef.current?.contains(event.target as Node)) setOpen(false); };
@@ -123,7 +117,6 @@ const MarketStripSymbols: React.FC = () => {
   return (
     // The box is the room the strip may take (half the row); the strip inside is what it uses.
     <div className="market-strip-box" ref={boxRef}>
-    {/* Hidden copy of every symbol and a "+N" button, measured to decide how many fit. */}
     <div className="market-strip market-strip--measure" ref={measureRef} aria-hidden="true">
       {symbols.map((u) => renderItem(u, 'market-strip__item'))}
       <span className="market-strip__more-btn">+{symbols.length} ▾</span>

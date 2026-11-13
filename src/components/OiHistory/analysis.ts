@@ -835,7 +835,6 @@ const EXITING: Record<MoveDirectionId, RolloverPatternId> = {
   [MoveDirection.Neutral]: RolloverPattern.Exiting,
 };
 
-/** Classify rollover pattern for a strike+optionType across expiries */
 export function classifyPattern(
   oiByExpiry: Map<string, { oi: number; prevOi: number | undefined; close: number; prevClose: number | undefined }>,
   expiries: string[],
@@ -909,7 +908,6 @@ const RED_PATTERNS: RolloverPatternId[] = [
 ];
 const ROLL_PATTERNS: RolloverPatternId[] = [RolloverPattern.RollingOverLong, RolloverPattern.RollingOverShort, RolloverPattern.RollingOver];
 
-/** Color for pattern label */
 export function patternColor(p: RolloverPatternId): string {
   if (ROLL_PATTERNS.includes(p)) return 'var(--accent)';
   if (RED_PATTERNS.includes(p)) return '#ef4444';
@@ -930,7 +928,7 @@ export function expiryLabel(expiry: string, isMonthly: boolean): string {
 export function computeMonthlyExpiries(allExpiries: string[]): Set<string> {
   const lastPerMonth = new Map<string, string>();
   for (const exp of allExpiries) {
-    const key = exp.slice(0, 7); // YYYY-MM
+    const key = exp.slice(0, 7);
     const cur = lastPerMonth.get(key);
     if (!cur || exp > cur) lastPerMonth.set(key, exp);
   }

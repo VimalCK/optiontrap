@@ -25,16 +25,11 @@ function underlyingFromOption(tradingsymbol: string): string {
   return stripped || upper;
 }
 
-/**
- * Get the TradingView-ready symbol for a given tradingsymbol + exchange.
- * Returns { exchange, symbol } to be joined as `EXCHANGE:SYMBOL`.
- */
 function resolveSymbol(tradingsymbol: string, exchange: string | undefined, underlyings: Underlying[]): { exchange: string; symbol: string } {
   const upperEx = (exchange || '').toUpperCase();
   const upperSym = tradingsymbol.toUpperCase();
   const chart = (u: Underlying) => ({ exchange: u.exchange || Exchange.NSE, symbol: u.tradingviewSymbol || u.name });
 
-  // Option/future symbol → chart the underlying
   if (upperEx === Exchange.NFO || upperEx === Exchange.BFO || /\d(CE|PE|FUT)$/.test(upperSym) || upperSym.endsWith(InstrumentType.FUT)) {
     const name = underlyingFromOption(upperSym);
     const underlying = underlyings.find((u) => u.name === name);
@@ -50,7 +45,6 @@ function resolveSymbol(tradingsymbol: string, exchange: string | undefined, unde
   return { exchange: ex, symbol: upperSym };
 }
 
-/** Build the full https://www.tradingview.com/chart URL. */
 export function tradingViewUrl(tradingsymbol: string, exchange?: string, underlyings: Underlying[] = []): string {
   const { exchange: ex, symbol } = resolveSymbol(tradingsymbol, exchange, underlyings);
   return `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(`${ex}:${symbol}`)}`;

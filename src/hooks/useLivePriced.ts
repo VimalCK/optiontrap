@@ -1,8 +1,4 @@
-/**
- * Shared engine behind useHoldings and useLivePositions: load once (priced
- * from quotes), cancel the load when the screen closes or reloads, and keep
- * the data live from ticks while the market is open.
- */
+/** Engine behind useHoldings and useLivePositions. */
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import type { Tick } from '@/services/kiteTicker';
 import { tickerSubscribe } from '@/services/tickerSingleton';

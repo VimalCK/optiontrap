@@ -1,8 +1,6 @@
 /**
- * The one source of live (Kite) positions for every screen (Positions,
- * Dashboard): loaded once, open positions priced from quotes, then kept live
- * from ticks while the market is open. Every figure comes from
- * src/services/livePositions.ts, so two screens always agree.
+ * Live Kite positions for every screen (Positions, Dashboard), so they always
+ * agree. Figures come from src/services/livePositions.ts.
  */
 import { useMemo } from 'react';
 import type { KitePositions } from '@/services/kiteApi';

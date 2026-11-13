@@ -1,13 +1,3 @@
-/**
- * Guard: no symbol names or index tokens in the app code. Which symbols are
- * indices, how they are labelled and charted, which are always snapshotted and
- * which is the market reference all live in the instruments table
- * (see the instruments table in server/migrations/000_base_schema.sql), so a name or token
- * written into the code would quietly bypass it.
- *
- * Checked: code in src, server and shared. Not checked: comments, test files
- * (sample data), and migrations (they have to name what they set or rename).
- */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,7 +6,6 @@ import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SKIP_DIRS = new Set(['node_modules', 'dist', '.git', 'migrations']);
 
-/** Allowed, with the reason. */
 const ALLOWED = new Map([
   // The login page's decorative preview: made-up numbers, shown before login, so it can't read the table.
   [path.join('src', 'pages', 'Login.tsx'), 'demo card caption'],

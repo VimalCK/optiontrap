@@ -19,7 +19,6 @@ export function positionPnl(p: KitePosition, lastPrice: number): number {
   return p.sell_value - p.buy_value + p.quantity * lastPrice * p.multiplier;
 }
 
-/** The position at `lastPrice`, with its P&L worked out from it. */
 function pricePosition(p: KitePosition, lastPrice: number): KitePosition {
   return { ...p, last_price: lastPrice, pnl: positionPnl(p, lastPrice) };
 }
@@ -44,12 +43,10 @@ export function applyPositionTicks(positions: KitePositions, ticks: Tick[]): Kit
   return reprice(positions, (p) => byToken.get(p.instrument_token));
 }
 
-/** Instrument tokens of the open positions, for the ticker. */
 export function openPositionTokens(positions: KitePositions): number[] {
   return [...new Set([...positions.net, ...positions.day].filter((p) => p.quantity !== 0).map((p) => p.instrument_token))];
 }
 
-/** Total P&L of a list of positions. */
 export function positionsPnl(list: KitePosition[]): number {
   return list.reduce((sum, p) => sum + p.pnl, 0);
 }

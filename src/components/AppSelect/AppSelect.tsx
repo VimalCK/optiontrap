@@ -1,9 +1,7 @@
 /**
- * AppSelect — custom styled combobox/select component.
- * Replaces native <select> with a fully theme-aware dropdown.
- * Supports optional search/filter when `searchable` prop is set.
- * Pass `selectedValues` instead of `value` for a multi-select: each option gets
- * a checkbox, a click toggles it through `onChange`, and the list stays open.
+ * Used instead of a native <select>. Pass `selectedValues` instead of `value` for a
+ * multi-select: each option gets a checkbox, a click toggles it through `onChange`,
+ * and the list stays open.
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
@@ -17,7 +15,6 @@ export interface AppSelectOption {
 
 interface AppSelectProps {
   value?: string | number;
-  /** Multi-select mode: the ticked values. */
   selectedValues?: (string | number)[];
   options: AppSelectOption[];
   onChange: (value: string | number) => void;
@@ -96,11 +93,9 @@ const AppSelect: React.FC<AppSelectProps> = ({
     if (searchable) {
       setTimeout(() => searchInputRef.current?.focus(), 10);
     }
-    // Scroll highlighted option into view when dropdown opens
     setTimeout(() => highlightedRef.current?.scrollIntoView({ block: 'nearest' }), 0);
   };
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {

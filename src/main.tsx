@@ -15,8 +15,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   </React.StrictMode>,
 );
 
-// Service worker for the installable app. Production only: in development it would
-// cache Vite's modules and get in the way of hot reload.
+// Production only: in development the service worker would cache Vite's modules and break hot reload.
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').catch((err) => console.warn('[PWA] Service worker registration failed:', err));

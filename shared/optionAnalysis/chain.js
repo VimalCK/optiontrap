@@ -7,22 +7,18 @@
 import { InstrumentType, OptionType } from '../tradeEnums.js';
 
 /**
- * The fields of an option the analysis reads; the browser's and the
- * server's instrument rows both have them.
  * @typedef {{ instrumentToken: number, strike: number, expiry: string | null, instrumentType: string }} ChainOption
  */
 
 /**
- * One strike of a chain, with its call and put (either may be missing).
  * @template {ChainOption} [T=ChainOption]
  * @typedef {{ strike: number, ce: T | null, pe: T | null }} ChainRow
  */
 
-/** Strikes shown either side of ATM in the analyzer. */
+/** Strikes shown either side of ATM. */
 export const STRIKES_EACH_SIDE = 15;
 
 /**
- * A chain row's call or put, by option type.
  * @template T
  * @param {{ ce: T | null, pe: T | null } | undefined} row
  * @param {import('../tradeEnums.js').OptionTypeId} optionType
@@ -41,7 +37,6 @@ export function upcomingExpiries(options, today) {
 }
 
 /**
- * The chain rows of one expiry, by strike ascending.
  * @template {ChainOption} T
  * @param {T[]} options
  * @param {string} expiry
@@ -96,7 +91,6 @@ export function strikeWindow(chain, atmStrike, each = STRIKES_EACH_SIDE) {
 }
 
 /**
- * The average volume of the options in these rows that have traded; 0 with none.
  * @param {ChainRow[]} rows
  * @param {Map<number, number>} volumes  instrument token → volume
  */

@@ -1,14 +1,7 @@
 /**
- * Enum values in SQL text. Queries name a value by its enum member
- * (`exchange = ${sqlEnum(Exchange.NFO)}`), so the SQL never holds a stray
- * literal that could drift from shared/tradeEnums.js or shared/appEnums.js,
- * and Postgres still receives the literal itself (`exchange = 'NFO'`). That
- * matters for partial indexes: one built `WHERE status = 'Open'` is used only
- * when the query states the same literal, which a $n parameter can't promise.
- *
- * The one exception to "$n parameters only" in server SQL, and safe for that
- * reason: it accepts only values the enums define (plain letters), never
- * input, and throws on anything else.
+ * Postgres still receives the literal itself, which partial indexes need: one built `WHERE status = 'Open'` is used
+ * only when the query states the same literal, which a $n parameter can't promise. The one exception to "$n
+ * parameters only": it accepts only enum values (plain letters), never input, and throws on anything else.
  */
 import * as tradeEnums from '../shared/tradeEnums.js';
 import * as appEnums from '../shared/appEnums.js';

@@ -1,5 +1,4 @@
 /**
- * Positions Service
  * Reads paper trading positions from the server's REST API. Positions are
  * opened and exited by orders (src/services/orders.ts); netting (average-in,
  * merging) runs on the server.
@@ -129,19 +128,10 @@ export async function getDailyPnl(
   return apiClient.get<DailyPnl[]>(`/api/positions/daily-pnl?${query({ mode, from, to, segment })}`);
 }
 
-/**
- * All-time win/loss figures over exited positions.
- */
 export async function getPositionStats(mode: TradingModeId = TradingMode.Paper): Promise<PositionStats> {
   return apiClient.get<PositionStats>(`/api/positions/stats?${query({ mode })}`);
 }
 
-/**
- * Add a new position. Server handles netting:
- *   - Same-side existing → average in
- *   - Opposite-side existing → net out (exact, partial, or over-close)
- *   - No existing → open fresh
- */
 /**
  * A trade to open. instrumentType and exchange may be left out for an option
  * (the server takes them from optionType, on NFO). source is never sent: the

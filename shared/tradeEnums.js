@@ -46,15 +46,12 @@ export const InstrumentType = Object.freeze({ CE: 'CE', PE: 'PE', FUT: 'FUT', EQ
 
 /** @typedef {typeof InstrumentType[keyof typeof InstrumentType]} InstrumentTypeId */
 
-/** Every instrument type. */
 export const INSTRUMENT_TYPES = /** @type {InstrumentTypeId[]} */ (Object.values(InstrumentType));
 
-/** An option's type: the instrument types of options only. */
 export const OptionType = Object.freeze({ CE: InstrumentType.CE, PE: InstrumentType.PE });
 
 /** @typedef {typeof OptionType[keyof typeof OptionType]} OptionTypeId */
 
-/** Both option types. */
 export const OPTION_TYPES = /** @type {OptionTypeId[]} */ (Object.values(OptionType));
 
 /**
@@ -91,7 +88,6 @@ export const OrderType = Object.freeze({ Limit: 'Limit', Market: 'Market' });
 
 /** @typedef {typeof OrderType[keyof typeof OrderType]} OrderTypeId */
 
-/** Every order type. */
 export const ORDER_TYPES = /** @type {OrderTypeId[]} */ (Object.values(OrderType));
 
 /** Who placed a trade: the user by hand, or the trade automation. Set by the server, never read from input. */
@@ -104,7 +100,6 @@ export const TradingMode = Object.freeze({ Paper: 'Paper', Live: 'Live' });
 
 /** @typedef {typeof TradingMode[keyof typeof TradingMode]} TradingModeId */
 
-/** Both trading modes. */
 export const TRADING_MODES = /** @type {TradingModeId[]} */ (Object.values(TradingMode));
 
 /**
@@ -119,10 +114,8 @@ export const Segment = Object.freeze({ Options: 'Options', Futures: 'Futures', S
 
 /** @typedef {typeof Segment[keyof typeof Segment]} SegmentId */
 
-/** Every segment. */
 export const SEGMENTS = /** @type {SegmentId[]} */ (Object.values(Segment));
 
-/** The segment an instrument type belongs to. */
 export function segmentOf(/** @type {unknown} */ instrumentType) {
   if (isOptionType(instrumentType)) return Segment.Options;
   return instrumentType === InstrumentType.FUT ? Segment.Futures : Segment.Stocks;

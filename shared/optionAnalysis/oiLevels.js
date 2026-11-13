@@ -9,8 +9,6 @@ import { Bias, LevelSide, OiSignal, oiSignalLabel } from '../analysisEnums.js';
 /** @typedef {import('./chain.js').ChainRow} ChainRow */
 
 /**
- * OI + Price signal classification
- * Determines market sentiment at a strike based on OI and price changes.
  * @typedef {import('../analysisEnums.js').OiSignalId} OiSignalId
  */
 
@@ -23,7 +21,7 @@ import { Bias, LevelSide, OiSignal, oiSignalLabel } from '../analysisEnums.js';
  */
 
 /**
- * Classify OI + Price action signal
+ * OI + price signal, read as:
  * - OI ↑ + Price ↑ = Long Buildup (bullish)
  * - OI ↑ + Price ↓ = Short Buildup (bearish)
  * - OI ↓ + Price ↓ = Long Unwinding (bearish)
@@ -54,9 +52,8 @@ export function classifyOiSignal(oiChange, priceChange) {
 }
 
 /**
- * Calculate Max Pain — the strike price at which the maximum number of
- * options (both CE and PE) expire worthless, causing maximum loss to buyers.
- * Price tends to gravitate toward max pain near expiry.
+ * Max pain: the strike at which the most options (CE and PE) expire worthless.
+ * Price tends to gravitate toward it near expiry.
  * @param {ChainRow[]} chain
  * @param {Map<number, number>} oiData
  * @returns {number}
@@ -104,8 +101,7 @@ export function calculateMaxPain(
 }
 
 /**
- * Calculate Put-Call Ratio for the visible chain
- * PCR = Total PE OI / Total CE OI
+ * PCR = Total PE OI / Total CE OI, over the visible chain.
  * PCR > 1 = more puts (bullish signal — put sellers are confident)
  * PCR < 1 = more calls (bearish signal — call sellers are confident)
  * @param {ChainRow[]} chain
@@ -129,8 +125,7 @@ export function calculatePCR(
 }
 
 /**
- * Find major OI walls (support/resistance levels)
- * Returns strikes with OI significantly above average
+ * OI walls (support/resistance): strikes whose OI is well above average.
  * @typedef {object} OiWall
  * @property {number} strike
  * @property {import('../analysisEnums.js').LevelSideId} type

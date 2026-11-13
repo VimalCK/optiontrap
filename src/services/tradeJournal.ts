@@ -39,7 +39,6 @@ export interface TradeEntry {
   stopLossPrice?: number | null;
   /** Who placed it: the trade automation or by hand. */
   source: Position['source'];
-  /** Intraday or positional. */
   horizon: Position['horizon'];
   confidence?: number | null;
 }
@@ -88,9 +87,6 @@ export function chargesTitle(breakdown: Position['chargeBreakdown'] | undefined)
   return CHARGE_LABELS.filter(([key]) => breakdown[key] > 0).map(([key, label]) => `${label} ₹${breakdown[key].toFixed(2)}`).join('\n');
 }
 
-/**
- * Convert an exited Position into a TradeEntry.
- */
 export function positionToEntry(pos: Position): TradeEntry {
   const exitPrice = pos.exitPrice ?? 0;
   const charges = pos.charges ?? 0;

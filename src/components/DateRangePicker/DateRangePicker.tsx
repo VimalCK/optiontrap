@@ -1,9 +1,5 @@
 /**
- * DateRangePicker — From / To date pickers for a range of market (IST) days,
- * used wherever a screen fetches by range (Algo Trading trades, Win/Loss
- * Patterns). To can't be set before From. The caller checks the range with
- * rangeProblem (TradeJournal/journalRange) before fetching. Each picker is the
- * shared DateInput, so dates read day, month, year.
+ * The caller checks the range with rangeProblem (TradeJournal/journalRange) before fetching.
  */
 import React from 'react';
 import DateInput from '@/components/DateInput/DateInput';

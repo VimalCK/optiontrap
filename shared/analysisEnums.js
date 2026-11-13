@@ -1,22 +1,16 @@
 /**
- * The value sets of the market analysis, in one place: the option analysis
- * (shared/optionAnalysis, the Option Analyzer, trap analysis, OI flow and fair
- * value), OI History, and the stock setups. Shared by the server (the Option
- * Analyzer setups strategy, the stock scan) and the browser.
- *
- * Like shared/tradeEnums.js, each value is its member's name
- * (SetupPattern.WallDefense is 'WallDefense'), and that is the text stored in
- * the database and its JSON (algo_trades.setup, trade_setup_signals.status and
- * details, stock_setup_signals.setup_type, stock_candle_sync.scan_summary).
- * Where the text shown to the user differs from the name, the enum has a label
- * list beside it (SETUP_PATTERNS) and a label function (setupPatternLabel).
+ * The value sets of the market analysis (option analysis, OI History, stock
+ * setups), shared by the server and the browser. Each value is its member's
+ * name (SetupPattern.WallDefense is 'WallDefense'), which is the text stored
+ * in the database and its JSON (algo_trades.setup, trade_setup_signals.status,
+ * stock_setup_signals.setup_type, ...). Where the shown text differs, a label
+ * list sits beside the enum.
  *
  * Imports nothing, so any shared, server or browser module can use it.
  */
 
 /**
- * A label function for an { id, label } list: the label of `id`, or `id`
- * itself when the list doesn't hold it.
+ * A label function for an { id, label } list. Falls back to `id` when the list doesn't hold it.
  * @param {{ id: string, label: string }[]} list
  * @returns {(id: unknown) => string}
  */
@@ -58,7 +52,6 @@ export const OiSignal = Object.freeze({
 
 /** @typedef {typeof OiSignal[keyof typeof OiSignal]} OiSignalId */
 
-/** Every OI signal with its label. */
 const OI_SIGNALS = /** @type {{ id: OiSignalId, label: string }[]} */ ([
   { id: OiSignal.LongBuildup, label: 'Long Buildup' },
   { id: OiSignal.ShortBuildup, label: 'Short Buildup' },
@@ -67,7 +60,6 @@ const OI_SIGNALS = /** @type {{ id: OiSignalId, label: string }[]} */ ([
   { id: OiSignal.Neutral, label: 'Neutral' },
 ]);
 
-/** An OI signal's label (Long Buildup …). */
 export const oiSignalLabel = labelFrom(OI_SIGNALS);
 
 /** The side of the price a level sits on: an OI wall, or a stock's support / resistance zone. */
@@ -93,7 +85,6 @@ export const VelocityTrend = Object.freeze({
 
 /** @typedef {typeof VelocityTrend[keyof typeof VelocityTrend]} VelocityTrendId */
 
-/** Every velocity trend with its label. */
 const VELOCITY_TRENDS = /** @type {{ id: VelocityTrendId, label: string }[]} */ ([
   { id: VelocityTrend.AcceleratingBuildup, label: 'Accelerating Buildup' },
   { id: VelocityTrend.SteadyBuildup, label: 'Steady Buildup' },
@@ -109,7 +100,6 @@ const VELOCITY_TRENDS = /** @type {{ id: VelocityTrendId, label: string }[]} */ 
   { id: VelocityTrend.Stable, label: 'Stable' },
 ]);
 
-/** A velocity trend's label (Accelerating Buildup …). */
 export const velocityTrendLabel = labelFrom(VELOCITY_TRENDS);
 
 /** An option trade the Strategy card suggests: one leg, a straddle or a strangle, sold or bought. */
@@ -126,7 +116,6 @@ export const OptionSetup = Object.freeze({
 
 /** @typedef {typeof OptionSetup[keyof typeof OptionSetup]} OptionSetupId */
 
-/** Every option setup with its label. */
 const OPTION_SETUPS = /** @type {{ id: OptionSetupId, label: string }[]} */ ([
   { id: OptionSetup.SellCe, label: 'Sell CE' },
   { id: OptionSetup.SellPe, label: 'Sell PE' },
@@ -138,7 +127,6 @@ const OPTION_SETUPS = /** @type {{ id: OptionSetupId, label: string }[]} */ ([
   { id: OptionSetup.BuyStrangle, label: 'Strangle' },
 ]);
 
-/** An option setup's label (Sell CE, Straddle …). */
 export const optionSetupLabel = labelFrom(OPTION_SETUPS);
 
 /** The pattern that scored most in a suggested setup; stored with each automated trade (algo_trades.setup). */
@@ -158,7 +146,6 @@ export const SetupPattern = Object.freeze({
 
 /** @typedef {typeof SetupPattern[keyof typeof SetupPattern]} SetupPatternId */
 
-/** Every setup pattern with its label. */
 const SETUP_PATTERNS = /** @type {{ id: SetupPatternId, label: string }[]} */ ([
   { id: SetupPattern.Pinning, label: 'Pinning' },
   { id: SetupPattern.WallDefense, label: 'Wall Defense' },
@@ -173,7 +160,6 @@ const SETUP_PATTERNS = /** @type {{ id: SetupPatternId, label: string }[]} */ ([
   { id: SetupPattern.Mixed, label: 'Mixed' },
 ]);
 
-/** A setup pattern's label (Wall Defense …). */
 export const setupPatternLabel = labelFrom(SETUP_PATTERNS);
 
 /** Whether a position at a strike looks trapped (trap analysis). */
@@ -181,14 +167,12 @@ export const TrapVerdict = Object.freeze({ Safe: 'Safe', Caution: 'Caution', Lik
 
 /** @typedef {typeof TrapVerdict[keyof typeof TrapVerdict]} TrapVerdictId */
 
-/** Every trap verdict with its label. */
 const TRAP_VERDICTS = /** @type {{ id: TrapVerdictId, label: string }[]} */ ([
   { id: TrapVerdict.Safe, label: 'Looks Safe' },
   { id: TrapVerdict.Caution, label: 'Caution' },
   { id: TrapVerdict.LikelyTrapped, label: 'Likely Trapped' },
 ]);
 
-/** A trap verdict's label (Looks Safe, Caution, Likely Trapped). */
 export const trapVerdictLabel = labelFrom(TRAP_VERDICTS);
 
 /** An option's premium against the IV curve (fair value). */
@@ -201,14 +185,12 @@ export const VolVerdict = Object.freeze({ OptionsExpensive: 'OptionsExpensive', 
 
 /** @typedef {typeof VolVerdict[keyof typeof VolVerdict]} VolVerdictId */
 
-/** Every volatility verdict with its label. */
 const VOL_VERDICTS = /** @type {{ id: VolVerdictId, label: string }[]} */ ([
   { id: VolVerdict.OptionsExpensive, label: 'Options expensive' },
   { id: VolVerdict.FairlyPriced, label: 'Fairly priced' },
   { id: VolVerdict.OptionsCheap, label: 'Options cheap' },
 ]);
 
-/** A volatility verdict's label (Options expensive …). */
 export const volVerdictLabel = labelFrom(VOL_VERDICTS);
 
 /** Where a forward price came from: implied from CE / PE prices (Parity), or spot grown at the rate (Carry). */
@@ -248,7 +230,6 @@ export const OiFlow = Object.freeze({
 
 /** @typedef {typeof OiFlow[keyof typeof OiFlow]} OiFlowId */
 
-/** Every OI flow with its label. */
 const OI_FLOWS = /** @type {{ id: OiFlowId, label: string }[]} */ ([
   { id: OiFlow.BuyersAdding, label: 'Buyers Adding' },
   { id: OiFlow.WritersAdding, label: 'Writers Adding' },
@@ -259,7 +240,6 @@ const OI_FLOWS = /** @type {{ id: OiFlowId, label: string }[]} */ ([
   { id: OiFlow.None, label: '-' },
 ]);
 
-/** An OI flow's label (Buyers Adding …). */
 export const oiFlowLabel = labelFrom(OI_FLOWS);
 
 /** How an option's OI and price moved from one day to the next (OI History). */
@@ -287,7 +267,6 @@ export const RolloverPattern = Object.freeze({
 
 /** @typedef {typeof RolloverPattern[keyof typeof RolloverPattern]} RolloverPatternId */
 
-/** Every rollover pattern with its label. */
 const ROLLOVER_PATTERNS = /** @type {{ id: RolloverPatternId, label: string }[]} */ ([
   { id: RolloverPattern.RollingOverLong, label: 'Rolling Over (Long)' },
   { id: RolloverPattern.RollingOverShort, label: 'Rolling Over (Short)' },
@@ -310,7 +289,6 @@ const ROLLOVER_PATTERNS = /** @type {{ id: RolloverPatternId, label: string }[]}
   { id: RolloverPattern.None, label: '-' },
 ]);
 
-/** A rollover pattern's label (Rolling Over (Long) …). */
 export const rolloverPatternLabel = labelFrom(ROLLOVER_PATTERNS);
 
 /** Where an OI History trade setup stands; stored with each logged signal (trade_setup_signals.status). */
@@ -330,7 +308,6 @@ export const SellingSetup = Object.freeze({ CallSell: 'CallSell', PutSell: 'PutS
 
 /** @typedef {typeof SellingSetup[keyof typeof SellingSetup]} SellingSetupId */
 
-/** Every selling setup with its label. */
 const SELLING_SETUPS = /** @type {{ id: SellingSetupId, label: string }[]} */ ([
   { id: SellingSetup.CallSell, label: 'Call Sell' },
   { id: SellingSetup.PutSell, label: 'Put Sell' },
@@ -338,7 +315,6 @@ const SELLING_SETUPS = /** @type {{ id: SellingSetupId, label: string }[]} */ ([
   { id: SellingSetup.NoSell, label: 'No Sell' },
 ]);
 
-/** A selling setup's label (Call Sell …). */
 export const sellingSetupLabel = labelFrom(SELLING_SETUPS);
 
 /** How a slice of the logged OI signals has done. */
@@ -346,7 +322,6 @@ export const SignalVerdict = Object.freeze({ Working: 'Working', Mixed: 'Mixed',
 
 /** @typedef {typeof SignalVerdict[keyof typeof SignalVerdict]} SignalVerdictId */
 
-/** Every signal verdict with its label. */
 const SIGNAL_VERDICTS = /** @type {{ id: SignalVerdictId, label: string }[]} */ ([
   { id: SignalVerdict.Working, label: 'Working' },
   { id: SignalVerdict.Mixed, label: 'Mixed' },
@@ -354,7 +329,6 @@ const SIGNAL_VERDICTS = /** @type {{ id: SignalVerdictId, label: string }[]} */ 
   { id: SignalVerdict.TooFew, label: 'Too few' },
 ]);
 
-/** A signal verdict's label (Too few …). */
 export const signalVerdictLabel = labelFrom(SIGNAL_VERDICTS);
 
 /** A stock setup the scan finds (shared/stockSetups.js); stored per signal (stock_setup_signals.setup_type). */

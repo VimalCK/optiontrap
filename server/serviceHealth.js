@@ -1,15 +1,7 @@
 /**
- * Health checks for the background services, in the shape of the IETF
- * "Health Check Response Format for HTTP APIs" (draft-inadarei-api-health-check):
- * each check is { status: HealthStatus.Pass | HealthStatus.Warn | HealthStatus.Fail, output, time }, where
- * output says why in plain English and time (ISO) is when the check's
- * observation was made (null when there is none yet).
- *
- * Each check is a pure function of a status() snapshot (the trade engine's,
- * server/tradeEngine/host.js), served by GET /api/admin/health and shown on
- * the admin Services page. A plug-in reports its own health (its health(),
- * in its status row); the engine's check folds them and knows no plug-in by
- * name, the same rule the host follows.
+ * Health checks in the shape of the IETF "Health Check Response Format for HTTP APIs": { status, output, time }.
+ * Each check is a pure function of a status() snapshot. The engine's check folds its plug-ins' own health and knows
+ * no plug-in by name, the same rule the host follows.
  */
 import { HealthStatus, JobRunStatus, PluginState } from '../shared/appEnums.js';
 
@@ -52,7 +44,6 @@ export function tradeEngineHealth({ running, plugins }) {
   return { status: HealthStatus.Pass, output, time: checks.find((check) => check.time !== null)?.time ?? null };
 }
 
-/** A YYYY-MM-DD date as "11 Nov". */
 const dayLabel = (/** @type {string} */ date) =>
   new Date(`${date}T00:00:00Z`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', timeZone: 'UTC' });
 

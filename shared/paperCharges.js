@@ -97,8 +97,6 @@ function addCharges(a, b) {
 }
 
 /**
- * The charge schedule for an instrument type; stocks are intraday when entered
- * and exited on the same IST day.
  * @param {string} instrumentType  CE, PE, FUT or EQ
  * @param {Date} entryTime
  * @param {Date} exitTime
@@ -111,8 +109,6 @@ export function chargeSegment(instrumentType, entryTime, exitTime) {
 }
 
 /**
- * A closed trade's charges: its entry order and its exit order (the opposite
- * side), both at its quantity.
  * @param {{ instrumentType: string, side: import('./tradeEnums.js').SideId, quantity: number, entryPrice: number, entryTime: Date }} trade
  * @param {number} exitPrice
  * @param {Date} exitTime

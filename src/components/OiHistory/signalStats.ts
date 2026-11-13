@@ -17,7 +17,6 @@ function dteBucket(days: number | null | undefined): string | null {
   return '8+ days';
 }
 
-/** A slice: the value it groups signals by, its row order, and the label shown for a value. */
 interface Slice {
   group: string;
   value: (signal: TradeSignalRow) => string | null | undefined;
@@ -25,7 +24,6 @@ interface Slice {
   label?: (value: string) => string;
 }
 
-/** A setup slice's value: the action and the option, e.g. "BUY CE". */
 const setupOf = (action: string, optionType: string) => `${action} ${optionType}`;
 
 /**
@@ -61,7 +59,6 @@ export function signalVerdict(scored: number, winRate: number | null, averageRet
   return SignalVerdict.Mixed;
 }
 
-/** Win rate, average return and average worst move for each slice of the logged signals. */
 export function summarizeSignalBreakdown(signals: TradeSignalRow[]): SignalBreakdownRow[] {
   const result: SignalBreakdownRow[] = [];
 

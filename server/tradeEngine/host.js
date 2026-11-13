@@ -34,7 +34,6 @@ import { createMarket } from './market.js';
 import { PluginKind, PluginState } from '../../shared/appEnums.js';
 
 const TRADE_ENGINE_LOCK = 'trade-engine';
-/** How often a standing-by server tries to take over the host. */
 const LOCK_RETRY_MS = 10_000;
 
 /**
@@ -54,7 +53,6 @@ const LOCK_RETRY_MS = 10_000;
  */
 
 /**
- * A plug-in host.
  * @param {{
  *   name: string,
  *   lockName: string,

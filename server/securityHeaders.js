@@ -1,9 +1,6 @@
 /**
- * Browser security headers for every reply. In production the server serves the built app, so the
- * Content-Security-Policy decides what the page may load: only its own scripts, Google Fonts, its own
- * API and WebSocket, and images over HTTPS (the Kite avatar's host isn't fixed). The page can't be
- * framed (frame-ancestors / X-Frame-Options), so clickjacking can't wrap it. In dev, Vite serves the
- * page, so these headers only reach API replies there.
+ * In dev, Vite serves the page, so these headers only reach API replies there. Images over HTTPS, since the Kite
+ * avatar's host isn't fixed.
  */
 
 /** The page's allowed sources, one entry per directive. Add a source here when the app starts loading one. */

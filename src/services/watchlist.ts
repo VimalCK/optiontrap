@@ -1,11 +1,6 @@
 /**
- * Watchlist API Client
- *
- * Thin wrappers over the /api/watchlists REST endpoints. All calls include
- * credentials (session cookie) and return typed data.
- *
- * GET /api/watchlists returns metadata only (no items) for fast tab rendering.
- * GET /api/watchlists/:id returns a single list with items — called on tab switch.
+ * Thin wrappers over /api/watchlists. GET /api/watchlists returns metadata only
+ * (no items) so tabs render fast; a tab's items come from GET /api/watchlists/:id on switch.
  */
 import { apiClient } from './apiClient';
 
@@ -35,12 +30,10 @@ export interface WatchlistFull {
 
 const request = <T>(url: string, options?: Parameters<typeof apiClient.get>[1]) => apiClient.get<T>(url, options);
 
-/** Fetch all watchlists (metadata only — id, name, itemCount) */
 export async function fetchWatchlists(): Promise<WatchlistMeta[]> {
   return request<WatchlistMeta[]>('/api/watchlists');
 }
 
-/** Fetch a single watchlist with all its items */
 export async function fetchWatchlistItems(id: string): Promise<WatchlistFull> {
   return request<WatchlistFull>(`/api/watchlists/${id}`);
 }

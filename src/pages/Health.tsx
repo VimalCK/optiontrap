@@ -26,7 +26,6 @@ const formatUptime = (seconds: number) => {
   return `${m}m`;
 };
 
-/** The badge look and word for each health check status. */
 const CHECK_BADGES: Record<HealthCheck['status'], { tone: HealthToneId; label: string }> = {
   [HealthStatus.Pass]: { tone: HealthTone.Up, label: 'OK' },
   [HealthStatus.Warn]: { tone: HealthTone.Warn, label: 'Warning' },
@@ -54,7 +53,6 @@ export function oiFeedStatus(newest: number | null, now: Date = new Date()): { t
   };
 }
 
-/** One service row for a server health check: its name, why (and when), and a pass / warn / fail badge. */
 export const HealthCheckRow: React.FC<{ icon: React.ReactNode; name: string; check: HealthCheck }> = ({ icon, name, check }) => {
   const badge = CHECK_BADGES[check.status];
   return (
@@ -112,7 +110,6 @@ const Health: React.FC = () => {
     <>
       {error && <div className="admin-error">{error}</div>}
 
-      {/* Overall status hero */}
       <div className={`hx-hero hx-hero--${(healthy ? HealthTone.Up : HealthTone.Down).toLowerCase()}`}>
         <div className="hx-hero__pulse"><span /></div>
         <div className="hx-hero__text">
@@ -129,7 +126,6 @@ const Health: React.FC = () => {
         </div>
       </div>
 
-      {/* Service status list */}
       <div className="hx-panels">
         <div className="hx-panel">
           <div className="hx-panel__title">Services</div>
@@ -180,7 +176,6 @@ const Health: React.FC = () => {
           <HealthCheckRow icon={<CalendarIcon size={18} />} name="Nightly Jobs" check={health.checks.nightlyJobs} />
         </div>
 
-        {/* Metrics */}
         <div className="hx-metrics">
           <div className="hx-stat">
             <span className="hx-stat__icon"><UserIcon size={18} /></span>

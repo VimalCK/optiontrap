@@ -1,5 +1,3 @@
-/** Rule: exit a position once its loss reaches a set percentage of its entry price. */
-
 import { ParamType } from '../tradeEnums.js';
 
 /** This exit rule's id: stored in users' settings and trade records, so it never changes. */

@@ -31,7 +31,6 @@ const isPermissionError = (/** @type {unknown} */ body) =>
   typeof body === 'object' && body !== null && 'error_type' in body && body.error_type === KiteErrorType.PermissionException;
 
 /**
- * Whether an HTTP status (and the reply's body, when known) means the Kite login is no longer valid.
  * @param {number | null | undefined} status
  * @param {unknown} [body]
  */
@@ -40,6 +39,5 @@ export function isKiteAuthFailure(status, body) {
   return status === FORBIDDEN && !isPermissionError(body);
 }
 
-/** Whether a reply body carries the KITE_LOGIN_ENDED code. */
 export const isKiteLoginEndedReply = (/** @type {unknown} */ body) =>
   typeof body === 'object' && body !== null && 'code' in body && body.code === KITE_LOGIN_ENDED;

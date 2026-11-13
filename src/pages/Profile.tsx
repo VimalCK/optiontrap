@@ -156,9 +156,7 @@ const Profile: React.FC = () => {
         </button>
       </div>
 
-      {/* Merged session + account details card */}
       <div className="card profile-merged-card">
-        {/* Left — avatar + account detail rows */}
         <div className="profile-merged-card__left">
           <div className="profile-merged-card__top">
             {session && profile?.avatarUrl ? (
@@ -219,7 +217,6 @@ const Profile: React.FC = () => {
 
         <div className="profile-merged-card__divider" />
 
-        {/* Right — funds */}
         <div className="profile-merged-card__right">
           {session && (
             <>
@@ -287,7 +284,6 @@ const Profile: React.FC = () => {
         </div>
       </div>
 
-      {/* Danger Zone */}
       <div className="card profile-danger-zone" style={{ marginTop: 'var(--card-gap)' }}>
         <div className="profile-danger-zone__content">
           <div>

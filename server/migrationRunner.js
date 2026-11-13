@@ -1,34 +1,21 @@
 /**
- * The migration runner: applies server/migrations/*.sql in filename order,
- * once each, recording every applied file in schema_migrations by name and
- * checksum, and refusing to start when an applied file was edited.
+ * Applied files are recorded by name and checksum, and startup is refused when one was edited. The base schema
+ * (000_base_schema.sql) is the end state of the migrations it replaces; its `-- replaces: <file>` line names the last one.
  *
- * The base schema is the file named BASE_SCHEMA_FILE (000_base_schema.sql):
- * the end state of every migration it replaced, written as one schema. Its
- * `-- replaces: <file>` line names the last migration folded into it. To fold
- * more in, regenerate the base file, update that line and delete the files it
- * now covers, all in one release; no code changes.
- *
- * - A new (empty) database runs the base file like any other.
- * - A database that has the `replaces` file recorded already has everything
- *   the base file builds: the base file is recorded (or its checksum updated,
- *   after a new squash) without running, and the rows of deleted files are
- *   cleared, so schema_migrations lists only files that exist.
- * - Any other database is refused: it is behind the base file (its IF NOT
- *   EXISTS would skip existing tables and leave the later changes out), or
- *   the base file was edited without a new `replaces`.
- * The plan is a pure function (planMigrations) so every path is tested
- * without a database; runMigrations carries it out.
+ * - An empty database runs the base file like any other.
+ * - A database that already has the `replaces` file recorded only records the base file, and the rows of deleted files
+ *   are cleared.
+ * - Any other database is refused: it is behind the base file (IF NOT EXISTS would skip existing tables), or the base
+ *   file was edited without a new `replaces`.
+ * The plan is a pure function (planMigrations), so every path is tested without a database.
  */
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { MigrationAction } from '../shared/appEnums.js';
 
-/** The base schema's file name, fixed so the runner can tell it from the migrations after it. */
 export const BASE_SCHEMA_FILE = '000_base_schema.sql';
 
-/** The base file's required line naming the last migration it replaces. */
 const REPLACES_LINE = /^-- replaces: (\S+\.sql)\s*$/m;
 
 /**
@@ -37,13 +24,12 @@ const REPLACES_LINE = /^-- replaces: (\S+\.sql)\s*$/m;
  */
 
 /**
- * A migration file's checksum, over LF line endings so a CRLF checkout matches.
+ * Over LF line endings, so a CRLF checkout matches.
  * @param {string} sql
  */
 export const migrationChecksum = (sql) => crypto.createHash('sha256').update(sql).digest('hex');
 
 /**
- * The last migration the base file replaces, from its `-- replaces:` line.
  * @param {MigrationFile} base
  * @returns {string}
  */
@@ -54,8 +40,6 @@ export function replacedMigration(base) {
 }
 
 /**
- * What to do with the base file: nothing when applied as it is, run it on an
- * empty database, or record it on one that has every migration it replaces.
  * @param {MigrationFile} base
  * @param {Map<string, string>} applied
  * @returns {MigrationStep | null}
@@ -73,9 +57,7 @@ function planBaseSchema(base, applied) {
 }
 
 /**
- * What to do with each file not applied yet: run it, or (the base file on a
- * database that already has what it builds) only record it. Throws when an
- * applied file's checksum changed, or the database is behind the base file.
+ * Throws when an applied file's checksum changed, or the database is behind the base file.
  * @param {MigrationFile[]} files  in filename order
  * @param {Map<string, string>} applied  name → checksum from schema_migrations
  * @returns {MigrationStep[]}
@@ -102,7 +84,6 @@ export function planMigrations(files, applied) {
 }
 
 /**
- * The .sql files in `dir`, in filename order, with LF line endings.
  * @param {string} dir
  * @returns {MigrationFile[]}
  */
@@ -118,9 +99,7 @@ function readMigrationFiles(dir) {
 }
 
 /**
- * One step in its own transaction. Recording the base file also clears the
- * rows of the files it replaced (no longer in the folder), so schema_migrations
- * lists only files that exist.
+ * One step in its own transaction.
  * @param {import('pg').Pool} pool
  * @param {MigrationStep} step
  * @param {string[]} fileNames  every file in the folder
@@ -147,7 +126,6 @@ async function applyStep(pool, { action, file }, fileNames) {
 }
 
 /**
- * Apply the pending migrations in `dir` to the database.
  * @param {import('pg').Pool} pool
  * @param {string} dir
  */

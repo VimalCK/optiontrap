@@ -1,18 +1,9 @@
 /**
- * One Kite ticker feed shared by everything on the server that needs live
- * prices: the trade engine's trade monitor and order service
- * (server/tradeEngine/services/tradeMonitor.js, orders.js).
+ * Kite allows only 3 ticker connections per API key, so the trade monitor and order service share one real feed. Each
+ * client has the shape of a kiteTickerFeed.js feed ({ watch, close }) and gets the ticks of its own instruments.
  *
- * Kite allows only 3 ticker connections per API key, so each of them can't
- * open its own feed. Each opens a client here instead, with the same shape
- * as a kiteTickerFeed.js feed ({ watch, close }): the real feed watches every
- * client's instruments together, and each client gets the ticks of its own.
- *
- * - The first client opens the real feed; when the last one closes, it closes.
- * - A client with a different Kite session (the admin logged in again)
- *   reopens the real feed with it, for all clients.
- * - When the session expires (a 403), every client hears onAuthError and is
- *   dropped, as with its own feed; each opens again at its next check.
+ * - A client with a different Kite session (the admin logged in again) reopens the real feed with it, for all clients.
+ * - When the session expires (a 403), every client hears onAuthError and is dropped.
  */
 import { createKiteTickerFeed } from './kiteTickerFeed.js';
 
@@ -23,7 +14,6 @@ import { createKiteTickerFeed } from './kiteTickerFeed.js';
  */
 
 /**
- * A factory of feed clients sharing one real feed.
  * @param {{ createFeed?: typeof createKiteTickerFeed }} [deps]
  * @returns {typeof createKiteTickerFeed}
  */
@@ -88,5 +78,4 @@ export function createSharedTickerFeed({ createFeed = createKiteTickerFeed } = {
   };
 }
 
-/** The server's one shared feed. */
 export const openSharedTickerFeed = createSharedTickerFeed();

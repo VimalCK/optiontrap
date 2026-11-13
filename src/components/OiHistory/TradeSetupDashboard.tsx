@@ -29,11 +29,7 @@ export function upcomingSignals(rows: TradeSignalRow[], today: string): TradeSig
   return rows.filter((row) => !row.expiry || row.expiry >= today);
 }
 
-/**
- * Logged signals for the scrip, newest first. Shows signals on upcoming
- * expiries by default; All adds the expired ones. Loss rows are tinted red,
- * profit rows green. With onDelete, each row gets a × that deletes it.
- */
+/** Upcoming expiries by default; All adds the expired ones. */
 export const SignalResultsGrid: React.FC<{ rows: TradeSignalRow[]; today?: string; onDelete?: (id: number) => void }> = ({ rows, today = todayIST(), onDelete }) => {
   const [showExpired, setShowExpired] = useState(false);
   const upcoming = upcomingSignals(rows, today);
@@ -107,10 +103,6 @@ export const SignalResultsGrid: React.FC<{ rows: TradeSignalRow[]; today?: strin
   );
 };
 
-/**
- * Which setups make money: win rate, average return and average worst move
- * per slice (action, setup, strength, OI pattern, flow, trend, days to expiry).
- */
 export const SignalBreakdownTable: React.FC<{ signals: TradeSignalRow[] }> = ({ signals }) => {
   const rows = summarizeSignalBreakdown(signals);
   const groups = [...new Set(rows.map((row) => row.group))];
@@ -166,7 +158,6 @@ export const SignalBreakdownTable: React.FC<{ signals: TradeSignalRow[] }> = ({ 
   );
 };
 
-/** Recorded signal outcomes for the scrip: win rate, returns and every signal. */
 const SignalPerformancePanel: React.FC<{ signalPerformance: SignalPerformanceSummary; signalRows: TradeSignalRow[]; onDeleteSignal?: (id: number) => void }> = ({ signalPerformance, signalRows, onDeleteSignal }) => (
   <div className="oi-history__signal-performance oi-history__signal-performance--dashboard">
     <div className="oi-history__signal-performance-head">
@@ -200,7 +191,6 @@ const SignalPerformancePanel: React.FC<{ signalPerformance: SignalPerformanceSum
   </div>
 );
 
-/** Trade Setup tab: buying and selling setups for the selected strike, with evidence. */
 export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
   setup,
   selectedStrike,

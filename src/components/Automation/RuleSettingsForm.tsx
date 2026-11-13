@@ -1,9 +1,6 @@
 /**
- * One rule list in the automation settings (the Entry rules and Exit rules
- * tabs): every rule in the list, each with an Active / Inactive toggle and
- * inputs for its values. Built entirely from the rule list it is given, so a
- * new rule shows up without changes to this file. Rules and settings logic:
- * shared/rules/ruleSettings.js.
+ * Rules and settings logic: shared/rules/ruleSettings.js. A new rule shows up here
+ * without changes to this file.
  */
 import React from 'react';
 import { PARAM_TYPES } from '../../../shared/rules/paramTypes.js';
@@ -18,13 +15,12 @@ export interface RuleSettingsFormProps {
   onChange: (settings: RuleSettings) => void;
   /** Names the group for screen readers, e.g. "Entry rules". */
   label: string;
-  /** One line on how the list is used. */
   description: string;
   /** Shown instead of the list when it has no rules (e.g. no strategies yet). */
   emptyText?: string;
 }
 
-/** What an input's text means as a value: empty is "not set"; anything else stays as typed, for the server to check. */
+/** Empty is "not set"; anything else stays as typed, for the server to check. */
 export function paramValueFromInput(type: ParamTypeId, text: string): ParamValue {
   if (text === '') return null;
   return PARAM_TYPES[type].input === 'number' ? Number(text) : text;

@@ -12,10 +12,7 @@ interface TradingViewLinkProps {
   title?: string;
 }
 
-/**
- * Tiny chart icon that opens the tradingsymbol on TradingView in a new tab.
- * Stops event propagation so it doesn't trigger any parent row/click handlers.
- */
+/** Stops event propagation so it doesn't trigger any parent row/click handlers. */
 const TradingViewLink: React.FC<TradingViewLinkProps> = ({
   symbol,
   exchange,

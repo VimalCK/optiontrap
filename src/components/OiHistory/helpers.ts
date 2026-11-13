@@ -61,11 +61,9 @@ export function addMonths(month: string, delta: number): string {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
-/** Format a month string (YYYY-MM) to label (e.g., "July 2026") */
 /** Price line colours per futures month, nearest first (OI/volume bars use purple/cyan). */
 export const FUTURES_LINE_COLORS = ['#22c55e', '#f59e0b', '#ec4899', '#3b82f6'];
 
-/** Daily price/OI changes and signal for one futures contract's history. */
 export function buildFuturesSeries(contractRows: FuturesHistoryRow[]) {
   const sorted = [...contractRows].sort((a, b) => a.date.localeCompare(b.date));
   return sorted.map((row, index) => {
@@ -90,14 +88,12 @@ export function formatMonthLabel(month: string): string {
   return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
 }
 
-/** Format a month string (YYYY-MM) to short label (e.g., "Jul '26") */
 export function formatMonthShortLabel(month: string): string {
   const [y, m] = month.split('-').map(Number);
   const mon = new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'short' });
   return `${mon} '${String(y).slice(2)}`;
 }
 
-/** Format a full date (YYYY-MM-DD) to label, day first (e.g., "Wed, 1 Jul") */
 export function formatFullDateLabel(date: string): string {
   return formatCalendarDate(date, { weekday: 'short', day: 'numeric', month: 'short' });
 }
@@ -107,7 +103,7 @@ export function priceDirection(
   data: Map<string, { close: number; prevClose: number | undefined }>,
   expiries: string[],
 ): MoveDirectionId {
-  // Use weighted average price change across expiries with data
+  // Equal-weight average of the price change across the expiries that have data.
   let totalChg = 0;
   let count = 0;
   for (const exp of expiries) {

@@ -20,7 +20,6 @@ import { istDateString } from '@/utils/marketStatus';
 import { buildOptionChain as buildChain, upcomingExpiries } from '../../shared/optionAnalysis/chain.js';
 import { Exchange, isOptionType, type OptionTypeId } from '../../shared/tradeEnums.js';
 
-/** In-memory cache of all instruments to avoid re-fetching */
 let instrumentsCache: Instrument[] | null = null;
 
 /**
@@ -46,25 +45,16 @@ export async function fetchOptions(symbol: string, signal?: AbortSignal): Promis
     }));
 }
 
-/**
- * Look up the lot size for an instrument token from the cache.
- */
 export function getLotSize(instrumentToken: number): number {
   if (!instrumentsCache) return 1;
   const inst = instrumentsCache.find((i) => i.instrumentToken === instrumentToken);
   return inst?.lotSize || 1;
 }
 
-/**
- * Get unique expiry dates sorted ascending
- */
 export function getExpiries(options: OptionInstrument[]): string[] {
   return upcomingExpiries(options, istDateString());
 }
 
-/**
- * Build option chain rows for a given expiry
- */
 export function buildOptionChain(options: OptionInstrument[], expiry: string): OptionChainRow[] {
   return buildChain(options, expiry);
 }

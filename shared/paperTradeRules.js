@@ -1,11 +1,7 @@
 /**
- * Paper trade rules: the single list of checks a paper trade must pass before
- * it is opened or exited, or an order for one is placed.
- *
- * Everything that places or exits a paper trade goes through these: every
- * order, manual or automated, through the trade engine's order service and
- * server/tradeEngine/positions.js. The browser can use them too, to check before asking.
- * To change what's allowed, change this list; don't add checks in callers.
+ * Paper trade rules: the one list of checks a paper trade must pass before it
+ * is opened, exited or ordered. Every order (manual or automated) and every
+ * exit goes through them, on the server and in the browser.
  *
  * A rule is { id, appliesTo, code, check }:
  *   id         stable name, for logs and tests
@@ -33,7 +29,6 @@ import { HORIZONS, Horizon, INSTRUMENT_TYPES, InstrumentType, PaperTradeAction, 
  */
 const PAPER_TRADE_ACTIONS = Object.values(PaperTradeAction);
 
-/** Error codes a rule can report. */
 export const RULE_CODES = {
   INVALID_TRADE: 'INVALID_TRADE',
   MARKET_CLOSED: 'MARKET_CLOSED',
@@ -153,7 +148,6 @@ export const PAPER_TRADE_RULES = [
 ];
 
 /**
- * Run every rule for `action`, in list order.
  * @param {import('./tradeEnums.js').PaperTradeActionId} action
  * @param {RuleContext} ctx see the file header
  * @param {PaperTradeRule[]} [rules] defaults to PAPER_TRADE_RULES

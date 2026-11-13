@@ -1,16 +1,6 @@
 /**
- * Daily candles for watchlist stocks.
- *
- * A stock's history is fetched from Kite once in full (Kite serves up to 2000
- * days of daily candles per request), then only the last few sessions on each
- * update. Re-fetching a short overlap catches late corrections, and a stored
- * close that no longer matches means Kite adjusted past prices for a split or
- * bonus, so the whole history is fetched again. Only completed sessions are
- * stored: today's candle waits for the 15:45 IST close.
- *
- * scanStock() then re-runs the shared setup engine on the stored candles,
- * saves the watchlist summary, records the day's setups, and moves open setups
- * forward to their target, stop or expiry.
+ * A stored close that no longer matches Kite's means Kite adjusted past prices for a split or bonus, so the whole
+ * history is fetched again. Only completed sessions are stored: today's candle waits for the 15:45 IST close.
  */
 
 import {
@@ -103,7 +93,6 @@ async function fetchKiteDaily(instrumentToken, from, to, kite, { signal, retried
 }
 
 /**
- * Bring one stock's stored candles up to date with the given Kite session.
  * @returns {Promise<{ fetched: number, full: boolean, skipped: boolean }>}
  */
 export async function syncStockCandles(instrumentToken, kite, { now = new Date(), signal } = {}) {
@@ -129,7 +118,6 @@ export async function syncStockCandles(instrumentToken, kite, { now = new Date()
 }
 
 /**
- * Re-scan one stock from its stored candles.
  * @param {{ instrumentToken: number, tradingsymbol: string }} stock
  * @param {Array<{ date: string, close: number }>} marketCandles  the market reference index; empty skips the market check
  */

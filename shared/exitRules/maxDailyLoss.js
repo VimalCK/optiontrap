@@ -1,9 +1,7 @@
 /**
- * Rule: square off every open automated position once today's automated loss
- * reaches a set amount. The Max loss per day entry rule only stops new trades;
- * this one closes the open ones too, so the day's loss stops near the amount.
- * Fired for every position at once (winners too), since closing a position at
- * its price doesn't change the day's P&L, only books it.
+ * The Max loss per day entry rule only stops new trades; this one also closes
+ * the open ones. It fires for every position at once, winners too: closing at
+ * the price doesn't change the day's P&L, only books it.
  */
 
 import { ParamType } from '../tradeEnums.js';

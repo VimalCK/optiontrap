@@ -19,7 +19,6 @@ export function storedTradingMode(): TradingModeId {
   }
 }
 
-/** Remember `mode` as the user's trading mode. */
 export function saveTradingMode(mode: TradingModeId): void {
   try {
     localStorage.setItem(STORAGE_KEY, mode);

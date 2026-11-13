@@ -10,7 +10,6 @@ export function getMarketStatus(): MarketStatusId {
   return marketStatus();
 }
 
-/** Is the market currently open for trading? */
 export function isMarketLive(): boolean {
   return getMarketStatus() === MarketStatus.Live;
 }

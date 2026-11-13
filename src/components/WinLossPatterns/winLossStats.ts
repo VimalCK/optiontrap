@@ -1,9 +1,6 @@
 /**
- * How Win/Loss Patterns reads the results of closed automated trades
- * (GET /api/automation/results): the ratios worked out from each group's
- * totals, and plain names for each group's key. Pure functions, so the
- * component only renders. Grouping and sums happen on the server
- * (server/autoTradeResults.js).
+ * Grouping and sums happen on the server (server/autoTradeResults.js); this file
+ * only derives the ratios and labels from each group's totals.
  */
 import { RESULTS_ENTRY_SLOT_MINUTES } from '../../../shared/automation.js';
 import { ENGINE_EXITS, EXIT_RULES } from '../../../shared/exitRules/index.js';
@@ -14,31 +11,27 @@ import { formatCalendarDate } from '@/utils/marketStatus';
 import { type SideId } from '../../../shared/tradeEnums.js';
 import { setupPatternLabel } from '../../../shared/analysisEnums.js';
 
-/** Share of trades that made money, in %; null with no trades. */
 export const winRate = (g: ResultGroup<unknown>): number | null => (g.trades > 0 ? (g.wins / g.trades) * 100 : null);
 
-/** Average P&L per trade; null with no trades. */
 export const averagePnl = (g: ResultGroup<unknown>): number | null => (g.trades > 0 ? g.pnl / g.trades : null);
 
-/** Average winning trade; null with no wins. */
 export const averageWin = (g: ResultGroup<unknown>): number | null => (g.wins > 0 ? g.grossProfit / g.wins : null);
 
-/** Average losing trade, as a negative amount; null with no losses. */
+/** As a negative amount. */
 export const averageLoss = (g: ResultGroup<unknown>): number | null => (g.losses > 0 ? -g.grossLoss / g.losses : null);
 
-/** Gross profit ÷ gross loss; null when nothing was lost (it has no value then). */
+/** Null when nothing was lost (it has no value then). */
 export const profitFactor = (g: ResultGroup<unknown>): number | null => (g.grossLoss > 0 ? g.grossProfit / g.grossLoss : null);
 
-/** What closed the trades: an exit rule's name, the engine's own exit, or a manual exit (key null). */
+/** A null id is a manual exit. */
 export function exitRuleLabel(id: string | null): string {
   if (id === null) return 'Exited manually';
   return [...EXIT_RULES, ...ENGINE_EXITS].find((exit) => exit.id === id)?.label ?? id;
 }
 
-/** A strategy's name from `strategies`; trades recorded before strategies were stored have none. */
+/** Trades recorded before strategies were stored have no id. */
 export const strategyName = (id: string | null, strategies: StrategyInfo[]): string => (id === null ? 'Unknown' : strategyLabel(id, strategies) ?? id);
 
-/** A setup (the strategy's pattern); trades recorded without one show "Unknown". */
 export const setupName = (setup: string | null): string => (setup === null ? 'Unknown' : setupPatternLabel(setup));
 
 const clock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
@@ -51,7 +44,7 @@ export const sideName = (side: SideId): string => sideLabel(side);
 /** An IST day, e.g. "Mon, 9 Nov". */
 export const dayLabel = (day: string): string => formatCalendarDate(day, { weekday: 'short', day: 'numeric', month: 'short' });
 
-/** An IST day without its weekday, e.g. "9 Nov", for the chart's axis. */
+/** An IST day without its weekday, e.g. "9 Nov". */
 export const shortDayLabel = (day: string): string => formatCalendarDate(day, { day: 'numeric', month: 'short' });
 
 /** At most this many day labels under the daily bars, so they never crowd. */
@@ -72,7 +65,6 @@ export function dailyBars(days: ResultGroup<string>[]) {
   }));
 }
 
-/** Each day's P&L with the running total up to and including it, oldest first. */
 export function withRunningTotal(days: ResultGroup<string>[]): (ResultGroup<string> & { total: number })[] {
   let total = 0;
   return days.map((day) => {

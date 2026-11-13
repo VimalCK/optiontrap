@@ -271,8 +271,14 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
 - TypeScript `strict` with `noUnusedLocals`/`noUnusedParameters`; no `any` unless unavoidable (shared JS uses JSDoc types).
 - 2-space indent, single quotes, semicolons, trailing commas in multi-line literals, arrow functions for small helpers.
   Long single-line expressions are accepted; match the surrounding file.
-- Every module starts with a `/** … */` header explaining **what it is for and why**, and where related rules live.
-  Exported functions get a one-line JSDoc. Comments explain intent and non-obvious reasons; don't narrate the code.
+- **Comments only when they add real value.** Clear names and small functions come first; a comment is the exception.
+  - Write one only for what the code can't say: a non-obvious reason or constraint, a domain fact (IST timing, a Kite
+    quirk, Zerodha's rules), a formula's source, or a deliberate trade-off. Keep it short.
+  - Don't write: module headers or JSDoc that restate the file/function name, comments that narrate the next line,
+    section banners, or descriptions of what a well-named function obviously does.
+  - No required module headers or per-function JSDoc. JSDoc type tags (`@typedef`, `@param`, `@type` casts) stay where
+    `checkJs` needs them, without prose around them unless the prose adds something.
+  - When editing a file, delete comments it no longer needs; never leave a comment that has gone stale.
 - Names are plain and domain-specific (`heldQuantity`, `positionPnl`, `openPosition`).
 - User-facing copy is short, plain English; middle dot `·` separates status fragments ("Off · engine not built yet").
   Unavailable options are shown disabled with a reason, not hidden.

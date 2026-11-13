@@ -1,9 +1,3 @@
-/**
- * Holdings & Positions — combined tabbed page.
- * Tab 1: Holdings (equity holdings from Kite)
- * Tab 2: Positions (paper / live option positions)
- */
-
 import React, { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import HoldingsView from './HoldingsView';

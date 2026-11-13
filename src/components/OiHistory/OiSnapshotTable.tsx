@@ -27,7 +27,6 @@ interface OiSnapshotTableProps {
   onTrade: (cell: OiCellData, optionType: OptionTypeId, side: SideId, strike: number, expiry: string) => void;
 }
 
-/** Strike × expiry OI table for the selected date, with CE/PE patterns and buy/sell buttons. */
 export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
   rows,
   expiries,
@@ -129,7 +128,6 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
                   className={`${isAtm ? 'oi-history__row--atm' : ''} ${selectedStrike === strike ? 'oi-history__row--selected' : ''} ${dimmed ? 'oi-history__row--dimmed' : ''}`}
                   onClick={() => onSelectStrike(strike)}
                 >
-                  {/* CE Pattern */}
                   <td
                     className="oi-history__cell--pattern oi-history__cell--pattern-ce"
                     style={{ color: patternColor(cePattern) }}
@@ -141,7 +139,6 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
                     )}
                   </td>
 
-                  {/* CE data per expiry */}
                   {expiries.map((exp) => {
                     const cell = cells.get(exp);
                     const { text, chgCls } = formatOiWithChg(cell?.ceOi || 0, cell?.cePrevOi);
@@ -162,7 +159,6 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
                     );
                   })}
 
-                  {/* Strike */}
                   <td className={`oi-history__cell--strike ${isAtm ? 'oi-history__cell--strike-atm' : ''}`} title={isAtm ? 'At-the-money strike' : `Strike ${strike}`}>
                     <div className="oi-history__strike-bars" style={{ '--oi-history-expiry-count': expiries.length } as React.CSSProperties}>
                       <div className="oi-history__oi-bar oi-history__oi-bar--ce" style={{ width: `${ceBarWidth}%` }} />
@@ -171,7 +167,6 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
                     {strike}
                   </td>
 
-                  {/* PE data per expiry */}
                   {expiries.map((exp) => {
                     const cell = cells.get(exp);
                     const { text, chgCls } = formatOiWithChg(cell?.peOi || 0, cell?.pePrevOi);
@@ -192,7 +187,6 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
                     );
                   })}
 
-                  {/* PE Pattern */}
                   <td
                     className="oi-history__cell--pattern oi-history__cell--pattern-pe"
                     style={{ color: patternColor(pePattern) }}

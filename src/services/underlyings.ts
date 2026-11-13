@@ -32,7 +32,6 @@ export function loadUnderlyings(): Promise<Underlying[]> {
   return shared;
 }
 
-/** The shared list if it has loaded, else null. */
 export function loadedUnderlyings(): Underlying[] | null {
   return sharedValue;
 }

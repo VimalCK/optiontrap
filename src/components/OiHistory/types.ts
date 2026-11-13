@@ -57,13 +57,10 @@ export interface SignalPerformanceSummary {
   buyWinRate: number | null;
 }
 
-/** Which way a strike's option flow leans over the history. */
 export type StrikeBias = typeof Trend.Upward | typeof Trend.Downward | typeof Trend.Neutral;
 
-/** Which way one day's option flow leaned. */
 export type DailyBias = typeof Bias.Bullish | typeof Bias.Bearish | typeof Bias.Neutral;
 
-/** Which way the underlying moved over the history. */
 export type PriceTrendDirection = typeof Trend.Upward | typeof Trend.Downward | typeof Trend.Sideways | typeof Trend.Unknown;
 
 export interface StrikeBiasDay {
@@ -224,7 +221,6 @@ export interface OptionMomentumSummary {
   pe: OptionMomentumSide | null;
 }
 
-/** One strike × expiry cell of the OI Snapshot table. */
 export interface OiCellData {
   ceOi: number;
   peOi: number;
@@ -242,7 +238,6 @@ export interface OiCellData {
   peExpiry: string | undefined;
 }
 
-/** One strike row of the OI Snapshot table. */
 export interface OiTableRow {
   strike: number;
   cells: Map<string, OiCellData>;
@@ -253,7 +248,6 @@ export interface OiTableRow {
   dimmed: boolean;
 }
 
-/** Setup summaries for the selected strike, shown on the Trade Setup tab. */
 export interface TradeSetupData {
   tradeSetup: TradeSetupSummary;
   sellingSetup: SellingSetupSummary;
@@ -302,7 +296,6 @@ export interface TradeSignalDetails {
   fairRichPct?: number | null;
 }
 
-/** Outcome stats for one slice of the logged signals, e.g. "Setup: SELL CE". */
 export interface SignalBreakdownRow {
   group: string;
   label: string;

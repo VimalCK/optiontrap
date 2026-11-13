@@ -1,10 +1,7 @@
 /**
- * FormFooter — the one Save / Cancel row for settings-style pages, so every
- * settings page saves and cancels the same way. The Save button itself says
- * where things stand: "Saving…" while a save is under way (both buttons
- * disabled), then "Saved" until something changes (the page stays open, e.g.
- * to change another tab). It keeps one width, so its label never shifts the
- * row. Why the last save failed shows beside the buttons.
+ * Save stays "Saved" until something changes, so a settings page can stay open
+ * while the user changes another tab. The button keeps one width, so its label
+ * never shifts the row.
  */
 import React from 'react';
 import './FormFooter.css';
@@ -13,7 +10,6 @@ export interface FormFooterProps {
   onSave: () => void;
   onCancel: () => void;
   saving: boolean;
-  /** Why the last save failed (the server's message). */
   error: string | null;
   /** The last save succeeded and nothing has changed since; Save reads "Saved" and is off. */
   saved?: boolean;

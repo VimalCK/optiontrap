@@ -59,7 +59,6 @@ export interface FlowInput {
   prevSpot: number | undefined;
   asOf: Date;
   prevAsOf: Date;
-  /** Contracts traded today. */
   volume?: number;
   /** Daily closing OI before today, oldest first; the last value is prevOi. */
   oiHistory?: number[];
@@ -399,7 +398,6 @@ function compact(value: number): string {
   return `${sign}${abs.toFixed(0)}`;
 }
 
-/** Short lines explaining a reading, for tooltips. */
 export function describeFlow(reading: FlowReading): string[] {
   const lines: string[] = [];
   if (reading.iv !== null) {
