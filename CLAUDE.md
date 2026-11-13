@@ -252,7 +252,8 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   - `ToastStack` + `useToasts` for short messages after an action (an order placed or refused).
   - `IconButton` for any icon-only button (`icon`, `label` = tooltip + accessible name, `expanded` for toggles).
   - SVG icons in `src/components/icons/Icons.tsx`: add new ones there in the same style (24 viewBox, `currentColor`
-    stroke, `aria-hidden`).
+    stroke, `aria-hidden`; line icons through its `StrokeIcon`, which takes a `strokeWidth`). Never an inline `<svg>` icon
+    in a page: `noInlineIcons.test.ts` fails on one. A chart drawn as SVG is fine; add its file to that test's `ALLOWED`.
   - Buttons `app-btn`, `app-btn--primary|--secondary|--danger|--icon`. Cards `card`, `card__title`, `card__description`.
 - **CSS:**
   - Plain CSS, one file per area in `src/styles/`, imported by the page/component.

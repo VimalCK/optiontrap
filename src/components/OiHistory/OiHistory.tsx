@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { LevelsIcon } from '@/components/icons/Icons';
 import { useNavigate } from 'react-router-dom';
 import { handleKiteAuthFailure } from '@/services/authSession';
 import { ApiError, apiClient, isAbortError, responseErrorMessage } from '@/services/apiClient';
@@ -1384,10 +1385,7 @@ const OiHistory: React.FC = () => {
                   title={`Entry & exit zones for ${underlyingStock.tradingsymbol}`}
                   aria-label={`Entry and exit zones for ${underlyingStock.tradingsymbol}`}
                 >
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M3 3v18h18" />
-                    <path d="M7 14h4M7 9h8M7 19h11" />
-                  </svg>
+                  <LevelsIcon size={14} />
                 </button>
               )}
             </span>

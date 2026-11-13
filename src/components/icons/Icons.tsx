@@ -256,23 +256,6 @@ export const ChevronRightIcon: React.FC<IconProps> = ({ size = 14, className }) 
   </svg>
 );
 
-export const CloseIcon: React.FC<IconProps> = ({ size = 16, className }) => (
-  <svg
-    width={size}
-    height={size}
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="2"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    className={className}
-    aria-hidden="true"
-  >
-    <path d="M18 6L6 18M6 6l12 12" />
-  </svg>
-);
-
 export const CalendarIcon: React.FC<IconProps> = ({ size = 16, className }) => (
   <svg
     width={size}
@@ -407,5 +390,130 @@ export const AutomationIcon: React.FC<IconProps> = ({ size = 20, className }) =>
     <circle cx="9" cy="14" r="1.2" />
     <circle cx="15" cy="14" r="1.2" />
     <path d="M2 13v3M22 13v3" />
+  </svg>
+);
+
+/** Icons drawn with lines take a heavier or lighter stroke where a screen shows them very small or large. */
+interface StrokeIconProps extends IconProps {
+  strokeWidth?: number;
+}
+
+const StrokeIcon: React.FC<StrokeIconProps & { children: React.ReactNode }> = ({ size = 16, className, strokeWidth = 2, children }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth={strokeWidth}
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    className={className}
+    aria-hidden="true"
+  >
+    {children}
+  </svg>
+);
+
+export const CloseIcon: React.FC<StrokeIconProps> = (props) => (
+  <StrokeIcon {...props}><path d="M18 6L6 18M6 6l12 12" /></StrokeIcon>
+);
+
+export const CheckIcon: React.FC<StrokeIconProps> = (props) => (
+  <StrokeIcon {...props}><path d="M20 6L9 17l-5-5" /></StrokeIcon>
+);
+
+export const RefreshIcon: React.FC<StrokeIconProps> = (props) => (
+  <StrokeIcon {...props}>
+    <path d="M23 4v6h-6" />
+    <path d="M1 20v-6h6" />
+    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+  </StrokeIcon>
+);
+
+/** Undo a change: an arrow turning back. */
+export const ResetIcon: React.FC<StrokeIconProps> = (props) => (
+  <StrokeIcon {...props}>
+    <path d="M3 12a9 9 0 1 0 3-6.7" />
+    <path d="M3 4v6h6" />
+  </StrokeIcon>
+);
+
+export const BellIcon: React.FC<StrokeIconProps> = (props) => (
+  <StrokeIcon {...props}>
+    <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7" />
+    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+    <path d="M12 4V2" />
+  </StrokeIcon>
+);
+
+export const TrashIcon: React.FC<StrokeIconProps> = (props) => (
+  <StrokeIcon {...props}>
+    <path d="M3 6h18" />
+    <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
+    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+    <path d="M10 11v6M14 11v6" />
+  </StrokeIcon>
+);
+
+export const EyeIcon: React.FC<StrokeIconProps> = (props) => (
+  <StrokeIcon {...props}>
+    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+    <circle cx="12" cy="12" r="3" />
+  </StrokeIcon>
+);
+
+export const EyeOffIcon: React.FC<StrokeIconProps> = (props) => (
+  <StrokeIcon {...props}>
+    <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" />
+    <path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" />
+    <path d="M1 1l22 22" />
+  </StrokeIcon>
+);
+
+/** Horizontal bars on an axis (a bar chart). */
+export const BarChartIcon: React.FC<StrokeIconProps> = (props) => (
+  <StrokeIcon {...props}>
+    <path d="M3 3v18h18" />
+    <path d="M7 16h3" />
+    <path d="M7 12h7" />
+    <path d="M7 8h11" />
+  </StrokeIcon>
+);
+
+/** Price levels on an axis (entry and exit zones). */
+export const LevelsIcon: React.FC<StrokeIconProps> = (props) => (
+  <StrokeIcon {...props}>
+    <path d="M3 3v18h18" />
+    <path d="M7 14h4M7 9h8M7 19h11" />
+  </StrokeIcon>
+);
+
+export const TreemapIcon: React.FC<StrokeIconProps> = (props) => (
+  <StrokeIcon {...props}>
+    <rect x="3" y="3" width="7" height="9" />
+    <rect x="14" y="3" width="7" height="5" />
+    <rect x="14" y="12" width="7" height="9" />
+    <rect x="3" y="16" width="7" height="5" />
+  </StrokeIcon>
+);
+
+/** A rising line with an arrow head: opens a price chart. */
+export const TrendIcon: React.FC<StrokeIconProps> = (props) => (
+  <StrokeIcon {...props}>
+    <path d="M3 18l4.5-4.5 4.5 3 7.5-9" />
+    <path d="M15 6h4.5v4.5" />
+  </StrokeIcon>
+);
+
+/** Six dots: a handle to drag a row by. Filled, so it takes no stroke. */
+export const DragHandleIcon: React.FC<IconProps> = ({ size = 14, className }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">
+    <circle cx="8.5" cy="5" r="1.8" />
+    <circle cx="15.5" cy="5" r="1.8" />
+    <circle cx="8.5" cy="12" r="1.8" />
+    <circle cx="15.5" cy="12" r="1.8" />
+    <circle cx="8.5" cy="19" r="1.8" />
+    <circle cx="15.5" cy="19" r="1.8" />
   </svg>
 );

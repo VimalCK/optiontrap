@@ -1,4 +1,5 @@
 import React from 'react';
+import { TrendIcon } from '@/components/icons/Icons';
 import { tradingViewUrl } from '@/services/tradingview';
 import { useUnderlyings } from '@/hooks/useUnderlyings';
 import './TradingViewLink.css';
@@ -31,10 +32,7 @@ const TradingViewLink: React.FC<TradingViewLinkProps> = ({
     onClick={(e) => e.stopPropagation()}
     aria-label={`Open ${symbol} chart on TradingView`}
   >
-    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" aria-hidden="true">
-      <path d="M2 12l3-3 3 2 5-6" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M10 4h3v3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
+    <TrendIcon size={size} strokeWidth={2.25} />
   </a>
   );
 };

@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { CloseIcon } from '@/components/icons/Icons';
 import { useTheme, ACCENT_THEMES } from '@/context/ThemeContext';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { useAbortSignal } from '@/hooks/useAbortSignal';
@@ -99,9 +100,7 @@ const AlwaysSnapshotSetting: React.FC = () => {
                 title={`Stop snapshotting ${u.label} every day`}
                 aria-label={`Remove ${u.label}`}
               >
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
-                  <path d="M18 6 6 18M6 6l12 12" />
-                </svg>
+                <CloseIcon size={9} strokeWidth={3} />
               </button>
             </span>
           ))}

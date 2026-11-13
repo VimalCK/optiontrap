@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { ChevronDownIcon } from '@/components/icons/Icons';
 import AppSelect from '@/components/AppSelect/AppSelect';
 import { getUsers, updateUserSubscription, AdminUser } from '@/services/admin';
 import { DurationUnit, SubscriptionAction, type SubscriptionActionId } from '../../shared/appEnums.js';
@@ -99,9 +100,7 @@ const AdminUsers: React.FC = () => {
                   </span>
                   <span className="admin-cell admin-cell--date">{formatDate(u.lastLogin)}</span>
                   <span className="admin-cell admin-cell--status">
-                    <svg className={`admin-chevron ${expanded ? 'admin-chevron--open' : ''}`} width="12" height="8" viewBox="0 0 12 8" fill="none">
-                      <path d="M1 1l5 5 5-5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
+                    <ChevronDownIcon size={20} className={`admin-chevron ${expanded ? 'admin-chevron--open' : ''}`} />
                   </span>
                 </button>
 

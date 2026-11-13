@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { HoldingsIcon } from '@/components/icons/Icons';
+import { BarChartIcon, EyeIcon, EyeOffIcon, HoldingsIcon, TreemapIcon } from '@/components/icons/Icons';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import { heldQuantity, isPledged } from '@/services/holdings';
 import { useHoldings } from '@/hooks/useHoldings';
@@ -74,13 +74,7 @@ const HoldingsView: React.FC = () => {
           title="Privacy mode"
           aria-pressed={privacyMode}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            {privacyMode ? (
-              <><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94" /><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19" /><path d="M1 1l22 22" /></>
-            ) : (
-              <><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" /></>
-            )}
-          </svg>
+          {privacyMode ? <EyeOffIcon /> : <EyeIcon />}
         </button>
       </div>
 
@@ -135,10 +129,10 @@ const HoldingsView: React.FC = () => {
               </div>
               <div className="allocation-toggle">
                 <button className={`allocation-toggle__btn ${allocationView === AllocationView.Bar ? 'active' : ''}`} onClick={() => setAllocationView(AllocationView.Bar)} title="Bar view">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 3v18h18" /><path d="M7 16h3" /><path d="M7 12h7" /><path d="M7 8h11" /></svg>
+                  <BarChartIcon />
                 </button>
                 <button className={`allocation-toggle__btn ${allocationView === AllocationView.Treemap ? 'active' : ''}`} onClick={() => setAllocationView(AllocationView.Treemap)} title="Treemap view">
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="9" /><rect x="14" y="3" width="7" height="5" /><rect x="14" y="12" width="7" height="9" /><rect x="3" y="16" width="7" height="5" /></svg>
+                  <TreemapIcon />
                 </button>
               </div>
             </div>

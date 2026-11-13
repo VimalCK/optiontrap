@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { BellIcon, ChevronLeftIcon, InfoIcon } from '@/components/icons/Icons';
 import { formatNumericDate } from '@/utils/marketStatus';
 import { analyzeStock, MIN_CANDLES, type StockAnalysis, type Zone } from '../../../shared/stockSetups.js';
 import { LevelSide, MarketRelation, MoveDirection, type MarketRelationId, type MoveDirectionId } from '../../../shared/analysisEnums.js';
@@ -246,11 +247,7 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
               title={support ? 'Alert when price falls into this zone' : 'Alert when price rises into this zone'}
               aria-label={`Set alert at ${support ? 'support' : 'resistance'} ${rs(zone.low)}–${rs(zone.high)}`}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7" />
-                <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                <path d="M12 4V2" />
-              </svg>
+              <BellIcon size={14} />
             </button>
           )}
         </div>
@@ -280,15 +277,9 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
               title={view !== StockSetupsView.Details ? 'Back to setup details' : 'How to read this panel'}
             >
               {view !== StockSetupsView.Details ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M15 18l-6-6 6-6" />
-                </svg>
+                <ChevronLeftIcon size={14} />
               ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9.5" />
-                  <path d="M12 11v5.5" />
-                  <path d="M12 7.5h.01" />
-                </svg>
+                <InfoIcon size={14} />
               )}
             </button>
             {backtested ? (

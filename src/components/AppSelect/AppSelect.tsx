@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+import { CheckIcon, ChevronDownIcon } from '@/components/icons/Icons';
 import { createPortal } from 'react-dom';
 import './AppSelect.css';
 
@@ -173,12 +174,7 @@ const AppSelect: React.FC<AppSelectProps> = ({
         aria-expanded={open}
       >
         <span className="app-select-trigger__label">{selectedLabel}</span>
-        <svg
-          className={`app-select-trigger__chevron ${open ? 'app-select-trigger__chevron--open' : ''}`}
-          width="10" height="6" viewBox="0 0 10 6" fill="none"
-        >
-          <path d="M1 1l4 4 4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
+        <ChevronDownIcon size={16} className={`app-select-trigger__chevron ${open ? 'app-select-trigger__chevron--open' : ''}`} />
       </button>
 
       {open && createPortal(
@@ -220,16 +216,12 @@ const AppSelect: React.FC<AppSelectProps> = ({
                 {multi && (
                   <span className={`app-select-option__checkbox ${isSelected(opt.value) ? 'app-select-option__checkbox--checked' : ''}`}>
                     {isSelected(opt.value) && (
-                      <svg width="10" height="8" viewBox="0 0 12 10" fill="none">
-                        <path d="M1 5l3.5 3.5L11 1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
+                      <CheckIcon size={12} strokeWidth={3} />
                     )}
                   </span>
                 )}
                 {!multi && opt.value === value && (
-                  <svg className="app-select-option__check" width="12" height="10" viewBox="0 0 12 10" fill="none">
-                    <path d="M1 5l3.5 3.5L11 1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                  </svg>
+                  <CheckIcon size={12} strokeWidth={3.6} className="app-select-option__check" />
                 )}
                 <span>{opt.label}</span>
               </div>

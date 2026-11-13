@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { BellIcon, CloseIcon, DragHandleIcon, ResetIcon, TrashIcon } from '@/components/icons/Icons';
 import {
   fetchWatchlists,
   fetchWatchlistItems,
@@ -623,9 +624,7 @@ const Watchlist: React.FC = () => {
               >
                 <span className="wl-tab__count">{tab?.itemCount}</span>
                 <span className="wl-tab__badge-delete" aria-hidden="true">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
-                    <path d="M18 6 6 18M6 6l12 12" />
-                  </svg>
+                  <CloseIcon size={10} strokeWidth={3} />
                 </span>
               </button>
             </div>
@@ -760,11 +759,7 @@ const Watchlist: React.FC = () => {
                             title="Drag to move"
                             aria-hidden="true"
                           >
-                            <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
-                              <circle cx="2.5" cy="2.5" r="1.3" /><circle cx="7.5" cy="2.5" r="1.3" />
-                              <circle cx="2.5" cy="7" r="1.3" /><circle cx="7.5" cy="7" r="1.3" />
-                              <circle cx="2.5" cy="11.5" r="1.3" /><circle cx="7.5" cy="11.5" r="1.3" />
-                            </svg>
+                            <DragHandleIcon size={14} />
                           </span>
                           <span className="wl-symbol">{instrumentMap.has(item.instrumentToken) ? getDisplayLabel(instrumentMap.get(item.instrumentToken)!) : item.tradingsymbol}</span>
                           <TradingViewLink symbol={item.tradingsymbol} exchange={item.exchange} />
@@ -799,11 +794,7 @@ const Watchlist: React.FC = () => {
                             title="Create price alert"
                             aria-label={`Create price alert for ${item.tradingsymbol}`}
                           >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                              <path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 7h18s-3 0-3-7" />
-                              <path d="M13.73 21a2 2 0 0 1-3.46 0" />
-                              <path d="M12 4V2" />
-                            </svg>
+                            <BellIcon size={14} />
                           </button>
                           <button
                             className="wl-remove-btn"
@@ -811,12 +802,7 @@ const Watchlist: React.FC = () => {
                             title="Remove from watchlist"
                             aria-label={`Remove ${item.tradingsymbol} from watchlist`}
                           >
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                              <path d="M3 6h18" />
-                              <path d="M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2" />
-                              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-                              <path d="M10 11v6M14 11v6" />
-                            </svg>
+                            <TrashIcon size={14} />
                           </button>
                         </td>
                       </tr>
@@ -906,18 +892,11 @@ const Watchlist: React.FC = () => {
                               <div className="wl-alert-actions">
                                 {alert.status === PriceAlertStatus.Triggered && (
                                   <button className="wl-alert-action" onClick={() => handleResetAlert(alert.id)} title="Reset alert" aria-label={`Reset ${alert.tradingsymbol} alert`}>
-                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                      <path d="M3 12a9 9 0 1 0 3-6.7" />
-                                      <path d="M3 4v6h6" />
-                                    </svg>
+                                    <ResetIcon size={14} />
                                   </button>
                                 )}
                                 <button className="wl-alert-action wl-alert-action--delete" onClick={() => handleDeleteAlert(alert.id)} title="Delete alert" aria-label={`Delete ${alert.tradingsymbol} alert`}>
-                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                                    <polyline points="3 6 5 6 21 6" />
-                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
-                                    <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-                                  </svg>
+                                  <TrashIcon size={14} />
                                 </button>
                               </div>
                             </td>

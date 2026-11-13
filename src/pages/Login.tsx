@@ -3,10 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import ParticleNetwork from '@/components/ParticleNetwork/ParticleNetwork';
 import { getLoginUrl, getLastAvatarUrl, saveCredentials, hasCredentials, getCredentials, SubscriptionPlan } from '@/services/kiteAuth';
 import { currencySymbol, getPublicPlans, formatDuration } from '@/services/subscription';
-import {
-  ShieldIcon, AnalyticsIcon, TradesIcon, WatchlistIcon,
-  PaperTradingIcon, DashboardIcon, LogoIcon,
-} from '@/components/icons/Icons';
+import { AnalyticsIcon, CheckIcon, DashboardIcon, LogoIcon, PaperTradingIcon, ShieldIcon, TradesIcon, WatchlistIcon } from '@/components/icons/Icons';
 import { DurationUnit } from '../../shared/appEnums.js';
 import '@/styles/login.css';
 
@@ -351,9 +348,7 @@ const Login: React.FC = () => {
                 <ul className="price-card__features">
                   {features.map((f) => (
                     <li key={f}>
-                      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-                        <path d="M2 7.5l3.2 3.2L12 3.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-                      </svg>
+                      <CheckIcon size={14} strokeWidth={3} />
                       {f}
                     </li>
                   ))}
