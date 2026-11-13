@@ -12,8 +12,9 @@ It never places real orders. The user is the sole developer; prod (optiontrap.co
 - **Backend** `server/`: Node 22 + Express (port 3001), plain ESM JavaScript. `index.js` sets up the app, mounts the
   routers, and holds the Kite REST proxy (`/api/*` → api.kite.trade) and WebSocket ticker proxy (`/ws`). Routes live in
   `routes/`, one router per resource (`routes/watchlists.js` …), listed in `routes/index.js` (`ROUTERS`); add a router by
-  adding it there. `authMiddleware.js` holds the guards, `serverConfig.js` the environment settings. `db.js` is all
-  Postgres access plus the migrations runner.
+  adding it there. `authMiddleware.js` holds the guards, `serverConfig.js` the environment settings. All Postgres access is
+  in `db/`, one module per table or area (`db/positions.js`, `db/orders.js` …, connection and query helpers in
+  `db/pool.js`); `db.js` re-exports them, and callers (and test mocks) import from `db.js` only.
 - **Scheduled jobs** `server/scheduledJobs.js`: background data work (OI snapshots, OI history, the stock scan, the
   instrument sync, nightly jobs, signal outcomes; `*Scheduler.js`, `nightlyJobs.js`, `signalOutcomesJob.js`) as plug-ins
   on their own host (the trade engine's `host.js`, its own advisory lock). A job never writes its own timer or time check:
@@ -168,14 +169,18 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   - Cross-user scans (schedulers, jobs) need their own index or a redesign; never a sequential scan over all users' rows.
   - Don't add duplicate indexes: a composite index on `(a, b)` already serves queries on `a` alone.
   - Prove it: `EXPLAIN` the query with synthetic rows in a rolled-back transaction on a scratch DB and check it uses the index.
-- `db.js` conventions:
+- `db/` conventions:
+  - A new query goes in its area's module and is added to `db.js`'s re-exports. A module imports another's
+    helpers directly (`./pool.js`), never through `db.js`.
+  - SQL only: no business rules or calculations (charges, merges, P&L). Compute them in the service and pass the
+    result in (e.g. `tradeEngine/positions.js` decides how a trade merges and what a close costs; `db/positions.js` stores it).
   - Use the `query` / `rows` / `firstRow` helpers with `$n` parameters only, never string-built values.
     The one exception is an enum value written into SQL text: `${sqlEnum(Exchange.NFO)}` (`server/sql.js`), never a bare literal like `'NFO'` (see Enums).
   - Every user-owned query filters by `user_id`.
   - Map snake_case rows to camelCase objects in a `mapXRow` / `toX` function.
   - Use transactions (`BEGIN`/`COMMIT`/`ROLLBACK` on a pool client) for multi-statement writes.
   - Use `withAdvisoryLock` / `withNamedAdvisoryLock` for jobs that must not run twice.
-  - bigint and numeric come back as JS numbers (type parsers at the top of the file).
+  - bigint and numeric come back as JS numbers (type parsers in `db/pool.js`).
 
 ## Server API conventions
 

@@ -4,10 +4,11 @@
  * price, so every trade, manual or automated, entry or exit, goes through one
  * path and is checked against the same rules (shared/paperTradeRules.js).
  *
- * - openPosition opens a position at the fill, or adds to an open one on the
- *   same instrument from the same source and horizon, at the average price.
+ * - openPosition opens a position at the fill, or merges it with an open one
+ *   (bookTrade): the merge rules and the charges are decided here, and db.js
+ *   only stores the result.
  * - closePosition closes an open position at the fill and records its charges
- *   (shared/paperCharges.js, via db.js), dated when it happens. Closing an
+ *   (shared/paperCharges.js), dated when it happens. Closing an
  *   automated position (source Auto) also closes the automated trades behind
  *   it, with why: the exit rule's reason from the trade monitor, "Exited
  *   manually" (MANUAL_EXIT), or the engine's square-off after the close
@@ -21,12 +22,22 @@
  *     MARKET_CLOSED  a rule says not now
  *     NOT_FOUND      no such open position (close only)
  */
-import { addPosition, closeAutoTradesOfPosition, exitPositionById, getOpenPosition } from '../db.js';
+import {
+  averageIntoPosition,
+  closeAutoTrades,
+  closeOpenPosition,
+  findOpenPosition,
+  getExecutedAutoTrades,
+  getOpenPosition,
+  insertPosition,
+  setPositionQuantity,
+} from '../db.js';
 import { checkPaperTrade, normalizeTradeInput } from '../../shared/paperTradeRules.js';
+import { roundTripCharges } from '../../shared/paperCharges.js';
 import { algoLog } from '../algoLog.js';
 import { paperPnl } from '../../shared/paperPnl.js';
 import { SESSION_SQUARE_OFF_ID } from '../../shared/exitRules/index.js';
-import { PaperTradeAction, TradeSource } from '../../shared/tradeEnums.js';
+import { PaperTradeAction, TradeSource, TradingMode, oppositeSide } from '../../shared/tradeEnums.js';
 
 export const NOT_FOUND = 'NOT_FOUND';
 const NOT_FOUND_MESSAGE = 'Position not found or already exited';
@@ -51,8 +62,81 @@ export async function openPosition(userId, input, { now = new Date(), source = T
   const trade = normalizeTradeInput(input);
   const result = checkPaperTrade(PaperTradeAction.Open, { trade, now });
   if (!result.ok) return refused(result.violations[0]);
-  return { ok: true, position: await addPosition(userId, { ...trade, source }) };
+  return { ok: true, position: await bookTrade(userId, { ...trade, mode: trade.mode || TradingMode.Paper, source }) };
 }
+
+/**
+ * A position's charges for closing at `exitPrice` at `exitTime` (shared/paperCharges.js).
+ * @param {{ instrumentType: string, side: any, quantity: number, entryPrice: number, entryTime: string }} position
+ * @param {number} exitPrice
+ * @param {Date} exitTime
+ */
+export const positionCharges = (position, exitPrice, exitTime) => roundTripCharges({
+  instrumentType: position.instrumentType,
+  side: position.side,
+  quantity: Number(position.quantity),
+  entryPrice: Number(position.entryPrice),
+  entryTime: new Date(position.entryTime),
+}, exitPrice, exitTime);
+
+/**
+ * An automated trade's own charges: its entry and exit at its own prices, since merged trades share one
+ * position at the average price. A trade with no entry price recorded counts as entered at the exit price.
+ * @param {{ side: any, quantity: number, entryPrice: number | null, createdAt: any }} trade
+ * @param {string} instrumentType
+ * @param {number} exitPrice
+ * @param {Date} exitTime
+ */
+export const autoTradeCharges = (trade, instrumentType, exitPrice, exitTime) => roundTripCharges({
+  instrumentType,
+  side: trade.side,
+  quantity: Number(trade.quantity),
+  entryPrice: Number(trade.entryPrice ?? exitPrice),
+  entryTime: trade.createdAt,
+}, exitPrice, exitTime).total;
+
+/**
+ * An open position with a trade on the same side added: the summed quantity at the average price, to 2 decimals.
+ * @param {{ quantity: number, entryPrice: number }} position
+ * @param {{ quantity: number, entryPrice: number }} trade
+ */
+export function averagedIn(position, trade) {
+  const quantity = Number(position.quantity) + trade.quantity;
+  const average = (position.entryPrice * Number(position.quantity) + trade.entryPrice * trade.quantity) / quantity;
+  return { quantity, entryPrice: Number(average.toFixed(2)) };
+}
+
+/**
+ * Books a trade. It merges with the user's open position in the same instrument from the same source and of the
+ * same horizon (intraday or positional): the same side averages in, the opposite side nets out (closing it, at the
+ * trade's price, when the trade covers it, and opening the rest the other way). Manual trades merge with manual
+ * positions and automated trades (source Auto) with automated ones, so 100 bought by the automation then 500 more
+ * shows as one automated position of 600, and the automation never changes a manual position (or the other way round).
+ * @param {string} userId
+ * @param {any} trade  normalized, with its mode and source
+ */
+async function bookTrade(userId, trade) {
+  const now = new Date();
+  const match = { mode: trade.mode, instrumentToken: trade.instrumentToken, source: trade.source, horizon: trade.horizon };
+
+  const sameSide = await findOpenPosition(userId, { ...match, side: trade.side });
+  if (sameSide) return averageIntoPosition(sameSide.id, averagedIn(sameSide, trade), trade);
+
+  const opposite = await findOpenPosition(userId, { ...match, side: oppositeSide(trade.side) });
+  if (!opposite) return insertPosition(userId, trade, trade.quantity, now.toISOString());
+  if (trade.quantity < opposite.quantity) return setPositionQuantity(opposite.id, opposite.quantity - trade.quantity);
+
+  const closed = await closeAt(opposite, trade.entryPrice, now);
+  if (trade.quantity === opposite.quantity) return closed ?? opposite;
+  return insertPosition(userId, trade, trade.quantity - opposite.quantity, now.toISOString());
+}
+
+/** Null if the position was closed meanwhile. */
+const closeAt = (position, exitPrice, at) => closeOpenPosition(position.id, {
+  exitPrice,
+  exitTime: at.toISOString(),
+  charges: positionCharges(position, exitPrice, at),
+});
 
 /**
  * The algo log details of a booked automated position: entry, exit, P&L
@@ -117,12 +201,19 @@ export function squareOffable(position, exitPrice, at) {
  *   now: the exit time. exitReason: why, recorded on the automated trades (an exit rule's, or MANUAL_EXIT by default).
  */
 export async function closePosition(userId, position, fill, { now = new Date(), exitReason = MANUAL_EXIT } = {}) {
-  // Another request may have closed it since it was checked.
-  const exited = await exitPositionById(position.id, userId, fill, now);
+  // Read again: another request may have closed or added to it since it was checked.
+  const open = await getOpenPosition(position.id, userId);
+  const exited = open && await closeAt(open, fill, now);
   if (!exited) return { ok: false, code: NOT_FOUND, message: NOT_FOUND_MESSAGE };
   if (position.source === TradeSource.Auto) {
-    await closeAutoTradesOfPosition(userId, position, fill, exitReason, now);
+    await closeAutoTradesOf(userId, position, fill, exitReason, now);
     algoLog('Exit', 'booked', bookedDetails(userId, position, exited, fill, exitReason));
   }
   return { ok: true, position: exited };
+}
+
+async function closeAutoTradesOf(userId, position, fill, exitReason, now) {
+  const trades = await getExecutedAutoTrades(userId, position.id);
+  const withCharges = trades.map((trade) => ({ id: trade.id, charges: autoTradeCharges(trade, position.instrumentType, fill, now) }));
+  return closeAutoTrades(userId, position.id, withCharges, fill, exitReason);
 }
