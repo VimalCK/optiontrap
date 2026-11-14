@@ -32,9 +32,6 @@ import { getOrFetchInstruments } from '../../instruments.js';
 import { Exchange, OptionType, ParamType, Side, isOptionType } from '../../../shared/tradeEnums.js';
 import { OptionSetup, setupPatternLabel } from '../../../shared/analysisEnums.js';
 
-/** This strategy's id: stored in users' settings and trade records, so it never changes. */
-export const OPTION_ANALYZER_SETUPS_STRATEGY_ID = 'option-analyzer-setups';
-
 /** How often, in market hours, it looks for a new OI snapshot. */
 const SNAPSHOT_CHECK_MS = 30 * 1000;
 
@@ -121,7 +118,8 @@ export const createOptionAnalyzerSetups = ({
   loadInstruments = getOrFetchInstruments,
   clock = () => new Date(),
 } = {}) => ({
-  id: OPTION_ANALYZER_SETUPS_STRATEGY_ID,
+  // Stored in users' settings and trade records, so it never changes. Code elsewhere names it StrategyId.OptionAnalyzerSetups.
+  id: 'option-analyzer-setups',
   label: 'Option Analyzer setups',
   description: 'Takes the Strategy card\'s best single-option setup for each snapshotted underlying (nearest expiry), after every OI snapshot (every 10 minutes): the highest score among the trades your General settings allow, if it reaches Min score and its premium reaches Min premium. Straddles and strangles are skipped.',
   params: [

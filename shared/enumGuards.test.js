@@ -11,9 +11,11 @@ const ENUM_FILES = new Set([
   path.join('src', 'utils', 'uiEnums.ts'),
 ]);
 const enumModules = await Promise.all([...ENUM_FILES].map((file) => import(pathToFileURL(path.join(root, file)).href)));
+// Built from the strategy list rather than written out, but named the same way.
+const { StrategyId } = await import(pathToFileURL(path.join(root, 'server', 'tradeEngine', 'strategies', 'index.js')).href);
 
 /** The enums: exported frozen objects (`Side`, `OrderStatus` …), by name. */
-const ENUMS = Object.entries(Object.assign({}, ...enumModules))
+const ENUMS = Object.entries(Object.assign({ StrategyId }, ...enumModules))
   .filter(([, value]) => value && typeof value === 'object' && !Array.isArray(value) && Object.isFrozen(value));
 
 const ENUM_VALUES = new Set(ENUMS.flatMap(([, members]) => Object.values(members)));
@@ -35,6 +37,8 @@ const ALLOWED = new Map([
   [path.join('src', 'components', 'Automation', 'autoTradeView.ts'), [{ values: ['Selected', 'Rejected', 'Closed'], reason: "fallback wording of a lifecycle event shown to the user" }]],
   [path.join('src', 'components', 'PaperOrders', 'PaperOrders.tsx'), [{ values: ['Cancelled', 'Market'], reason: "the order badge and price-column wording" }]],
   [path.join('src', 'components', 'Sidebar', 'Sidebar.tsx'), [{ values: ['Admin'], reason: "the collapsed nav item tooltip" }]],
+  [path.join('server', 'tradeEngine', 'strategies', 'optionAnalyzerSetups.js'), [{ values: ['option-analyzer-setups'], reason: "the strategy's own id, which StrategyId is built from" }]],
+  [path.join('src', 'services', 'strategies.fixture.ts'), [{ values: ['option-analyzer-setups'], reason: 'test data: a strategy as GET /api/strategies sends it to the browser' }]],
   [path.join('src', 'components', 'StockSetups', 'setupDetails.ts'), [{ values: ['Rejected'], reason: "a zone that turned the price away (Held / Rejected wording)" }]],
   [path.join('src', 'components', 'WinLossPatterns', 'winLossStats.ts'), [{ values: ['Unknown'], reason: "the name shown for trades recorded without a strategy or setup" }]],
   [path.join('src', 'pages', 'AdminUsers.tsx'), [{ values: ['Unknown'], reason: "the name shown for a user without one" }]],

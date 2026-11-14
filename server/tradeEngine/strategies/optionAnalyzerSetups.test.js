@@ -6,6 +6,7 @@ vi.mock('../../oiHistoryScheduler.js', () => ({ findWorkingAdminSession: vi.fn()
 vi.mock('../../instruments.js', () => ({ getOrFetchInstruments: vi.fn() }));
 
 const { createOptionAnalyzerSetups, optionAnalyzerSetups, underlyingSetups } = await import('./optionAnalyzerSetups.js');
+const { StrategyId } = await import('./index.js');
 
 const NOON = new Date('2026-11-05T06:30:00Z'); // Thu 12:00 IST
 const SPOT_TOKEN = 900;
@@ -157,7 +158,7 @@ describe('optionAnalyzerSetups running on the market clock', () => {
     await run.check();
     await run.check();
     expect(run.submit).toHaveBeenCalledTimes(1);
-    expect(run.submit).toHaveBeenCalledWith('option-analyzer-setups', optionAnalyzerSetups.prepare(input));
+    expect(run.submit).toHaveBeenCalledWith(StrategyId.OptionAnalyzerSetups, optionAnalyzerSetups.prepare(input));
     expect(run.loadInstruments).toHaveBeenCalledWith('key', 'token');
   });
 

@@ -128,8 +128,11 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
     each with an `{ id, label }` list and a `xLabel()` for display text), `shared/appEnums.js` (the rest).
   - `src/utils/uiEnums.ts`: sets only the browser uses (tones, toasts, the accent theme, tabs and views). Read a URL
     parameter with `enumFromParam`, which also accepts links saved in the old lower-case spelling.
-  - Plug-in ids (entry/exit rules, strategies, engine services) are not central enums: each plug-in exports its own id
+  - Plug-in ids (entry/exit rules, engine services) are not central enums: each plug-in exports its own id
     constant (`TARGET_RULE_ID`), and callers import it. Stored rule and strategy ids never change.
+  - Strategy ids: a strategy states its own id once (`id: 'option-analyzer-setups'`); everywhere else names it through
+    `StrategyId` (`server/tradeEngine/strategies/index.js`), built from `STRATEGIES` with the id in PascalCase as the member
+    (`StrategyId.OptionAnalyzerSetups`). The enum guard checks it like the other enums.
 - **CSS classes stay lower-case:** a class modifier built from a value lower-cases it: `badge--${tone.toLowerCase()}`.
 - Code names the member, never the value: `OrderStatus.Open`, not `'Open'`. This holds everywhere the app runs:
   - SQL in JS: `${sqlEnum(OrderStatus.Open)}` (`server/sql.js`); Postgres still gets a literal, so partial indexes match.

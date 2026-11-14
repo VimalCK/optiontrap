@@ -56,6 +56,29 @@ import { optionAnalyzerSetups } from './optionAnalyzerSetups.js';
 /** Every strategy, in the order they start. @type {Strategy[]} */
 export const STRATEGIES = [optionAnalyzerSetups];
 
+/** A strategy id's member name: 'option-analyzer-setups' → 'OptionAnalyzerSetups'. */
+export const strategyMemberName = (/** @type {string} */ id) =>
+  id.split('-').map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join('');
+
+/**
+ * Every strategy's id by member name, like an enum (`StrategyId.OptionAnalyzerSetups`), so code names a strategy
+ * instead of typing its id. Built from the list: a strategy added there is a member here.
+ * @param {Strategy[]} strategies
+ * @returns {Readonly<Record<string, string>>}
+ */
+export function strategyIds(strategies) {
+  /** @type {Record<string, string>} */
+  const ids = {};
+  for (const { id } of strategies) {
+    const member = strategyMemberName(id);
+    if (ids[member]) throw new Error(`strategies ${ids[member]} and ${id} share the member name ${member}`);
+    ids[member] = id;
+  }
+  return Object.freeze(ids);
+}
+
+export const StrategyId = strategyIds(STRATEGIES);
+
 /** What the Automation page and the stored config need of each strategy: id, label, description, params. */
 export const strategyInfos = (/** @type {Strategy[]} */ strategies = STRATEGIES) =>
   strategies.map(({ id, label, description, params }) => ({ id, label, description, params }));
