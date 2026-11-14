@@ -10,6 +10,24 @@ const dayLabels = (html: string) => [...html.matchAll(/class="heatmap-day-label"
 const coloured = (html: string) =>
   [...html.matchAll(/class="([^"]*)"/g)].filter(([, cls]) => /heatmap-cell--(profit|loss)\b/.test(cls) && cls.includes('heatmap-cell--hoverable')).length;
 
+const statValues = (html: string) => [...html.matchAll(/class="heatmap-stat__value[^"]*">(.*?)<\/span>/g)].map((m) => m[1]);
+
+describe('PnLHeatmap stats', () => {
+  it("shows the range's totals and its day counts", () => {
+    const daily = new Map([['2026-10-15', 500], ['2026-10-16', -200], ['2026-10-19', 300]]);
+    const html = renderToStaticMarkup(<PnLHeatmap dailyPnL={daily} totals={{ pnl: 600, charges: 40, realised: 560 }} endDate={END} />);
+    expect(statValues(html)).toEqual(['+600.00', '40.00', '+560.00', '3', '2', '1', '66.7%']);
+    expect(html).toContain('title="Total P&amp;L minus charges">Realised P&amp;L</span>');
+  });
+
+  it('shimmers every figure while the report loads, keeping the labels', () => {
+    const html = renderToStaticMarkup(<PnLHeatmap dailyPnL={new Map()} totals={NO_TOTALS} endDate={END} loading />);
+    expect(statValues(html).every((value) => value.includes('class="shimmer shimmer--text"'))).toBe(true);
+    expect(statValues(html)).toHaveLength(7);
+    expect(html).toContain('>Win Rate</span>');
+  });
+});
+
 describe('PnLHeatmap', () => {
   it('always shows all seven days, even with no trades', () => {
     const html = renderToStaticMarkup(<PnLHeatmap dailyPnL={new Map()} totals={NO_TOTALS} endDate={END} />);

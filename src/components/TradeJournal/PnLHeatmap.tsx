@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { formatNumericDate } from '@/utils/marketStatus';
 import { formatAmount, formatSignedAmount } from '@/utils/formatAmount';
 import type { JournalTotals } from '@/services/tradeJournal';
+import { ShimmerText } from '@/components/Shimmer/Shimmer';
 import { createPortal } from 'react-dom';
 
 interface PnLHeatmapProps {
@@ -10,6 +11,8 @@ interface PnLHeatmapProps {
   totals: JournalTotals;
   endDate?: Date;
   months?: number;
+  /** The stats shimmer while the range's report loads; the calendar shows empty meanwhile. */
+  loading?: boolean;
 }
 
 interface DayCell {
@@ -56,7 +59,7 @@ function intensityLevel(pnl: number, maxAbs: number): number {
   return 4;
 }
 
-const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, totals, endDate, months = 12 }) => {
+const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, totals, endDate, months = 12, loading = false }) => {
   const today = useMemo(() => {
     const d = new Date(endDate ?? new Date());
     d.setHours(0, 0, 0, 0);
@@ -168,36 +171,20 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, totals, endDate, mont
   return (
     <div className="heatmap-wrapper">
       <div className="heatmap-stats">
-        <div className="heatmap-stat">
-          <span className="heatmap-stat__label" title="Before charges">Total P&L</span>
-          <span className={`heatmap-stat__value ${toneClass(totals.pnl)}`}>{formatSignedAmount(totals.pnl)}</span>
-        </div>
-        <div className="heatmap-stat">
-          <span className="heatmap-stat__label" title="What Zerodha would charge for the entries and exits">Charges</span>
-          <span className="heatmap-stat__value">{formatAmount(totals.charges)}</span>
-        </div>
-        <div className="heatmap-stat">
-          <span className="heatmap-stat__label" title="Total P&L minus charges">Realised P&L</span>
-          <span className={`heatmap-stat__value ${toneClass(totals.realised)}`}>{formatSignedAmount(totals.realised)}</span>
-        </div>
-        <div className="heatmap-stat">
-          <span className="heatmap-stat__label">Trading Days</span>
-          <span className="heatmap-stat__value">{totalDays}</span>
-        </div>
-        <div className="heatmap-stat">
-          <span className="heatmap-stat__label">Win Days</span>
-          <span className="heatmap-stat__value heatmap-positive">{winDays}</span>
-        </div>
-        <div className="heatmap-stat">
-          <span className="heatmap-stat__label">Loss Days</span>
-          <span className="heatmap-stat__value heatmap-negative">{lossDays}</span>
-        </div>
-        <div className="heatmap-stat">
-          <span className="heatmap-stat__label">Win Rate</span>
-          <span className="heatmap-stat__value">
-            {totalDays > 0 ? ((winDays / totalDays) * 100).toFixed(1) : '0.0'}%
-          </span>
-        </div>
+        {[
+          { label: 'Total P&L', title: 'Before charges', value: formatSignedAmount(totals.pnl), tone: toneClass(totals.pnl) },
+          { label: 'Charges', title: 'What Zerodha would charge for the entries and exits', value: formatAmount(totals.charges), tone: '' },
+          { label: 'Realised P&L', title: 'Total P&L minus charges', value: formatSignedAmount(totals.realised), tone: toneClass(totals.realised) },
+          { label: 'Trading Days', value: String(totalDays), tone: '' },
+          { label: 'Win Days', value: String(winDays), tone: 'heatmap-positive' },
+          { label: 'Loss Days', value: String(lossDays), tone: 'heatmap-negative' },
+          { label: 'Win Rate', value: `${totalDays > 0 ? ((winDays / totalDays) * 100).toFixed(1) : '0.0'}%`, tone: '' },
+        ].map((stat) => (
+          <div key={stat.label} className="heatmap-stat">
+            <span className="heatmap-stat__label" title={stat.title}>{stat.label}</span>
+            <span className={`heatmap-stat__value ${stat.tone}`}><ShimmerText loading={loading} width="4em">{stat.value}</ShimmerText></span>
+          </div>
+        ))}
       </div>
 
       <div className="heatmap-chart-outer">

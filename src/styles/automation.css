@@ -441,3 +441,13 @@
   gap: 12px;
 }
 
+
+/* Setting rows in outline while the configuration loads. */
+.automation-settings-shimmer__row {
+  align-items: center;
+}
+
+.automation-settings-shimmer__control {
+  flex: 1;
+  height: 28px;
+}

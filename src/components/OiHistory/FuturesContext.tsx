@@ -7,6 +7,8 @@ import IconButton from '@/components/IconButton/IconButton';
 import { InfoIcon } from '@/components/icons/Icons';
 import { FuturesView, type FuturesViewId } from '@/utils/uiEnums';
 
+export const FUTURES_CONTEXT_TITLE = 'Futures Context';
+
 interface FuturesContextProps {
   futuresData: FuturesHistoryRow[];
   filterDate: string;
@@ -98,7 +100,7 @@ export const FuturesContext: React.FC<FuturesContextProps> = ({ futuresData, fil
       <div className="oi-history__table-header">
         <div className="oi-history__table-header-left">
           <div>
-            <div className="oi-history__table-title">Futures Context</div>
+            <div className="oi-history__table-title">{FUTURES_CONTEXT_TITLE}</div>
             <div className="oi-history__table-subtitle">
               {futuresView === FuturesView.Chart
                 ? `${futuresContracts.length} month${futuresContracts.length === 1 ? '' : 's'} · Daily price, OI, and volume history`

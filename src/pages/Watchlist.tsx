@@ -10,7 +10,9 @@ import StockSetupsPanel from '@/components/StockSetups/StockSetupsPanel';
 import SetupScorecard from '@/components/StockSetups/SetupScorecard';
 import WatchlistTabs from '@/components/Watchlist/WatchlistTabs';
 import InstrumentSearch from '@/components/Watchlist/InstrumentSearch';
-import WatchlistTable from '@/components/Watchlist/WatchlistTable';
+import WatchlistTable, { WATCHLIST_COLUMN_COUNT, WatchlistTableFrame } from '@/components/Watchlist/WatchlistTable';
+import Shimmer, { ShimmerGroup, ShimmerTableRows, shimmerKeys } from '@/components/Shimmer/Shimmer';
+import { ShimmerShape } from '@/utils/uiEnums';
 import PriceAlertsTable from '@/components/Watchlist/PriceAlertsTable';
 import PriceAlertModal, { type AlertPrefill } from '@/components/Watchlist/PriceAlertModal';
 import { useWatchlists } from '@/components/Watchlist/useWatchlists';
@@ -19,10 +21,27 @@ import { useDragReorder } from '@/components/Watchlist/useDragReorder';
 import { withPriceTicks, type LivePrice } from '@/components/Watchlist/watchlistRows';
 import '@/styles/watchlist.css';
 
-const Spinner: React.FC = () => (
-  <div className="wl-loading">
-    <div className="wl-loading__spinner" />
-  </div>
+/** Placeholder list tabs and rows while the watchlists load. */
+const PLACEHOLDER_TABS = 3;
+const PLACEHOLDER_ROWS = 6;
+
+const WatchlistRowsShimmer: React.FC = () => (
+  <ShimmerGroup label="Loading watchlist">
+    <WatchlistTableFrame><ShimmerTableRows rows={PLACEHOLDER_ROWS} columns={WATCHLIST_COLUMN_COUNT} cellClassName="wl-table__td" /></WatchlistTableFrame>
+  </ShimmerGroup>
+);
+
+/** The lists in outline while they load: their tabs, the search bar and the table. */
+const WatchlistShimmer: React.FC = () => (
+  <>
+    <div className="wl-tabs" aria-hidden="true">
+      {shimmerKeys(PLACEHOLDER_TABS).map((tab) => <span key={tab} className="wl-tab-shimmer"><Shimmer width="6em" /></span>)}
+    </div>
+    <div className="wl-content">
+      <Shimmer shape={ShimmerShape.Block} className="wl-search-shimmer" />
+      <WatchlistRowsShimmer />
+    </div>
+  </>
 );
 
 const Watchlist: React.FC = () => {
@@ -106,8 +125,6 @@ const Watchlist: React.FC = () => {
     return meta !== null;
   };
 
-  if (lists.loading) return <Spinner />;
-
   return (
     <div className="wl">
       {toast && (
@@ -117,46 +134,50 @@ const Watchlist: React.FC = () => {
         </div>
       )}
 
-      <WatchlistTabs tabs={lists.tabs} activeId={activeTabId} onOpen={openTab} onCreate={createList} onRename={lists.renameList} onDelete={lists.deleteList} />
+      {lists.loading ? <WatchlistShimmer /> : (
+        <>
+          <WatchlistTabs tabs={lists.tabs} activeId={activeTabId} onOpen={openTab} onCreate={createList} onRename={lists.renameList} onDelete={lists.deleteList} />
 
-      {activeTab ? (
-        <div className="wl-content">
-          {/* Keyed by the list, so opening another one clears the search. */}
-          <InstrumentSearch key={activeTab.id} instruments={instruments} items={items} itemCount={activeTab.itemCount} onAdd={lists.addItem} />
+          {activeTab ? (
+            <div className="wl-content">
+              {/* Keyed by the list, so opening another one clears the search. */}
+              <InstrumentSearch key={activeTab.id} instruments={instruments} items={items} itemCount={activeTab.itemCount} onAdd={lists.addItem} />
 
-          {lists.itemsLoading ? <Spinner /> : items.length > 0 ? (
-            <WatchlistTable
-              items={items}
-              instrumentMap={instrumentMap}
-              livePrices={livePrices}
-              scans={scans}
-              isStockItem={isStockItem}
-              selectedToken={scorecardToken}
-              onSelect={(item) => setScorecardToken((prev) => (prev === item.instrumentToken ? null : item.instrumentToken))}
-              drag={drag}
-              onOpenSetups={setSetupsItem}
-              onAlert={(item) => setAlertDraft({ item })}
-              onRemove={lists.removeItem}
-            />
+              {lists.itemsLoading ? <WatchlistRowsShimmer /> : items.length > 0 ? (
+                <WatchlistTable
+                  items={items}
+                  instrumentMap={instrumentMap}
+                  livePrices={livePrices}
+                  scans={scans}
+                  isStockItem={isStockItem}
+                  selectedToken={scorecardToken}
+                  onSelect={(item) => setScorecardToken((prev) => (prev === item.instrumentToken ? null : item.instrumentToken))}
+                  drag={drag}
+                  onOpenSetups={setSetupsItem}
+                  onAlert={(item) => setAlertDraft({ item })}
+                  onRemove={lists.removeItem}
+                />
+              ) : (
+                <div className="wl-empty">
+                  <p className="wl-empty__text">No instruments in this list. Use the search bar above to add stocks.</p>
+                </div>
+              )}
+            </div>
           ) : (
             <div className="wl-empty">
-              <p className="wl-empty__text">No instruments in this list. Use the search bar above to add stocks.</p>
+              <p className="wl-empty__text">
+                No watchlists yet. Click the <strong>+</strong> button above to create one.
+              </p>
             </div>
           )}
-        </div>
-      ) : (
-        <div className="wl-empty">
-          <p className="wl-empty__text">
-            No watchlists yet. Click the <strong>+</strong> button above to create one.
-          </p>
-        </div>
+        </>
       )}
 
       {scorecardItem && (
         <SetupScorecard key={scorecardItem.instrumentToken} instrumentToken={scorecardItem.instrumentToken} tradingsymbol={scorecardItem.tradingsymbol} refreshKey={scansVersion} />
       )}
 
-      <PriceAlertsTable alerts={priceAlerts.alerts} livePrices={livePrices} onReset={priceAlerts.resetAlert} onDelete={priceAlerts.deleteAlert} />
+      <PriceAlertsTable alerts={priceAlerts.alerts} loading={priceAlerts.loading} livePrices={livePrices} onReset={priceAlerts.resetAlert} onDelete={priceAlerts.deleteAlert} />
 
       {setupsItem && (
         <StockSetupsPanel

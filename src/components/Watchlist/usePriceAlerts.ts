@@ -36,6 +36,7 @@ export function useTimedToast() {
  */
 export function usePriceAlerts(showToast: (message: string) => void) {
   const [alerts, setAlerts] = useState<PriceAlert[]>([]);
+  const [loading, setLoading] = useState(true);
   // Read by the tick handler, which fires too often to re-create on every alert change.
   const alertsRef = useRef<PriceAlert[]>([]);
 
@@ -47,7 +48,8 @@ export function usePriceAlerts(showToast: (message: string) => void) {
     const controller = new AbortController();
     fetchPriceAlerts(controller.signal)
       .then(setAlerts)
-      .catch((err) => { if (!isAbortError(err)) console.error('[Watchlist] Price alerts load failed:', err); });
+      .catch((err) => { if (!isAbortError(err)) console.error('[Watchlist] Price alerts load failed:', err); })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, []);
 
@@ -111,5 +113,5 @@ export function usePriceAlerts(showToast: (message: string) => void) {
     }
   };
 
-  return { alerts, checkTicks, createAlert, deleteAlert, resetAlert };
+  return { alerts, loading, checkTicks, createAlert, deleteAlert, resetAlert };
 }

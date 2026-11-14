@@ -1,0 +1,59 @@
+/* Shimmer: a placeholder with a light sweeping across it, tinted from the theme's text colour so it suits dark and light. */
+.shimmer {
+  --shimmer-base: color-mix(in srgb, var(--text-secondary) 16%, transparent);
+  --shimmer-highlight: color-mix(in srgb, var(--text-secondary) 30%, transparent);
+  position: relative;
+  max-width: 100%;
+  overflow: hidden;
+  vertical-align: middle;
+  background: var(--shimmer-base);
+}
+
+.shimmer::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--shimmer-highlight), transparent);
+  transform: translateX(-100%);
+  animation: shimmer-sweep 1.4s ease-in-out infinite;
+}
+
+/* Each shape's defaults weigh nothing (:where), so a page class that sizes a placeholder always wins. */
+:where(.shimmer--text) {
+  display: inline-block;
+  width: 100%;
+  height: 0.8em;
+  border-radius: 6px;
+}
+
+:where(.shimmer--block) {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--radius);
+}
+
+:where(.shimmer--circle) {
+  display: inline-block;
+  border-radius: 50%;
+}
+
+@keyframes shimmer-sweep {
+  to { transform: translateX(100%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .shimmer::after {
+    display: none;
+  }
+}
+
+/* Read by screen readers only. */
+.shimmer-group__label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}

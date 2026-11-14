@@ -40,8 +40,8 @@ describe('Automation screen', () => {
 
 describe('automationStatus', () => {
   it('says on or off, and that nothing trades while there are no strategies', () => {
-    expect(automationStatus(null, TEST_STRATEGIES)).toBe('Loading…');
-    expect(automationStatus(defaultAutomationConfig(TEST_STRATEGIES), null)).toBe('Loading…');
+    expect(automationStatus(null, TEST_STRATEGIES)).toBeNull();
+    expect(automationStatus(defaultAutomationConfig(TEST_STRATEGIES), null)).toBeNull();
     expect(automationStatus(defaultAutomationConfig([]), [])).toBe('Off · no strategies yet, nothing trades');
     expect(automationStatus({ ...defaultAutomationConfig([]), enabled: true }, [])).toBe('On · no strategies yet, nothing trades');
   });
@@ -73,6 +73,14 @@ describe('AutoTradesTable', () => {
 
   it('says there are no trades yet', () => {
     expect(renderToStaticMarkup(<AutoTradesTable trades={[]} />)).toContain('No automated trades in this range');
+  });
+
+  it("shows the headings over placeholder rows while a range loads, not the last range's trades", () => {
+    const table = renderToStaticMarkup(<AutoTradesTable trades={[trade]} loading />);
+    expect(table).toContain('<th class="automation-trades__stage">Stage</th>');
+    expect(table).toContain('shimmer-row');
+    expect(table).not.toContain('NIFTY26NOV24000PE');
+    expect(table).not.toContain('No automated trades in this range');
   });
 
   it('shows each trade with its horizon, side and stage, timed in IST', () => {

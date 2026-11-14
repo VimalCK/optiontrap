@@ -4,15 +4,19 @@ import { positionsPnl } from '@/services/livePositions';
 import { useLivePositions } from '@/hooks/useLivePositions';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import Message from '@/components/Message/Message';
-import LoadingState from '@/components/LoadingState/LoadingState';
+import { ShimmerGroup, ShimmerTableRows } from '@/components/Shimmer/Shimmer';
 import { RefreshIcon } from '@/components/icons/Icons';
 import { formatSignedAmount } from '@/utils/formatAmount';
 import { LiveView, type LiveViewId, MessageTone } from '@/utils/uiEnums';
 import { Side } from '../../../shared/tradeEnums.js';
+import PositionsTotal from './PositionsTotal';
 import { pnlTone } from './riskLabels';
 
 /** Kite's live position lists, in the order their tabs show. */
 const LIVE_VIEWS: LiveViewId[] = [LiveView.Net, LiveView.Day];
+const ACTIVE_COLUMNS = ['Instrument', 'Product', 'Side', 'Qty', 'Avg', 'LTP', 'P&L'];
+/** Placeholder rows in the Active table while the positions load. */
+const PLACEHOLDER_ROWS = 4;
 
 const LiveViewControls: React.FC<{ view: LiveViewId; onView: (view: LiveViewId) => void; onRefresh: () => void }> = ({ view, onView, onRefresh }) => (
   <div className="live-positions__controls">
@@ -40,41 +44,40 @@ const LiveInstrument: React.FC<{ pos: KitePosition }> = ({ pos }) => (
 
 const positionKey = (pos: KitePosition) => `${pos.exchange}:${pos.tradingsymbol}`;
 
-const ActivePositionsTable: React.FC<{ list: KitePosition[] }> = ({ list }) => (
+/** The Active card and its table's header, around the rows given. */
+const ActivePositionsCard: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="card" style={{ marginBottom: 'var(--card-gap)' }}>
     <h4 className="live-positions__section-title">Active</h4>
     <div className="positions-table-scroll">
       <table className="positions-table live-positions-table">
         <thead>
           <tr>
-            <th>Instrument</th>
-            <th>Product</th>
-            <th>Side</th>
-            <th>Qty</th>
-            <th>Avg</th>
-            <th>LTP</th>
-            <th>P&L</th>
+            {ACTIVE_COLUMNS.map((column) => <th key={column}>{column}</th>)}
           </tr>
         </thead>
-        <tbody>
-          {list.map((pos) => {
-            const side = pos.quantity > 0 ? Side.BUY : Side.SELL;
-            return (
-              <tr key={positionKey(pos)}>
-                <td><LiveInstrument pos={pos} /></td>
-                <td><span className="live-positions__product">{pos.product}</span></td>
-                <td><span className={`positions-table__side positions-table__side--${side.toLowerCase()}`}>{side}</span></td>
-                <td>{Math.abs(pos.quantity)}</td>
-                <td>{pos.average_price > 0 ? pos.average_price.toFixed(2) : '-'}</td>
-                <td>{pos.last_price > 0 ? pos.last_price.toFixed(2) : '-'}</td>
-                <td className={pnlTone(pos.pnl)}>{formatSignedAmount(pos.pnl)}</td>
-              </tr>
-            );
-          })}
-        </tbody>
+        <tbody>{children}</tbody>
       </table>
     </div>
   </div>
+);
+
+const ActivePositionsTable: React.FC<{ list: KitePosition[] }> = ({ list }) => (
+  <ActivePositionsCard>
+    {list.map((pos) => {
+      const side = pos.quantity > 0 ? Side.BUY : Side.SELL;
+      return (
+        <tr key={positionKey(pos)}>
+          <td><LiveInstrument pos={pos} /></td>
+          <td><span className="live-positions__product">{pos.product}</span></td>
+          <td><span className={`positions-table__side positions-table__side--${side.toLowerCase()}`}>{side}</span></td>
+          <td>{Math.abs(pos.quantity)}</td>
+          <td>{pos.average_price > 0 ? pos.average_price.toFixed(2) : '-'}</td>
+          <td>{pos.last_price > 0 ? pos.last_price.toFixed(2) : '-'}</td>
+          <td className={pnlTone(pos.pnl)}>{formatSignedAmount(pos.pnl)}</td>
+        </tr>
+      );
+    })}
+  </ActivePositionsCard>
 );
 
 const ExitedPositionsTable: React.FC<{ list: KitePosition[] }> = ({ list }) => (
@@ -106,11 +109,22 @@ const LivePositions: React.FC = () => {
   const { positions, loading, error, reload } = useLivePositions();
   const [view, setView] = useState<LiveViewId>(LiveView.Net);
 
-  if (loading) return <div className="card"><LoadingState label="Loading live positions…" /></div>;
+  const controls = <LiveViewControls view={view} onView={setView} onRefresh={reload} />;
+
+  if (loading) {
+    return (
+      <>
+        {controls}
+        <PositionsTotal pnl={0} loading />
+        <ShimmerGroup label="Loading live positions">
+          <ActivePositionsCard><ShimmerTableRows rows={PLACEHOLDER_ROWS} columns={ACTIVE_COLUMNS.length} /></ActivePositionsCard>
+        </ShimmerGroup>
+      </>
+    );
+  }
   if (error) return <Message tone={MessageTone.Error}>{error}</Message>;
 
   const rows = view === LiveView.Net ? positions.net : positions.day;
-  const controls = <LiveViewControls view={view} onView={setView} onRefresh={reload} />;
 
   if (rows.length === 0) {
     return (
@@ -131,14 +145,7 @@ const LivePositions: React.FC = () => {
   return (
     <>
       {controls}
-      <div className="card" style={{ marginBottom: 'var(--card-gap)' }}>
-        <div className="positions-summary">
-          <div className="positions-summary__item">
-            <span className="positions-summary__label">Total P&L</span>
-            <span className={`positions-summary__value ${pnlTone(totalPnL)}`}>{formatSignedAmount(totalPnL)}</span>
-          </div>
-        </div>
-      </div>
+      <PositionsTotal pnl={totalPnL} />
       {openRows.length > 0 && <ActivePositionsTable list={openRows} />}
       {closedRows.length > 0 && <ExitedPositionsTable list={closedRows} />}
     </>

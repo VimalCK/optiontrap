@@ -27,7 +27,7 @@ import { saveTradingMode, storedTradingMode } from '@/utils/tradingModeStorage';
 import { AnySegment, type AnySegmentId, JournalRange, type JournalRangeId, MessageTone } from '@/utils/uiEnums';
 import Message from '@/components/Message/Message';
 import '@/styles/tradejournal.css';
-import LoadingState from '@/components/LoadingState/LoadingState';
+import { ShimmerTableRows } from '@/components/Shimmer/Shimmer';
 
 type SegmentFilter = AnySegmentId | SegmentId;
 
@@ -35,6 +35,9 @@ type SegmentFilter = AnySegmentId | SegmentId;
 const FETCH_DELAY_MS = 400;
 
 const DAY_PAGE_SIZE = 100;
+const TRADE_LOG_COLUMN_COUNT = 8;
+/** Placeholder rows: days in the Trade Log while a report loads, and at most this many while a day's trades load. */
+const PLACEHOLDER_ROWS = 5;
 
 interface ReportFilters {
   from: string;
@@ -160,6 +163,8 @@ const TradeJournal: React.FC<{
   }, [initialMode]);
 
   const problem = rangeProblem(rangeStart, rangeEnd);
+  // The first report counts as loading from the start, through the fetch delay, so the page doesn't show zeros first.
+  const reportPending = reportLoading || (report === null && reportError === null && reportToFetch(mode, rangeStart, rangeEnd, segment) !== null);
 
   // Fetch exactly the range shown (the default on opening), shortly after the last change to it.
   useEffect(() => {
@@ -242,7 +247,6 @@ const TradeJournal: React.FC<{
               ))}
             </div>
 
-            {reportLoading && <LoadingState inline />}
           </>
         )}
       </div>
@@ -270,10 +274,11 @@ const TradeJournal: React.FC<{
               totals={journalTotals(report?.days ?? [])}
               endDate={new Date(report?.filters.to ?? rangeEnd)}
               months={12}
+              loading={reportPending}
             />
           </div>
 
-          {report !== null && report.days.length > 0 && (
+          {(reportPending || (report !== null && report.days.length > 0)) && (
             <div className="card">
               <h4 className="tj-section-title" style={{ marginBottom: 16 }}>Trade Log</h4>
               <table className="tj-table">
@@ -290,7 +295,7 @@ const TradeJournal: React.FC<{
                   </tr>
                 </thead>
                 <tbody>
-                  {report.days.map((day) => {
+                  {reportPending || report === null ? <ShimmerTableRows rows={PLACEHOLDER_ROWS} columns={TRADE_LOG_COLUMN_COUNT} /> : report.days.map((day) => {
                     const isExpanded = expandedDates.has(day.date);
                     const loaded = dayTrades[day.date];
                     const shown = loaded?.trades.length ?? 0;
@@ -338,12 +343,14 @@ const TradeJournal: React.FC<{
                           </tr>
                         ))}
 
-                        {isExpanded && loaded && (loaded.loading || loaded.error || shown < day.trades) && (
+                        {isExpanded && loaded?.loading && (
+                          <ShimmerTableRows rows={Math.min(day.trades - shown, PLACEHOLDER_ROWS)} columns={TRADE_LOG_COLUMN_COUNT} />
+                        )}
+
+                        {isExpanded && loaded && !loaded.loading && (loaded.error || shown < day.trades) && (
                           <tr className="tj-day-status-row">
-                            <td colSpan={8}>
-                              {loaded.loading ? (
-                                <LoadingState label="Loading trades…" inline />
-                              ) : loaded.error ? (
+                            <td colSpan={TRADE_LOG_COLUMN_COUNT}>
+                              {loaded.error ? (
                                 <Message tone={MessageTone.Error}>{loaded.error}</Message>
                               ) : (
                                 <button

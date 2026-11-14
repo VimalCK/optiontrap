@@ -254,7 +254,14 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   - The shared `TabBar` for page tabs. `MarketStrip`.
   - `ToastStack` + `useToasts` for short messages after an action (an order placed or refused).
   - `Message` (`tone` `MessageTone.Error`/`Info`) for an error or notice that stays on the page; a page class adds only its margin.
-  - `LoadingState` (`label`, `inline` in a row of controls or a table cell) while a section loads, `EmptyState` when it has nothing.
+  - `Shimmer` (`src/components/Shimmer/`) while content loads: placeholders in the content's own shape and layout classes
+    (`shape` `ShimmerShape.Text`/`Block`/`Circle`, `width`/`height`), `ShimmerText` for a value (`loading`, `width`),
+    `ShimmerTableRows` (`rows`, `columns`, `cellClassName`) under a table's real header (split the table into a
+    `…Frame` that takes its rows as children, so the header is written once), `shimmerKeys(count)` to repeat a
+    placeholder, and `ShimmerGroup` (`label`, read by screen readers) around a placeholder area. Size a placeholder
+    with a page class; the shapes' own defaults never outweigh it. It is the only loading indicator: no spinners or
+    "Loading…" text. Admin table and service rows have theirs in `src/components/AdminShimmer/`.
+  - `EmptyState` when a section has nothing.
   - `IconButton` for any icon-only button (`icon`, `label` = tooltip + accessible name, `expanded` for toggles).
   - SVG icons in `src/components/icons/Icons.tsx`: add new ones there in the same style (24 viewBox, `currentColor`
     stroke, `aria-hidden`; line icons through its `StrokeIcon`, which takes a `strokeWidth`). Never an inline `<svg>` icon

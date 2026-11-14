@@ -9,7 +9,8 @@ import {
 import { FeedbackStatus, FeedbackType, type FeedbackStatusId, type FeedbackTypeId } from '../../shared/appEnums.js';
 import Message from '@/components/Message/Message';
 import { MessageTone } from '@/utils/uiEnums';
-import LoadingState from '@/components/LoadingState/LoadingState';
+import { ShimmerGroup } from '@/components/Shimmer/Shimmer';
+import { AdminTableRowsShimmer } from '@/components/AdminShimmer/AdminShimmer';
 
 const TYPE_OPTIONS = [
   { value: '', label: 'All types' },
@@ -25,6 +26,10 @@ const STATUS_OPTIONS = [
   { value: FeedbackStatus.Reviewed, label: 'Reviewed' },
   { value: FeedbackStatus.Resolved, label: 'Resolved' },
 ];
+
+const PLACEHOLDER_ROWS = 6;
+/** Submitted, User, Type, Message and Status. */
+const FEEDBACK_COLUMNS = 5;
 
 const formatDate = (value: string) => {
   if (!value) return '—';
@@ -113,9 +118,7 @@ const AdminFeedback: React.FC = () => {
 
       {error && <Message tone={MessageTone.Error}>{error}</Message>}
 
-      {loading ? (
-        <LoadingState label="Loading feedback…" />
-      ) : feedback.length === 0 ? (
+      {!loading && feedback.length === 0 ? (
         <div className="admin-empty">No feedback matches the current filters.</div>
       ) : (
         <div className="admin-table">
@@ -126,7 +129,12 @@ const AdminFeedback: React.FC = () => {
             <span>Message</span>
             <span>Status</span>
           </div>
-          {feedback.map((item) => {
+          {loading && (
+            <ShimmerGroup label="Loading feedback">
+              <AdminTableRowsShimmer rows={PLACEHOLDER_ROWS} columns={FEEDBACK_COLUMNS} />
+            </ShimmerGroup>
+          )}
+          {!loading && feedback.map((item) => {
             const expanded = expandedId === item.id;
             return (
               <div className={`admin-row ${expanded ? 'admin-row--expanded' : ''}`} key={item.id}>

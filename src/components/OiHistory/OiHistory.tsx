@@ -14,6 +14,7 @@ import { currentMonthIST } from './helpers';
 import { computeMonthlyExpiries } from './analysis';
 import { FuturesContext } from './FuturesContext';
 import { OiSnapshotTable } from './OiSnapshotTable';
+import OiHistoryShimmer from './OiHistoryShimmer';
 import StockSetupsPanel from '@/components/StockSetups/StockSetupsPanel';
 import { findNseStock } from '@/services/stockSetups';
 import { useUnderlyings } from '@/hooks/useUnderlyings';
@@ -26,7 +27,6 @@ import OrderModal from '@/components/OrderModal/OrderModal';
 import { useOrderChoices } from '@/components/OrderModal/useOrderChoices';
 import type { OrderOption } from '@/components/OrderModal/orderTicket';
 import { useToasts } from '@/hooks/useToasts';
-import LoadingState from '@/components/LoadingState/LoadingState';
 import {
   STRIKE_RANGE, buildOiTable, cellOption, expiryColors as colorsForExpiries, fairInputs, flowInputs, latestVisibleDate,
   maxConsolidatedOi as largestConsolidatedOi, nearestStrike, oiSeriesByToken, rowsByDate as groupRowsByDate, sortedUnique, strikesInRange,
@@ -318,6 +318,9 @@ const OiHistory: React.FC = () => {
     });
   };
 
+  // A fetch rewrites the history on screen, so its old rows give way to the outline until the fresh data loads.
+  const showShimmer = fetching || (loading && data.length === 0);
+
   return (
     <div className="oi-history">
       <ToastStack toasts={toasts} />
@@ -354,17 +357,14 @@ const OiHistory: React.FC = () => {
         error={fetchError}
       />
 
-      <DateBar dates={visibleDates} selected={filterDate} expiryDates={expiryMarkerDates} onSelect={setFilterDate} />
-
-      <FuturesContext futuresData={futuresData} filterDate={filterDate} scrip={scrip} />
-
-      {(loading || fetching) && data.length === 0 && (
-        <div className="card">
-          <LoadingState label="Loading data…" />
-        </div>
+      {showShimmer ? <OiHistoryShimmer /> : (
+        <>
+          <DateBar dates={visibleDates} selected={filterDate} expiryDates={expiryMarkerDates} onSelect={setFilterDate} />
+          <FuturesContext futuresData={futuresData} filterDate={filterDate} scrip={scrip} />
+        </>
       )}
 
-      {tableData.length > 0 && (
+      {!showShimmer && tableData.length > 0 && (
         <OiSnapshotTable
           rows={tableData}
           expiries={visibleTableExpiries}
@@ -381,7 +381,7 @@ const OiHistory: React.FC = () => {
         />
       )}
 
-      {chartData && selectedStrike && (
+      {!showShimmer && chartData && selectedStrike && (
         <StrikeHistoryCard
           strike={selectedStrike}
           chart={chartData}

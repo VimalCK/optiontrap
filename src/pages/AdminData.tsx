@@ -4,7 +4,8 @@ import { isAbortError } from '@/services/apiClient';
 import { useAbortSignal } from '@/hooks/useAbortSignal';
 import { saveFile } from '@/utils/saveFile';
 import Message from '@/components/Message/Message';
-import LoadingState from '@/components/LoadingState/LoadingState';
+import { ShimmerGroup } from '@/components/Shimmer/Shimmer';
+import { ServiceRowsShimmer } from '@/components/AdminShimmer/AdminShimmer';
 import EmptyState from '@/components/EmptyState/EmptyState';
 import { CheckIcon, DownloadIcon, TableIcon } from '@/components/icons/Icons';
 import { MessageTone } from '@/utils/uiEnums';
@@ -13,6 +14,7 @@ import type { ExportTableId } from '../../shared/appEnums.js';
 const BYTES_PER_KB = 1024;
 const FILE_SIZE_UNITS = ['B', 'KB', 'MB', 'GB'];
 const EXPORT_FACTS = ['Excel .xlsx', 'Every column', 'Every row'];
+const PLACEHOLDER_TABLES = 1;
 
 const errorText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
@@ -93,15 +95,14 @@ const AdminData: React.FC = () => {
   };
 
   if (loadError) return <Message tone={MessageTone.Error}>{loadError}</Message>;
-  if (!tables) return <LoadingState label="Loading tables…" />;
-
   return (
     <section className="hx-panel admin-export" aria-labelledby="admin-export-title">
       <div className="hx-panel__title admin-export__title">
         <h2 id="admin-export-title">Download a table</h2>
         <p>Built on the server from the live table, a page at a time, so a large table can take a while.</p>
       </div>
-      {tables.length === 0
+      {!tables && <ShimmerGroup label="Loading tables"><ServiceRowsShimmer rows={PLACEHOLDER_TABLES} /></ShimmerGroup>}
+      {tables && (tables.length === 0
         ? <EmptyState icon={<TableIcon size={64} />} title="No tables to download" />
         : tables.map((table) => (
           <TableExportRow
@@ -112,7 +113,7 @@ const AdminData: React.FC = () => {
             error={errors[table.id] ?? null}
             onDownload={download}
           />
-        ))}
+        )))}
     </section>
   );
 };

@@ -15,10 +15,25 @@ import { useStrategies } from '@/hooks/useStrategies';
 import { AutomationSettingsSection, type AutomationSettingsSectionId, enumFromParam, MessageTone } from '@/utils/uiEnums';
 import Message from '@/components/Message/Message';
 import '@/styles/analytics.css'; // reuse the shared tab-bar CSS
+import Shimmer, { ShimmerGroup, shimmerKeys } from '@/components/Shimmer/Shimmer';
+import { ShimmerShape } from '@/utils/uiEnums';
 import '@/styles/automation.css';
-import LoadingState from '@/components/LoadingState/LoadingState';
 
 const errorText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
+
+/** Placeholder setting rows while the configuration loads. */
+const PLACEHOLDER_SETTINGS = shimmerKeys(4);
+
+const SettingsShimmer: React.FC = () => (
+  <ShimmerGroup label="Loading Algo Trading settings">
+    {PLACEHOLDER_SETTINGS.map((row) => (
+      <div key={row} className="automation-config__row automation-settings-shimmer__row">
+        <span className="automation-config__label"><Shimmer width="5em" /></span>
+        <Shimmer shape={ShimmerShape.Block} className="automation-settings-shimmer__control" />
+      </div>
+    ))}
+  </ShimmerGroup>
+);
 
 export const sectionFromParams = (params: URLSearchParams): AutomationSettingsSectionId =>
   enumFromParam(AutomationSettingsSection, params.get('tab'), AutomationSettingsSection.General);
@@ -73,7 +88,7 @@ const AutomationSettings: React.FC = () => {
       <section className="card automation-settings__card">
         <div className="automation-settings__body">
           {error && <Message tone={MessageTone.Error}>{error}</Message>}
-          {(!config || !strategies) && !error && <LoadingState />}
+          {(!config || !strategies) && !error && <SettingsShimmer />}
           {config && strategies && (
             <AutomationConfigForm
               config={config}

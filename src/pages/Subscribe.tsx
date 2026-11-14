@@ -7,7 +7,7 @@ import { activateSubscription, currencySymbol, formatDuration, getSubscriptionPl
 import '@/styles/subscribe.css';
 import Message from '@/components/Message/Message';
 import { MessageTone } from '@/utils/uiEnums';
-import LoadingState from '@/components/LoadingState/LoadingState';
+import Shimmer, { ShimmerGroup, shimmerKeys } from '@/components/Shimmer/Shimmer';
 
 const getPlanPriceLabel = (plan: SubscriptionPlan) =>
   `${currencySymbol(plan.currency)}${plan.price.toLocaleString('en-IN')} / ${formatDuration(plan.durationCount, plan.durationUnit)}`;
@@ -26,6 +26,10 @@ const planMeta: Record<string, { badge?: string; extraFeatures?: string[] }> = {
 };
 
 const planCapabilityChips = ['Live Greeks', 'OI History', 'Smart Watchlists', 'Paper + Live P&L'];
+
+/** Placeholder plan cards while the plans load, each with a line per capability every plan has. */
+const PLACEHOLDER_PLANS = shimmerKeys(3);
+const PLACEHOLDER_FEATURES = shimmerKeys(planCapabilityChips.length);
 
 const Subscribe: React.FC = () => {
   const navigate = useNavigate();
@@ -81,7 +85,20 @@ const Subscribe: React.FC = () => {
         {error && <Message tone={MessageTone.Error} className="subscribe-error">{error}</Message>}
 
         {loading ? (
-          <LoadingState label="Loading plans…" />
+          <ShimmerGroup label="Loading plans" className="subscribe-plans">
+            {PLACEHOLDER_PLANS.map((plan) => (
+              <div key={plan} className="subscribe-plan">
+                <div className="subscribe-plan__content">
+                  <h2><Shimmer width="6em" /></h2>
+                  <p><Shimmer width="80%" /></p>
+                </div>
+                <div className="subscribe-plan__price"><Shimmer width="4em" /></div>
+                <ul className="subscribe-plan__features">
+                  {PLACEHOLDER_FEATURES.map((feature) => <li key={feature}><Shimmer width="70%" /></li>)}
+                </ul>
+              </div>
+            ))}
+          </ShimmerGroup>
         ) : plans.length > 0 ? (
           <div className="subscribe-plans">
             {plans.map((plan) => (

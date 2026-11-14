@@ -597,6 +597,12 @@
   line-height: 1;
 }
 
+/* A stat's value in outline while Diagnostics loads: one line of .hx-stat__value. */
+.hx-stat__value-shimmer {
+  width: 56px;
+  height: 40px;
+}
+
 .hx-stat__label {
   font-size: 13px;
   font-weight: 700;

@@ -64,6 +64,39 @@ const LtpCell: React.FC<{
   );
 };
 
+/** CE OI and LTP, the strike, PE LTP and OI. */
+export const CHAIN_COLUMN_COUNT = 5;
+
+/** The chain table, its column widths and header, around the rows given. */
+export const ChainTableFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="option-chain-table-wrapper">
+    <table className="option-chain-table">
+      <colgroup>
+        <col className="oc-col-oi" />
+        <col className="oc-col-ltp" />
+        <col className="oc-col-strike" />
+        <col className="oc-col-ltp" />
+        <col className="oc-col-oi" />
+      </colgroup>
+      <thead>
+        <tr>
+          <th className="oc-header-ce" colSpan={2}>CALLS</th>
+          <th className="oc-header-strike">STRIKE</th>
+          <th className="oc-header-pe" colSpan={2}>PUTS</th>
+        </tr>
+        <tr>
+          <th>OI</th>
+          <th>LTP</th>
+          <th></th>
+          <th>LTP</th>
+          <th>OI</th>
+        </tr>
+      </thead>
+      <tbody>{children}</tbody>
+    </table>
+  </div>
+);
+
 /**
  * The option chain: CE and PE OI and LTP per strike, each with its change from the previous day, the ATM row
  * marked, and OI bars behind the strike. `orderOpen` is the option whose order popup is open.
@@ -84,53 +117,28 @@ const ChainTable: React.FC<{
   };
 
   return (
-    <div className="option-chain-table-wrapper">
-      <table className="option-chain-table">
-        <colgroup>
-          <col className="oc-col-oi" />
-          <col className="oc-col-ltp" />
-          <col className="oc-col-strike" />
-          <col className="oc-col-ltp" />
-          <col className="oc-col-oi" />
-        </colgroup>
-        <thead>
-          <tr>
-            <th className="oc-header-ce" colSpan={2}>CALLS</th>
-            <th className="oc-header-strike">STRIKE</th>
-            <th className="oc-header-pe" colSpan={2}>PUTS</th>
+    <ChainTableFrame>
+      {chain.map((row) => {
+        const ceItm = row.strike < atmStrike ? 'oc-cell--itm-ce' : '';
+        const peItm = row.strike > atmStrike ? 'oc-cell--itm-pe' : '';
+        const isOrderOpen = orderOpen?.strike === row.strike;
+        return (
+          <tr key={row.strike} className={`${row.strike === atmStrike ? 'oc-row--atm' : ''} ${isOrderOpen ? 'oc-row--active' : ''}`} style={{ position: 'relative' }}>
+            <OiCell instrument={row.ce} prices={prices} className={`oc-cell-oi oc-cell-oi--ce ${ceItm}`} />
+            <LtpCell instrument={row.ce} strike={row.strike} optionType={OptionType.CE} prices={prices} className={ceItm} onOpenOrder={(price) => onOpenOrder(row.strike, OptionType.CE, price)} onQuickTrade={onQuickTrade} />
+            <td className="oc-cell-strike">
+              <div className="oc-strike-bars">
+                <div className="oc-oi-bar oc-oi-bar--ce" style={{ width: barWidth(row.ce) }} />
+                <div className="oc-oi-bar oc-oi-bar--pe" style={{ width: barWidth(row.pe) }} />
+              </div>
+              {row.strike}
+            </td>
+            <LtpCell instrument={row.pe} strike={row.strike} optionType={OptionType.PE} prices={prices} className={peItm} onOpenOrder={(price) => onOpenOrder(row.strike, OptionType.PE, price)} onQuickTrade={onQuickTrade} />
+            <OiCell instrument={row.pe} prices={prices} className={`oc-cell-oi oc-cell-oi--pe ${peItm}`} />
           </tr>
-          <tr>
-            <th>OI</th>
-            <th>LTP</th>
-            <th></th>
-            <th>LTP</th>
-            <th>OI</th>
-          </tr>
-        </thead>
-        <tbody>
-          {chain.map((row) => {
-            const ceItm = row.strike < atmStrike ? 'oc-cell--itm-ce' : '';
-            const peItm = row.strike > atmStrike ? 'oc-cell--itm-pe' : '';
-            const isOrderOpen = orderOpen?.strike === row.strike;
-            return (
-              <tr key={row.strike} className={`${row.strike === atmStrike ? 'oc-row--atm' : ''} ${isOrderOpen ? 'oc-row--active' : ''}`} style={{ position: 'relative' }}>
-                <OiCell instrument={row.ce} prices={prices} className={`oc-cell-oi oc-cell-oi--ce ${ceItm}`} />
-                <LtpCell instrument={row.ce} strike={row.strike} optionType={OptionType.CE} prices={prices} className={ceItm} onOpenOrder={(price) => onOpenOrder(row.strike, OptionType.CE, price)} onQuickTrade={onQuickTrade} />
-                <td className="oc-cell-strike">
-                  <div className="oc-strike-bars">
-                    <div className="oc-oi-bar oc-oi-bar--ce" style={{ width: barWidth(row.ce) }} />
-                    <div className="oc-oi-bar oc-oi-bar--pe" style={{ width: barWidth(row.pe) }} />
-                  </div>
-                  {row.strike}
-                </td>
-                <LtpCell instrument={row.pe} strike={row.strike} optionType={OptionType.PE} prices={prices} className={peItm} onOpenOrder={(price) => onOpenOrder(row.strike, OptionType.PE, price)} onQuickTrade={onQuickTrade} />
-                <OiCell instrument={row.pe} prices={prices} className={`oc-cell-oi oc-cell-oi--pe ${peItm}`} />
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+        );
+      })}
+    </ChainTableFrame>
   );
 };
 

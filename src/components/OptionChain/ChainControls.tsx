@@ -1,6 +1,8 @@
 import React from 'react';
 import AppSelect from '@/components/AppSelect/AppSelect';
+import Shimmer from '@/components/Shimmer/Shimmer';
 import { formatCalendarDate } from '@/utils/marketStatus';
+import { ShimmerShape } from '@/utils/uiEnums';
 
 type Option = { value: string; label: string };
 
@@ -14,7 +16,8 @@ const ChainControls: React.FC<{
   expiries: string[];
   onExpiry: (expiry: string) => void;
   daysToExpiry: number | undefined;
-}> = ({ symbol, symbolOptions, recentSymbolOptions, onSymbol, expiry, expiries, onExpiry, daysToExpiry }) => (
+  loading: boolean;
+}> = ({ symbol, symbolOptions, recentSymbolOptions, onSymbol, expiry, expiries, onExpiry, daysToExpiry, loading }) => (
   <div className="oc-expiry-panel">
     <div className="oc-expiry-bar">
       <AppSelect value={symbol} options={symbolOptions} onChange={(v) => onSymbol(String(v))} placeholder="Select symbol" searchable />
@@ -27,6 +30,13 @@ const ChainControls: React.FC<{
             onChange={(v) => onExpiry(String(v))}
             className="oc-expiry-select"
           />
+        </>
+      )}
+      {loading && expiries.length === 0 && (
+        <>
+          <span className="oc-expiry-bar__label">Expiry</span>
+          <Shimmer shape={ShimmerShape.Block} className="oc-expiry-select oc-expiry-select-shimmer" />
+          <span className="oc-expiry-bar__days"><Shimmer width="6em" /></span>
         </>
       )}
       {daysToExpiry !== undefined && (

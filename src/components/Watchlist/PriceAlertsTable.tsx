@@ -4,6 +4,32 @@ import type { PriceAlert } from '@/services/priceAlerts';
 import { PriceAlertStatus, priceAlertConditionLabel } from '../../../shared/appEnums.js';
 import { countByStatus, formatAlertTime, groupAlerts } from './priceAlertRows';
 import { formatPrice, type LivePrice } from './watchlistRows';
+import Shimmer, { ShimmerGroup, ShimmerTableRows } from '@/components/Shimmer/Shimmer';
+
+/** Symbol, Condition, Tgt, LTP, Status, Time, Actions. */
+const ALERT_COLUMN_COUNT = 7;
+/** Placeholder rows while the alerts load. */
+const PLACEHOLDER_ROWS = 3;
+
+/** The alerts table and its header, around the rows given. */
+const AlertsTableFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="wl-alerts__table-wrap">
+    <table className="wl-alerts-table">
+      <thead>
+        <tr>
+          <th>Symbol</th>
+          <th className="wl-alerts-table__center">Condition</th>
+          <th className="wl-alerts-table__num">Tgt</th>
+          <th className="wl-alerts-table__num">LTP</th>
+          <th className="wl-alerts-table__center">Status</th>
+          <th className="wl-alerts-table__center">Time</th>
+          <th className="wl-alerts-table__center">Actions</th>
+        </tr>
+      </thead>
+      <tbody>{children}</tbody>
+    </table>
+  </div>
+);
 
 const AlertRow: React.FC<{ alert: PriceAlert; price: LivePrice | undefined; onReset: (id: string) => void; onDelete: (id: string) => void }> = ({ alert, price, onReset, onDelete }) => (
   <tr>
@@ -35,10 +61,11 @@ const AlertRow: React.FC<{ alert: PriceAlert; price: LivePrice | undefined; onRe
 /** Every price alert, grouped by instrument; triggered ones stay until reset or deleted. */
 const PriceAlertsTable: React.FC<{
   alerts: PriceAlert[];
+  loading: boolean;
   livePrices: Map<number, LivePrice>;
   onReset: (id: string) => void;
   onDelete: (id: string) => void;
-}> = ({ alerts, livePrices, onReset, onDelete }) => {
+}> = ({ alerts, loading, livePrices, onReset, onDelete }) => {
   const total = countByStatus(alerts);
   return (
     <div className="wl-alerts">
@@ -47,46 +74,35 @@ const PriceAlertsTable: React.FC<{
           <h3 className="wl-alerts__title">Price Alerts</h3>
           <p className="wl-alerts__desc">Triggered alerts stay here until you reset or delete them.</p>
         </div>
-        <span className="wl-alerts__count">{total.active} active / {total.triggered} triggered</span>
+        <span className="wl-alerts__count">{loading ? <Shimmer width="9em" /> : `${total.active} active / ${total.triggered} triggered`}</span>
       </div>
 
-      {alerts.length === 0 ? (
+      {loading ? (
+        <ShimmerGroup label="Loading price alerts">
+          <AlertsTableFrame><ShimmerTableRows rows={PLACEHOLDER_ROWS} columns={ALERT_COLUMN_COUNT} /></AlertsTableFrame>
+        </ShimmerGroup>
+      ) : alerts.length === 0 ? (
         <div className="wl-alerts__empty">No price alerts yet. Use the Alert button on a watchlist item.</div>
       ) : (
-        <div className="wl-alerts__table-wrap">
-          <table className="wl-alerts-table">
-            <thead>
-              <tr>
-                <th>Symbol</th>
-                <th className="wl-alerts-table__center">Condition</th>
-                <th className="wl-alerts-table__num">Tgt</th>
-                <th className="wl-alerts-table__num">LTP</th>
-                <th className="wl-alerts-table__center">Status</th>
-                <th className="wl-alerts-table__center">Time</th>
-                <th className="wl-alerts-table__center">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {groupAlerts(alerts).map((group) => {
-                const count = countByStatus(group.alerts);
-                return (
-                  <React.Fragment key={group.key}>
-                    <tr className="wl-alert-group-row">
-                      <td colSpan={7}>
-                        <span className="wl-alerts-table__symbol">{group.symbol}</span>
-                        <span className={`wl-alerts-table__exchange wl-exchange--${group.exchange.toLowerCase()}`}>{group.exchange}</span>
-                        <span className="wl-alert-group-row__count">{count.active} active / {count.triggered} triggered</span>
-                      </td>
-                    </tr>
-                    {group.alerts.map((alert) => (
-                      <AlertRow key={alert.id} alert={alert} price={livePrices.get(alert.instrumentToken)} onReset={onReset} onDelete={onDelete} />
-                    ))}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <AlertsTableFrame>
+          {groupAlerts(alerts).map((group) => {
+            const count = countByStatus(group.alerts);
+            return (
+              <React.Fragment key={group.key}>
+                <tr className="wl-alert-group-row">
+                  <td colSpan={ALERT_COLUMN_COUNT}>
+                    <span className="wl-alerts-table__symbol">{group.symbol}</span>
+                    <span className={`wl-alerts-table__exchange wl-exchange--${group.exchange.toLowerCase()}`}>{group.exchange}</span>
+                    <span className="wl-alert-group-row__count">{count.active} active / {count.triggered} triggered</span>
+                  </td>
+                </tr>
+                {group.alerts.map((alert) => (
+                  <AlertRow key={alert.id} alert={alert} price={livePrices.get(alert.instrumentToken)} onReset={onReset} onDelete={onDelete} />
+                ))}
+              </React.Fragment>
+            );
+          })}
+        </AlertsTableFrame>
       )}
     </div>
   );

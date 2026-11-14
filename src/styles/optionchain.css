@@ -72,6 +72,11 @@
   width: 160px;
 }
 
+/* Stands in for the expiry select while the symbol's expiries load. */
+.oc-expiry-select-shimmer {
+  height: 32px;
+}
+
 /* Option Chain Card */
 .option-chain-card {
   overflow: hidden;
@@ -104,15 +109,6 @@
 .oc-refresh-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.oc-refresh-btn--spinning svg {
-  animation: oc-spin 0.8s linear infinite;
-}
-
-@keyframes oc-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
 }
 
 .option-chain-header {
@@ -366,6 +362,10 @@
 }
 
 /* Vertical Bar Chart View */
+.oc-chart-card {
+  --oc-chart-height: 320px;
+}
+
 .oc-chart {
   padding: 16px 0;
 }
@@ -391,14 +391,14 @@
   color: var(--text-secondary);
   text-align: right;
   min-width: 44px;
-  height: 320px;
+  height: var(--oc-chart-height);
 }
 
 .oc-chart__bars {
   display: flex;
   align-items: stretch;
   gap: 2px;
-  height: 320px;
+  height: var(--oc-chart-height);
   padding: 0 8px;
   overflow: visible;
   position: relative;
@@ -458,7 +458,7 @@
   position: absolute;
   left: 0;
   bottom: 0;
-  height: 320px;
+  height: var(--oc-chart-height);
   width: 0;
   border-left: 1px dashed var(--accent);
   pointer-events: none;
@@ -995,4 +995,21 @@
 
 .oc-row--active {
   background: var(--sidebar-hover) !important;
+}
+
+/* The OI Chart and Strategy cards in outline while the chain loads. */
+.oc-chart-shimmer {
+  height: var(--oc-chart-height);
+  margin: 16px 0;
+}
+
+.oc-strategy-shimmer {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.oc-strategy-shimmer__row {
+  height: 64px;
 }

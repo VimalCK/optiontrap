@@ -232,11 +232,20 @@
 
 /* ── Daily P&L bars, from a zero line ── */
 
+.winloss {
+  --winloss-chart-height: 180px;
+}
+
+/* The Daily P&L chart's outline while the results load. */
+.winloss-chart-shimmer {
+  height: var(--winloss-chart-height);
+}
+
 .winloss-chart {
   display: flex;
   align-items: stretch;
   gap: 2px;
-  height: 180px;
+  height: var(--winloss-chart-height);
   padding-bottom: 20px;
   position: relative;
 }

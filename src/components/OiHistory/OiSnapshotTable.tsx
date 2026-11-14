@@ -13,6 +13,7 @@ const premiumLabel = (price: number): string => `₹${price.toFixed(price < 10 ?
 
 /** Strikes shown above and below ATM before the grid scrolls vertically. */
 const STRIKES_EACH_SIDE = 10;
+export const OI_SNAPSHOT_TITLE = 'OI Snapshot';
 
 interface OiSnapshotTableProps {
   rows: OiTableRow[];
@@ -72,7 +73,7 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
       <div className="oi-history__table-header">
         <div className="oi-history__table-header-left">
           <div>
-            <div className="oi-history__table-title">OI Snapshot</div>
+            <div className="oi-history__table-title">{OI_SNAPSHOT_TITLE}</div>
             <div className="oi-history__table-subtitle">
               {filterDate ? formatFullDateLabel(filterDate) : 'Select a date'}
               <span>Daily change vs previous session</span>

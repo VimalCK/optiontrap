@@ -8,7 +8,9 @@ import { HealthStatus } from '../../shared/appEnums.js';
 import { HealthTone, type HealthToneId, MessageTone } from '@/utils/uiEnums';
 import Message from '@/components/Message/Message';
 import '@/styles/admin.css';
-import LoadingState from '@/components/LoadingState/LoadingState';
+import Shimmer, { ShimmerGroup } from '@/components/Shimmer/Shimmer';
+import { ServiceRowsShimmer } from '@/components/AdminShimmer/AdminShimmer';
+import { ShimmerShape } from '@/utils/uiEnums';
 
 /** How long ago, roughly: "just now", "12m ago", "3h ago", "2d ago". */
 const timeAgo = (ms: number) => {
@@ -69,6 +71,37 @@ export const HealthCheckRow: React.FC<{ icon: React.ReactNode; name: string; che
   );
 };
 
+/** Database, Server, Kite Session, OI Data Feed, Trade Engine and Nightly Jobs. */
+const SERVICE_ROWS = 6;
+
+/** Diagnostics in outline while the first report loads: the status banner, the services and the usage stats. */
+const HealthShimmer: React.FC = () => (
+  <ShimmerGroup label="Loading diagnostics">
+    <div className="hx-hero">
+      <div className="hx-hero__text">
+        <h2><Shimmer width="14em" /></h2>
+        <p><Shimmer width="22em" /></p>
+      </div>
+    </div>
+    <div className="hx-panels">
+      <div className="hx-panel">
+        <div className="hx-panel__title">Services</div>
+        <ServiceRowsShimmer rows={SERVICE_ROWS} />
+      </div>
+      <div className="hx-metrics">
+        <div className="hx-stat">
+          <Shimmer shape={ShimmerShape.Block} className="hx-stat__value-shimmer" />
+          <span className="hx-stat__label">Active users</span>
+        </div>
+        <div className="hx-stat">
+          <Shimmer shape={ShimmerShape.Block} className="hx-stat__value-shimmer" />
+          <span className="hx-stat__label">Open feedback</span>
+        </div>
+      </div>
+    </div>
+  </ShimmerGroup>
+);
+
 const secondsAgo = (ts: number) => Math.max(0, Math.round((Date.now() - ts) / 1000));
 
 const Health: React.FC = () => {
@@ -96,7 +129,7 @@ const Health: React.FC = () => {
   }, [load]);
 
   if (loading && !health) {
-    return <LoadingState label="Loading diagnostics…" />;
+    return <HealthShimmer />;
   }
   if (!health) {
     return error ? <Message tone={MessageTone.Error}>{error}</Message> : null;

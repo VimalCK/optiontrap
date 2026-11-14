@@ -60,7 +60,6 @@ const Redirect: React.FC = () => {
   return (
     <div className="redirect-page">
       <div className="redirect-card">
-        <div className="redirect-spinner" />
         <h2>Authenticating...</h2>
         <p>Completing login with Kite Connect</p>
       </div>

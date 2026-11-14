@@ -285,9 +285,16 @@
 }
 
 .dashboard-quality {
+  --quality-ring-size: 118px;
   display: flex;
   align-items: center;
   gap: 20px;
+}
+
+.dashboard-quality__ring-shimmer {
+  width: var(--quality-ring-size);
+  height: var(--quality-ring-size);
+  flex-shrink: 0;
 }
 
 .dashboard-quality__ring {
@@ -295,8 +302,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  width: 118px;
-  height: 118px;
+  width: var(--quality-ring-size);
+  height: var(--quality-ring-size);
   flex-shrink: 0;
   border-radius: 50%;
   background:

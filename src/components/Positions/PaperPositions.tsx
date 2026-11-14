@@ -6,21 +6,34 @@ import PaperOrders, { pendingCount, pendingOrders, usePaperOrders } from '@/comp
 import { useLastPrices } from '@/hooks/useLastPrices';
 import TabBar, { type TabBarItem } from '@/components/TabBar/TabBar';
 import Message from '@/components/Message/Message';
-import LoadingState from '@/components/LoadingState/LoadingState';
-import { formatSignedAmount } from '@/utils/formatAmount';
+import { ShimmerGroup, ShimmerTableRows } from '@/components/Shimmer/Shimmer';
 import { MessageTone, PaperTab, type PaperTabId } from '@/utils/uiEnums';
-import PaperPositionsTable from './PaperPositionsTable';
+import PaperPositionsTable, { PAPER_POSITION_COLUMNS, PaperPositionsFrame } from './PaperPositionsTable';
+import PositionsTotal from './PositionsTotal';
 import RiskTable from './RiskTable';
 import { paperPositionsPnl } from './paperPnl';
-import { pnlTone } from './riskLabels';
 import { useSpotPrices } from './useSpotPrices';
 
-/** The paper tabs, each with how many it holds: Open positions, Pending orders still waiting to fill, Position Risk strategies. */
-export const paperTabs = (openPositions: number, pendingOrders: number, riskGroups: number): TabBarItem<PaperTabId>[] => [
-  { id: PaperTab.Positions, label: `Open (${openPositions})` },
-  { id: PaperTab.Orders, label: `Pending (${pendingOrders})` },
-  { id: PaperTab.Risk, label: `Position Risk (${riskGroups})` },
+export interface PaperTabCounts {
+  openPositions: number;
+  pendingOrders: number;
+  riskGroups: number;
+}
+
+const countLabel = (count: number | undefined) => (count === undefined ? '' : ` (${count})`);
+
+/**
+ * The paper tabs, each with how many it holds: Open positions, Pending orders still waiting to fill, Position Risk
+ * strategies. No counts (null) while the positions load, rather than zeros that aren't true yet.
+ */
+export const paperTabs = (counts: PaperTabCounts | null): TabBarItem<PaperTabId>[] => [
+  { id: PaperTab.Positions, label: `Open${countLabel(counts?.openPositions)}` },
+  { id: PaperTab.Orders, label: `Pending${countLabel(counts?.pendingOrders)}` },
+  { id: PaperTab.Risk, label: `Position Risk${countLabel(counts?.riskGroups)}` },
 ];
+
+/** Placeholder rows in the positions table while the positions load. */
+const PLACEHOLDER_ROWS = 4;
 
 const PaperPositions: React.FC = () => {
   const [positions, setPositions] = useState<Position[]>([]);
@@ -61,7 +74,7 @@ const PaperPositions: React.FC = () => {
     <section className="card" aria-label="Paper positions and orders">
       <div className="positions-paper-tabs">
         <TabBar
-          items={paperTabs(openPositions, pendingCount(orderBook.orders), riskGroups.length)}
+          items={paperTabs(loading ? null : { openPositions, pendingOrders: pendingCount(orderBook.orders), riskGroups: riskGroups.length })}
           activeId={tab}
           onChange={setTab}
           className="analytics-tabs analytics-tabs--small"
@@ -75,7 +88,18 @@ const PaperPositions: React.FC = () => {
     </section>
   );
 
-  if (loading) return <div className="card"><LoadingState label="Loading positions…" /></div>;
+  if (loading) {
+    return (
+      <>
+        <PositionsTotal pnl={0} loading />
+        {positionsCard(
+          <ShimmerGroup label="Loading paper positions">
+            <PaperPositionsFrame><ShimmerTableRows rows={PLACEHOLDER_ROWS} columns={PAPER_POSITION_COLUMNS.length} /></PaperPositionsFrame>
+          </ShimmerGroup>,
+        )}
+      </>
+    );
+  }
 
   if (positions.length === 0) {
     return positionsCard(
@@ -90,14 +114,7 @@ const PaperPositions: React.FC = () => {
     <>
       {exitError && <Message tone={MessageTone.Error} className="positions-exit-error">{exitError}</Message>}
 
-      <div className="card" style={{ marginBottom: 'var(--card-gap)' }}>
-        <div className="positions-summary">
-          <div className="positions-summary__item">
-            <span className="positions-summary__label">Total P&L</span>
-            <span className={`positions-summary__value ${pnlTone(totalPnL)}`}>{formatSignedAmount(totalPnL)}</span>
-          </div>
-        </div>
-      </div>
+      <PositionsTotal pnl={totalPnL} />
 
       {positionsCard(<PaperPositionsTable positions={positions} livePrices={livePrices} onExit={handleExit} />)}
     </>

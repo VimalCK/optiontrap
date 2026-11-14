@@ -25,11 +25,15 @@ const group = (changes: Partial<RiskGroup> = {}): RiskGroup => ({
 
 describe('paperTabs', () => {
   it('names the paper tabs, Open, Pending and Position Risk, with how many each holds', () => {
-    expect(paperTabs(2, 1, 3)).toEqual([
+    expect(paperTabs({ openPositions: 2, pendingOrders: 1, riskGroups: 3 })).toEqual([
       { id: PaperTab.Positions, label: 'Open (2)' },
       { id: PaperTab.Orders, label: 'Pending (1)' },
       { id: PaperTab.Risk, label: 'Position Risk (3)' },
     ]);
+  });
+
+  it('shows no counts while the positions load, rather than zeros', () => {
+    expect(paperTabs(null).map((tab) => tab.label)).toEqual(['Open', 'Pending', 'Position Risk']);
   });
 });
 

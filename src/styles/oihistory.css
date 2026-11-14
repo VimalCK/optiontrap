@@ -790,6 +790,24 @@
   padding: 12px 16px;
 }
 
+/* OI History in outline while its data loads: stacked like the cards it stands for. */
+.oi-history__shimmer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--card-gap);
+}
+
+.oi-history__date-shimmer {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+}
+
+/* The strike chart's SVG is drawn at 700 × 162 and scales with the card. */
+.oi-history__chart-shimmer {
+  aspect-ratio: 700 / 162;
+}
+
 /* Futures chart sits inside the card, so it aligns with the card header. */
 .oi-history__chart-wrap.oi-history__chart-wrap--futures {
   margin-top: 8px;

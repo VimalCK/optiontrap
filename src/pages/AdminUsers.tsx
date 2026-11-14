@@ -7,7 +7,12 @@ import { getPublicPlans, formatDuration } from '@/services/subscription';
 import { SubscriptionPlan } from '@/services/kiteAuth';
 import Message from '@/components/Message/Message';
 import { MessageTone } from '@/utils/uiEnums';
-import LoadingState from '@/components/LoadingState/LoadingState';
+import { ShimmerGroup } from '@/components/Shimmer/Shimmer';
+import { AdminTableRowsShimmer } from '@/components/AdminShimmer/AdminShimmer';
+
+const PLACEHOLDER_ROWS = 6;
+/** User, Subscription, Last login and the chevron. */
+const USER_COLUMNS = 4;
 
 const formatDate = (value: string | null) => {
   if (!value) return '—';
@@ -75,9 +80,7 @@ const AdminUsers: React.FC = () => {
 
       {error && <Message tone={MessageTone.Error}>{error}</Message>}
 
-      {loading ? (
-        <LoadingState label="Loading users…" />
-      ) : users.length === 0 ? (
+      {!loading && users.length === 0 ? (
         <div className="admin-empty">No registered users yet.</div>
       ) : (
         <div className="admin-table admin-table--users">
@@ -88,7 +91,12 @@ const AdminUsers: React.FC = () => {
             <span />
           </div>
 
-          {users.map((u) => {
+          {loading && (
+            <ShimmerGroup label="Loading users">
+              <AdminTableRowsShimmer rows={PLACEHOLDER_ROWS} columns={USER_COLUMNS} />
+            </ShimmerGroup>
+          )}
+          {!loading && users.map((u) => {
             const expanded = expandedId === u.userId;
             const sub = u.subscription;
             return (

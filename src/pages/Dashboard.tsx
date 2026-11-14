@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { formatNumericDate } from '@/utils/marketStatus';
 import { useNavigate } from 'react-router-dom';
 import { DashboardIcon, RefreshIcon } from '@/components/icons/Icons';
+import Shimmer, { ShimmerGroup, ShimmerText, shimmerKeys } from '@/components/Shimmer/Shimmer';
 import { heldQuantity } from '@/services/holdings';
 import { useHoldings } from '@/hooks/useHoldings';
 import { useLivePositions } from '@/hooks/useLivePositions';
@@ -12,8 +13,12 @@ import { fetchWatchlists } from '@/services/watchlist';
 import { Side, TradingMode, type TradingModeId } from '../../shared/tradeEnums.js';
 import { PriceAlertStatus } from '../../shared/appEnums.js';
 import { saveTradingMode } from '@/utils/tradingModeStorage';
-import { AnalyticsTab, JournalRange, PortfolioTab, Tone, type ToneId } from '@/utils/uiEnums';
+import { AnalyticsTab, JournalRange, PortfolioTab, ShimmerShape, Tone, type ToneId } from '@/utils/uiEnums';
 import '@/styles/dashboard.css';
+
+/** Rows in the Top Holdings and Recent Journal lists. */
+const DASHBOARD_LIST_SIZE = 5;
+const PLACEHOLDER_ROWS = shimmerKeys(DASHBOARD_LIST_SIZE);
 
 type DashboardTradeEntry = TradeEntry & { mode: TradingModeId };
 
@@ -88,8 +93,8 @@ const MetricCard: React.FC<{
   const content = (
     <>
       <span className="dashboard-metric__label">{title}</span>
-      <strong className={`dashboard-metric__value dashboard-tone--${tone.toLowerCase()}`}>{loading ? 'Loading...' : value}</strong>
-      <span className="dashboard-metric__detail">{detail}</span>
+      <strong className={`dashboard-metric__value dashboard-tone--${tone.toLowerCase()}`}><ShimmerText loading={loading} width="4.5em">{value}</ShimmerText></strong>
+      <span className="dashboard-metric__detail"><ShimmerText loading={loading} width="80%">{detail}</ShimmerText></span>
     </>
   );
 
@@ -107,6 +112,37 @@ const MetricCard: React.FC<{
     </div>
   );
 };
+
+const HoldingRowsShimmer: React.FC = () => (
+  <ShimmerGroup label="Loading top holdings" className="dashboard-list">
+    {PLACEHOLDER_ROWS.map((row) => (
+      <div className="dashboard-list__item" key={row}>
+        <div>
+          <strong><Shimmer width="6em" /></strong>
+          <span><Shimmer width="5em" /></span>
+        </div>
+        <div className="dashboard-list__right">
+          <strong><Shimmer width="4em" /></strong>
+          <span><Shimmer width="3em" /></span>
+        </div>
+      </div>
+    ))}
+  </ShimmerGroup>
+);
+
+const TradeRowsShimmer: React.FC = () => (
+  <ShimmerGroup label="Loading recent trades" className="dashboard-trades">
+    {PLACEHOLDER_ROWS.map((row) => (
+      <div className="dashboard-trade" key={row}>
+        <div>
+          <strong><Shimmer width="9em" /></strong>
+          <span><Shimmer width="14em" /></span>
+        </div>
+        <strong><Shimmer width="4em" /></strong>
+      </div>
+    ))}
+  </ShimmerGroup>
+);
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -136,14 +172,14 @@ const Dashboard: React.FC = () => {
     setError(null);
 
     try {
-      // Stats are totalled on the server, and only the 5 latest trades are
+      // Stats are totalled on the server, and only the latest trades are
       // fetched, so the Dashboard never loads the full trade history.
       // Holdings and live positions come from useHoldings and useLivePositions,
       // shared with the Portfolio and Positions pages.
       const [paperPositionsResult, paperStatsResult, paperTradesResult, liveTradesResult, watchlistsResult, alertsResult] = await Promise.allSettled([
         getPositions(),
         getPaperTradeStats(),
-        getPaperTrades({ limit: 5 }),
+        getPaperTrades({ limit: DASHBOARD_LIST_SIZE }),
         getLiveTradeEntries(),
         fetchWatchlists(),
         fetchPriceAlerts(),
@@ -158,7 +194,7 @@ const Dashboard: React.FC = () => {
       const recentTrades: DashboardTradeEntry[] = [
         ...paperTrades.map((trade) => ({ ...trade, mode: TradingMode.Paper })),
         ...liveTrades.map((trade) => ({ ...trade, mode: TradingMode.Live })),
-      ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
+      ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, DASHBOARD_LIST_SIZE);
       const watchlists = watchlistsResult.status === 'fulfilled' ? watchlistsResult.value : [];
       const alerts = alertsResult.status === 'fulfilled' ? alertsResult.value : [];
 
@@ -201,7 +237,7 @@ const Dashboard: React.FC = () => {
   const topHoldings = holdingsData.holdings
     .map((h) => ({ symbol: h.tradingsymbol, value: h.last_price * heldQuantity(h), pnl: h.pnl }))
     .sort((a, b) => b.value - a.value)
-    .slice(0, 5)
+    .slice(0, DASHBOARD_LIST_SIZE)
     .map((h) => ({ ...h, weight: holdingsValue > 0 ? (h.value / holdingsValue) * 100 : 0 }));
   // Live positions: the same source as the Positions page.
   const liveData = useLivePositions();
@@ -221,7 +257,7 @@ const Dashboard: React.FC = () => {
     : `${metrics.winningTrades}W / ${metrics.losingTrades}L closed trades`;
 
   return (
-    <div className="dashboard">
+    <div className="dashboard" aria-busy={busy}>
       {/* Title row, the height of the other pages' tab bars, so the market strip sits beside it. */}
       <header className="dashboard-header">
         <h1 className="dashboard-header__title">Dashboard</h1>
@@ -243,7 +279,7 @@ const Dashboard: React.FC = () => {
           <div className="dashboard-hero__icon"><DashboardIcon /></div>
           <span className="dashboard-hero__label">Total Net P&L</span>
           <strong className={`dashboard-hero__value dashboard-tone--${getTone(totalPnl).toLowerCase()}`}>
-            {busy ? 'Loading...' : formatCompactMoney(totalPnl, true)}
+            <ShimmerText loading={busy} width="5em">{formatCompactMoney(totalPnl, true)}</ShimmerText>
           </strong>
           <p className="dashboard-hero__text">Includes holdings, open/closed paper positions, and live broker positions.</p>
         </div>
@@ -282,9 +318,11 @@ const Dashboard: React.FC = () => {
                 <div className="dashboard-breakdown__row" key={item.label}>
                   <span>{item.label}</span>
                   <div className="dashboard-breakdown__track">
-                    <div className={`dashboard-breakdown__bar dashboard-breakdown__bar--${getTone(item.value).toLowerCase()}`} style={{ width: `${width}%` }} />
+                    {busy
+                      ? <Shimmer shape={ShimmerShape.Block} />
+                      : <div className={`dashboard-breakdown__bar dashboard-breakdown__bar--${getTone(item.value).toLowerCase()}`} style={{ width: `${width}%` }} />}
                   </div>
-                  <strong className={`dashboard-tone--${getTone(item.value).toLowerCase()}`}>{formatCompactMoney(item.value, true)}</strong>
+                  <strong className={`dashboard-tone--${getTone(item.value).toLowerCase()}`}><ShimmerText loading={busy} width="4em">{formatCompactMoney(item.value, true)}</ShimmerText></strong>
                 </div>
               );
             })}
@@ -295,18 +333,22 @@ const Dashboard: React.FC = () => {
           <div className="dashboard-panel__header">
             <div>
               <h3>Trade Quality</h3>
-              <p>{tradeEdgeLabel}</p>
+              <p><ShimmerText loading={loading} width="12em">{tradeEdgeLabel}</ShimmerText></p>
             </div>
           </div>
           <div className="dashboard-quality">
-            <div className="dashboard-quality__ring" style={{ '--ring-value': `${metrics.winRate * 3.6}deg` } as React.CSSProperties}>
-              <span>{metrics.winRate.toFixed(0)}%</span>
-              <small>Win Rate</small>
-            </div>
+            {loading
+              ? <Shimmer shape={ShimmerShape.Circle} className="dashboard-quality__ring-shimmer" />
+              : (
+                <div className="dashboard-quality__ring" style={{ '--ring-value': `${metrics.winRate * 3.6}deg` } as React.CSSProperties}>
+                  <span>{metrics.winRate.toFixed(0)}%</span>
+                  <small>Win Rate</small>
+                </div>
+              )}
             <div className="dashboard-quality__stats">
-              <span>Avg Win <strong className="dashboard-tone--positive">{formatCompactMoney(metrics.avgWin, true)}</strong></span>
-              <span>Avg Loss <strong className="dashboard-tone--negative">{formatCompactMoney(metrics.avgLoss, true)}</strong></span>
-              <span>Closed Trades <strong>{metrics.closedTrades}</strong></span>
+              <span>Avg Win <strong className="dashboard-tone--positive"><ShimmerText loading={loading} width="4em">{formatCompactMoney(metrics.avgWin, true)}</ShimmerText></strong></span>
+              <span>Avg Loss <strong className="dashboard-tone--negative"><ShimmerText loading={loading} width="4em">{formatCompactMoney(metrics.avgLoss, true)}</ShimmerText></strong></span>
+              <span>Closed Trades <strong><ShimmerText loading={loading} width="2em">{metrics.closedTrades}</ShimmerText></strong></span>
             </div>
           </div>
         </div>
@@ -318,21 +360,23 @@ const Dashboard: React.FC = () => {
               <p>Largest equity exposures by current value.</p>
             </div>
           </div>
-          <div className="dashboard-list">
-            {topHoldings.length === 0 && <span className="dashboard-empty">No holdings loaded.</span>}
-            {topHoldings.map((holding) => (
-              <div className="dashboard-list__item" key={holding.symbol}>
-                <div>
-                  <strong>{holding.symbol}</strong>
-                  <span>{holding.weight.toFixed(1)}% weight</span>
+          {holdingsData.loading ? <HoldingRowsShimmer /> : (
+            <div className="dashboard-list">
+              {topHoldings.length === 0 && <span className="dashboard-empty">No holdings loaded.</span>}
+              {topHoldings.map((holding) => (
+                <div className="dashboard-list__item" key={holding.symbol}>
+                  <div>
+                    <strong>{holding.symbol}</strong>
+                    <span>{holding.weight.toFixed(1)}% weight</span>
+                  </div>
+                  <div className="dashboard-list__right">
+                    <strong>{formatCompactMoney(holding.value)}</strong>
+                    <span className={`dashboard-tone--${getTone(holding.pnl).toLowerCase()}`}>{formatCompactMoney(holding.pnl, true)}</span>
+                  </div>
                 </div>
-                <div className="dashboard-list__right">
-                  <strong>{formatCompactMoney(holding.value)}</strong>
-                  <span className={`dashboard-tone--${getTone(holding.pnl).toLowerCase()}`}>{formatCompactMoney(holding.pnl, true)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </button>
 
         <div className="dashboard-panel dashboard-panel--wide">
@@ -342,18 +386,20 @@ const Dashboard: React.FC = () => {
               <p>Latest exited paper and live trades with realised P&L.</p>
             </div>
           </div>
-          <div className="dashboard-trades">
-            {metrics.recentTrades.length === 0 && <span className="dashboard-empty">No closed trades yet.</span>}
-            {metrics.recentTrades.map((trade) => (
-              <button type="button" className="dashboard-trade dashboard-trade--clickable" key={trade.id} onClick={() => goToJournalTrade(trade)}>
-                <div>
-                  <strong>{trade.symbol}</strong>
-                  <span>{trade.mode.toUpperCase()} | {trade.side} x {trade.quantity} | {formatNumericDate(trade.date)}</span>
-                </div>
-                <strong className={`dashboard-tone--${getTone(trade.pnl).toLowerCase()}`}>{formatMoney(trade.pnl, true)}</strong>
-              </button>
-            ))}
-          </div>
+          {loading ? <TradeRowsShimmer /> : (
+            <div className="dashboard-trades">
+              {metrics.recentTrades.length === 0 && <span className="dashboard-empty">No closed trades yet.</span>}
+              {metrics.recentTrades.map((trade) => (
+                <button type="button" className="dashboard-trade dashboard-trade--clickable" key={trade.id} onClick={() => goToJournalTrade(trade)}>
+                  <div>
+                    <strong>{trade.symbol}</strong>
+                    <span>{trade.mode.toUpperCase()} | {trade.side} x {trade.quantity} | {formatNumericDate(trade.date)}</span>
+                  </div>
+                  <strong className={`dashboard-tone--${getTone(trade.pnl).toLowerCase()}`}>{formatMoney(trade.pnl, true)}</strong>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
       </section>

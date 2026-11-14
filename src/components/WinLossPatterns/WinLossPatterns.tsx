@@ -16,12 +16,20 @@ import {
 } from './winLossStats';
 import '@/styles/winLoss.css';
 import Message from '@/components/Message/Message';
-import { MessageTone } from '@/utils/uiEnums';
-import LoadingState from '@/components/LoadingState/LoadingState';
+import { MessageTone, ShimmerShape } from '@/utils/uiEnums';
+import Shimmer, { ShimmerGroup, ShimmerTableRows, shimmerKeys } from '@/components/Shimmer/Shimmer';
 
 const FETCH_DELAY_MS = 400;
 /** The range it opens on: the last 30 IST days, today included. */
 const DEFAULT_RANGE_DAYS = 30;
+
+/** The summary's headline figures and smaller stats, named once for the results and their placeholder. */
+const KPI = { pnl: 'Total P&L', winRate: 'Win rate', profitFactor: 'Profit factor', drawdown: 'Max drawdown' };
+const STAT = { avgWin: 'Avg win', avgLoss: 'Avg loss', best: 'Best trade', worst: 'Worst trade', charges: 'Charges paid' };
+const BREAKDOWN_COLUMN_COUNT = 5;
+/** Placeholder breakdown panels and rows in each while the results load. */
+const PLACEHOLDER_PANELS = 4;
+const PLACEHOLDER_ROWS = 3;
 
 const dash = '–';
 const amount = (value: number | null) => (value === null ? dash : formatSignedAmount(value));
@@ -41,7 +49,7 @@ const WinLossBar: React.FC<{ group: ResultGroup<unknown> }> = ({ group }) => {
   );
 };
 
-const Kpi: React.FC<{ label: string; value: string; tone?: number | null; note: React.ReactNode }> = ({ label, value, tone = null, note }) => (
+const Kpi: React.FC<{ label: string; value: React.ReactNode; tone?: number | null; note: React.ReactNode }> = ({ label, value, tone = null, note }) => (
   <div className="winloss-kpi">
     <span className="winloss-kpi__label">{label}</span>
     <span className={`winloss-kpi__value ${toneClass(tone)}`}>{value}</span>
@@ -49,7 +57,7 @@ const Kpi: React.FC<{ label: string; value: string; tone?: number | null; note: 
   </div>
 );
 
-const Stat: React.FC<{ label: string; value: string; tone?: number | null }> = ({ label, value, tone = null }) => (
+const Stat: React.FC<{ label: string; value: React.ReactNode; tone?: number | null }> = ({ label, value, tone = null }) => (
   <div className="winloss-stat">
     <span className="winloss-stat__label">{label}</span>
     <span className={`winloss-stat__value ${toneClass(tone)}`}>{value}</span>
@@ -59,18 +67,18 @@ const Stat: React.FC<{ label: string; value: string; tone?: number | null }> = (
 const ResultsSummary: React.FC<{ results: AutoTradeResults }> = ({ results: { summary, maxDrawdown } }) => (
   <div className="winloss-summary">
     <div className="winloss-kpis">
-      <Kpi label="Total P&L" value={amount(summary.pnl)} tone={summary.pnl} note={`${summary.trades} closed trades`} />
-      <Kpi label="Win rate" value={percent(winRate(summary))}
+      <Kpi label={KPI.pnl} value={amount(summary.pnl)} tone={summary.pnl} note={`${summary.trades} closed trades`} />
+      <Kpi label={KPI.winRate} value={percent(winRate(summary))}
         note={<><WinLossBar group={summary} />{summary.wins} won · {summary.losses} lost</>} />
-      <Kpi label="Profit factor" value={ratio(profitFactor(summary))} note="Gross profit ÷ gross loss" />
-      <Kpi label="Max drawdown" value={maxDrawdown > 0 ? formatAmount(-maxDrawdown) : dash} tone={-maxDrawdown} note="Biggest fall from a peak" />
+      <Kpi label={KPI.profitFactor} value={ratio(profitFactor(summary))} note="Gross profit ÷ gross loss" />
+      <Kpi label={KPI.drawdown} value={maxDrawdown > 0 ? formatAmount(-maxDrawdown) : dash} tone={-maxDrawdown} note="Biggest fall from a peak" />
     </div>
     <div className="winloss-stats">
-      <Stat label="Avg win" value={amount(averageWin(summary))} tone={averageWin(summary)} />
-      <Stat label="Avg loss" value={amount(averageLoss(summary))} tone={averageLoss(summary)} />
-      <Stat label="Best trade" value={amount(summary.best)} tone={summary.best} />
-      <Stat label="Worst trade" value={amount(summary.worst)} tone={summary.worst} />
-      <Stat label="Charges paid" value={formatAmount(summary.charges)} />
+      <Stat label={STAT.avgWin} value={amount(averageWin(summary))} tone={averageWin(summary)} />
+      <Stat label={STAT.avgLoss} value={amount(averageLoss(summary))} tone={averageLoss(summary)} />
+      <Stat label={STAT.best} value={amount(summary.best)} tone={summary.best} />
+      <Stat label={STAT.worst} value={amount(summary.worst)} tone={summary.worst} />
+      <Stat label={STAT.charges} value={formatAmount(summary.charges)} />
     </div>
   </div>
 );
@@ -154,6 +162,34 @@ export const DailyPnl: React.FC<{ days: AutoTradeResults['byDay'] }> = ({ days }
   );
 };
 
+/** The results' summary and panels in outline while they load: real labels, shimmering figures, tables and chart. */
+const ResultsShimmer: React.FC = () => (
+  <ShimmerGroup label="Loading results">
+    <div className="winloss-summary">
+      <div className="winloss-kpis">
+        {Object.values(KPI).map((label) => <Kpi key={label} label={label} value={<Shimmer width="5em" />} note={<Shimmer width="70%" />} />)}
+      </div>
+      <div className="winloss-stats">
+        {Object.values(STAT).map((label) => <Stat key={label} label={label} value={<Shimmer width="4em" />} />)}
+      </div>
+    </div>
+    <div className="winloss-panels">
+      <section className="winloss-panel winloss-panel--wide">
+        <h4 className="winloss-panel__title">Daily P&amp;L</h4>
+        <Shimmer shape={ShimmerShape.Block} className="winloss-chart-shimmer" />
+      </section>
+      {shimmerKeys(PLACEHOLDER_PANELS).map((panel) => (
+        <section key={panel} className="winloss-panel">
+          <h4 className="winloss-panel__title"><Shimmer width="7em" /></h4>
+          <table className="winloss-table">
+            <tbody><ShimmerTableRows rows={PLACEHOLDER_ROWS} columns={BREAKDOWN_COLUMN_COUNT} /></tbody>
+          </table>
+        </section>
+      ))}
+    </div>
+  </ShimmerGroup>
+);
+
 export const ResultsView: React.FC<{ results: AutoTradeResults }> = ({ results }) => {
   const { strategies } = useStrategies();
   return (
@@ -204,7 +240,7 @@ const WinLossPatterns: React.FC = () => {
         <DateRangePicker range={range} onChange={setRange} />
       </div>
       {message && <Message tone={MessageTone.Error}>{message}</Message>}
-      {!message && loading && <LoadingState />}
+      {!message && loading && <ResultsShimmer />}
       {!message && !loading && results?.summary.trades === 0 && (
         <p className="winloss__empty">No closed automated trades in this range.</p>
       )}

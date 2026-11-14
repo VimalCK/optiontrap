@@ -23,8 +23,8 @@ import { formatAmount, formatSignedAmount } from '@/utils/formatAmount';
 import { formatCalendarDate, istTimeLabel } from '@/utils/marketStatus';
 import { AnalyticsTab, MessageTone } from '@/utils/uiEnums';
 import Message from '@/components/Message/Message';
+import { ShimmerGroup, ShimmerTableRows, ShimmerText } from '@/components/Shimmer/Shimmer';
 import '@/styles/automation.css';
-import LoadingState from '@/components/LoadingState/LoadingState';
 
 const errorText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
@@ -39,6 +39,8 @@ const eventTime = (at: string) => istTimeLabel(new Date(at));
 const FETCH_DELAY_MS = 400;
 
 const TRADE_COLUMNS = 9;
+/** Placeholder trade rows while a range loads. */
+const PLACEHOLDER_ROWS = 5;
 /** Columns before P&L, so a day's P&L lines up under it. */
 const PNL_COLUMN = 6;
 
@@ -125,6 +127,28 @@ export const DayRow: React.FC<{ group: TradeDay; expanded: boolean; onToggle: ()
   </tr>
 );
 
+/** The trades table with its headings; its day groups (or placeholder rows) come as children. */
+const AutoTradesFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <div className="automation-trades__scroll">
+    <table className="automation-table automation-trades">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Instrument</th>
+          <th>Side</th>
+          <th className="automation-trades__num">Qty</th>
+          <th className="automation-trades__num">Entry</th>
+          <th className="automation-trades__num">Exit</th>
+          <th className="automation-trades__num">P&amp;L</th>
+          <th className="automation-trades__stage">Stage</th>
+          <th><span className="automation-trades__sr">Lifecycle</span></th>
+        </tr>
+      </thead>
+      {children}
+    </table>
+  </div>
+);
+
 export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean; error?: string | null; controls?: React.ReactNode }> = ({ trades, loading, error, controls }) => {
   const [open, setOpen] = useState<string | null>(null);
   // Every day starts expanded; these are the ones the user folded away.
@@ -142,7 +166,11 @@ export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean;
         {controls}
       </div>
       {error && <Message tone={MessageTone.Error}>{error}</Message>}
-      {loading && <LoadingState />}
+      {loading && (
+        <ShimmerGroup label="Loading automated trades">
+          <AutoTradesFrame><tbody><ShimmerTableRows rows={PLACEHOLDER_ROWS} columns={TRADE_COLUMNS} /></tbody></AutoTradesFrame>
+        </ShimmerGroup>
+      )}
       {!loading && !error && trades.length === 0 && (
         <EmptyState
           icon={<AutomationIcon size={64} />}
@@ -150,40 +178,25 @@ export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean;
           description="Each one will show here with every stage of its lifecycle."
         />
       )}
-      {trades.length > 0 && (
-        <div className="automation-trades__scroll">
-          <table className="automation-table automation-trades">
-            <thead>
-              <tr>
-                <th>Time</th>
-                <th>Instrument</th>
-                <th>Side</th>
-                <th className="automation-trades__num">Qty</th>
-                <th className="automation-trades__num">Entry</th>
-                <th className="automation-trades__num">Exit</th>
-                <th className="automation-trades__num">P&amp;L</th>
-                <th className="automation-trades__stage">Stage</th>
-                <th><span className="automation-trades__sr">Lifecycle</span></th>
-              </tr>
-            </thead>
-            {tradesByDay(trades).map((group) => (
-              <tbody key={group.day}>
-                <DayRow group={group} expanded={!collapsedDays.has(group.day)} onToggle={() => toggleDay(group.day)} />
-                {!collapsedDays.has(group.day) && group.trades.map((t) => (
-                  <TradeRow key={t.id} trade={t} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} />
-                ))}
-              </tbody>
-            ))}
-          </table>
-        </div>
+      {!loading && trades.length > 0 && (
+        <AutoTradesFrame>
+          {tradesByDay(trades).map((group) => (
+            <tbody key={group.day}>
+              <DayRow group={group} expanded={!collapsedDays.has(group.day)} onToggle={() => toggleDay(group.day)} />
+              {!collapsedDays.has(group.day) && group.trades.map((t) => (
+                <TradeRow key={t.id} trade={t} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} />
+              ))}
+            </tbody>
+          ))}
+        </AutoTradesFrame>
       )}
     </section>
   );
 };
 
-/** "On" or "Off", and whether anything can trade: a strategy must exist and be active. */
-export function automationStatus(config: AutomationConfig | null, strategies: Pick<StrategyInfo, 'id'>[] | null): string {
-  if (!config || !strategies) return 'Loading…';
+/** "On" or "Off", and whether anything can trade: a strategy must exist and be active. null until both have loaded. */
+export function automationStatus(config: AutomationConfig | null, strategies: Pick<StrategyInfo, 'id'>[] | null): string | null {
+  if (!config || !strategies) return null;
   const onOff = config.enabled ? 'On' : 'Off';
   if (strategies.length === 0) return `${onOff} · no strategies yet, nothing trades`;
   const active = strategies.filter((s) => config.strategies[s.id]?.active).length;
@@ -202,6 +215,7 @@ const Automation: React.FC = () => {
   const [tradesLoading, setTradesLoading] = useState(true);
   const [tradesError, setTradesError] = useState<string | null>(null);
   const problem = rangeProblem(range.from, range.to);
+  const status = automationStatus(config, strategies);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -230,7 +244,9 @@ const Automation: React.FC = () => {
     <div className="automation automation--trades">
       <header className="automation-header">
         <h1 className="automation-header__title">Algo Trading</h1>
-        <span className="automation-header__status">{configError || strategiesError ? 'Settings could not be loaded' : automationStatus(config, strategies)}</span>
+        <span className="automation-header__status">
+          {configError || strategiesError ? 'Settings could not be loaded' : <ShimmerText loading={status === null} width="12em">{status}</ShimmerText>}
+        </span>
       </header>
 
       <AutoTradesTable

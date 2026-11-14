@@ -5,13 +5,32 @@ import { heldQuantity, isPledged } from '@/services/holdings';
 import { useHoldings } from '@/hooks/useHoldings';
 import { formatAmount, formatSignedAmount } from '@/utils/formatAmount';
 import { MarketStatus } from '../../shared/tradeEnums.js';
-import { AllocationView, type AllocationViewId, MessageTone } from '@/utils/uiEnums';
+import { AllocationView, type AllocationViewId, MessageTone, ShimmerShape } from '@/utils/uiEnums';
 import Message from '@/components/Message/Message';
+import Shimmer, { ShimmerTableRows, ShimmerText, shimmerKeys } from '@/components/Shimmer/Shimmer';
 import '@/styles/holdings.css';
-import LoadingState from '@/components/LoadingState/LoadingState';
 
 const PRIVACY_MODE_KEY = 'optiontrap_privacy_mode';
+const HOLDINGS_COLUMNS = ['Instrument', 'Qty', 'Avg Price', 'LTP', 'Change', 'P&L', 'Day Change'];
+/** Placeholder rows in the allocation list and the holdings table while the holdings load. */
+const PLACEHOLDER_ROWS = 6;
 
+const AllocationRowsShimmer: React.FC = () => (
+  <div className="allocation-list">
+    {shimmerKeys(PLACEHOLDER_ROWS).map((row) => (
+      <div key={row} className="allocation-item">
+        <div className="allocation-item__row">
+          <div className="allocation-item__info">
+            <span className="allocation-item__symbol"><Shimmer width="6em" /></span>
+            <span className="allocation-item__exchange"><Shimmer width="3em" /></span>
+          </div>
+          <div className="allocation-item__bar-wrapper"><Shimmer shape={ShimmerShape.Block} /></div>
+          <span className="allocation-item__pct"><Shimmer width="3em" /></span>
+        </div>
+      </div>
+    ))}
+  </div>
+);
 
 interface AllocationItem {
   symbol: string;
@@ -58,7 +77,7 @@ const HoldingsView: React.FC = () => {
     .sort((a, b) => b.currentValue - a.currentValue);
 
   return (
-    <div>
+    <div aria-busy={loading}>
       <div className="holdings-subheader">
         <div className="holdings-status-row">
           {marketStatus === MarketStatus.Live && <span className="live-badge">● LIVE</span>}
@@ -80,24 +99,24 @@ const HoldingsView: React.FC = () => {
         </button>
       </div>
 
-      {loading && <LoadingState label="Loading holdings…" />}
-
       {error && <Message tone={MessageTone.Error}>{error}</Message>}
 
-      {!loading && !error && holdings.length > 0 && (
+      {!error && (loading || holdings.length > 0) && (
         <>
           <div className="card-grid card-grid--two-col">
             <div className="card holdings-stat">
               <span className="holdings-stat__label">Total P&L</span>
               <span className={`holdings-stat__value ${totalPnl >= 0 ? 'positive' : 'negative'} ${privacyMode ? 'blurred' : ''}`}>
-                {formatSignedAmount(totalPnl)}
-                <small> ({totalInvestment > 0 ? ((totalPnl / totalInvestment) * 100).toFixed(2) : '0.00'}%)</small>
+                <ShimmerText loading={loading} width="7em">
+                  {formatSignedAmount(totalPnl)}
+                  <small> ({totalInvestment > 0 ? ((totalPnl / totalInvestment) * 100).toFixed(2) : '0.00'}%)</small>
+                </ShimmerText>
               </span>
             </div>
             <div className="card holdings-stat">
               <span className="holdings-stat__label">Day Change</span>
               <span className={`holdings-stat__value ${totalDayChange >= 0 ? 'positive' : 'negative'}`}>
-                {formatSignedAmount(totalDayChange)}
+                <ShimmerText loading={loading} width="6em">{formatSignedAmount(totalDayChange)}</ShimmerText>
               </span>
             </div>
           </div>
@@ -110,12 +129,12 @@ const HoldingsView: React.FC = () => {
                 <div className="allocation-summary">
                   <span className="allocation-summary__item">
                     <span className="allocation-summary__label">Invested</span>
-                    <span className={`allocation-summary__value ${privacyMode ? 'blurred' : ''}`}>{formatAmount(totalInvestment)}</span>
+                    <span className={`allocation-summary__value ${privacyMode ? 'blurred' : ''}`}><ShimmerText loading={loading} width="5em">{formatAmount(totalInvestment)}</ShimmerText></span>
                   </span>
                   <span className="allocation-summary__divider" />
                   <span className="allocation-summary__item">
                     <span className="allocation-summary__label">Current</span>
-                    <span className={`allocation-summary__value ${privacyMode ? 'blurred' : ''}`}>{formatAmount(totalCurrentValue)}</span>
+                    <span className={`allocation-summary__value ${privacyMode ? 'blurred' : ''}`}><ShimmerText loading={loading} width="5em">{formatAmount(totalCurrentValue)}</ShimmerText></span>
                   </span>
                 </div>
               </div>
@@ -129,7 +148,7 @@ const HoldingsView: React.FC = () => {
               </div>
             </div>
 
-            {allocationView === AllocationView.Bar ? (
+            {loading ? <AllocationRowsShimmer /> : allocationView === AllocationView.Bar ? (
               <div className="allocation-list">
                 {allocation.map((item) => {
                   const key = `${item.exchange}:${item.symbol}`;
@@ -181,16 +200,11 @@ const HoldingsView: React.FC = () => {
             <table className="holdings-table">
               <thead>
                 <tr>
-                  <th>Instrument</th>
-                  <th>Qty</th>
-                  <th>Avg Price</th>
-                  <th>LTP</th>
-                  <th>Change</th>
-                  <th>P&L</th>
-                  <th>Day Change</th>
+                  {HOLDINGS_COLUMNS.map((column) => <th key={column}>{column}</th>)}
                 </tr>
               </thead>
               <tbody>
+                {loading && <ShimmerTableRows rows={PLACEHOLDER_ROWS} columns={HOLDINGS_COLUMNS.length} />}
                 {holdings.map((h) => {
                   const qty = heldQuantity(h);
                   const investedValue = h.average_price * qty;

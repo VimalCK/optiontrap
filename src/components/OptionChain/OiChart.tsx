@@ -12,6 +12,8 @@ import StrikeTooltip from './StrikeTooltip';
 import type { ChainPrices, QuickTrade } from './ChainTable';
 import { expectedRangeBand, maxChainOi, oiAxisLabel, oiBar, strikeLabelStep, tooltipBottomPx, valueOf, type OiBar } from './chainMetrics';
 
+export const OI_CHART_TITLE = 'OI Chart';
+
 const AXIS_STEPS = 8;
 const AXIS_LINES = Array.from({ length: AXIS_STEPS + 1 }, (_, i) => i);
 
@@ -65,7 +67,7 @@ const OiChart: React.FC<OiChartProps> = ({ chain, atmStrike, prices, averageVolu
     <div className={`card oc-chart-card ${selectedStrike !== null ? 'oc-chart-card--tooltip-open' : ''}`} style={{ marginTop: 'var(--card-gap)' }}>
       <div className="trap-card-header">
         <div className="trap-card-header__left">
-          <h3 className="card__title" style={{ marginBottom: 0 }}>OI Chart <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-secondary)' }}>(daily changes)</span></h3>
+          <h3 className="card__title" style={{ marginBottom: 0 }}>{OI_CHART_TITLE} <span style={{ fontSize: '11px', fontWeight: 400, color: 'var(--text-secondary)' }}>(daily changes)</span></h3>
           <IconButton icon={<InfoIcon />} label="How to read this chart" onClick={() => setShowInfo(!showInfo)} expanded={showInfo} />
         </div>
       </div>

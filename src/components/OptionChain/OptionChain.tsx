@@ -12,10 +12,10 @@ import OrderModal from '@/components/OrderModal/OrderModal';
 import { useOrderChoices } from '@/components/OrderModal/useOrderChoices';
 import { computeLiveFlow } from '@/services/oiFlow';
 import { SellStrategyGuide, BuyStrategyGuide, PositionAnalyzerGuide } from './AnalyzerGuides';
-import { MessageTone, ToastColor } from '@/utils/uiEnums';
+import { MessageTone, ShimmerShape, ToastColor } from '@/utils/uiEnums';
 import Message from '@/components/Message/Message';
 import ToastStack from '@/components/Toast/ToastStack';
-import LoadingState from '@/components/LoadingState/LoadingState';
+import Shimmer, { ShimmerGroup, ShimmerTableRows, shimmerKeys } from '@/components/Shimmer/Shimmer';
 import { useToasts } from '@/hooks/useToasts';
 import { isAbortError } from '@/services/apiClient';
 import { useAbortSignal } from '@/hooks/useAbortSignal';
@@ -25,10 +25,36 @@ import { istDaysUntil } from '@/utils/marketStatus';
 import { Horizon, OptionType, TradingMode, type OptionTypeId, type SideId } from '../../../shared/tradeEnums.js';
 import { StrategyMode, type StrategyModeId } from '../../../shared/appEnums.js';
 import ChainControls from './ChainControls';
-import ChainTable from './ChainTable';
-import OiChart from './OiChart';
+import ChainTable, { CHAIN_COLUMN_COUNT, ChainTableFrame } from './ChainTable';
+import OiChart, { OI_CHART_TITLE } from './OiChart';
 import { useLiveChain, useOiSnapshots, usePrevDayOi, useSymbolChoice } from './useChainData';
 import '@/styles/optionchain.css';
+
+/** Placeholder strikes in the chain while it loads. */
+const PLACEHOLDER_STRIKES = 12;
+/** Placeholder suggestion rows in the Strategy card while the chain loads. */
+const PLACEHOLDER_SUGGESTIONS = shimmerKeys(3);
+const STRATEGY_TITLE = 'Strategy';
+
+/** The OI Chart and Strategy cards in outline while the chain loads, with their real titles. */
+const AnalyzerCardsShimmer: React.FC = () => (
+  <ShimmerGroup label="Loading OI chart and strategy">
+    <div className="card oc-chart-card" style={{ marginTop: 'var(--card-gap)' }}>
+      <div className="trap-card-header">
+        <h3 className="card__title" style={{ marginBottom: 0 }}>{OI_CHART_TITLE}</h3>
+      </div>
+      <Shimmer shape={ShimmerShape.Block} className="oc-chart-shimmer" />
+    </div>
+    <div className="card" style={{ marginTop: 'var(--card-gap)' }}>
+      <div className="trap-card-header">
+        <h3 className="card__title" style={{ marginBottom: 0 }}>{STRATEGY_TITLE}</h3>
+      </div>
+      <div className="oc-strategy-shimmer">
+        {PLACEHOLDER_SUGGESTIONS.map((row) => <Shimmer key={row} shape={ShimmerShape.Block} className="oc-strategy-shimmer__row" />)}
+      </div>
+    </div>
+  </ShimmerGroup>
+);
 
 const OptionChain: React.FC = () => {
   // Cancels this tab's in-flight requests when the user navigates away.
@@ -142,7 +168,7 @@ const OptionChain: React.FC = () => {
   return (
     <div>
       <ToastStack toasts={toasts} />
-      {(expiries.length > 0 || !selectedSymbol) && (
+      {(expiries.length > 0 || !selectedSymbol || loading) && (
         <ChainControls
           symbol={selectedSymbol}
           symbolOptions={symbolOptions}
@@ -152,11 +178,16 @@ const OptionChain: React.FC = () => {
           expiries={expiries}
           onExpiry={setSelectedExpiry}
           daysToExpiry={daysToExpiry}
+          loading={loading}
         />
       )}
 
       <div className="card option-chain-card" ref={chainCardRef}>
-        {loading && <LoadingState label="Loading option chain…" />}
+        {loading && (
+          <ShimmerGroup label="Loading option chain">
+            <ChainTableFrame><ShimmerTableRows rows={PLACEHOLDER_STRIKES} columns={CHAIN_COLUMN_COUNT} /></ChainTableFrame>
+          </ShimmerGroup>
+        )}
         {error && (
           <div style={{ padding: 16 }}>
             <Message tone={MessageTone.Error}>{error}</Message>
@@ -185,6 +216,8 @@ const OptionChain: React.FC = () => {
         />
       )}
 
+      {loading && <AnalyzerCardsShimmer />}
+
       {chainReady && (
         <OiChart
           chain={visibleChain}
@@ -205,7 +238,7 @@ const OptionChain: React.FC = () => {
         <div className="card" style={{ marginTop: 'var(--card-gap)' }}>
           <div className="trap-card-header">
             <div className="trap-card-header__left">
-              <h3 className="card__title" style={{ marginBottom: 0 }}>Strategy</h3>
+              <h3 className="card__title" style={{ marginBottom: 0 }}>{STRATEGY_TITLE}</h3>
               <IconButton icon={<InfoIcon />} label="How this works" onClick={() => setShowStrategyInfo(!showStrategyInfo)} expanded={showStrategyInfo} />
             </div>
           </div>

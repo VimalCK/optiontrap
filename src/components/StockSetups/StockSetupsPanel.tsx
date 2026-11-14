@@ -7,7 +7,8 @@ import { LevelSide } from '../../../shared/analysisEnums.js';
 import StockSetupsGuide from './StockSetupsGuide';
 import SetupScorecard from './SetupScorecard';
 import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
-import { StockSetupsView, type StockSetupsViewId } from '@/utils/uiEnums';
+import { ShimmerShape, StockSetupsView, type StockSetupsViewId } from '@/utils/uiEnums';
+import Shimmer, { ShimmerGroup } from '@/components/Shimmer/Shimmer';
 import PriceLadder from './PriceLadder';
 import ZoneList, { type SetAlert } from './ZoneList';
 import SetupCards from './SetupCards';
@@ -113,10 +114,14 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
           {history.running && <div className="wl-sz-message">Backtesting the past year: replaying each session and adding its setups to the scorecard…</div>}
           {history.message && <div className={`wl-sz-message${history.error ? ' wl-sz-message--error' : ''}`}>{history.message}</div>}
           {!data && !error && (
-            <div className="wl-sz-loading">
-              <span className="wl-sz-loading__spinner" />
-              Loading daily candles…
-            </div>
+            <ShimmerGroup label="Loading daily candles" className="wl-sz-shimmer">
+              <Shimmer shape={ShimmerShape.Block} className="wl-sz-shimmer__overview" />
+              <Shimmer shape={ShimmerShape.Block} className="wl-sz-shimmer__ladder" />
+              <div className="wl-sz-columns">
+                <Shimmer shape={ShimmerShape.Block} className="wl-sz-shimmer__zones" />
+                <Shimmer shape={ShimmerShape.Block} className="wl-sz-shimmer__zones" />
+              </div>
+            </ShimmerGroup>
           )}
           {data?.warning && <div className="wl-sz-message wl-sz-message--warn">Couldn&apos;t refresh from Kite ({data.warning}). Showing stored candles up to {lastDate && formatNumericDate(lastDate)}.</div>}
           {data && !analysis && <div className="wl-sz-message">Not enough history yet: zones need at least {MIN_CANDLES} trading days ({data.candles.length} stored).</div>}

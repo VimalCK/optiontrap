@@ -6,24 +6,16 @@
   height: 100%;
 }
 
-.wl-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 200px;
+/* The list tabs and search bar in outline while the watchlists load. */
+.wl-tab-shimmer {
+  display: inline-flex;
+  padding: 8px 12px;
 }
 
-.wl-loading__spinner {
-  width: 28px;
-  height: 28px;
-  border: 3px solid var(--card-border);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: wl-spin 0.7s linear infinite;
-}
-
-@keyframes wl-spin {
-  to { transform: rotate(360deg); }
+.wl-search-shimmer {
+  height: 40px;
+  margin-bottom: 12px;
+  border-radius: 999px;
 }
 
 /* ── Tab bar ── */
@@ -1092,7 +1084,6 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
 }
 
 @keyframes wl-sz-rise { from { opacity: 0; transform: translateY(10px) scale(0.985); } }
-@keyframes wl-sz-spin { to { transform: rotate(360deg); } }
 
 /* Header */
 .wl-sz__header {
@@ -1220,23 +1211,15 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
   scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
 }
 
-.wl-sz-loading {
+/* The panel's overview, price ladder and zone lists in outline while the daily candles load. */
+.wl-sz-shimmer {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 48px 0;
-  color: var(--text-secondary);
-  font-size: 13px;
+  flex-direction: column;
+  gap: 16px;
 }
-.wl-sz-loading__spinner {
-  width: 18px;
-  height: 18px;
-  border: 2px solid var(--sz-line);
-  border-top-color: var(--accent);
-  border-radius: 50%;
-  animation: wl-sz-spin 0.8s linear infinite;
-}
+.wl-sz-shimmer__overview { height: 96px; }
+.wl-sz-shimmer__ladder { height: 140px; }
+.wl-sz-shimmer__zones { height: 180px; }
 
 .wl-sz-message {
   padding: 12px 14px;

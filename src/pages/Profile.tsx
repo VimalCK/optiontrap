@@ -8,7 +8,7 @@ import { fetchAppVersion } from '@/services/appVersion';
 import { formatDuration } from '@/services/subscription';
 import { notifySessionChange } from '@/hooks/useKiteSession';
 import '@/styles/settings.css';
-import LoadingState from '@/components/LoadingState/LoadingState';
+import { ShimmerText } from '@/components/Shimmer/Shimmer';
 
 const formatSubscriptionDate = (value: string | null | undefined) => {
   if (!value) return 'No expiry';
@@ -47,6 +47,19 @@ interface UserProfile {
   orderTypes: string[];
   avatarUrl: string | null;
 }
+
+/** The Kite profile's rows, in order; values are empty until the profile has loaded. */
+const profileRows = (profile: UserProfile | null, isAdmin: boolean | undefined): { label: string; value: string }[] => [
+  { label: 'Name', value: profile?.userName ?? '' },
+  { label: 'User ID', value: profile?.userId ?? '' },
+  { label: 'Email', value: profile?.email ?? '' },
+  { label: 'Broker', value: profile?.broker ?? '' },
+  { label: 'Account Type', value: profile?.userType ?? '' },
+  { label: 'Role', value: isAdmin ? 'Administrator' : 'Member' },
+  { label: 'Exchanges', value: profile?.exchanges.join(', ') ?? '' },
+  { label: 'Products', value: profile?.products.join(', ') ?? '' },
+  { label: 'Order Types', value: profile?.orderTypes.join(', ') ?? '' },
+];
 
 const Profile: React.FC = () => {
   const navigate = useNavigate();
@@ -172,48 +185,16 @@ const Profile: React.FC = () => {
               </div>
             )}
           </div>
-          {session && profile ? (
+          {session && (profile || profileLoading) && (
             <div className="profile-details">
-              <div className="profile-details__row">
-                <span className="profile-details__label">Name</span>
-                <span className="profile-details__value">{profile.userName}</span>
-              </div>
-              <div className="profile-details__row">
-                <span className="profile-details__label">User ID</span>
-                <span className="profile-details__value">{profile.userId}</span>
-              </div>
-              <div className="profile-details__row">
-                <span className="profile-details__label">Email</span>
-                <span className="profile-details__value">{profile.email}</span>
-              </div>
-              <div className="profile-details__row">
-                <span className="profile-details__label">Broker</span>
-                <span className="profile-details__value">{profile.broker}</span>
-              </div>
-              <div className="profile-details__row">
-                <span className="profile-details__label">Account Type</span>
-                <span className="profile-details__value">{profile.userType}</span>
-              </div>
-              <div className="profile-details__row">
-                <span className="profile-details__label">Role</span>
-                <span className="profile-details__value">{session?.isAdmin ? 'Administrator' : 'Member'}</span>
-              </div>
-              <div className="profile-details__row">
-                <span className="profile-details__label">Exchanges</span>
-                <span className="profile-details__value">{profile.exchanges.join(', ')}</span>
-              </div>
-              <div className="profile-details__row">
-                <span className="profile-details__label">Products</span>
-                <span className="profile-details__value">{profile.products.join(', ')}</span>
-              </div>
-              <div className="profile-details__row">
-                <span className="profile-details__label">Order Types</span>
-                <span className="profile-details__value">{profile.orderTypes.join(', ')}</span>
-              </div>
+              {profileRows(profile, session.isAdmin).map((row) => (
+                <div key={row.label} className="profile-details__row">
+                  <span className="profile-details__label">{row.label}</span>
+                  <span className="profile-details__value"><ShimmerText loading={!profile} width="8em">{row.value}</ShimmerText></span>
+                </div>
+              ))}
             </div>
-          ) : profileLoading ? (
-            <LoadingState label="Loading profile…" />
-          ) : null}
+          )}
         </div>
 
         <div className="profile-merged-card__divider" />

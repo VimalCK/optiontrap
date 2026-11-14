@@ -5,7 +5,7 @@ import { fetchSetupScorecard, type SetupStats, type TrackedSetup } from '@/servi
 import { isAbortError } from '@/services/apiClient';
 import { SetupOutcomeStatus } from '../../../shared/appEnums.js';
 import { sideLabel } from '../../../shared/tradeEnums.js';
-import LoadingState from '@/components/LoadingState/LoadingState';
+import { ShimmerGroup, ShimmerTableRows } from '@/components/Shimmer/Shimmer';
 
 const STATUS_TEXT: Record<TrackedSetup['status'], string> = {
   [SetupOutcomeStatus.Open]: 'Open',
@@ -19,6 +19,30 @@ function winRate(s: SetupStats): string {
   const decided = s.target + s.stop;
   return decided ? `${Math.round((s.target / decided) * 100)}%` : '—';
 }
+
+/** Setup, Tracked, Target, Stop, Expired, Open, Win rate, Avg best / worst. */
+const SUMMARY_COLUMN_COUNT = 8;
+/** Placeholder setup rows while the scorecard loads. */
+const PLACEHOLDER_ROWS = 3;
+
+/** The per-setup summary table and its header, around the rows given. */
+const ScorecardSummaryFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <table className="wl-alerts-table wl-scorecard__summary">
+    <thead>
+      <tr>
+        <th>Setup</th>
+        <th className="wl-alerts-table__num">Tracked</th>
+        <th className="wl-alerts-table__num">Target</th>
+        <th className="wl-alerts-table__num">Stop</th>
+        <th className="wl-alerts-table__num">Expired</th>
+        <th className="wl-alerts-table__num">Open</th>
+        <th className="wl-alerts-table__num" title="Target hits ÷ (target hits + stops)">Win rate</th>
+        <th className="wl-alerts-table__num" title="Average best and worst move while tracked">Avg best / worst</th>
+      </tr>
+    </thead>
+    <tbody>{children}</tbody>
+  </table>
+);
 
 const SetupScorecard: React.FC<{
   instrumentToken: number;
@@ -46,41 +70,29 @@ const SetupScorecard: React.FC<{
         </div>
       </div>
       {!data ? (
-        <LoadingState />
+        <ShimmerGroup label="Loading the setup scorecard" className="wl-alerts__table-wrap">
+          <ScorecardSummaryFrame><ShimmerTableRows rows={PLACEHOLDER_ROWS} columns={SUMMARY_COLUMN_COUNT} /></ScorecardSummaryFrame>
+        </ShimmerGroup>
       ) : data.stats.length === 0 ? (
         <div className="wl-alerts__empty">No setups tracked for {tradingsymbol} yet. They appear when the after-close scan finds one{inSetupsPanel ? '.' : ', or use Backtest 1Y in its entry and exit zones panel to add the past year.'}</div>
       ) : (
         <div className="wl-alerts__table-wrap">
-          <table className="wl-alerts-table wl-scorecard__summary">
-            <thead>
-              <tr>
-                <th>Setup</th>
-                <th className="wl-alerts-table__num">Tracked</th>
-                <th className="wl-alerts-table__num">Target</th>
-                <th className="wl-alerts-table__num">Stop</th>
-                <th className="wl-alerts-table__num">Expired</th>
-                <th className="wl-alerts-table__num">Open</th>
-                <th className="wl-alerts-table__num" title="Target hits ÷ (target hits + stops)">Win rate</th>
-                <th className="wl-alerts-table__num" title="Average best and worst move while tracked">Avg best / worst</th>
+          <ScorecardSummaryFrame>
+            {data.stats.map((s) => (
+              <tr key={s.setupType}>
+                <td><span className={`wl-setup-chip wl-setup-chip--${s.direction.toLowerCase()}`}>{sideLabel(s.direction)}</span> {setupLabel(s.setupType)}</td>
+                <td className="wl-alerts-table__num">{s.total}</td>
+                <td className="wl-alerts-table__num">{s.target}</td>
+                <td className="wl-alerts-table__num">{s.stop}</td>
+                <td className="wl-alerts-table__num">{s.expired}</td>
+                <td className="wl-alerts-table__num">{s.open}</td>
+                <td className="wl-alerts-table__num">{winRate(s)}</td>
+                <td className="wl-alerts-table__num">
+                  {s.avgFavorablePct === null ? '—' : `+${s.avgFavorablePct.toFixed(1)}% / −${(s.avgAdversePct ?? 0).toFixed(1)}%`}
+                </td>
               </tr>
-            </thead>
-            <tbody>
-              {data.stats.map((s) => (
-                <tr key={s.setupType}>
-                  <td><span className={`wl-setup-chip wl-setup-chip--${s.direction.toLowerCase()}`}>{sideLabel(s.direction)}</span> {setupLabel(s.setupType)}</td>
-                  <td className="wl-alerts-table__num">{s.total}</td>
-                  <td className="wl-alerts-table__num">{s.target}</td>
-                  <td className="wl-alerts-table__num">{s.stop}</td>
-                  <td className="wl-alerts-table__num">{s.expired}</td>
-                  <td className="wl-alerts-table__num">{s.open}</td>
-                  <td className="wl-alerts-table__num">{winRate(s)}</td>
-                  <td className="wl-alerts-table__num">
-                    {s.avgFavorablePct === null ? '—' : `+${s.avgFavorablePct.toFixed(1)}% / −${(s.avgAdversePct ?? 0).toFixed(1)}%`}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+            ))}
+          </ScorecardSummaryFrame>
           {data.recent.length > 0 && (
             <div className="wl-scorecard__recent-wrap">
               <table className="wl-alerts-table wl-scorecard__recent">

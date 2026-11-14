@@ -19,6 +19,10 @@ export type ToneId = typeof Tone[keyof typeof Tone];
 export const MessageTone = Object.freeze({ Error: 'Error', Info: 'Info' });
 export type MessageToneId = typeof MessageTone[keyof typeof MessageTone];
 
+/** A loading placeholder's shape: a line of text, a box, or a circle. */
+export const ShimmerShape = Object.freeze({ Text: 'Text', Block: 'Block', Circle: 'Circle' });
+export type ShimmerShapeId = typeof ShimmerShape[keyof typeof ShimmerShape];
+
 /** A guide row's chip colour (InfoGuide). */
 export const GuideTone = Object.freeze({ Bull: 'Bull', Bear: 'Bear', Warn: 'Warn', Violet: 'Violet', Accent: 'Accent', Muted: 'Muted', Plain: 'Plain' });
 export type GuideToneId = typeof GuideTone[keyof typeof GuideTone];
