@@ -589,17 +589,6 @@
   border-color: #ef4444;
 }
 
-.wl-alert-modal-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-  background: rgba(0, 0, 0, 0.55);
-}
-
 .wl-alert-modal {
   width: min(380px, 100%);
   border: 1px solid var(--card-border);
@@ -1077,13 +1066,6 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
 .wl-setup-chip--stretched { color: #f59e0b; }
 .wl-setup-chip--uptrend { color: #22c55e; }
 
-.wl-sz-overlay {
-  background: rgba(4, 4, 8, 0.62);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
-  animation: wl-sz-fade 0.18s ease-out;
-}
-
 .wl-sz {
   --sz-buy: #22c55e;
   --sz-sell: #ef4444;
@@ -1109,7 +1091,6 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
   animation: wl-sz-rise 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-@keyframes wl-sz-fade { from { opacity: 0; } }
 @keyframes wl-sz-rise { from { opacity: 0; transform: translateY(10px) scale(0.985); } }
 @keyframes wl-sz-spin { to { transform: rotate(360deg); } }
 

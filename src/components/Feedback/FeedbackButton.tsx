@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import ModalOverlay from '@/components/ModalOverlay/ModalOverlay';
 import { submitFeedback } from '@/services/feedback';
 import { FeedbackType, type FeedbackTypeId } from '../../../shared/appEnums.js';
 import '@/styles/feedback.css';
@@ -60,9 +61,8 @@ const FeedbackButton: React.FC = () => {
       </button>
 
       {open && (
-        <div className="feedback-modal" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
-          <button type="button" className="feedback-modal__backdrop" onClick={close} aria-label="Close feedback" />
-          <div className="feedback-modal__card">
+        <ModalOverlay onClose={close}>
+          <div className="feedback-modal__card" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
             <div className="feedback-modal__header">
               <div>
                 <span className="feedback-modal__eyebrow">Help improve OptionTrap</span>
@@ -111,7 +111,7 @@ const FeedbackButton: React.FC = () => {
               </>
             )}
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </>
   );

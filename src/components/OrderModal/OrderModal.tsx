@@ -1,5 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import IconButton from '@/components/IconButton/IconButton';
+import ModalOverlay from '@/components/ModalOverlay/ModalOverlay';
 import { ChevronDownIcon, ChevronRightIcon, CloseIcon } from '@/components/icons/Icons';
 import { placeOrder, placedOrderMessage, placedOrderRefused } from '@/services/orders';
 import { instrumentName, tradeErrorMessage } from '@/services/positions';
@@ -86,8 +87,9 @@ const OrderModal: React.FC<OrderModalProps> = ({ option, initialPrice, priceLabe
   };
 
   return (
-    <div className="order-modal-overlay" onClick={onClose} onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }} tabIndex={-1} ref={focusOnOpen}>
-      <div className={`order-modal order-modal--${side.toLowerCase()}`} role="dialog" aria-label={`Order ${title}`} onClick={(e) => e.stopPropagation()}>
+    <ModalOverlay onClose={onClose}>
+      <div className={`order-modal order-modal--${side.toLowerCase()}`} role="dialog" aria-label={`Order ${title}`}
+        onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }} tabIndex={-1} ref={focusOnOpen}>
         <div className="order-modal__header">
           <div>
             <div className="order-modal__title">{title} <span className="order-modal__expiry">· {formatCalendarDate(option.expiry, { day: 'numeric', month: 'short' })}</span></div>
@@ -169,7 +171,7 @@ const OrderModal: React.FC<OrderModalProps> = ({ option, initialPrice, priceLabe
           )}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 };
 

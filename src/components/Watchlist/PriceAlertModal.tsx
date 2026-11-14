@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import AppSelect from '@/components/AppSelect/AppSelect';
+import ModalOverlay from '@/components/ModalOverlay/ModalOverlay';
 import type { NewPriceAlert } from '@/services/priceAlerts';
 import type { WatchlistItem } from '@/services/watchlist';
 import { PRICE_ALERT_CONDITIONS, PriceAlertCondition, type PriceAlertConditionId } from '../../../shared/appEnums.js';
@@ -52,8 +53,8 @@ const PriceAlertModal: React.FC<{
   };
 
   return (
-    <div className="wl-alert-modal-overlay" onMouseDown={onClose}>
-      <div className="wl-alert-modal" onMouseDown={(e) => e.stopPropagation()}>
+    <ModalOverlay onClose={onClose}>
+      <div className="wl-alert-modal">
         <div className="wl-alert-modal__header">
           <div>
             <h3>Create Price Alert</h3>
@@ -101,7 +102,7 @@ const PriceAlertModal: React.FC<{
           <button type="button" className="wl-alert-modal__primary" onClick={create} disabled={!valid}>Create Alert</button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 };
 

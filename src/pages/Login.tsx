@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import ModalOverlay from '@/components/ModalOverlay/ModalOverlay';
 import ParticleNetwork from '@/components/ParticleNetwork/ParticleNetwork';
 import { getLoginUrl, getLastAvatarUrl, saveCredentials, hasCredentials, getCredentials, SubscriptionPlan } from '@/services/kiteAuth';
 import { currencySymbol, getPublicPlans, formatDuration } from '@/services/subscription';
@@ -371,9 +372,9 @@ const Login: React.FC = () => {
       </footer>
 
       {authOpen && (
-        <div className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title">
-          <button type="button" className="auth-modal__backdrop" onClick={() => setAuthOpen(false)} aria-label="Close" />
-          <div className="auth-modal__card">
+        <ModalOverlay onClose={() => setAuthOpen(false)}>
+          <div className="auth-modal__card" role="dialog" aria-modal="true" aria-labelledby="auth-title"
+            onKeyDown={(e) => { if (e.key === 'Escape') setAuthOpen(false); }}>
             <div className="auth-modal__header">
               <div className="auth-modal__icon">
                 {avatarUrl ? <img src={avatarUrl} alt="" /> : <ShieldIcon size={26} />}
@@ -458,7 +459,7 @@ const Login: React.FC = () => {
               </div>
             )}
           </div>
-        </div>
+        </ModalOverlay>
       )}
     </div>
   );

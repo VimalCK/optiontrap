@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { ChevronLeftIcon, InfoIcon } from '@/components/icons/Icons';
+import ModalOverlay from '@/components/ModalOverlay/ModalOverlay';
 import { formatNumericDate } from '@/utils/marketStatus';
 import { MIN_CANDLES } from '../../../shared/stockSetups.js';
 import { LevelSide } from '../../../shared/analysisEnums.js';
@@ -47,8 +48,8 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
   const guideToggleLabel = onDetails ? 'How to read this panel' : 'Back to setup details';
 
   return (
-    <div className="wl-alert-modal-overlay wl-sz-overlay" onMouseDown={onClose}>
-      <div className="wl-sz" role="dialog" aria-modal="true" aria-labelledby="wl-sz-title" onMouseDown={(e) => e.stopPropagation()}>
+    <ModalOverlay onClose={onClose}>
+      <div className="wl-sz" role="dialog" aria-modal="true" aria-labelledby="wl-sz-title">
         <div className="wl-sz__header">
           <div className="wl-sz__title">
             <h3 id="wl-sz-title">{tradingsymbol}</h3>
@@ -153,7 +154,7 @@ const StockSetupsPanel: React.FC<StockSetupsPanelProps> = ({ instrumentToken, tr
           Based on {data ? `${data.candles.length} trading days` : 'past prices'}{lastDate ? ` up to ${formatNumericDate(lastDate)}` : ''}. Zones improve the odds, not certainty; sell setups on cash stocks are exits, not shorts.
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 };
 

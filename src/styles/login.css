@@ -755,25 +755,6 @@
 
 /* ─── Auth modal ────────────────────────────────────────────────────── */
 
-.auth-modal {
-  position: fixed;
-  inset: 0;
-  z-index: 100;
-  display: grid;
-  place-items: center;
-  padding: 20px;
-}
-
-.auth-modal__backdrop {
-  position: absolute;
-  inset: 0;
-  border: 0;
-  background: rgba(2, 6, 23, 0.72);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-  cursor: pointer;
-}
-
 .auth-modal__card {
   position: relative;
   z-index: 1;

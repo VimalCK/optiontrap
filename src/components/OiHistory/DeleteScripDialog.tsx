@@ -1,8 +1,9 @@
 import React from 'react';
+import ModalOverlay from '@/components/ModalOverlay/ModalOverlay';
 
 const DeleteScripDialog: React.FC<{ label: string; onCancel: () => void; onConfirm: () => void }> = ({ label, onCancel, onConfirm }) => (
-  <div className="oi-confirm-overlay" onClick={onCancel}>
-    <div className="oi-confirm-modal" onClick={(e) => e.stopPropagation()}>
+  <ModalOverlay onClose={onCancel}>
+    <div className="oi-confirm-modal">
       <h4 className="oi-confirm-modal__title">Delete Script Data</h4>
       <p className="oi-confirm-modal__text">
         Delete ALL OI history data for <strong>{label}</strong>? This cannot be undone.
@@ -12,7 +13,7 @@ const DeleteScripDialog: React.FC<{ label: string; onCancel: () => void; onConfi
         <button className="app-btn app-btn--danger" onClick={onConfirm}>Delete</button>
       </div>
     </div>
-  </div>
+  </ModalOverlay>
 );
 
 export default DeleteScripDialog;

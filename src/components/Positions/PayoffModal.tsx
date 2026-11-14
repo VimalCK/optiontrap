@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import ModalOverlay from '@/components/ModalOverlay/ModalOverlay';
 import { loadGroupOi, type OiBar, type RiskGroup } from '@/services/positionRisk';
 import PayoffChart from './PayoffChart';
 import { breakevenLabel, expiryLabel, legCountLabel, maxLossLabel, maxProfitLabel } from './riskLabels';
@@ -25,8 +26,8 @@ const PayoffModal: React.FC<{ group: RiskGroup; spotPrice?: number | null; onClo
   }, [group]);
 
   return createPortal(
-    <div className="payoff-modal__backdrop" onClick={onClose}>
-      <div className="payoff-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true">
+    <ModalOverlay onClose={onClose}>
+      <div className="payoff-modal" role="dialog" aria-modal="true">
         <div className="payoff-modal__header">
           <span className="payoff-modal__title">
             {group.underlying} <span className="risk-card__expiry">{expiryLabel(group.expiry)}</span>
@@ -52,7 +53,7 @@ const PayoffModal: React.FC<{ group: RiskGroup; spotPrice?: number | null; onClo
           </div>
         )}
       </div>
-    </div>,
+    </ModalOverlay>,
     document.body,
   );
 };
