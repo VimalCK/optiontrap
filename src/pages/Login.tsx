@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import ModalOverlay from '@/components/ModalOverlay/ModalOverlay';
+import Modal from '@/components/Modal/Modal';
 import ParticleNetwork from '@/components/ParticleNetwork/ParticleNetwork';
 import { getLoginUrl, getLastAvatarUrl, saveCredentials, hasCredentials, getCredentials, SubscriptionPlan } from '@/services/kiteAuth';
 import { currencySymbol, getPublicPlans, formatDuration } from '@/services/subscription';
@@ -8,7 +8,7 @@ import { AnalyticsIcon, CheckIcon, DashboardIcon, LogoIcon, PaperTradingIcon, Sh
 import { DurationUnit } from '../../shared/appEnums.js';
 import '@/styles/login.css';
 import Message from '@/components/Message/Message';
-import { MessageTone } from '@/utils/uiEnums';
+import { MessageTone, ModalSize } from '@/utils/uiEnums';
 
 const FEATURES = [
   { icon: <AnalyticsIcon />, title: 'Live Option Chain', text: 'Real-time OI, intraday velocity and Greeks across every strike.' },
@@ -372,94 +372,93 @@ const Login: React.FC = () => {
       </footer>
 
       {authOpen && (
-        <ModalOverlay onClose={() => setAuthOpen(false)}>
-          <div className="auth-modal__card" role="dialog" aria-modal="true" aria-labelledby="auth-title"
-            onKeyDown={(e) => { if (e.key === 'Escape') setAuthOpen(false); }}>
-            <div className="auth-modal__header">
-              <div className="auth-modal__icon">
-                {avatarUrl ? <img src={avatarUrl} alt="" /> : <ShieldIcon size={26} />}
-              </div>
-              <h2 id="auth-title">{credsSaved ? 'Welcome back' : 'Connect your Kite account'}</h2>
-              <p>{credsSaved
-                ? 'Continue to Kite to authorise this session.'
-                : 'OptionTrap connects to your Zerodha account using Kite Connect.'}</p>
+        <Modal
+          title={credsSaved ? 'Welcome back' : 'Connect your Kite account'}
+          subtitle={credsSaved
+            ? 'Continue to Kite to authorise this session.'
+            : 'OptionTrap connects to your Zerodha account using Kite Connect.'}
+          leading={(
+            <div className="auth-modal__icon">
+              {avatarUrl ? <img src={avatarUrl} alt="" /> : <ShieldIcon size={22} />}
             </div>
+          )}
+          size={ModalSize.Medium}
+          onClose={() => setAuthOpen(false)}
+        >
+          {error && <Message tone={MessageTone.Error} className="auth-modal__error">{error}</Message>}
 
-            {error && <Message tone={MessageTone.Error} className="auth-modal__error">{error}</Message>}
+          {credsSaved ? (
+            <>
+              <button className="auth-modal__primary" onClick={handleLogin} disabled={loginLoading}>
+                {loginLoading ? 'Redirecting...' : 'Login with Kite'}
+              </button>
+              <button className="auth-modal__link" type="button" onClick={() => setCredsSaved(false)}>
+                Change credentials
+              </button>
+            </>
+          ) : (
+            <div className="auth-form">
+              <p className="auth-form__hint">
+                Enter your Kite Connect API credentials.{' '}
+                <a href="https://developers.kite.trade" target="_blank" rel="noopener noreferrer">Get keys</a>
+              </p>
 
-            {credsSaved ? (
-              <>
-                <button className="auth-modal__primary" onClick={handleLogin} disabled={loginLoading}>
-                  {loginLoading ? 'Redirecting...' : 'Login with Kite'}
-                </button>
-                <button className="auth-modal__link" type="button" onClick={() => setCredsSaved(false)}>
-                  Change credentials
-                </button>
-              </>
-            ) : (
-              <div className="auth-form">
-                <p className="auth-form__hint">
-                  Enter your Kite Connect API credentials.{' '}
-                  <a href="https://developers.kite.trade" target="_blank" rel="noopener noreferrer">Get keys</a>
-                </p>
-
-                <div className="auth-form__redirect">
-                  <span className="auth-form__redirect-label">In your Kite app, set the Redirect URL to</span>
-                  <div className="auth-form__redirect-row">
-                    <code>{REDIRECT_URL}</code>
-                    <button type="button" className="auth-form__copy" onClick={copyRedirect}>
-                      {copied ? 'Copied' : 'Copy'}
-                    </button>
-                  </div>
+              <div className="auth-form__redirect">
+                <span className="auth-form__redirect-label">In your Kite app, set the Redirect URL to</span>
+                <div className="auth-form__redirect-row">
+                  <code>{REDIRECT_URL}</code>
+                  <button type="button" className="auth-form__copy" onClick={copyRedirect}>
+                    {copied ? 'Copied' : 'Copy'}
+                  </button>
                 </div>
+              </div>
 
-                <div className="form-field">
-                  <label className="form-field__label" htmlFor="login-api-key">API Key</label>
+              <div className="form-field">
+                <label className="form-field__label" htmlFor="login-api-key">API Key</label>
+                <input
+                  id="login-api-key"
+                  type="text"
+                  className="form-field__input"
+                  placeholder="Enter your Kite API key"
+                  value={apiKey}
+                  onChange={(e) => setApiKey(e.target.value)}
+                  autoComplete="off"
+                />
+              </div>
+
+              <div className="form-field">
+                <label className="form-field__label" htmlFor="login-api-secret">API Secret</label>
+                <div className="form-field__input-wrapper">
                   <input
-                    id="login-api-key"
-                    type="text"
+                    id="login-api-secret"
+                    type={showSecret ? 'text' : 'password'}
                     className="form-field__input"
-                    placeholder="Enter your Kite API key"
-                    value={apiKey}
-                    onChange={(e) => setApiKey(e.target.value)}
+                    placeholder="Enter your Kite API secret"
+                    value={apiSecret}
+                    onChange={(e) => setApiSecret(e.target.value)}
                     autoComplete="off"
                   />
+                  <button
+                    type="button"
+                    className="form-field__toggle-visibility"
+                    onClick={() => setShowSecret((prev) => !prev)}
+                    aria-label={showSecret ? 'Hide secret' : 'Show secret'}
+                  >
+                    {showSecret ? 'Hide' : 'Show'}
+                  </button>
                 </div>
-
-                <div className="form-field">
-                  <label className="form-field__label" htmlFor="login-api-secret">API Secret</label>
-                  <div className="form-field__input-wrapper">
-                    <input
-                      id="login-api-secret"
-                      type={showSecret ? 'text' : 'password'}
-                      className="form-field__input"
-                      placeholder="Enter your Kite API secret"
-                      value={apiSecret}
-                      onChange={(e) => setApiSecret(e.target.value)}
-                      autoComplete="off"
-                    />
-                    <button
-                      type="button"
-                      className="form-field__toggle-visibility"
-                      onClick={() => setShowSecret((prev) => !prev)}
-                      aria-label={showSecret ? 'Hide secret' : 'Show secret'}
-                    >
-                      {showSecret ? 'Hide' : 'Show'}
-                    </button>
-                  </div>
-                </div>
-
-                <p className="auth-form__privacy">
-                  Stored only in this browser. Never sent to our servers for storage.
-                </p>
-
-                <button className="auth-modal__primary" onClick={handleSave} disabled={!hasCreds}>
-                  Save &amp; Continue
-                </button>
               </div>
-            )}
-          </div>
-        </ModalOverlay>
+
+              <p className="auth-form__privacy">
+                Stored only in this browser. Never sent to our servers for storage.
+              </p>
+
+              <button className="auth-modal__primary" onClick={handleSave} disabled={!hasCreds}>
+                Save &amp; Continue
+              </button>
+            </div>
+          )}
+        </Modal>
       )}
     </div>
   );

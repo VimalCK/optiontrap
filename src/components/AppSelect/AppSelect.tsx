@@ -134,7 +134,12 @@ const AppSelect: React.FC<AppSelectProps> = ({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Escape') { setOpen(false); return; }
+    if (e.key === 'Escape') {
+      // Escape closes the open list only, not a popup the select sits in.
+      if (open) e.preventDefault();
+      setOpen(false);
+      return;
+    }
     if (e.key === 'Enter') {
       if (!open) { handleOpen(); return; }
       if (highlightedIdx !== null && filteredOptions[highlightedIdx]) {

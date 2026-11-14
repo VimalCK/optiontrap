@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import AppSelect from '@/components/AppSelect/AppSelect';
-import ModalOverlay from '@/components/ModalOverlay/ModalOverlay';
+import Modal from '@/components/Modal/Modal';
 import type { NewPriceAlert } from '@/services/priceAlerts';
 import type { WatchlistItem } from '@/services/watchlist';
 import { PRICE_ALERT_CONDITIONS, PriceAlertCondition, type PriceAlertConditionId } from '../../../shared/appEnums.js';
@@ -53,56 +53,51 @@ const PriceAlertModal: React.FC<{
   };
 
   return (
-    <ModalOverlay onClose={onClose}>
-      <div className="wl-alert-modal">
-        <div className="wl-alert-modal__header">
-          <div>
-            <h3>Create Price Alert</h3>
-            <p>{item.tradingsymbol}</p>
-          </div>
-          <button type="button" className="wl-alert-modal__close" onClick={onClose}>x</button>
-        </div>
-
-        <div className="wl-alert-modal__body">
-          <label className="wl-alert-field">
-            <span>Condition</span>
-            <AppSelect
-              value={condition}
-              options={PRICE_ALERT_CONDITIONS.map((c) => ({ value: c.id, label: c.label }))}
-              onChange={(next) => setCondition(next as PriceAlertConditionId)}
-              className="wl-alert-select"
-            />
-          </label>
-
-          <label className="wl-alert-field">
-            <span>Price</span>
-            <div className="wl-alert-number">
-              <input type="number" value={value} onChange={(e) => setValue(e.target.value)} min={0} step={PRICE_STEP} autoFocus />
-              <div className="wl-alert-number__btns">
-                <button type="button" className="wl-alert-number__btn" onClick={() => adjustValue(PRICE_STEP)}>▲</button>
-                <button type="button" className="wl-alert-number__btn" onClick={() => adjustValue(-PRICE_STEP)}>▼</button>
-              </div>
-            </div>
-          </label>
-
-          <label className="wl-alert-field">
-            <span>Note</span>
-            <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={NOTE_MAX_LENGTH} placeholder="Optional reason or action plan" />
-          </label>
-
-          <label className="wl-alert-check">
-            <input type="checkbox" checked={browserNotification} onChange={(e) => setBrowserNotification(e.target.checked)} />
-            <span className="wl-alert-check__box" aria-hidden="true" />
-            <span>Browser notification</span>
-          </label>
-        </div>
-
-        <div className="wl-alert-modal__footer">
+    <Modal
+      title="Create Price Alert"
+      subtitle={item.tradingsymbol}
+      onClose={onClose}
+      footer={(
+        <>
           <button type="button" className="wl-alert-modal__secondary" onClick={onClose}>Cancel</button>
           <button type="button" className="wl-alert-modal__primary" onClick={create} disabled={!valid}>Create Alert</button>
-        </div>
+        </>
+      )}
+    >
+      <div className="wl-alert-modal__body">
+        <label className="wl-alert-field">
+          <span>Condition</span>
+          <AppSelect
+            value={condition}
+            options={PRICE_ALERT_CONDITIONS.map((c) => ({ value: c.id, label: c.label }))}
+            onChange={(next) => setCondition(next as PriceAlertConditionId)}
+            className="wl-alert-select"
+          />
+        </label>
+
+        <label className="wl-alert-field">
+          <span>Price</span>
+          <div className="wl-alert-number">
+            <input type="number" value={value} onChange={(e) => setValue(e.target.value)} min={0} step={PRICE_STEP} autoFocus />
+            <div className="wl-alert-number__btns">
+              <button type="button" className="wl-alert-number__btn" onClick={() => adjustValue(PRICE_STEP)}>▲</button>
+              <button type="button" className="wl-alert-number__btn" onClick={() => adjustValue(-PRICE_STEP)}>▼</button>
+            </div>
+          </div>
+        </label>
+
+        <label className="wl-alert-field">
+          <span>Note</span>
+          <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={NOTE_MAX_LENGTH} placeholder="Optional reason or action plan" />
+        </label>
+
+        <label className="wl-alert-check">
+          <input type="checkbox" checked={browserNotification} onChange={(e) => setBrowserNotification(e.target.checked)} />
+          <span className="wl-alert-check__box" aria-hidden="true" />
+          <span>Browser notification</span>
+        </label>
       </div>
-    </ModalOverlay>
+    </Modal>
   );
 };
 

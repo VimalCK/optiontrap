@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import ModalOverlay from '@/components/ModalOverlay/ModalOverlay';
+import Modal from '@/components/Modal/Modal';
 import { submitFeedback } from '@/services/feedback';
 import { FeedbackType, type FeedbackTypeId } from '../../../shared/appEnums.js';
 import '@/styles/feedback.css';
 import Message from '@/components/Message/Message';
-import { MessageTone } from '@/utils/uiEnums';
+import { MessageTone, ModalSize } from '@/utils/uiEnums';
 
 const feedbackTypes: Array<{ id: FeedbackTypeId; label: string }> = [
   { id: FeedbackType.Bug, label: 'Bug' },
@@ -61,57 +61,55 @@ const FeedbackButton: React.FC = () => {
       </button>
 
       {open && (
-        <ModalOverlay onClose={close}>
-          <div className="feedback-modal__card" role="dialog" aria-modal="true" aria-labelledby="feedback-title">
-            <div className="feedback-modal__header">
-              <div>
-                <span className="feedback-modal__eyebrow">Help improve OptionTrap</span>
-                <h2 id="feedback-title">Send feedback</h2>
-              </div>
+        <Modal
+          title="Send feedback"
+          eyebrow="Help improve OptionTrap"
+          size={ModalSize.Medium}
+          onClose={close}
+          className="feedback-modal"
+          footer={submitted ? undefined : (
+            <>
+              <button type="button" className="feedback-secondary" onClick={close}>Cancel</button>
+              <button type="button" className="feedback-primary" onClick={handleSubmit} disabled={submitting}>
+                {submitting ? 'Sending...' : 'Send Feedback'}
+              </button>
+            </>
+          )}
+        >
+          {submitted ? (
+            <div className="feedback-modal__success">
+              <strong>Thanks for the feedback.</strong>
+              <span>We have received it and will review it.</span>
             </div>
-
-            {submitted ? (
-              <div className="feedback-modal__success">
-                <strong>Thanks for the feedback.</strong>
-                <span>We have received it and will review it.</span>
-              </div>
-            ) : (
-              <>
-                <div className="feedback-types">
-                  {feedbackTypes.map((item) => (
-                    <button
-                      type="button"
-                      key={item.id}
-                      className={`feedback-type ${type === item.id ? 'feedback-type--active' : ''}`}
-                      onClick={() => setType(item.id)}
-                    >
-                      {item.label}
-                    </button>
-                  ))}
-                </div>
-
-                <label className="feedback-field">
-                  <span>What should we know?</span>
-                  <textarea
-                    value={message}
-                    onChange={(event) => setMessage(event.target.value)}
-                    placeholder="Share the issue, idea, or improvement you have in mind."
-                    rows={5}
-                  />
-                </label>
-
-                {error && <Message tone={MessageTone.Error} className="feedback-modal__error">{error}</Message>}
-
-                <div className="feedback-modal__actions">
-                  <button type="button" className="feedback-secondary" onClick={close}>Cancel</button>
-                  <button type="button" className="feedback-primary" onClick={handleSubmit} disabled={submitting}>
-                    {submitting ? 'Sending...' : 'Send Feedback'}
+          ) : (
+            <>
+              <div className="feedback-types">
+                {feedbackTypes.map((item) => (
+                  <button
+                    type="button"
+                    key={item.id}
+                    className={`feedback-type ${type === item.id ? 'feedback-type--active' : ''}`}
+                    onClick={() => setType(item.id)}
+                  >
+                    {item.label}
                   </button>
-                </div>
-              </>
-            )}
-          </div>
-        </ModalOverlay>
+                ))}
+              </div>
+
+              <label className="feedback-field">
+                <span>What should we know?</span>
+                <textarea
+                  value={message}
+                  onChange={(event) => setMessage(event.target.value)}
+                  placeholder="Share the issue, idea, or improvement you have in mind."
+                  rows={5}
+                />
+              </label>
+
+              {error && <Message tone={MessageTone.Error} className="feedback-modal__error">{error}</Message>}
+            </>
+          )}
+        </Modal>
       )}
     </>
   );

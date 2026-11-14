@@ -577,54 +577,10 @@
   border-color: #ef4444;
 }
 
-.wl-alert-modal {
-  width: min(380px, 100%);
-  border: 1px solid var(--card-border);
-  border-radius: 12px;
-  background: var(--content-bg);
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
-}
-
-.wl-alert-modal__header,
-.wl-alert-modal__footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--card-border);
-}
-
-.wl-alert-modal__footer {
-  border-top: 1px solid var(--card-border);
-  border-bottom: none;
-}
-
-.wl-alert-modal__header h3 {
-  margin: 0;
-  font-size: 15px;
-}
-
-.wl-alert-modal__header p {
-  margin: 3px 0 0;
-  color: var(--text-secondary);
-  font-size: 12px;
-}
-
-.wl-alert-modal__close {
-  border: none;
-  background: transparent;
-  color: var(--text-secondary);
-  cursor: pointer;
-  font: inherit;
-  font-size: 16px;
-}
-
 .wl-alert-modal__body {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  padding: 16px;
 }
 
 .wl-alert-field {
@@ -989,17 +945,6 @@
   background: rgba(255, 255, 255, 0.045);
 }
 
-.wl-alert-modal {
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at top right, rgba(99, 102, 241, 0.12), transparent 32%),
-    var(--content-bg);
-}
-
-.wl-alert-modal__header h3 {
-  font-weight: 850;
-}
-
 .wl-alert-field input,
 .wl-alert-field textarea,
 .wl-alert-number {
@@ -1054,53 +999,18 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
 .wl-setup-chip--stretched { color: #f59e0b; }
 .wl-setup-chip--uptrend { color: #22c55e; }
 
+/* The stock setups panel's colours, used by everything inside it. */
 .wl-sz {
   --sz-buy: #22c55e;
   --sz-sell: #ef4444;
   --sz-warn: #f59e0b;
   --sz-surface: rgba(255, 255, 255, 0.028);
   --sz-line: rgba(255, 255, 255, 0.07);
-  display: flex;
-  flex-direction: column;
-  width: min(880px, 100%);
-  max-height: calc(100vh - 32px);
-  overflow: hidden;
-  border: 1px solid rgba(255, 255, 255, 0.09);
-  border-radius: 20px;
-  background:
-    radial-gradient(120% 60% at 100% 0%, color-mix(in srgb, var(--accent) 16%, transparent), transparent 55%),
-    radial-gradient(80% 50% at 0% 100%, rgba(34, 197, 94, 0.05), transparent 60%),
-    var(--card-bg-solid);
-  color: var(--text-primary);
-  box-shadow:
-    0 0 0 1px rgba(0, 0, 0, 0.4),
-    0 24px 80px rgba(0, 0, 0, 0.6),
-    inset 0 1px 0 rgba(255, 255, 255, 0.06);
-  animation: wl-sz-rise 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-
-@keyframes wl-sz-rise { from { opacity: 0; transform: translateY(10px) scale(0.985); } }
 
 /* Header */
-.wl-sz__header {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 20px 22px 18px;
-  border-bottom: 1px solid var(--sz-line);
-}
-.wl-sz__title { display: flex; flex: 1; align-items: center; gap: 10px; min-width: 0; }
 /* The title row already spaces its items, so the chart link drops its own side margins. */
-.wl-sz__title .wl-sz__chart-link { margin: 0; flex-shrink: 0; }
-.wl-sz__title h3 {
-  margin: 0;
-  overflow: hidden;
-  font-size: 22px;
-  font-weight: 850;
-  letter-spacing: -0.02em;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
+.wl-sz__chart-link { margin: 0; flex-shrink: 0; }
 .wl-sz__quote { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
 .wl-sz__price {
   font-size: 22px;
@@ -1115,26 +1025,7 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
   color: var(--text-secondary);
   font-size: 11px;
 }
-.wl-sz__icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  width: 32px;
-  height: 32px;
-  align-self: flex-start;
-  border: 1px solid var(--sz-line);
-  border-radius: 999px;
-  background: var(--sz-surface);
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: color 0.15s, background 0.15s, border-color 0.15s;
-}
-.wl-sz__icon-btn:hover:not(:disabled) { color: var(--text-primary); background: rgba(255, 255, 255, 0.08); border-color: rgba(255, 255, 255, 0.16); }
-.wl-sz__icon-btn:disabled { opacity: 0.5; cursor: progress; }
-.wl-sz__icon-btn--small { width: 26px; height: 26px; align-self: center; }
-
-/* Labelled header action (Backtest 1Y): same border and surface as the icon buttons. */
+/* Labelled header actions (Scorecard, Backtest 1Y): pills on the title's line. */
 .wl-sz__pill-btn {
   display: inline-flex;
   align-items: center;
@@ -1177,8 +1068,7 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
 @media (prefers-reduced-motion: reduce) {
   .wl-sz__pill-btn--pulse { animation: none; }
 }
-.wl-sz__pill-btn--active,
-.wl-sz__icon-btn--active { color: var(--accent); border-color: var(--accent); background: var(--sidebar-active); }
+.wl-sz__pill-btn--active { color: var(--accent); border-color: var(--accent); background: var(--sidebar-active); }
 
 .wl-sz-state {
   padding: 3px 10px;
@@ -1201,10 +1091,6 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 20px 22px 22px;
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
 }
 
 /* The panel's overview, price ladder and zone lists in outline while the daily candles load. */
@@ -1485,10 +1371,9 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
 /* Guide */
 .wl-sz__body[hidden] { display: none; }
 /* Footer */
-.wl-sz__footer {
-  padding: 12px 22px;
-  border-top: 1px solid var(--sz-line);
-  background: rgba(0, 0, 0, 0.18);
+.wl-sz__note {
+  flex: 1;
+  margin: 0;
   color: var(--text-secondary);
   font-size: 11px;
   line-height: 1.5;
@@ -1496,10 +1381,6 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
 }
 
 @media (max-width: 760px) {
-  .wl-sz { border-radius: 16px; }
-  .wl-sz__header { flex-wrap: wrap; padding: 16px; }
-  .wl-sz__quote { align-items: flex-start; order: 3; width: 100%; flex-direction: row; justify-content: space-between; }
-  .wl-sz__body { padding: 16px; }
   .wl-sz-market { grid-template-columns: 1fr 1fr; }
   .wl-sz-stat--wide { grid-column: 1 / -1; }
   .wl-sz-columns { grid-template-columns: 1fr; }

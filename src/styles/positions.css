@@ -359,48 +359,6 @@
 }
 
 /* Payoff modal */
-.payoff-modal {
-  background: var(--card-bg-solid, #191920);
-  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.1));
-  border-radius: 12px;
-  width: min(960px, 96vw);
-  max-height: 92vh;
-  overflow-y: auto;
-  padding: 20px 22px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-}
-
-.payoff-modal__header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.payoff-modal__title {
-  font-size: 16px;
-  font-weight: 700;
-  color: var(--text-primary);
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.payoff-modal__close {
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  font-size: 26px;
-  line-height: 1;
-  cursor: pointer;
-  padding: 0 4px;
-}
-
-.payoff-modal__close:hover {
-  color: var(--text-primary);
-}
-
 .payoff-modal__summary {
   display: flex;
   flex-wrap: wrap;

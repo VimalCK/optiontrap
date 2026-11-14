@@ -262,6 +262,9 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
     with a page class; the shapes' own defaults never outweigh it. It is the only loading indicator: no spinners or
     "Loading…" text. Admin table and service rows have theirs in `src/components/AdminShimmer/`.
   - `EmptyState` when a section has nothing.
+  - `Modal` (`src/components/Modal/`) for every popup: the blurred backdrop, one panel look, a title row (`title`, `eyebrow`,
+    `subtitle`, `leading`, `titleExtras`, `aside`) with the close button, a scrolling body, an optional `footer`, Escape and
+    focus. `size` `ModalSize.Small`/`Medium`/`Large`; a `className` adds only what that popup alone needs.
   - `IconButton` for any icon-only button (`icon`, `label` = tooltip + accessible name, `expanded` for toggles).
   - SVG icons in `src/components/icons/Icons.tsx`: add new ones there in the same style (24 viewBox, `currentColor`
     stroke, `aria-hidden`; line icons through its `StrokeIcon`, which takes a `strokeWidth`). Never an inline `<svg>` icon

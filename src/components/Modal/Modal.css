@@ -1,0 +1,96 @@
+.modal {
+  --modal-width: 400px;
+  display: flex;
+  flex-direction: column;
+  width: min(var(--modal-width), 100%);
+  max-height: calc(100vh - 32px);
+  overflow: hidden;
+  border: 1px solid var(--card-border);
+  border-radius: 16px;
+  background:
+    radial-gradient(120% 60% at 100% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 55%),
+    var(--content-bg);
+  color: var(--text-primary);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+  outline: none;
+  animation: modal-rise 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.modal--small { --modal-width: 400px; }
+.modal--medium { --modal-width: 520px; }
+.modal--large { --modal-width: 960px; }
+
+@keyframes modal-rise { from { opacity: 0; transform: translateY(10px) scale(0.985); } }
+
+.modal__header {
+  display: flex;
+  flex-shrink: 0;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 16px 14px 20px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.modal__leading { flex-shrink: 0; }
+
+.modal__heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.modal__eyebrow {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.modal__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+  min-height: 32px;
+}
+
+.modal__title {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.modal__subtitle {
+  margin-top: 2px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.modal__aside { flex-shrink: 0; }
+
+.modal__close { flex-shrink: 0; }
+
+.modal__body {
+  flex: 1;
+  min-height: 0;
+  padding: 18px 20px 20px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+
+.modal__footer {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 20px 14px;
+  border-top: 1px solid var(--card-border);
+}

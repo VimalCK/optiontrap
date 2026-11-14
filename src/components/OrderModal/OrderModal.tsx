@@ -1,7 +1,6 @@
-import React, { useCallback, useState } from 'react';
-import IconButton from '@/components/IconButton/IconButton';
-import ModalOverlay from '@/components/ModalOverlay/ModalOverlay';
-import { ChevronDownIcon, ChevronRightIcon, CloseIcon } from '@/components/icons/Icons';
+import React, { useState } from 'react';
+import Modal from '@/components/Modal/Modal';
+import { ChevronDownIcon, ChevronRightIcon } from '@/components/icons/Icons';
 import { placeOrder, placedOrderMessage, placedOrderRefused } from '@/services/orders';
 import { instrumentName, tradeErrorMessage } from '@/services/positions';
 import { formatAmount } from '@/utils/formatAmount';
@@ -67,9 +66,6 @@ const OrderModal: React.FC<OrderModalProps> = ({ option, initialPrice, priceLabe
   const [stopLossPrice, setStopLossPrice] = useState('');
   const [confidence, setConfidence] = useState(DEFAULT_CONFIDENCE);
   const [note, setNote] = useState('');
-  // Focus once when it opens (so Escape closes it). A stable callback ref: an inline one is called on every render
-  // and would pull focus out of the inputs on each tick.
-  const focusOnOpen = useCallback((el: HTMLDivElement | null) => el?.focus(), []);
 
   const isPaper = choices.mode === TradingMode.Paper;
   const isLimit = isPaper && choices.orderType === OrderType.Limit;
@@ -87,91 +83,82 @@ const OrderModal: React.FC<OrderModalProps> = ({ option, initialPrice, priceLabe
   };
 
   return (
-    <ModalOverlay onClose={onClose}>
-      <div className={`order-modal order-modal--${side.toLowerCase()}`} role="dialog" aria-label={`Order ${title}`}
-        onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }} tabIndex={-1} ref={focusOnOpen}>
-        <div className="order-modal__header">
-          <div>
-            <div className="order-modal__title">{title} <span className="order-modal__expiry">· {formatCalendarDate(option.expiry, { day: 'numeric', month: 'short' })}</span></div>
-            <div className="order-modal__premium">{priceLabel} ₹{formatAmount(initialPrice)}</div>
+    <Modal
+      title={<>{title} <span className="order-modal__expiry">· {formatCalendarDate(option.expiry, { day: 'numeric', month: 'short' })}</span></>}
+      subtitle={<>{priceLabel} ₹{formatAmount(initialPrice)}</>}
+      onClose={onClose}
+      className={`order-modal order-modal--${side.toLowerCase()}`}
+      footer={isPaper ? (
+        <button type="button" className={`order-modal__submit order-modal__submit--${side.toLowerCase()}`} onClick={submit}>
+          {side} {quantity} @ {isLimit ? formatAmount(price) : 'MKT'}
+        </button>
+      ) : (
+        <p className="order-modal__live-notice">Live trading coming soon. Use Paper mode to track positions.</p>
+      )}
+    >
+      <div className="order-modal__body">
+        <div className="order-modal__row">
+          {isPaper && (
+            <div className={`order-modal__side order-modal__side--${side.toLowerCase()}`}>
+              <OrderModalSwitch label="Side" options={SIDE_OPTIONS} value={side} onChange={setSide} />
+            </div>
+          )}
+          <div className="order-modal__trading-mode">
+            <OrderModalSwitch label="Trading mode" options={MODE_OPTIONS} value={choices.mode} onChange={choices.chooseMode} />
           </div>
-          <IconButton icon={<CloseIcon />} label="Close" onClick={onClose} />
         </div>
 
-        <div className="order-modal__body">
-          <div className="order-modal__row">
-            {isPaper && (
-              <div className={`order-modal__side order-modal__side--${side.toLowerCase()}`}>
-                <OrderModalSwitch label="Side" options={SIDE_OPTIONS} value={side} onChange={setSide} />
+        {isPaper && (
+          <>
+            <div className="order-modal__fields">
+              <NumberField label={`Qty (lot ${option.lotSize})`} value={quantity} min={option.lotSize} step={option.lotSize} onChange={setQuantity}
+                onUp={() => setQuantity(quantity + option.lotSize)} onDown={() => setQuantity(Math.max(option.lotSize, quantity - option.lotSize))} />
+              <NumberField label={isLimit ? 'Limit price' : 'Price'} value={price} min={0} step={0.05} onChange={setPrice}
+                onUp={() => setPrice(+(price + PRICE_STEP).toFixed(2))} onDown={() => setPrice(Math.max(0, +(price - PRICE_STEP).toFixed(2)))}
+                disabledText={isLimit ? undefined : MARKET_PRICE_TEXT} />
+            </div>
+
+            <div className="order-modal__fields">
+              <div className="order-modal__field">
+                <span>Order</span>
+                <OrderModalSwitch label="Order type" options={ORDER_TYPE_OPTIONS} value={choices.orderType} onChange={choices.setOrderType} />
+              </div>
+              <div className="order-modal__field">
+                <span>Trade</span>
+                <OrderModalSwitch label="Trade type" options={HORIZON_OPTIONS} value={choices.horizon} onChange={choices.setHorizon} />
+              </div>
+            </div>
+
+            <button type="button" className="order-modal__details-toggle" aria-expanded={showDetails} onClick={() => setShowDetails(!showDetails)}>
+              {showDetails ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
+              Add target, stop-loss, note
+            </button>
+            {showDetails && (
+              <div className="order-modal__details">
+                <div className="order-modal__fields">
+                  <label className="order-modal__field">
+                    <span>Target</span>
+                    <input type="number" value={targetPrice} onChange={(e) => setTargetPrice(e.target.value)} min={0} step={0.05} placeholder="Optional" />
+                  </label>
+                  <label className="order-modal__field">
+                    <span>Stop-loss</span>
+                    <input type="number" value={stopLossPrice} onChange={(e) => setStopLossPrice(e.target.value)} min={0} step={0.05} placeholder="Optional" />
+                  </label>
+                </div>
+                <label className="order-modal__field">
+                  <span>Confidence: {confidence}%</span>
+                  <input type="range" value={confidence} onChange={(e) => setConfidence(Number(e.target.value))} min={0} max={100} step={5} />
+                </label>
+                <label className="order-modal__field">
+                  <span>Trade note</span>
+                  <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={240} placeholder="Why are you taking this trade?" />
+                </label>
               </div>
             )}
-            <div className="order-modal__trading-mode">
-              <OrderModalSwitch label="Trading mode" options={MODE_OPTIONS} value={choices.mode} onChange={choices.chooseMode} />
-            </div>
-          </div>
-
-          {isPaper && (
-            <>
-              <div className="order-modal__fields">
-                <NumberField label={`Qty (lot ${option.lotSize})`} value={quantity} min={option.lotSize} step={option.lotSize} onChange={setQuantity}
-                  onUp={() => setQuantity(quantity + option.lotSize)} onDown={() => setQuantity(Math.max(option.lotSize, quantity - option.lotSize))} />
-                <NumberField label={isLimit ? 'Limit price' : 'Price'} value={price} min={0} step={0.05} onChange={setPrice}
-                  onUp={() => setPrice(+(price + PRICE_STEP).toFixed(2))} onDown={() => setPrice(Math.max(0, +(price - PRICE_STEP).toFixed(2)))}
-                  disabledText={isLimit ? undefined : MARKET_PRICE_TEXT} />
-              </div>
-
-              <div className="order-modal__fields">
-                <div className="order-modal__field">
-                  <span>Order</span>
-                  <OrderModalSwitch label="Order type" options={ORDER_TYPE_OPTIONS} value={choices.orderType} onChange={choices.setOrderType} />
-                </div>
-                <div className="order-modal__field">
-                  <span>Trade</span>
-                  <OrderModalSwitch label="Trade type" options={HORIZON_OPTIONS} value={choices.horizon} onChange={choices.setHorizon} />
-                </div>
-              </div>
-
-              <button type="button" className="order-modal__details-toggle" aria-expanded={showDetails} onClick={() => setShowDetails(!showDetails)}>
-                {showDetails ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
-                Add target, stop-loss, note
-              </button>
-              {showDetails && (
-                <div className="order-modal__details">
-                  <div className="order-modal__fields">
-                    <label className="order-modal__field">
-                      <span>Target</span>
-                      <input type="number" value={targetPrice} onChange={(e) => setTargetPrice(e.target.value)} min={0} step={0.05} placeholder="Optional" />
-                    </label>
-                    <label className="order-modal__field">
-                      <span>Stop-loss</span>
-                      <input type="number" value={stopLossPrice} onChange={(e) => setStopLossPrice(e.target.value)} min={0} step={0.05} placeholder="Optional" />
-                    </label>
-                  </div>
-                  <label className="order-modal__field">
-                    <span>Confidence: {confidence}%</span>
-                    <input type="range" value={confidence} onChange={(e) => setConfidence(Number(e.target.value))} min={0} max={100} step={5} />
-                  </label>
-                  <label className="order-modal__field">
-                    <span>Trade note</span>
-                    <textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={240} placeholder="Why are you taking this trade?" />
-                  </label>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        <div className="order-modal__footer">
-          {isPaper ? (
-            <button type="button" className={`order-modal__submit order-modal__submit--${side.toLowerCase()}`} onClick={submit}>
-              {side} {quantity} @ {isLimit ? formatAmount(price) : 'MKT'}
-            </button>
-          ) : (
-            <p className="order-modal__live-notice">Live trading coming soon. Use Paper mode to track positions.</p>
-          )}
-        </div>
+          </>
+        )}
       </div>
-    </ModalOverlay>
+    </Modal>
   );
 };
 

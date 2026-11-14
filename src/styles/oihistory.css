@@ -2267,40 +2267,11 @@ span.oi-history__chart-legend-item:hover {
 }
 
 /* ── Confirm Modal ── */
-.oi-confirm-modal {
-  background: #1c1c22;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 12px;
-  padding: 24px;
-  max-width: 380px;
-  width: 90%;
-  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
-  animation: slideUp 0.15s ease;
-}
-
-.oi-confirm-modal__title {
-  margin: 0 0 8px;
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
 .oi-confirm-modal__text {
-  margin: 0 0 20px;
+  margin: 0;
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.5;
-}
-
-.oi-confirm-modal__actions {
-  display: flex;
-  gap: 10px;
-  justify-content: flex-end;
-}
-
-@keyframes slideUp {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
 }
 
 /* ── Trade action buttons on hover ── */

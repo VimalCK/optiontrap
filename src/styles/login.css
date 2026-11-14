@@ -755,32 +755,9 @@
 
 /* ─── Auth modal ────────────────────────────────────────────────────── */
 
-.auth-modal__card {
-  position: relative;
-  z-index: 1;
-  width: min(440px, 100%);
-  padding: 32px 28px 28px;
-  border: 1px solid var(--card-border);
-  border-radius: 20px;
-  background: var(--content-bg);
-  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.5);
-  animation: auth-in 0.18s ease;
-}
-
-@keyframes auth-in {
-  from { opacity: 0; transform: translateY(8px) scale(0.98); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.auth-modal__header {
-  text-align: center;
-  margin-bottom: 22px;
-}
-
 .auth-modal__icon {
-  width: 60px;
-  height: 60px;
-  margin: 0 auto 16px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -794,19 +771,6 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-}
-
-.auth-modal__header h2 {
-  margin: 0 0 6px;
-  font-size: 22px;
-  font-weight: 800;
-}
-
-.auth-modal__header p {
-  margin: 0;
-  font-size: 13.5px;
-  line-height: 1.5;
-  color: var(--text-secondary);
 }
 
 .auth-modal__error {

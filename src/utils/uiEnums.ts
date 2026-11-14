@@ -23,6 +23,10 @@ export type MessageToneId = typeof MessageTone[keyof typeof MessageTone];
 export const ShimmerShape = Object.freeze({ Text: 'Text', Block: 'Block', Circle: 'Circle' });
 export type ShimmerShapeId = typeof ShimmerShape[keyof typeof ShimmerShape];
 
+/** A popup's width: a short form, a longer form, or a wide panel of tables and charts. */
+export const ModalSize = Object.freeze({ Small: 'Small', Medium: 'Medium', Large: 'Large' });
+export type ModalSizeId = typeof ModalSize[keyof typeof ModalSize];
+
 /** A guide row's chip colour (InfoGuide). */
 export const GuideTone = Object.freeze({ Bull: 'Bull', Bear: 'Bear', Warn: 'Warn', Violet: 'Violet', Accent: 'Accent', Muted: 'Muted', Plain: 'Plain' });
 export type GuideToneId = typeof GuideTone[keyof typeof GuideTone];
