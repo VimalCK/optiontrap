@@ -188,13 +188,13 @@ export function createSignalsService({
     }
     const { trade } = planned;
     const todayStart = new Date(marketDayStartMs(now.getTime())).toISOString();
-    const ctx = {
-      now,
-      openAutoPositions: await db.getOpenAutoPositions(userId),
-      waitingAutoOrders: await db.getWaitingAutoOrders(userId),
-      todayAutoPnl: (await db.getTodayAutoRealisedPnl(userId, todayStart)) + monitor.openPnl(userId),
-      todayAutoExits: await db.getTodayAutoExits(userId, todayStart),
-    };
+    const [openAutoPositions, waitingAutoOrders, todayRealisedPnl, todayAutoExits] = await Promise.all([
+      db.getOpenAutoPositions(userId),
+      db.getWaitingAutoOrders(userId),
+      db.getTodayAutoRealisedPnl(userId, todayStart),
+      db.getTodayAutoExits(userId, todayStart),
+    ]);
+    const ctx = { now, openAutoPositions, waitingAutoOrders, todayAutoPnl: todayRealisedPnl + monitor.openPnl(userId), todayAutoExits };
     const refused = refusal(trade, config, ctx);
     if (refused) {
       log('not entered', { trade: tradeLabel(trade), user: userId, strategy: signal.strategyId, reason: refused.reason });
