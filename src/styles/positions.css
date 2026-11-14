@@ -279,33 +279,6 @@
 .positions-mode-dot--paper { background: #a78bfa; }
 .positions-mode-dot--live  { background: #22c55e; }
 
-/* Live coming soon */
-.positions-coming-soon {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 10px;
-  padding: 48px 24px;
-  text-align: center;
-}
-
-.positions-coming-soon__icon {
-  font-size: 36px;
-  line-height: 1;
-}
-
-.positions-coming-soon__title {
-  font-size: 15px;
-  font-weight: 600;
-}
-
-.positions-coming-soon__desc {
-  font-size: 13px;
-  color: var(--text-secondary);
-  max-width: 380px;
-  line-height: 1.6;
-}
-
 /* ── Live Positions ── */
 .live-positions__controls {
   display: flex;

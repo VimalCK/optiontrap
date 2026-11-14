@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeFairValues, fitSmile, realizedVol, volVerdict, describeFair, type FairInput } from './fairValue';
+import { computeFairValues, fitSmile, realizedVol, volVerdict, type FairInput } from './fairValue';
 import { bsPrice, marketCloseIST, yearsToExpiry, RISK_FREE_RATE } from './oiFlow';
 
 const asOf = marketCloseIST('2026-10-26');
@@ -98,7 +98,6 @@ describe('computeFairValues', () => {
     const farCall = byToken.get(tokenOf(inputs, 24800, 'CE'))!;
     expect(farCall.itmProb!).toBeLessThan(0.1);
     expect(farCall.moveMultiple!).toBeCloseTo(800 / stats.straddle!, 6);
-    expect(describeFair(farCall).join(' ')).toContain('ITM chance');
   });
 
   it('prices on the parity forward, which matches carry when there is no dividend', () => {

@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { renderToStaticMarkup } from 'react-dom/server';
 import type { FuturesHistoryRow, OiCellData, OiTableRow, StrikeHistoryEntry, TradeSignalRow } from './types';
 import { FuturesContext } from './FuturesContext';
 import { OiSnapshotTable } from './OiSnapshotTable';
 import { StrikeOiChart } from './StrikeOiChart';
 import { SignalBreakdownTable, SignalResultsGrid, upcomingSignals } from './TradeSetupDashboard';
+import { SignalVerdict } from '../../../shared/analysisEnums.js';
 
 const futuresRow = (date: string, expiry: string, close: number, oi: number): FuturesHistoryRow => ({
   date,
@@ -334,5 +338,11 @@ describe('SignalBreakdownTable', () => {
     expect(html).toContain('Short Buildup');
     expect(html).toContain('oi-history__signal-verdict--toofew');
     expect(html).not.toContain('recorded on new signals');
+  });
+
+  it('has a style for every verdict badge it renders', () => {
+    const css = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../styles/oihistory.css'), 'utf8');
+    const unstyled = Object.values(SignalVerdict).filter((verdict) => !css.includes(`.oi-history__signal-verdict--${verdict.toLowerCase()} {`));
+    expect(unstyled).toEqual([]);
   });
 });

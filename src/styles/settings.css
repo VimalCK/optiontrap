@@ -64,33 +64,7 @@
   flex-shrink: 0;
 }
 
-/* Settings Link */
-.settings-link {
-  color: var(--accent);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.settings-link:hover {
-  opacity: 0.8;
-}
-
-/* Form */
-.settings-form {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  max-width: 480px;
-}
-
 /* Buttons */
-.form-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 4px;
-}
-
 .btn {
   padding: 10px 20px;
   font-size: 14px;
@@ -113,12 +87,6 @@
 .btn--primary:disabled {
   opacity: 0.4;
   cursor: not-allowed;
-}
-
-.form-actions__feedback {
-  font-size: 13px;
-  color: #22c55e;
-  font-weight: 500;
 }
 
 /* Danger Button */
@@ -306,47 +274,6 @@
   color: var(--text-primary);
   font-size: 15px;
   font-weight: 750;
-}
-
-/* Profile Funds */
-.profile-funds {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--card-border);
-}
-
-.profile-funds__title {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 10px;
-}
-
-.profile-funds__items {
-  display: flex;
-  gap: 16px;
-}
-
-.profile-funds__row {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.profile-funds__label {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.4px;
-}
-
-.profile-funds__value {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
 }
 
 /* Danger Zone */

@@ -518,10 +518,6 @@
   font-size: 11px;
 }
 
-.wl-alerts-table__muted {
-  color: var(--text-secondary);
-}
-
 .wl-alerts-table__num {
   text-align: right !important;
   font-variant-numeric: tabular-nums;

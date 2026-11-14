@@ -356,26 +356,3 @@ export function richnessColor(richness: RichnessId | null): string {
   if (richness === Richness.Cheap) return '#38bdf8';
   return 'var(--text-secondary)';
 }
-
-function rupees(value: number): string {
-  return `₹${value < 10 ? value.toFixed(2) : value < 100 ? value.toFixed(1) : value.toFixed(0)}`;
-}
-
-export function describeFair(reading: FairReading): string[] {
-  const lines: string[] = [];
-  if (reading.fairPrice !== null && reading.curveIv !== null && reading.richPct !== null) {
-    const pct = reading.richPct * 100;
-    lines.push(`Fair ${rupees(reading.fairPrice)} at curve IV ${(reading.curveIv * 100).toFixed(1)}% · market ${rupees(reading.price)} (${pct >= 0 ? '+' : ''}${pct.toFixed(1)}%, ${reading.richness})`);
-  } else {
-    lines.push('Fair value unavailable (outside the fitted curve or no IV)');
-  }
-  if (reading.pairIvGap !== null) {
-    const gap = reading.pairIvGap * 100;
-    lines.push(`CE IV − PE IV at this strike: ${gap >= 0 ? '+' : ''}${gap.toFixed(1)} pts`);
-  }
-  const context: string[] = [];
-  if (reading.itmProb !== null) context.push(`ITM chance ${(reading.itmProb * 100).toFixed(0)}%`);
-  if (reading.moveMultiple !== null) context.push(`${reading.moveMultiple.toFixed(1)}× expected move from spot`);
-  if (context.length) lines.push(context.join(' · '));
-  return lines;
-}

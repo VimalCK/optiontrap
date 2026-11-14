@@ -111,13 +111,6 @@
   cursor: not-allowed;
 }
 
-.option-chain-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 20px;
-}
-
 /* Expiry select now uses shared .app-select from global.css (via .oc-expiry-select) */
 
 /* Table Wrapper */
@@ -227,20 +220,6 @@
   font-variant-numeric: tabular-nums;
 }
 
-.oc-cell-symbol {
-  font-size: 11px;
-  color: var(--text-secondary);
-  max-width: 140px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.oc-cell-lot {
-  font-size: 11px;
-  color: var(--text-secondary);
-  text-align: center;
-}
-
 /* OI Cell */
 .oc-cell-oi {
   font-size: 11px;
@@ -325,40 +304,6 @@
 .oc-row--atm .oc-cell--itm-ce,
 .oc-row--atm .oc-cell--itm-pe {
   background: transparent;
-}
-
-/* View Toggle */
-.option-chain-controls {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.oc-view-toggle {
-  display: flex;
-  border: 1px solid var(--card-border);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.oc-view-toggle__btn {
-  padding: 6px 10px;
-  background: transparent;
-  border: none;
-  color: var(--text-secondary);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  transition: background 0.15s, color 0.15s;
-}
-
-.oc-view-toggle__btn:hover {
-  background: var(--sidebar-hover);
-}
-
-.oc-view-toggle__btn.active {
-  background: var(--accent);
-  color: #fff;
 }
 
 /* Vertical Bar Chart View */
@@ -462,10 +407,6 @@
   width: 0;
   border-left: 1px dashed var(--accent);
   pointer-events: none;
-}
-
-.oc-chart__col--in-range {
-  /* unused — using overlay instead */
 }
 
 .oc-chart__expected-range {
@@ -574,16 +515,6 @@
 
 .oc-chart__bar-prev--pe {
   border-color: #ef4444;
-}
-
-.oc-chart__bar-label {
-  position: absolute;
-  top: -16px;
-  left: 50%;
-  transform: translateX(-50%);
-  font-size: 8px;
-  color: var(--text-secondary);
-  white-space: nowrap;
 }
 
 

@@ -1,19 +1,4 @@
-/* Holdings Stats */
-.card-grid--four-col {
-  grid-template-columns: repeat(4, 1fr);
-}
 
-@media (max-width: 1024px) {
-  .card-grid--four-col {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 600px) {
-  .card-grid--four-col {
-    grid-template-columns: 1fr;
-  }
-}
 
 .holdings-stat {
   display: flex;
@@ -161,11 +146,6 @@
   text-align: right;
 }
 
-.allocation-item__pnl {
-  font-size: 11px;
-  font-weight: 500;
-}
-
 /* Holdings Table */
 .holdings-table {
   width: 100%;
@@ -272,62 +252,6 @@
   background: var(--accent);
   color: #fff;
   box-shadow: 0 2px 8px var(--accent-glow);
-}
-
-/* Pie Chart Container */
-.allocation-pie-container {
-  display: flex;
-  align-items: center;
-  gap: 32px;
-  flex-wrap: wrap;
-}
-
-@media (max-width: 600px) {
-  .allocation-pie-container {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-}
-
-.pie-chart {
-  flex-shrink: 0;
-}
-
-/* Pie Legend */
-.allocation-pie-legend {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex: 1;
-  min-width: 200px;
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-.pie-legend-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.pie-legend-item__color {
-  width: 10px;
-  height: 10px;
-  border-radius: 3px;
-  flex-shrink: 0;
-}
-
-.pie-legend-item__symbol {
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--text-primary);
-  flex: 1;
-}
-
-.pie-legend-item__pct {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
 }
 
 /* Live Badge */
@@ -454,12 +378,6 @@
 }
 
 /* Privacy Mode */
-.page-header__row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
 .privacy-toggle {
   display: flex;
   align-items: center;
