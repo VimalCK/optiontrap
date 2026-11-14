@@ -1,10 +1,10 @@
 /* The side colours the popup's top edge: green to buy, red to sell. */
 .order-modal {
-  border-top: 3px solid #22c55e;
+  border-top: 3px solid var(--profit);
 }
 
 .order-modal--sell {
-  border-top-color: #ef4444;
+  border-top-color: var(--loss);
 }
 
 .order-modal__expiry {
@@ -69,13 +69,13 @@
 }
 
 .order-modal__side--buy .order-modal__mode-btn.active {
-  color: #fff;
-  background: #22c55e;
+  color: var(--on-fill);
+  background: var(--profit);
 }
 
 .order-modal__side--sell .order-modal__mode-btn.active {
-  color: #fff;
-  background: #ef4444;
+  color: var(--on-fill);
+  background: var(--loss);
 }
 
 .order-modal__live-notice {
@@ -204,7 +204,7 @@
 
 .order-modal__number-btn:active {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-fill);
 }
 
 .order-modal__details-toggle {
@@ -237,7 +237,7 @@
   font-size: 13px;
   font-weight: 700;
   font-family: inherit;
-  color: #fff;
+  color: var(--on-fill);
   border: none;
   border-radius: 6px;
   cursor: pointer;
@@ -249,9 +249,9 @@
 }
 
 .order-modal__submit--buy {
-  background: #22c55e;
+  background: var(--profit);
 }
 
 .order-modal__submit--sell {
-  background: #ef4444;
+  background: var(--loss);
 }

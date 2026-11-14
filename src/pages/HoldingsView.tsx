@@ -293,8 +293,8 @@ const Treemap: React.FC<{ data: AllocationItem[] }> = ({ data }) => {
         const item = data[rect.index];
         const pnlPct = item.pnlPercentage;
         const intensity = Math.min(Math.abs(pnlPct) / 20, 1);
-        const bgColor = pnlPct >= 0 ? `rgba(34, 197, 94, ${0.15 + intensity * 0.55})` : `rgba(239, 68, 68, ${0.15 + intensity * 0.55})`;
-        const textColor = pnlPct >= 0 ? '#22c55e' : '#ef4444';
+        const bgColor = pnlPct >= 0 ? `rgba(var(--profit-rgb), ${0.15 + intensity * 0.55})` : `rgba(var(--loss-rgb), ${0.15 + intensity * 0.55})`;
+        const textColor = pnlPct >= 0 ? 'var(--profit)' : 'var(--loss)';
         return (
           <div
             key={`${item.exchange}:${item.symbol}`}

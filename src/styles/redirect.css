@@ -28,15 +28,15 @@
 }
 
 .redirect-card--error {
-  border-color: rgba(239, 68, 68, 0.3);
+  border-color: rgba(var(--loss-rgb), 0.3);
 }
 
 .redirect-icon {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+  background: rgba(var(--loss-rgb), 0.15);
+  color: var(--loss);
   display: flex;
   align-items: center;
   justify-content: center;

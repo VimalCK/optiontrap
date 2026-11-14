@@ -63,8 +63,8 @@
   font-variant-numeric: tabular-nums;
 }
 
-.market-strip__change--up { color: #22c55e; }
-.market-strip__change--down { color: #ef4444; }
+.market-strip__change--up { color: var(--profit); }
+.market-strip__change--down { color: var(--loss); }
 
 .market-strip__more-btn {
   font: inherit;
@@ -72,7 +72,7 @@
   font-weight: 600;
   color: var(--text-secondary);
   background: transparent;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(var(--tint-rgb), 0.12);
   border-radius: 6px;
   padding: 2px 8px;
   cursor: pointer;
@@ -81,7 +81,7 @@
 .market-strip__more-btn:hover,
 .market-strip__more-btn--open {
   color: var(--text-primary);
-  border-color: rgba(255, 255, 255, 0.25);
+  border-color: rgba(var(--tint-rgb), 0.25);
 }
 
 /* The extra symbols, as aligned columns: label, price, change. */
@@ -95,9 +95,9 @@
   row-gap: 8px;
   padding: 10px 14px;
   background: var(--card-bg-solid);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(var(--tint-rgb), 0.1);
   border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 24px rgba(var(--shade-rgb), 0.4);
 }
 
 /* Each row's spans become cells of the dropdown grid. */

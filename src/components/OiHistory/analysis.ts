@@ -910,8 +910,8 @@ const ROLL_PATTERNS: RolloverPatternId[] = [RolloverPattern.RollingOverLong, Rol
 
 export function patternColor(p: RolloverPatternId): string {
   if (ROLL_PATTERNS.includes(p)) return 'var(--accent)';
-  if (RED_PATTERNS.includes(p)) return '#ef4444';
-  if (GREEN_PATTERNS.includes(p)) return '#22c55e';
+  if (RED_PATTERNS.includes(p)) return 'var(--loss)';
+  if (GREEN_PATTERNS.includes(p)) return 'var(--profit)';
   return 'var(--text-secondary)';
 }
 

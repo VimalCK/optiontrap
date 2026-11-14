@@ -381,8 +381,8 @@ export function computeLiveFlow(
 }
 
 export function flowColor(flow: OiFlowId): string {
-  if (flow === OiFlow.BuyersAdding || flow === OiFlow.WritersCovering) return '#22c55e';
-  if (flow === OiFlow.WritersAdding || flow === OiFlow.BuyersExiting) return '#ef4444';
+  if (flow === OiFlow.BuyersAdding || flow === OiFlow.WritersCovering) return 'var(--profit)';
+  if (flow === OiFlow.WritersAdding || flow === OiFlow.BuyersExiting) return 'var(--loss)';
   return 'var(--text-secondary)';
 }
 

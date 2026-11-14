@@ -19,7 +19,7 @@ const SPARKLINE = { width: 60, height: 20 };
 const sparklinePoints = (series: number[]) =>
   series.map((v, i) => `${(i / (series.length - 1)) * SPARKLINE.width},${(1 - v) * SPARKLINE.height}`).join(' ');
 
-const sparklineColor = (direction: string) => (direction === MoveDirection.Up ? '#4ade80' : direction === MoveDirection.Down ? '#f87171' : '#94a3b8');
+const sparklineColor = (direction: string) => (direction === MoveDirection.Up ? 'var(--profit-light)' : direction === MoveDirection.Down ? 'var(--loss-light)' : 'var(--slate)');
 
 /** One side of the tooltip: OI and its change, IV flow, OI velocity and today's OI pattern as a sparkline. */
 const TooltipSide: React.FC<{

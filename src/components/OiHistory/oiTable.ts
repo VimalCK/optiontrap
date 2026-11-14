@@ -20,7 +20,7 @@ export const strikeModeFor = (strikeRange: number): StrikeModeId => (
 const SIGNIFICANT_OI_SHARE = 0.05;
 const MIN_SIGNIFICANT_OI = 1000;
 
-const EXPIRY_PALETTE = ['#6366f1', '#f59e0b', '#10b981', '#ec4899', '#8b5cf6', '#06b6d4'];
+const EXPIRY_PALETTE = ['var(--indigo)', 'var(--warn)', 'var(--emerald)', 'var(--pink)', 'var(--violet)', 'var(--cyan)'];
 
 export const sortedUnique = (values: (string | null)[]): string[] => [...new Set(values.filter((v): v is string => !!v))].sort();
 

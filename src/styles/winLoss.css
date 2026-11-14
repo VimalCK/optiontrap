@@ -21,11 +21,11 @@
 
 /* Scoped under .winloss so they win over the values' own text colour. */
 .winloss .winloss--profit {
-  color: #22c55e;
+  color: var(--profit);
 }
 
 .winloss .winloss--loss {
-  color: #ef4444;
+  color: var(--loss);
 }
 
 /* ── Summary: four headline figures, then the supporting ones ── */
@@ -119,12 +119,12 @@
 }
 
 .winloss-bar__wins {
-  background: #22c55e;
+  background: var(--profit);
   border-radius: 2px 0 0 2px;
 }
 
 .winloss-bar__losses {
-  background: #ef4444;
+  background: var(--loss);
   border-radius: 0 2px 2px 0;
 }
 
@@ -300,12 +300,12 @@
 }
 
 .winloss-chart__bar--profit {
-  background: #22c55e;
+  background: var(--profit);
   border-radius: 4px 4px 0 0;
 }
 
 .winloss-chart__bar--loss {
-  background: #ef4444;
+  background: var(--loss);
   border-radius: 0 0 4px 4px;
 }
 

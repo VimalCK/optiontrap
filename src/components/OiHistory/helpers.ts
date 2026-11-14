@@ -62,7 +62,7 @@ export function addMonths(month: string, delta: number): string {
 }
 
 /** Price line colours per futures month, nearest first (OI/volume bars use purple/cyan). */
-export const FUTURES_LINE_COLORS = ['#22c55e', '#f59e0b', '#ec4899', '#3b82f6'];
+export const FUTURES_LINE_COLORS = ['var(--profit)', 'var(--warn)', 'var(--pink)', 'var(--blue)'];
 
 export function buildFuturesSeries(contractRows: FuturesHistoryRow[]) {
   const sorted = [...contractRows].sort((a, b) => a.date.localeCompare(b.date));

@@ -10,7 +10,7 @@
 }
 
 .message--error {
-  border-color: rgba(239, 68, 68, 0.35);
-  background: rgba(239, 68, 68, 0.08);
-  color: #ef4444;
+  border-color: rgba(var(--loss-rgb), 0.35);
+  background: rgba(var(--loss-rgb), 0.08);
+  color: var(--loss);
 }

@@ -82,7 +82,7 @@
 .date-input__day--selected,
 .date-input__day--selected:hover:not(:disabled) {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-fill);
 }
 
 .date-input__day:disabled {

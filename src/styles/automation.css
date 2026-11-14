@@ -317,12 +317,12 @@
 }
 
 .automation-trades__pnl--profit {
-  color: #22c55e;
+  color: var(--profit);
   font-weight: 600;
 }
 
 .automation-trades__pnl--loss {
-  color: #ef4444;
+  color: var(--loss);
   font-weight: 600;
 }
 
@@ -390,11 +390,11 @@
   top: 10px;
   bottom: -10px;
   width: 2px;
-  background: #22c55e;
+  background: var(--profit);
 }
 
 .automation-timeline__step--negative::before {
-  background: #ef4444;
+  background: var(--loss);
 }
 
 .automation-timeline__marker {
@@ -405,11 +405,11 @@
   height: 8px;
   margin-top: 6px;
   border-radius: 50%;
-  background: #22c55e;
+  background: var(--profit);
 }
 
 .automation-timeline__step--negative .automation-timeline__marker {
-  background: #ef4444;
+  background: var(--loss);
 }
 
 /* Stage, time and sentence on one line; the sentence wraps beneath only when it doesn't fit. */

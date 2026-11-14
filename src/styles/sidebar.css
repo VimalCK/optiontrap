@@ -34,7 +34,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: linear-gradient(135deg, var(--accent), #8b5cf6);
+  background: linear-gradient(135deg, var(--accent), var(--violet));
   border-radius: 10px;
   box-shadow: 0 4px 12px var(--accent-glow);
 }
@@ -42,7 +42,7 @@
 .sidebar__logo svg {
   width: 20px;
   height: 20px;
-  color: #fff;
+  color: var(--on-fill);
 }
 
 .sidebar__brand {
@@ -204,7 +204,7 @@
   right: -2px;
   width: 8px;
   height: 8px;
-  background: #ef4444;
+  background: var(--loss);
   border-radius: 50%;
   border: 2px solid var(--sidebar-bg);
 }
@@ -215,7 +215,7 @@
   right: -2px;
   width: 8px;
   height: 8px;
-  background: #22c55e;
+  background: var(--profit);
   border-radius: 50%;
   border: 2px solid var(--sidebar-bg);
 }
@@ -243,9 +243,9 @@
   font-weight: 800;
   letter-spacing: 0.6px;
   text-transform: uppercase;
-  color: #f59e0b;
-  background: rgba(245, 158, 11, 0.14);
-  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: var(--warn);
+  background: rgba(var(--warn-rgb), 0.14);
+  border: 1px solid rgba(var(--warn-rgb), 0.4);
   white-space: nowrap;
   opacity: 1;
   transition: opacity var(--transition-speed) ease;

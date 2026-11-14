@@ -1,10 +1,10 @@
 /* P&L Colors */
 .positive {
-  color: #22c55e !important;
+  color: var(--profit) !important;
 }
 
 .negative {
-  color: #ef4444 !important;
+  color: var(--loss) !important;
 }
 
 /* Positions Page */
@@ -39,7 +39,7 @@
   max-height: 60vh;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  scrollbar-color: rgba(var(--tint-rgb), 0.12) transparent;
 }
 
 .positions-table-scroll::-webkit-scrollbar {
@@ -51,12 +51,12 @@
 }
 
 .positions-table-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(var(--tint-rgb), 0.12);
   border-radius: 3px;
 }
 
 .positions-table-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(var(--tint-rgb), 0.22);
 }
 
 /* Positions Table */
@@ -120,7 +120,7 @@
 .positions-table__meta span {
   padding: 2px 5px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--tint-rgb), 0.05);
 }
 
 .positions-table__note {
@@ -141,22 +141,22 @@
 }
 
 .positions-table__type--ce {
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
+  background: rgba(var(--profit-rgb), 0.15);
+  color: var(--profit);
 }
 
 .positions-table__type--pe {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
+  background: rgba(var(--loss-rgb), 0.15);
+  color: var(--loss);
 }
 
 .positions-table__type--fut {
-  background: rgba(99, 102, 241, 0.15);
-  color: #818cf8;
+  background: rgba(var(--indigo-rgb), 0.15);
+  color: var(--indigo-light);
 }
 
 .positions-table__type--eq {
-  background: rgba(148, 163, 184, 0.15);
+  background: rgba(var(--slate-rgb), 0.15);
   color: var(--text-secondary);
 }
 
@@ -173,13 +173,13 @@
 }
 
 .positions-table__side--buy {
-  background: rgba(34, 197, 94, 0.1);
-  color: #22c55e;
+  background: rgba(var(--profit-rgb), 0.1);
+  color: var(--profit);
 }
 
 .positions-table__side--sell {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  background: rgba(var(--loss-rgb), 0.1);
+  color: var(--loss);
 }
 
 .positions-table__pct {
@@ -201,9 +201,9 @@
 }
 
 .positions-table__exit:hover {
-  color: #ef4444;
-  border-color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
+  color: var(--loss);
+  border-color: var(--loss);
+  background: rgba(var(--loss-rgb), 0.1);
 }
 
 .positions-table__row--exited {
@@ -276,8 +276,8 @@
   flex-shrink: 0;
 }
 
-.positions-mode-dot--paper { background: #a78bfa; }
-.positions-mode-dot--live  { background: #22c55e; }
+.positions-mode-dot--paper { background: var(--violet-light); }
+.positions-mode-dot--live  { background: var(--profit); }
 
 /* ── Live Positions ── */
 .live-positions__controls {
@@ -316,8 +316,8 @@
   font-weight: 600;
   padding: 2px 6px;
   border-radius: 3px;
-  background: rgba(99, 102, 241, 0.12);
-  color: #818cf8;
+  background: rgba(var(--indigo-rgb), 0.12);
+  color: var(--indigo-light);
   letter-spacing: 0.3px;
 }
 
@@ -332,14 +332,14 @@
 }
 
 .risk-table__row--invalidated {
-  background: rgba(239, 68, 68, 0.06);
+  background: rgba(var(--loss-rgb), 0.06);
 }
 
 .risk-table__breached {
   margin-top: 4px;
   font-size: 11px;
   font-weight: 600;
-  color: #ef4444;
+  color: var(--loss);
 }
 
 /* The payoff popup's title: the expiry and leg count after the underlying. */
@@ -354,8 +354,8 @@
   font-weight: 600;
   padding: 2px 6px;
   border-radius: 3px;
-  background: rgba(99, 102, 241, 0.12);
-  color: #818cf8;
+  background: rgba(var(--indigo-rgb), 0.12);
+  color: var(--indigo-light);
 }
 
 /* Payoff modal */
@@ -400,8 +400,8 @@
   display: inline-block;
 }
 
-.payoff-modal__legend .swatch--ce { background: rgba(59, 130, 246, 0.75); }
-.payoff-modal__legend .swatch--pe { background: rgba(249, 115, 22, 0.75); }
+.payoff-modal__legend .swatch--ce { background: rgba(var(--blue-rgb), 0.75); }
+.payoff-modal__legend .swatch--pe { background: rgba(var(--orange-rgb), 0.75); }
 
 .payoff-chart {
   width: 100%;
@@ -410,11 +410,11 @@
 }
 
 .payoff-chart__oi-ce {
-  fill: rgba(59, 130, 246, 0.45);
+  fill: rgba(var(--blue-rgb), 0.45);
 }
 
 .payoff-chart__oi-pe {
-  fill: rgba(249, 115, 22, 0.45);
+  fill: rgba(var(--orange-rgb), 0.45);
 }
 
 .payoff-chart__oi-label {
@@ -431,13 +431,13 @@
 }
 
 .payoff-chart__line-profit {
-  stroke: #22c55e;
+  stroke: var(--profit);
   stroke-width: 2.5;
   stroke-linejoin: round;
 }
 
 .payoff-chart__line-loss {
-  stroke: #ef4444;
+  stroke: var(--loss);
   stroke-width: 2.5;
   stroke-linejoin: round;
 }
@@ -445,7 +445,7 @@
 
 
 .payoff-chart__zero {
-  stroke: rgba(255, 255, 255, 0.45);
+  stroke: rgba(var(--tint-rgb), 0.45);
   stroke-width: 1.4;
   stroke-dasharray: 4 4;
 }
@@ -458,7 +458,7 @@
 }
 
 .payoff-chart__tick {
-  stroke: rgba(255, 255, 255, 0.2);
+  stroke: rgba(var(--tint-rgb), 0.2);
   stroke-width: 1;
 }
 
@@ -467,22 +467,22 @@
 }
 
 .payoff-chart__crosshair {
-  stroke: rgba(255, 255, 255, 0.35);
+  stroke: rgba(var(--tint-rgb), 0.35);
   stroke-width: 1;
   stroke-dasharray: 4 4;
   pointer-events: none;
 }
 
 .payoff-chart__hover-dot {
-  fill: #fff;
-  stroke: rgba(0, 0, 0, 0.6);
+  fill: var(--on-fill);
+  stroke: rgba(var(--shade-rgb), 0.6);
   stroke-width: 1.5;
   pointer-events: none;
 }
 
 .payoff-chart__tooltip-bg {
-  fill: rgba(20, 22, 28, 0.95);
-  stroke: rgba(255, 255, 255, 0.15);
+  fill: rgba(var(--chart-label-rgb), 0.95);
+  stroke: rgba(var(--tint-rgb), 0.15);
   stroke-width: 1;
   pointer-events: none;
 }
@@ -498,17 +498,17 @@
   font-weight: 700;
 }
 
-.payoff-chart__tooltip-pnl.positive { fill: #22c55e; }
-.payoff-chart__tooltip-pnl.negative { fill: #ef4444; }
+.payoff-chart__tooltip-pnl.positive { fill: var(--profit); }
+.payoff-chart__tooltip-pnl.negative { fill: var(--loss); }
 
 .payoff-chart__be-line {
-  stroke: rgba(34, 197, 94, 0.5);
+  stroke: rgba(var(--profit-rgb), 0.5);
   stroke-width: 1;
   stroke-dasharray: 3 3;
 }
 
 .payoff-chart__be-label {
-  fill: #22c55e;
+  fill: var(--profit);
   font-size: 12px;
   font-weight: 600;
 }
@@ -523,12 +523,12 @@
 }
 
 .payoff-chart__spot-dot {
-  stroke: rgba(0, 0, 0, 0.65);
+  stroke: rgba(var(--shade-rgb), 0.65);
   stroke-width: 1.5;
 }
 
 .payoff-chart__spot-label-bg {
-  fill: rgba(20, 22, 28, 0.96);
+  fill: rgba(var(--chart-label-rgb), 0.96);
   stroke-width: 1;
 }
 
@@ -545,28 +545,28 @@
 
 .payoff-chart__spot--profit .payoff-chart__spot-line,
 .payoff-chart__spot--profit .payoff-chart__spot-label-bg {
-  stroke: rgba(34, 197, 94, 0.75);
+  stroke: rgba(var(--profit-rgb), 0.75);
 }
 
 .payoff-chart__spot--profit .payoff-chart__spot-dot {
-  fill: #22c55e;
+  fill: var(--profit);
 }
 
 .payoff-chart__spot--profit .payoff-chart__spot-pnl {
-  fill: #22c55e;
+  fill: var(--profit);
 }
 
 .payoff-chart__spot--loss .payoff-chart__spot-line,
 .payoff-chart__spot--loss .payoff-chart__spot-label-bg {
-  stroke: rgba(239, 68, 68, 0.75);
+  stroke: rgba(var(--loss-rgb), 0.75);
 }
 
 .payoff-chart__spot--loss .payoff-chart__spot-dot {
-  fill: #ef4444;
+  fill: var(--loss);
 }
 
 .payoff-chart__spot--loss .payoff-chart__spot-pnl {
-  fill: #ef4444;
+  fill: var(--loss);
 }
 
 /* ── Paper limit orders (components/PaperOrders): a card above the positions, in the positions table style ── */

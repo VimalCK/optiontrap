@@ -5,7 +5,7 @@
   justify-content: space-between;
   gap: 8px;
   padding: 7px 11px;
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--tint-rgb), 0.04);
   border: 1px solid var(--card-border);
   border-radius: 8px;
   color: var(--text-primary);
@@ -21,15 +21,15 @@
 }
 
 .app-select-trigger:hover {
-  border-color: rgba(255, 255, 255, 0.15);
-  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(var(--tint-rgb), 0.15);
+  background: rgba(var(--tint-rgb), 0.06);
 }
 
 .app-select-trigger--open,
 .app-select-trigger:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 2px var(--accent-glow);
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--tint-rgb), 0.06);
 }
 
 .app-select-trigger__label {
@@ -58,10 +58,10 @@
 
 /* ── Dropdown panel ── */
 .app-select-dropdown {
-  background: #1c1c22;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: var(--surface-popover);
+  border: 1px solid rgba(var(--tint-rgb), 0.1);
   border-radius: 10px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 2px 8px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 8px 32px rgba(var(--shade-rgb), 0.5), 0 2px 8px rgba(var(--shade-rgb), 0.3);
   overflow: hidden;
   animation: appSelectFadeIn 0.12s ease;
 }
@@ -74,14 +74,14 @@
 /* ── Search input ── */
 .app-select-search {
   padding: 6px 6px 2px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  border-bottom: 1px solid rgba(var(--tint-rgb), 0.06);
 }
 
 .app-select-search__input {
   width: 100%;
   padding: 6px 10px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(var(--tint-rgb), 0.05);
+  border: 1px solid rgba(var(--tint-rgb), 0.1);
   border-radius: 6px;
   color: var(--text-primary);
   font-family: inherit;
@@ -107,7 +107,7 @@
 
   /* Styled scrollbar */
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  scrollbar-color: rgba(var(--tint-rgb), 0.12) transparent;
 }
 
 .app-select-dropdown__inner::-webkit-scrollbar {
@@ -119,12 +119,12 @@
 }
 
 .app-select-dropdown__inner::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(var(--tint-rgb), 0.12);
   border-radius: 3px;
 }
 
 .app-select-dropdown__inner::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.25);
+  background: rgba(var(--tint-rgb), 0.25);
 }
 
 /* ── Option row ── */
@@ -143,25 +143,25 @@
 }
 
 .app-select-option:hover {
-  background: rgba(255, 255, 255, 0.07);
+  background: rgba(var(--tint-rgb), 0.07);
 }
 
 .app-select-option--selected {
   color: var(--accent);
   font-weight: 600;
-  background: rgba(99, 102, 241, 0.1);
+  background: rgba(var(--indigo-rgb), 0.1);
 }
 
 .app-select-option--selected:hover {
-  background: rgba(99, 102, 241, 0.15);
+  background: rgba(var(--indigo-rgb), 0.15);
 }
 
 .app-select-option--highlighted {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(var(--tint-rgb), 0.08);
 }
 
 .app-select-option--highlighted.app-select-option--selected {
-  background: rgba(99, 102, 241, 0.18);
+  background: rgba(var(--indigo-rgb), 0.18);
 }
 
 .app-select-option__check {
@@ -205,5 +205,5 @@
 .app-select-option__checkbox--checked {
   background: var(--accent);
   border-color: var(--accent);
-  color: #fff;
+  color: var(--on-fill);
 }

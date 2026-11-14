@@ -84,7 +84,7 @@ button.tab-bar__tab {
 
 .tab-bar__more--open {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--tint-rgb), 0.05);
 }
 
 .tab-bar__menu {
@@ -103,7 +103,7 @@ button.tab-bar__tab {
   background: var(--card-bg-solid);
   border: 1px solid var(--card-border);
   border-radius: 10px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 24px rgba(var(--shade-rgb), 0.4);
 }
 
 .tab-bar__menu-item {
@@ -125,5 +125,5 @@ button.tab-bar__tab {
 }
 
 .tab-bar__menu-item:hover {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--tint-rgb), 0.06);
 }

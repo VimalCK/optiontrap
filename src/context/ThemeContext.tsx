@@ -2,12 +2,12 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { AccentTheme, type AccentThemeId } from '@/utils/uiEnums';
 
 export const ACCENT_THEMES: { id: AccentThemeId; label: string; color: string }[] = [
-  { id: AccentTheme.Indigo, label: 'Indigo', color: '#6366f1' },
-  { id: AccentTheme.Emerald, label: 'Emerald', color: '#10b981' },
-  { id: AccentTheme.Amber, label: 'Amber', color: '#f59e0b' },
-  { id: AccentTheme.Rose, label: 'Rose', color: '#f43f5e' },
-  { id: AccentTheme.Cyan, label: 'Cyan', color: '#06b6d4' },
-  { id: AccentTheme.Violet, label: 'Violet', color: '#8b5cf6' },
+  { id: AccentTheme.Indigo, label: 'Indigo', color: 'var(--indigo)' },
+  { id: AccentTheme.Emerald, label: 'Emerald', color: 'var(--emerald)' },
+  { id: AccentTheme.Amber, label: 'Amber', color: 'var(--warn)' },
+  { id: AccentTheme.Rose, label: 'Rose', color: 'var(--rose)' },
+  { id: AccentTheme.Cyan, label: 'Cyan', color: 'var(--cyan)' },
+  { id: AccentTheme.Violet, label: 'Violet', color: 'var(--violet)' },
 ];
 
 interface ThemeContextValue {

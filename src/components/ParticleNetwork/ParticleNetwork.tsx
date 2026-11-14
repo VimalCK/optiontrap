@@ -10,8 +10,8 @@ interface Particle {
 
 const PARTICLE_COUNT = 55;
 const MAX_DIST = 130;
-const PARTICLE_COLOR = 'rgba(99, 102, 241,';
-const LINE_COLOR = 'rgba(99, 102, 241,';
+// A canvas can't read CSS variables, so it takes the brand colour's channels from the theme once.
+const brandRgb = () => getComputedStyle(document.documentElement).getPropertyValue('--indigo-rgb').trim();
 
 const ParticleNetwork: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -33,6 +33,7 @@ const ParticleNetwork: React.FC = () => {
     if (!canvas) return;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+    const rgb = brandRgb();
 
     const resize = () => {
       canvas.width = window.innerWidth;
@@ -65,7 +66,7 @@ const ParticleNetwork: React.FC = () => {
           if (dist < MAX_DIST) {
             const alpha = (1 - dist / MAX_DIST) * 0.25;
             ctx.beginPath();
-            ctx.strokeStyle = `${LINE_COLOR}${alpha})`;
+            ctx.strokeStyle = `rgba(${rgb}, ${alpha})`;
             ctx.lineWidth = 0.8;
             ctx.moveTo(pts[i].x, pts[i].y);
             ctx.lineTo(pts[j].x, pts[j].y);
@@ -77,7 +78,7 @@ const ParticleNetwork: React.FC = () => {
       for (const p of pts) {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-        ctx.fillStyle = `${PARTICLE_COLOR}0.55)`;
+        ctx.fillStyle = `rgba(${rgb}, 0.55)`;
         ctx.fill();
       }
 

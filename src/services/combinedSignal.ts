@@ -40,33 +40,33 @@ function combineSignals(ceSignal: OiSignalId, peSignal: OiSignalId): StanceConfi
 
   // Both-leg combinations (strong signals)
   const bothLeg: Record<string, StanceConfig> = {
-    [`${OiSignal.ShortBuildup}|${OiSignal.ShortBuildup}`]:   { stance: CombinedStance.Pinning,        label: 'Pinning/Range',    color: '#f59e0b', weak: false },
-    [`${OiSignal.LongBuildup}|${OiSignal.ShortBuildup}`]:    { stance: CombinedStance.Bullish,        label: 'Bullish',          color: '#4ade80', weak: false },
-    [`${OiSignal.ShortBuildup}|${OiSignal.LongBuildup}`]:    { stance: CombinedStance.Bearish,        label: 'Bearish',          color: '#f87171', weak: false },
-    [`${OiSignal.LongBuildup}|${OiSignal.LongBuildup}`]:     { stance: CombinedStance.HighVolatility, label: 'High Volatility',  color: '#a78bfa', weak: false },
-    [`${OiSignal.ShortCovering}|${OiSignal.ShortCovering}`]: { stance: CombinedStance.Breakout,       label: 'Breakout Setup',   color: '#a78bfa', weak: false },
-    [`${OiSignal.LongUnwinding}|${OiSignal.LongUnwinding}`]: { stance: CombinedStance.DeRisking,      label: 'De-risking',       color: '#94a3b8', weak: false },
-    [`${OiSignal.LongBuildup}|${OiSignal.ShortCovering}`]:   { stance: CombinedStance.StrongBullish,  label: 'Strong Bullish',   color: '#22c55e', weak: false },
-    [`${OiSignal.ShortCovering}|${OiSignal.LongBuildup}`]:   { stance: CombinedStance.StrongBearish,  label: 'Strong Bearish',   color: '#ef4444', weak: false },
+    [`${OiSignal.ShortBuildup}|${OiSignal.ShortBuildup}`]:   { stance: CombinedStance.Pinning,        label: 'Pinning/Range',    color: 'var(--warn)', weak: false },
+    [`${OiSignal.LongBuildup}|${OiSignal.ShortBuildup}`]:    { stance: CombinedStance.Bullish,        label: 'Bullish',          color: 'var(--profit-light)', weak: false },
+    [`${OiSignal.ShortBuildup}|${OiSignal.LongBuildup}`]:    { stance: CombinedStance.Bearish,        label: 'Bearish',          color: 'var(--loss-light)', weak: false },
+    [`${OiSignal.LongBuildup}|${OiSignal.LongBuildup}`]:     { stance: CombinedStance.HighVolatility, label: 'High Volatility',  color: 'var(--violet-light)', weak: false },
+    [`${OiSignal.ShortCovering}|${OiSignal.ShortCovering}`]: { stance: CombinedStance.Breakout,       label: 'Breakout Setup',   color: 'var(--violet-light)', weak: false },
+    [`${OiSignal.LongUnwinding}|${OiSignal.LongUnwinding}`]: { stance: CombinedStance.DeRisking,      label: 'De-risking',       color: 'var(--slate)', weak: false },
+    [`${OiSignal.LongBuildup}|${OiSignal.ShortCovering}`]:   { stance: CombinedStance.StrongBullish,  label: 'Strong Bullish',   color: 'var(--profit)', weak: false },
+    [`${OiSignal.ShortCovering}|${OiSignal.LongBuildup}`]:   { stance: CombinedStance.StrongBearish,  label: 'Strong Bearish',   color: 'var(--loss)', weak: false },
   };
 
   if (bothLeg[key]) return bothLeg[key];
 
   if (peSignal === OiSignal.Neutral) {
     switch (ceSignal) {
-      case OiSignal.LongBuildup:   return { stance: CombinedStance.BullishWeak, label: 'Bullish (weak)',  color: '#4ade80', weak: true };
-      case OiSignal.ShortBuildup:  return { stance: CombinedStance.BearishWeak, label: 'Bearish (weak)',  color: '#f87171', weak: true };
-      case OiSignal.LongUnwinding: return { stance: CombinedStance.FadingBull,  label: 'Fading Bull',     color: '#94a3b8', weak: true };
-      case OiSignal.ShortCovering: return { stance: CombinedStance.FadingBear,  label: 'Fading Bear',     color: '#94a3b8', weak: true };
+      case OiSignal.LongBuildup:   return { stance: CombinedStance.BullishWeak, label: 'Bullish (weak)',  color: 'var(--profit-light)', weak: true };
+      case OiSignal.ShortBuildup:  return { stance: CombinedStance.BearishWeak, label: 'Bearish (weak)',  color: 'var(--loss-light)', weak: true };
+      case OiSignal.LongUnwinding: return { stance: CombinedStance.FadingBull,  label: 'Fading Bull',     color: 'var(--slate)', weak: true };
+      case OiSignal.ShortCovering: return { stance: CombinedStance.FadingBear,  label: 'Fading Bear',     color: 'var(--slate)', weak: true };
     }
   }
 
   if (ceSignal === OiSignal.Neutral) {
     switch (peSignal) {
-      case OiSignal.LongBuildup:   return { stance: CombinedStance.BearishWeak, label: 'Bearish (weak)',  color: '#f87171', weak: true };
-      case OiSignal.ShortBuildup:  return { stance: CombinedStance.BullishWeak, label: 'Bullish (weak)',  color: '#4ade80', weak: true };
-      case OiSignal.LongUnwinding: return { stance: CombinedStance.FadingBear,  label: 'Fading Bear',     color: '#94a3b8', weak: true };
-      case OiSignal.ShortCovering: return { stance: CombinedStance.FadingBull,  label: 'Fading Bull',     color: '#94a3b8', weak: true };
+      case OiSignal.LongBuildup:   return { stance: CombinedStance.BearishWeak, label: 'Bearish (weak)',  color: 'var(--loss-light)', weak: true };
+      case OiSignal.ShortBuildup:  return { stance: CombinedStance.BullishWeak, label: 'Bullish (weak)',  color: 'var(--profit-light)', weak: true };
+      case OiSignal.LongUnwinding: return { stance: CombinedStance.FadingBear,  label: 'Fading Bear',     color: 'var(--slate)', weak: true };
+      case OiSignal.ShortCovering: return { stance: CombinedStance.FadingBull,  label: 'Fading Bull',     color: 'var(--slate)', weak: true };
     }
   }
 
@@ -75,7 +75,7 @@ function combineSignals(ceSignal: OiSignalId, peSignal: OiSignalId): StanceConfi
   }
 
   // Mixed / transitional (all other combinations)
-  return { stance: CombinedStance.Transitional, label: 'Transitional', color: '#64748b', weak: false };
+  return { stance: CombinedStance.Transitional, label: 'Transitional', color: 'var(--slate-dark)', weak: false };
 }
 
 /**

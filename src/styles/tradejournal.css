@@ -59,11 +59,11 @@
 }
 
 .tj-mode-dot--paper {
-  background: #a78bfa;
+  background: var(--violet-light);
 }
 
 .tj-mode-dot--live {
-  background: #22c55e;
+  background: var(--profit);
 }
 
 /* ── Segment select — sizing only ── */
@@ -190,11 +190,11 @@
 /* P&L colors — used in table cells too, needs enough specificity */
 .heatmap-positive,
 .tj-table td.heatmap-positive,
-.tj-table .heatmap-positive { color: #22c55e !important; }
+.tj-table .heatmap-positive { color: var(--profit) !important; }
 
 .heatmap-negative,
 .tj-table td.heatmap-negative,
-.tj-table .heatmap-negative { color: #ef4444 !important; }
+.tj-table .heatmap-negative { color: var(--loss) !important; }
 
 /* ── Full-width chart layout ── */
 .heatmap-chart-outer {
@@ -285,11 +285,11 @@
 }
 
 .heatmap-cell--empty {
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--tint-rgb), 0.06);
 }
 
 .heatmap-cell--zero {
-  background: rgba(255, 255, 255, 0.14);
+  background: rgba(var(--tint-rgb), 0.14);
 }
 
 .heatmap-cell--hoverable {
@@ -302,20 +302,20 @@
 }
 
 /* Profit levels */
-.heatmap-cell--profit-1 { background: rgba(34, 197, 94, 0.25); }
-.heatmap-cell--profit-2 { background: rgba(34, 197, 94, 0.45); }
-.heatmap-cell--profit-3 { background: rgba(34, 197, 94, 0.70); }
-.heatmap-cell--profit-4 { background: rgba(34, 197, 94, 0.95); }
+.heatmap-cell--profit-1 { background: rgba(var(--profit-rgb), 0.25); }
+.heatmap-cell--profit-2 { background: rgba(var(--profit-rgb), 0.45); }
+.heatmap-cell--profit-3 { background: rgba(var(--profit-rgb), 0.70); }
+.heatmap-cell--profit-4 { background: rgba(var(--profit-rgb), 0.95); }
 
 /* Loss levels */
-.heatmap-cell--loss-1 { background: rgba(239, 68, 68, 0.25); }
-.heatmap-cell--loss-2 { background: rgba(239, 68, 68, 0.45); }
-.heatmap-cell--loss-3 { background: rgba(239, 68, 68, 0.70); }
-.heatmap-cell--loss-4 { background: rgba(239, 68, 68, 0.95); }
+.heatmap-cell--loss-1 { background: rgba(var(--loss-rgb), 0.25); }
+.heatmap-cell--loss-2 { background: rgba(var(--loss-rgb), 0.45); }
+.heatmap-cell--loss-3 { background: rgba(var(--loss-rgb), 0.70); }
+.heatmap-cell--loss-4 { background: rgba(var(--loss-rgb), 0.95); }
 
 /* Tooltip */
 .heatmap-tooltip {
-  background: #1e1e24;
+  background: var(--surface-tooltip);
   border: 1px solid var(--card-border);
   border-radius: 7px;
   padding: 7px 12px;
@@ -323,7 +323,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 16px rgba(var(--shade-rgb), 0.4);
   min-width: 130px;
 }
 
@@ -391,13 +391,13 @@
 
 /* Date group header row */
 .tj-group-row {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--tint-rgb), 0.03);
   cursor: pointer;
   user-select: none;
 }
 
 .tj-group-row:hover {
-  background: rgba(255, 255, 255, 0.06) !important;
+  background: rgba(var(--tint-rgb), 0.06) !important;
 }
 
 .tj-group-date {
@@ -483,7 +483,7 @@
 .tj-trade-meta span {
   padding: 2px 5px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(var(--tint-rgb), 0.05);
 }
 
 .tj-trade-meta__note {
@@ -503,13 +503,13 @@
 }
 
 .tj-badge--options {
-  background: rgba(99, 102, 241, 0.15);
-  color: #818cf8;
+  background: rgba(var(--indigo-rgb), 0.15);
+  color: var(--indigo-light);
 }
 
 .tj-badge--stocks {
-  background: rgba(245, 158, 11, 0.15);
-  color: #f59e0b;
+  background: rgba(var(--warn-rgb), 0.15);
+  color: var(--warn);
 }
 
 .tj-side {
@@ -520,11 +520,11 @@
 }
 
 .tj-side--buy {
-  background: rgba(34, 197, 94, 0.1);
-  color: #22c55e;
+  background: rgba(var(--profit-rgb), 0.1);
+  color: var(--profit);
 }
 
 .tj-side--sell {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  background: rgba(var(--loss-rgb), 0.1);
+  color: var(--loss);
 }

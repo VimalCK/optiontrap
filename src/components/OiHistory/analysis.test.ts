@@ -186,8 +186,8 @@ describe('classifyPattern', () => {
 describe('labels', () => {
   it('colours patterns by meaning', () => {
     expect(patternColor('RollingOverLong')).toBe('var(--accent)');
-    expect(patternColor('ExitingLongUnwind')).toBe('#ef4444');
-    expect(patternColor('LongBuildup')).toBe('#22c55e');
+    expect(patternColor('ExitingLongUnwind')).toBe('var(--loss)');
+    expect(patternColor('LongBuildup')).toBe('var(--profit)');
     expect(patternColor('Stable')).toBe('var(--text-secondary)');
   });
 

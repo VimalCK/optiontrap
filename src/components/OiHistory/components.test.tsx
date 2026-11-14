@@ -179,28 +179,28 @@ describe('StrikeOiChart', () => {
       renderToStaticMarkup(<StrikeOiChart optionType="CE" maxPrice={120} {...props} dates={[...props.dates, '2026-10-24']} dateMap={fairMap} showFair={showFair} />).replace(/<!-- -->/g, '');
 
     const off = render(false);
-    expect(off).not.toContain('stroke="#cbd5e1"');
+    expect(off).not.toContain('stroke="var(--slate-light)"');
     expect(off).not.toContain('+12%');
     expect(off).not.toContain('<polygon');
     expect(off).toContain('>avg</text>');
 
     const on = render(true);
-    expect(on).toContain('stroke="#cbd5e1" stroke-width="1" opacity="0.9"');
+    expect(on).toContain('stroke="var(--slate-light)" stroke-width="1" opacity="0.9"');
     expect(on.match(/<svg/g)).toHaveLength(1);
     // Bars switch from OI to the rich / cheap gap, with a % scale on the right axis.
     expect(on).not.toContain('opacity="0.25"');
     expect(on).toContain('>12%</text>');
     expect(on).toContain('+12%');
     expect(on).toContain('-8%');
-    expect(on).toContain('#f59e0b');
-    expect(on).toContain('#38bdf8');
+    expect(on).toContain('var(--warn)');
+    expect(on).toContain('var(--sky)');
     // Only days labelled Expensive or Cheap get a bar: a 7% gap the model calls Fair (IV within a
     // vol point of the curve, e.g. a cheap far-OTM option) gets none. No connectors from price to fair value.
     expect(on).not.toContain('+7%');
     expect(on.match(/<rect /g)?.length).toBe(2);
     expect(on).not.toContain('stroke-width="1.6"');
     // Fair line is light grey and the gap to the price line is one grey shaded area.
-    expect(on).toContain('stroke="#cbd5e1"');
+    expect(on).toContain('stroke="var(--slate-light)"');
     expect(on.match(/<polygon /g)?.length).toBe(1);
     expect(on).toContain('>avg</text>');
   });

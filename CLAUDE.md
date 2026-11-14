@@ -273,9 +273,16 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
 - **CSS:**
   - Plain CSS, one file per area in `src/styles/`, imported by the page/component.
   - BEM-style names prefixed by area (`automation-header__title`, `positions-table__source`, `automation-stage--rejected`).
-  - Use the theme variables from `global.css` (`--text-primary`, `--text-secondary`, `--accent`, `--card-bg`, `--card-border`,
-    `--radius`, `--card-gap`), never hard-coded theme colours, so dark/light and accent themes work. Colours that don't
-    change with the theme are hard-coded: profit/ok `#22c55e`, loss/error `#ef4444`.
+  - **Every colour is defined once, in the theme block at the top of `global.css`**, so a light theme only sets the same
+    names under `[data-theme='light']`. Never write a colour anywhere else (hex, `rgb()`/`rgba()` numbers, `white`/`black`), in
+    CSS or code; `src/styles/themeColours.test.ts` fails on one.
+    - Each palette colour is a channel triple and a solid: `--loss-rgb: 239, 68, 68` and `--loss`. Use `var(--loss)`, or
+      `rgba(var(--loss-rgb), 0.12)` for a tint. Translucent white over a surface is `--tint-rgb`, black `--shade-rgb`,
+      text on a coloured fill `--on-fill`.
+    - Prefer the roles (`--text-primary`, `--text-secondary`, `--accent`, `--card-bg`, `--card-border`, `--content-bg`);
+      profit/up is `--profit`, loss/down/error `--loss`, warning `--warn`. A new colour gets a token in the palette first.
+    - Code passes the same tokens as strings (`'var(--profit)'`) to inline styles and SVG attributes; a canvas reads the
+      channels with `getComputedStyle`.
   - Every page's first row is `--page-top-row-height` tall at `--page-top-offset`, lining up with the sidebar brand.
     Put page actions inside the content cards, not over the top-right strip.
 - Accessibility: buttons have `type="button"`; icon-only buttons have `aria-label` and `title`; sections use

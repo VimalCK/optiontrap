@@ -69,12 +69,12 @@ const PayoffChart: React.FC<{ group: RiskGroup; oiBars?: OiBar[]; spotPrice?: nu
     >
       <defs>
         <pattern id={profitPatternId} patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
-          <rect width="8" height="8" fill="rgba(34, 197, 94, 0.14)" />
-          <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(34, 197, 94, 0.55)" strokeWidth="0.6" />
+          <rect width="8" height="8" fill="rgba(var(--profit-rgb), 0.14)" />
+          <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(var(--profit-rgb), 0.55)" strokeWidth="0.6" />
         </pattern>
         <pattern id={lossPatternId} patternUnits="userSpaceOnUse" width="8" height="8" patternTransform="rotate(45)">
-          <rect width="8" height="8" fill="rgba(239, 68, 68, 0.14)" />
-          <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(239, 68, 68, 0.55)" strokeWidth="0.6" />
+          <rect width="8" height="8" fill="rgba(var(--loss-rgb), 0.14)" />
+          <line x1="0" y1="0" x2="0" y2="8" stroke="rgba(var(--loss-rgb), 0.55)" strokeWidth="0.6" />
         </pattern>
       </defs>
 

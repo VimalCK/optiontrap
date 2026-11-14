@@ -1,22 +1,145 @@
+/* The theme: every colour the app uses is defined here, once.
+   A colour is a channel triple (--name-rgb) and a solid (--name). Use the solid, or rgba(var(--name-rgb), alpha)
+   for a tint. A light theme sets the same names under [data-theme='light']. */
 :root,
 [data-theme='dark'] {
+  /* Palette */
+  /* Neutrals: light ink laid over dark surfaces (tints, borders, hovers) and black for shadows. */
+  --tint-rgb: 255, 255, 255;
+  --shade-rgb: 0, 0, 0;
+
+  /* Text and knobs drawn on a coloured fill. */
+  --on-fill-rgb: 255, 255, 255;
+
+  /* Dark text on a light chip. */
+  --ink-dark-rgb: 11, 11, 15;
+
+  /* Surfaces. */
+  --sidebar-bg-rgb: 15, 15, 18;
+  --content-bg-rgb: 22, 22, 26;
+  --card-bg-solid-rgb: 25, 25, 32;
+  --surface-popover-rgb: 28, 28, 34;
+  --surface-tooltip-rgb: 30, 30, 36;
+  --surface-strong-rgb: 58, 58, 68;
+  --surface-floating-rgb: 24, 24, 27;
+  --chart-label-rgb: 20, 22, 28;
+  --hatch-rgb: 40, 40, 40;
+  --navy-rgb: 15, 23, 42;
+  --navy-deep-rgb: 2, 6, 23;
+  --navy-gray-rgb: 17, 24, 39;
+  --backdrop-rgb: 4, 4, 8;
+
+  /* Profit / up, loss / down and warning, with their lighter and darker shades. */
+  --profit-rgb: 34, 197, 94;
+  --profit-light-rgb: 74, 222, 128;
+  --profit-pale-rgb: 134, 239, 172;
+  --profit-paler-rgb: 187, 247, 208;
+  --profit-dark-rgb: 22, 163, 74;
+  --profit-deep-rgb: 22, 101, 52;
+  --loss-rgb: 239, 68, 68;
+  --loss-light-rgb: 248, 113, 113;
+  --loss-pale-rgb: 252, 165, 165;
+  --loss-paler-rgb: 254, 202, 202;
+  --loss-dark-rgb: 220, 38, 38;
+  --loss-deep-rgb: 127, 29, 29;
+  --warn-rgb: 245, 158, 11;
+  --warn-light-rgb: 251, 191, 36;
+  --warn-pale-rgb: 252, 211, 77;
+  --warn-paler-rgb: 253, 230, 138;
+  --yellow-rgb: 234, 179, 8;
+  --orange-rgb: 249, 115, 22;
+
+  /* Hues: the brand indigo, the accent choices, and chart and badge colours. */
+  --indigo-rgb: 99, 102, 241;
+  --indigo-light-rgb: 129, 140, 248;
+  --violet-rgb: 139, 92, 246;
+  --violet-light-rgb: 167, 139, 250;
+  --violet-pale-rgb: 196, 181, 253;
+  --purple-rgb: 168, 85, 247;
+  --emerald-rgb: 16, 185, 129;
+  --cyan-rgb: 6, 182, 212;
+  --rose-rgb: 244, 63, 94;
+  --pink-rgb: 236, 72, 153;
+  --blue-rgb: 59, 130, 246;
+  --blue-light-rgb: 96, 165, 250;
+  --blue-pale-rgb: 191, 219, 254;
+  --sky-rgb: 56, 189, 248;
+  --sky-light-rgb: 125, 211, 252;
+  --slate-rgb: 148, 163, 184;
+  --slate-light-rgb: 203, 213, 225;
+  --slate-dark-rgb: 100, 116, 139;
+  --text-secondary-rgb: 161, 161, 170;
+
+  /* Each colour as a solid, for use without an alpha. */
+  --tint: rgb(var(--tint-rgb));
+  --shade: rgb(var(--shade-rgb));
+  --on-fill: rgb(var(--on-fill-rgb));
+  --ink-dark: rgb(var(--ink-dark-rgb));
+  --sidebar-bg: rgb(var(--sidebar-bg-rgb));
+  --content-bg: rgb(var(--content-bg-rgb));
+  --card-bg-solid: rgb(var(--card-bg-solid-rgb));
+  --surface-popover: rgb(var(--surface-popover-rgb));
+  --surface-tooltip: rgb(var(--surface-tooltip-rgb));
+  --surface-strong: rgb(var(--surface-strong-rgb));
+  --surface-floating: rgb(var(--surface-floating-rgb));
+  --chart-label: rgb(var(--chart-label-rgb));
+  --hatch: rgb(var(--hatch-rgb));
+  --navy: rgb(var(--navy-rgb));
+  --navy-deep: rgb(var(--navy-deep-rgb));
+  --navy-gray: rgb(var(--navy-gray-rgb));
+  --backdrop: rgb(var(--backdrop-rgb));
+  --profit: rgb(var(--profit-rgb));
+  --profit-light: rgb(var(--profit-light-rgb));
+  --profit-pale: rgb(var(--profit-pale-rgb));
+  --profit-paler: rgb(var(--profit-paler-rgb));
+  --profit-dark: rgb(var(--profit-dark-rgb));
+  --profit-deep: rgb(var(--profit-deep-rgb));
+  --loss: rgb(var(--loss-rgb));
+  --loss-light: rgb(var(--loss-light-rgb));
+  --loss-pale: rgb(var(--loss-pale-rgb));
+  --loss-paler: rgb(var(--loss-paler-rgb));
+  --loss-dark: rgb(var(--loss-dark-rgb));
+  --loss-deep: rgb(var(--loss-deep-rgb));
+  --warn: rgb(var(--warn-rgb));
+  --warn-light: rgb(var(--warn-light-rgb));
+  --warn-pale: rgb(var(--warn-pale-rgb));
+  --warn-paler: rgb(var(--warn-paler-rgb));
+  --yellow: rgb(var(--yellow-rgb));
+  --orange: rgb(var(--orange-rgb));
+  --indigo: rgb(var(--indigo-rgb));
+  --indigo-light: rgb(var(--indigo-light-rgb));
+  --violet: rgb(var(--violet-rgb));
+  --violet-light: rgb(var(--violet-light-rgb));
+  --violet-pale: rgb(var(--violet-pale-rgb));
+  --purple: rgb(var(--purple-rgb));
+  --emerald: rgb(var(--emerald-rgb));
+  --cyan: rgb(var(--cyan-rgb));
+  --rose: rgb(var(--rose-rgb));
+  --pink: rgb(var(--pink-rgb));
+  --blue: rgb(var(--blue-rgb));
+  --blue-light: rgb(var(--blue-light-rgb));
+  --blue-pale: rgb(var(--blue-pale-rgb));
+  --sky: rgb(var(--sky-rgb));
+  --sky-light: rgb(var(--sky-light-rgb));
+  --slate: rgb(var(--slate-rgb));
+  --slate-light: rgb(var(--slate-light-rgb));
+  --slate-dark: rgb(var(--slate-dark-rgb));
+  --text-secondary: rgb(var(--text-secondary-rgb));
+
+  /* Roles */
   --sidebar-width-expanded: 240px;
   --sidebar-width-collapsed: 72px;
-  --sidebar-bg: #0f0f12;
-  --sidebar-hover: rgba(255, 255, 255, 0.06);
-  --sidebar-active: rgba(99, 102, 241, 0.15);
-  --sidebar-border: rgba(255, 255, 255, 0.06);
-  --content-bg: #16161a;
-  --text-primary: #ffffffed;
-  --text-secondary: #a1a1aa;
-  --accent: #6366f1;
-  --accent-glow: rgba(99, 102, 241, 0.4);
-  --card-bg: rgba(255, 255, 255, 0.03);
-  --card-bg-solid: #191920;
-  --card-hover-bg: rgba(255, 255, 255, 0.05);
-  --card-border: rgba(255, 255, 255, 0.06);
-  --card-hover-border: rgba(99, 102, 241, 0.3);
-  --card-shadow: rgba(0, 0, 0, 0.3);
+  --sidebar-hover: rgba(var(--tint-rgb), 0.06);
+  --sidebar-active: rgba(var(--indigo-rgb), 0.15);
+  --sidebar-border: rgba(var(--tint-rgb), 0.06);
+  --text-primary: rgba(var(--tint-rgb), 0.929);
+  --accent: var(--indigo);
+  --accent-glow: rgba(var(--indigo-rgb), 0.4);
+  --card-bg: rgba(var(--tint-rgb), 0.03);
+  --card-hover-bg: rgba(var(--tint-rgb), 0.05);
+  --card-border: rgba(var(--tint-rgb), 0.06);
+  --card-hover-border: rgba(var(--indigo-rgb), 0.3);
+  --card-shadow: rgba(var(--shade-rgb), 0.3);
   --radius: 12px;
   --card-gap: 8px;                /* space between cards on every page */
   --transition-speed: 0.2s;
@@ -30,38 +153,38 @@
 
 /* Accent theme overrides */
 [data-accent='emerald'] {
-  --accent: #10b981;
-  --accent-glow: rgba(16, 185, 129, 0.4);
-  --sidebar-active: rgba(16, 185, 129, 0.15);
-  --card-hover-border: rgba(16, 185, 129, 0.3);
+  --accent: var(--emerald);
+  --accent-glow: rgba(var(--emerald-rgb), 0.4);
+  --sidebar-active: rgba(var(--emerald-rgb), 0.15);
+  --card-hover-border: rgba(var(--emerald-rgb), 0.3);
 }
 
 [data-accent='amber'] {
-  --accent: #f59e0b;
-  --accent-glow: rgba(245, 158, 11, 0.4);
-  --sidebar-active: rgba(245, 158, 11, 0.15);
-  --card-hover-border: rgba(245, 158, 11, 0.3);
+  --accent: var(--warn);
+  --accent-glow: rgba(var(--warn-rgb), 0.4);
+  --sidebar-active: rgba(var(--warn-rgb), 0.15);
+  --card-hover-border: rgba(var(--warn-rgb), 0.3);
 }
 
 [data-accent='rose'] {
-  --accent: #f43f5e;
-  --accent-glow: rgba(244, 63, 94, 0.4);
-  --sidebar-active: rgba(244, 63, 94, 0.15);
-  --card-hover-border: rgba(244, 63, 94, 0.3);
+  --accent: var(--rose);
+  --accent-glow: rgba(var(--rose-rgb), 0.4);
+  --sidebar-active: rgba(var(--rose-rgb), 0.15);
+  --card-hover-border: rgba(var(--rose-rgb), 0.3);
 }
 
 [data-accent='cyan'] {
-  --accent: #06b6d4;
-  --accent-glow: rgba(6, 182, 212, 0.4);
-  --sidebar-active: rgba(6, 182, 212, 0.15);
-  --card-hover-border: rgba(6, 182, 212, 0.3);
+  --accent: var(--cyan);
+  --accent-glow: rgba(var(--cyan-rgb), 0.4);
+  --sidebar-active: rgba(var(--cyan-rgb), 0.15);
+  --card-hover-border: rgba(var(--cyan-rgb), 0.3);
 }
 
 [data-accent='violet'] {
-  --accent: #8b5cf6;
-  --accent-glow: rgba(139, 92, 246, 0.4);
-  --sidebar-active: rgba(139, 92, 246, 0.15);
-  --card-hover-border: rgba(139, 92, 246, 0.3);
+  --accent: var(--violet);
+  --accent-glow: rgba(var(--violet-rgb), 0.4);
+  --sidebar-active: rgba(var(--violet-rgb), 0.15);
+  --card-hover-border: rgba(var(--violet-rgb), 0.3);
 }
 
 *,
@@ -98,12 +221,12 @@ body,
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(var(--tint-rgb), 0.12);
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.22);
+  background: rgba(var(--tint-rgb), 0.22);
 }
 
 /* Firefox has no ::-webkit-scrollbar; use the standard properties there only, since in
@@ -111,7 +234,7 @@ body,
 @supports not selector(::-webkit-scrollbar) {
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+    scrollbar-color: rgba(var(--tint-rgb), 0.12) transparent;
   }
 }
 
@@ -224,7 +347,7 @@ ol {
 
 .app-btn--primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-fill);
 }
 
 .app-btn--primary:hover:not(:disabled) {
@@ -232,13 +355,13 @@ ol {
 }
 
 .app-btn--danger {
-  background: #ef4444;
-  color: #fff;
+  background: var(--loss);
+  color: var(--on-fill);
 }
 
 .app-btn--danger:hover:not(:disabled) {
-  background: #dc2626;
-  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+  background: var(--loss-dark);
+  box-shadow: 0 2px 8px rgba(var(--loss-rgb), 0.3);
 }
 
 .app-btn--icon {

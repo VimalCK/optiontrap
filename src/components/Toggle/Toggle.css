@@ -52,7 +52,7 @@
 
 .toggle--on .toggle__knob {
   transform: translateX(16px);
-  background: #fff;
+  background: var(--on-fill);
 }
 
 .toggle:focus-visible .toggle__track {

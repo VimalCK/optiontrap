@@ -6,7 +6,7 @@
   align-items: center;
   justify-content: center;
   padding: 16px;
-  background: rgba(4, 4, 8, 0.62);
+  background: rgba(var(--backdrop-rgb), 0.62);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
   animation: modal-overlay-fade 0.18s ease-out;

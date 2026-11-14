@@ -22,15 +22,15 @@
 }
 
 .toast--green {
-  background: #166534;
-  border: 1px solid #22c55e;
-  color: #bbf7d0;
+  background: var(--profit-deep);
+  border: 1px solid var(--profit);
+  color: var(--profit-paler);
 }
 
 .toast--red {
-  background: #7f1d1d;
-  border: 1px solid #ef4444;
-  color: #fecaca;
+  background: var(--loss-deep);
+  border: 1px solid var(--loss);
+  color: var(--loss-paler);
 }
 
 @keyframes toast-in {

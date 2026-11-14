@@ -176,8 +176,8 @@ export const FuturesContext: React.FC<FuturesContextProps> = ({ futuresData, fil
               const volumeHeight = (day.volume / futuresChart.maxVolume) * futuresChart.plotHeight;
               return (
                 <g key={`bars-${day.date}`} onMouseEnter={() => setFuturesHover(day)} onMouseLeave={() => setFuturesHover(null)}>
-                  <rect x={day.x - barWidth} y={futuresChart.top + futuresChart.plotHeight - oiHeight} width={Math.max(barWidth, 0.5)} height={oiHeight} fill="#8b5cf6" opacity="0.45" rx="1" />
-                  <rect x={day.x} y={futuresChart.top + futuresChart.plotHeight - volumeHeight} width={Math.max(barWidth, 0.5)} height={volumeHeight} fill="#06b6d4" opacity="0.45" rx="1" />
+                  <rect x={day.x - barWidth} y={futuresChart.top + futuresChart.plotHeight - oiHeight} width={Math.max(barWidth, 0.5)} height={oiHeight} fill="var(--violet)" opacity="0.45" rx="1" />
+                  <rect x={day.x} y={futuresChart.top + futuresChart.plotHeight - volumeHeight} width={Math.max(barWidth, 0.5)} height={volumeHeight} fill="var(--cyan)" opacity="0.45" rx="1" />
                 </g>
               );
             })}
@@ -195,7 +195,7 @@ export const FuturesContext: React.FC<FuturesContextProps> = ({ futuresData, fil
               const tooltipX = Math.min(Math.max(futuresHover.x - tooltipWidth / 2, futuresChart.left), futuresChart.width - futuresChart.right - tooltipWidth);
               return (
                 <g pointerEvents="none">
-                  <rect x={tooltipX} y={futuresChart.top + 3} width={tooltipWidth} height={tooltipHeight} rx="3" fill="var(--card-bg-solid, #111827)" stroke="var(--card-border)" />
+                  <rect x={tooltipX} y={futuresChart.top + 3} width={tooltipWidth} height={tooltipHeight} rx="3" fill="var(--card-bg-solid)" stroke="var(--card-border)" />
                   <text x={tooltipX + 7} y={futuresChart.top + 14} fontSize="8" fill="var(--text-primary)">{formatFullDateLabel(futuresHover.date)}</text>
                   {futuresHover.closes.map((item, index) => (
                     <text key={item.label} x={tooltipX + 7} y={futuresChart.top + 26 + index * 12} fontSize="8" fill={item.color}>{item.label}: {item.close.toLocaleString('en-IN')}</text>
@@ -207,8 +207,8 @@ export const FuturesContext: React.FC<FuturesContextProps> = ({ futuresData, fil
             <ChartXAxis dates={futuresChart.days.map((day) => day.date)} padL={futuresChart.left} plotW={futuresChart.plotWidth} h={futuresChart.height} />
           </svg>
           <div className="oi-history__chart-legend">
-            <span className="oi-history__chart-legend-item"><span className="oi-history__chart-legend-swatch" style={{ background: '#8b5cf6' }} /> Total OI</span>
-            <span className="oi-history__chart-legend-item"><span className="oi-history__chart-legend-swatch" style={{ background: '#06b6d4' }} /> Total volume</span>
+            <span className="oi-history__chart-legend-item"><span className="oi-history__chart-legend-swatch" style={{ background: 'var(--violet)' }} /> Total OI</span>
+            <span className="oi-history__chart-legend-item"><span className="oi-history__chart-legend-swatch" style={{ background: 'var(--cyan)' }} /> Total volume</span>
             {futuresChart.lines.map((line) => (
               <span key={line.expiry} className="oi-history__chart-legend-item" title={line.tradingsymbol}><span className="oi-history__chart-legend-swatch" style={{ background: line.color }} /> {line.label}</span>
             ))}

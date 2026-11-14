@@ -7,7 +7,7 @@
 .analytics-tabs {
   border: 1px solid var(--card-border);
   background: var(--card-bg);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 18px 40px rgba(var(--shade-rgb), 0.12);
 }
 
 .analytics-tabs {
@@ -37,7 +37,7 @@
 
 .analytics-tab:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--tint-rgb), 0.04);
 }
 
 .analytics-tab--active {
@@ -59,9 +59,9 @@
 .analytics-content .card {
   border-radius: 16px;
   background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.01)),
+    linear-gradient(145deg, rgba(var(--tint-rgb), 0.035), rgba(var(--tint-rgb), 0.01)),
     var(--card-bg);
-  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 14px 32px rgba(var(--shade-rgb), 0.12);
 }
 
 .analytics-content .card__title,
@@ -74,14 +74,14 @@
   padding: 10px 12px;
   border: 1px solid var(--card-border);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--tint-rgb), 0.03);
 }
 
 .analytics-content .tj-mode-tabs,
 .analytics-content .tj-presets {
   border-radius: 999px;
   padding: 4px;
-  background: rgba(255, 255, 255, 0.035);
+  background: rgba(var(--tint-rgb), 0.035);
 }
 
 .analytics-content .tj-mode-tab,
@@ -98,7 +98,7 @@
   padding: 12px;
   border: 1px solid var(--card-border);
   border-radius: 14px;
-  background: rgba(255, 255, 255, 0.025);
+  background: rgba(var(--tint-rgb), 0.025);
 }
 
 .analytics-content .heatmap-stat__label {
@@ -120,7 +120,7 @@
 
 .analytics-content .tj-table th,
 .analytics-content .oi-history__table th {
-  background: rgba(255, 255, 255, 0.035);
+  background: rgba(var(--tint-rgb), 0.035);
   font-size: 10px;
   font-weight: 800;
 }
@@ -128,7 +128,7 @@
 /* The OI grid pins its pattern and strike columns, so its headers need an
    opaque base under the tint or scrolled headers show through them. */
 .analytics-content .oi-history__table th {
-  background: linear-gradient(rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.035)), var(--card-bg-solid);
+  background: linear-gradient(rgba(var(--tint-rgb), 0.035), rgba(var(--tint-rgb), 0.035)), var(--card-bg-solid);
 }
 
 .analytics-content .tj-table tbody tr,
@@ -138,7 +138,7 @@
 
 .analytics-content .tj-table tbody tr:hover,
 .analytics-content .oi-history__table tbody tr:hover {
-  background: rgba(255, 255, 255, 0.045);
+  background: rgba(var(--tint-rgb), 0.045);
 }
 
 .analytics-content .tj-badge,

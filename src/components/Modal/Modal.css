@@ -11,7 +11,7 @@
     radial-gradient(120% 60% at 100% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 55%),
     var(--content-bg);
   color: var(--text-primary);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.55);
+  box-shadow: 0 24px 80px rgba(var(--shade-rgb), 0.55);
   outline: none;
   animation: modal-rise 0.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }

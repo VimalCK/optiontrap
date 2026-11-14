@@ -75,7 +75,7 @@
 
 .btn--primary {
   background: var(--accent);
-  color: #fff;
+  color: var(--on-fill);
 }
 
 .btn--primary:hover:not(:disabled) {
@@ -91,13 +91,13 @@
 
 /* Danger Button */
 .btn--danger {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(var(--loss-rgb), 0.15);
+  color: var(--loss);
+  border: 1px solid rgba(var(--loss-rgb), 0.3);
 }
 
 .btn--danger:hover {
-  background: rgba(239, 68, 68, 0.25);
+  background: rgba(var(--loss-rgb), 0.25);
   transform: translateY(-1px);
 }
 
@@ -152,9 +152,9 @@
   margin-top: var(--card-gap);
   position: relative;
   overflow: hidden;
-  border-color: rgba(99, 102, 241, 0.22);
+  border-color: rgba(var(--indigo-rgb), 0.22);
   background:
-    radial-gradient(circle at top right, rgba(99, 102, 241, 0.16), transparent 34%),
+    radial-gradient(circle at top right, rgba(var(--indigo-rgb), 0.16), transparent 34%),
     var(--card-bg);
 }
 
@@ -164,7 +164,7 @@
   left: 8%;
   right: 8%;
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(99, 102, 241, 0.55), rgba(168, 85, 247, 0.45), transparent);
+  background: linear-gradient(90deg, transparent, rgba(var(--indigo-rgb), 0.55), rgba(var(--purple-rgb), 0.45), transparent);
   content: '';
 }
 
@@ -233,15 +233,15 @@
 }
 
 .profile-subscription-badge--active {
-  border: 1px solid rgba(34, 197, 94, 0.28);
-  background: rgba(34, 197, 94, 0.12);
-  color: #22c55e;
+  border: 1px solid rgba(var(--profit-rgb), 0.28);
+  background: rgba(var(--profit-rgb), 0.12);
+  color: var(--profit);
 }
 
 .profile-subscription-badge--inactive {
-  border: 1px solid rgba(239, 68, 68, 0.28);
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
+  border: 1px solid rgba(var(--loss-rgb), 0.28);
+  background: rgba(var(--loss-rgb), 0.1);
+  color: var(--loss);
 }
 
 .profile-subscription-grid {
@@ -254,10 +254,10 @@
 
 .profile-subscription-stat {
   padding: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.075);
+  border: 1px solid rgba(var(--tint-rgb), 0.075);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.045);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.035);
+  background: rgba(var(--tint-rgb), 0.045);
+  box-shadow: inset 0 1px 0 rgba(var(--tint-rgb), 0.035);
 }
 
 .profile-subscription-stat span {
@@ -278,7 +278,7 @@
 
 /* Danger Zone */
 .profile-danger-zone {
-  border: 1px solid rgba(239, 68, 68, 0.25);
+  border: 1px solid rgba(var(--loss-rgb), 0.25);
 }
 
 /* The running build, under the last card (it used to sit in the app-wide footer). */
@@ -319,7 +319,7 @@
 
 .profile-danger-zone__warning {
   font-size: 13px;
-  color: #ef4444;
+  color: var(--loss);
   font-weight: 500;
   text-align: right;
 }
@@ -371,9 +371,9 @@
   letter-spacing: 0.6px;
   text-transform: uppercase;
   vertical-align: middle;
-  color: #f59e0b;
-  background: rgba(245, 158, 11, 0.14);
-  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: var(--warn);
+  background: rgba(var(--warn-rgb), 0.14);
+  border: 1px solid rgba(var(--warn-rgb), 0.4);
 }
 
 /* ── Settings page: one card per setting, in the Dashboard's style ── */
@@ -412,9 +412,9 @@
   border: 1px solid var(--card-border);
   border-radius: 18px;
   background:
-    radial-gradient(circle at top right, rgba(99, 102, 241, 0.16), transparent 34%),
+    radial-gradient(circle at top right, rgba(var(--indigo-rgb), 0.16), transparent 34%),
     var(--card-bg);
-  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.14);
+  box-shadow: 0 18px 40px rgba(var(--shade-rgb), 0.14);
 }
 
 .settings-card--wide {
@@ -464,7 +464,7 @@
   border: 1px solid var(--card-border);
   border-radius: 999px;
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--tint-rgb), 0.04);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.6px;
@@ -473,9 +473,9 @@
 }
 
 .settings-badge--admin {
-  color: #f59e0b;
-  background: rgba(245, 158, 11, 0.12);
-  border-color: rgba(245, 158, 11, 0.4);
+  color: var(--warn);
+  background: rgba(var(--warn-rgb), 0.12);
+  border-color: rgba(var(--warn-rgb), 0.4);
 }
 
 /* Trading mode: a pill toggle like the app's tab bars. */
@@ -507,7 +507,7 @@
 
 .settings-toggle__option:hover {
   color: var(--text-primary);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(var(--tint-rgb), 0.04);
 }
 
 .settings-toggle__dot {
@@ -529,8 +529,8 @@
 
 /* Live means real money: red, so it is never mistaken for paper. */
 .settings-toggle__option--live.settings-toggle__option--active {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.12);
+  color: var(--loss);
+  background: rgba(var(--loss-rgb), 0.12);
 }
 
 .settings-hint {
@@ -540,7 +540,7 @@
 }
 
 .settings-hint--live {
-  color: #ef4444;
+  color: var(--loss);
 }
 
 /* Accent colour: round swatches; the chosen one has a ring. */
@@ -557,7 +557,7 @@
   padding: 8px 14px 8px 10px;
   border: 1px solid var(--card-border);
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--tint-rgb), 0.03);
   color: var(--text-secondary);
   font: inherit;
   font-size: 13px;
@@ -631,14 +631,14 @@
   padding: 0;
   border: none;
   border-radius: 50%;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(var(--tint-rgb), 0.06);
   color: var(--text-secondary);
   cursor: pointer;
 }
 
 .settings-chip__remove:hover {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.15);
+  color: var(--loss);
+  background: rgba(var(--loss-rgb), 0.15);
 }
 
 /* Notifications: one row per channel. */

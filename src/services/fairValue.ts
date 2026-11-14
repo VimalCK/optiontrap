@@ -349,10 +349,10 @@ export function volVerdict(atmIv: number | null, realized: number | null): VolVe
 }
 
 /** Colour of the fair-value line; a light grey kept clear of the expiry palette and the rich / cheap colours. */
-export const FAIR_LINE_COLOR = '#cbd5e1';
+export const FAIR_LINE_COLOR = 'var(--slate-light)';
 
 export function richnessColor(richness: RichnessId | null): string {
-  if (richness === Richness.Expensive) return '#f59e0b';
-  if (richness === Richness.Cheap) return '#38bdf8';
+  if (richness === Richness.Expensive) return 'var(--warn)';
+  if (richness === Richness.Cheap) return 'var(--sky)';
   return 'var(--text-secondary)';
 }

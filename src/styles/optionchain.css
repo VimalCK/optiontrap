@@ -46,7 +46,7 @@
 .oc-recent-symbols__chip:hover {
   color: var(--text-primary);
   border-color: var(--accent);
-  background: rgba(99, 102, 241, 0.08);
+  background: rgba(var(--indigo-rgb), 0.08);
 }
 
 .oc-expiry-bar__label {
@@ -160,14 +160,14 @@
 
 .oc-header-ce {
   text-align: center;
-  color: #22c55e !important;
-  background: rgba(34, 197, 94, 0.05);
+  color: var(--profit) !important;
+  background: rgba(var(--profit-rgb), 0.05);
 }
 
 .oc-header-pe {
   text-align: center;
-  color: #ef4444 !important;
-  background: rgba(239, 68, 68, 0.05);
+  color: var(--loss) !important;
+  background: rgba(var(--loss-rgb), 0.05);
 }
 
 .oc-header-strike {
@@ -258,13 +258,13 @@
 
 .oc-oi-bar--ce {
   right: 50%;
-  background: rgba(34, 197, 94, 0.35);
+  background: rgba(var(--profit-rgb), 0.35);
   border-radius: 1px 0 0 1px;
 }
 
 .oc-oi-bar--pe {
   left: 50%;
-  background: rgba(239, 68, 68, 0.35);
+  background: rgba(var(--loss-rgb), 0.35);
   border-radius: 0 1px 1px 0;
 }
 
@@ -284,20 +284,20 @@
 }
 
 .oc-cell-chg.positive {
-  color: #22c55e;
+  color: var(--profit);
 }
 
 .oc-cell-chg.negative {
-  color: #ef4444;
+  color: var(--loss);
 }
 
 /* ITM Shading */
 .oc-cell--itm-ce {
-  background: rgba(34, 197, 94, 0.06);
+  background: rgba(var(--profit-rgb), 0.06);
 }
 
 .oc-cell--itm-pe {
-  background: rgba(239, 68, 68, 0.06);
+  background: rgba(var(--loss-rgb), 0.06);
 }
 
 /* Keep ATM row styling above ITM shading */
@@ -389,7 +389,7 @@
   bottom: 0;
   left: 50%;
   width: 0;
-  border-left: 1px dashed rgba(255, 255, 255, 0.2);
+  border-left: 1px dashed rgba(var(--tint-rgb), 0.2);
   pointer-events: none;
 }
 
@@ -413,9 +413,9 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  background: rgba(99, 102, 241, 0.04);
-  border-left: 1px dashed rgba(99, 102, 241, 0.4);
-  border-right: 1px dashed rgba(99, 102, 241, 0.4);
+  background: rgba(var(--indigo-rgb), 0.04);
+  border-left: 1px dashed rgba(var(--indigo-rgb), 0.4);
+  border-right: 1px dashed rgba(var(--indigo-rgb), 0.4);
   pointer-events: none;
   z-index: 0;
 }
@@ -424,8 +424,8 @@
   width: 8px;
   height: 8px;
   border-radius: 2px;
-  background: rgba(99, 102, 241, 0.15);
-  border: 1px solid rgba(99, 102, 241, 0.4);
+  background: rgba(var(--indigo-rgb), 0.15);
+  border: 1px solid rgba(var(--indigo-rgb), 0.4);
 }
 
 .oc-chart__bar-group {
@@ -457,20 +457,20 @@
 }
 
 .oc-chart__bar--ce {
-  background: rgba(34, 197, 94, 0.7);
+  background: rgba(var(--profit-rgb), 0.7);
 }
 
 .oc-chart__bar--pe {
-  background: rgba(239, 68, 68, 0.7);
+  background: rgba(var(--loss-rgb), 0.7);
 }
 
 /* Volume-confirmed glow */
 .oc-chart__bar--confirmed.oc-chart__bar--ce {
-  box-shadow: 0 0 6px rgba(34, 197, 94, 0.6), 0 0 12px rgba(34, 197, 94, 0.3);
+  box-shadow: 0 0 6px rgba(var(--profit-rgb), 0.6), 0 0 12px rgba(var(--profit-rgb), 0.3);
 }
 
 .oc-chart__bar--confirmed.oc-chart__bar--pe {
-  box-shadow: 0 0 6px rgba(239, 68, 68, 0.6), 0 0 12px rgba(239, 68, 68, 0.3);
+  box-shadow: 0 0 6px rgba(var(--loss-rgb), 0.6), 0 0 12px rgba(var(--loss-rgb), 0.3);
 }
 
 /* Crosshatch pattern for newly added OI */
@@ -483,8 +483,8 @@
     45deg,
     transparent,
     transparent 3px,
-    rgba(40, 40, 40, 0.7) 3px,
-    rgba(40, 40, 40, 0.7) 6px
+    rgba(var(--hatch-rgb), 0.7) 3px,
+    rgba(var(--hatch-rgb), 0.7) 6px
   );
 }
 
@@ -510,11 +510,11 @@
 }
 
 .oc-chart__bar-prev--ce {
-  border-color: #22c55e;
+  border-color: var(--profit);
 }
 
 .oc-chart__bar-prev--pe {
-  border-color: #ef4444;
+  border-color: var(--loss);
 }
 
 
@@ -538,11 +538,11 @@
 }
 
 .oc-chart__velocity--up {
-  color: #22c55e;
+  color: var(--profit);
 }
 
 .oc-chart__velocity--down {
-  color: #ef4444;
+  color: var(--loss);
 }
 
 /* Signal heatmap row */
@@ -583,9 +583,9 @@
 }
 
 .oc-chart__tooltip-confidence { font-weight: 600; }
-.oc-chart__tooltip-confidence--high { color: #22c55e; }
-.oc-chart__tooltip-confidence--medium { color: #a1a1aa; }
-.oc-chart__tooltip-confidence--low { color: #f59e0b; }
+.oc-chart__tooltip-confidence--high { color: var(--profit); }
+.oc-chart__tooltip-confidence--medium { color: var(--text-secondary); }
+.oc-chart__tooltip-confidence--low { color: var(--warn); }
 
 .oc-chart__legend {
   display: flex;
@@ -601,7 +601,7 @@
   align-items: center;
   gap: 6px;
   color: var(--text-secondary);
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  text-shadow: 0 1px 2px rgba(var(--shade-rgb), 0.15);
   font-size: 10px;
 }
 
@@ -612,11 +612,11 @@
 }
 
 .oc-chart__legend-dot--ce {
-  background: rgba(34, 197, 94, 0.7);
+  background: rgba(var(--profit-rgb), 0.7);
 }
 
 .oc-chart__legend-dot--pe {
-  background: rgba(239, 68, 68, 0.7);
+  background: rgba(var(--loss-rgb), 0.7);
 }
 
 /* Chart Tooltip */
@@ -642,10 +642,10 @@
   width: max-content;
   min-width: 210px;
   background: var(--sidebar-bg);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(var(--tint-rgb), 0.1);
   border-radius: 10px;
   padding: 10px;
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 10px 28px rgba(var(--shade-rgb), 0.45);
   font-size: 10px;
   line-height: 1.35;
   white-space: nowrap;
@@ -708,16 +708,16 @@
   margin-top: 6px;
   padding: 6px 8px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(var(--tint-rgb), 0.03);
   border-left: 2px solid;
 }
 
 .oc-tip__side--ce {
-  border-left-color: rgba(34, 197, 94, 0.6);
+  border-left-color: rgba(var(--profit-rgb), 0.6);
 }
 
 .oc-tip__side--pe {
-  border-left-color: rgba(239, 68, 68, 0.6);
+  border-left-color: rgba(var(--loss-rgb), 0.6);
 }
 
 .oc-tip__side-title {
@@ -729,11 +729,11 @@
 }
 
 .oc-tip__side--ce .oc-tip__side-title {
-  color: #22c55e;
+  color: var(--profit);
 }
 
 .oc-tip__side--pe .oc-tip__side-title {
-  color: #ef4444;
+  color: var(--loss);
 }
 
 .oc-tip__row {
@@ -811,23 +811,23 @@
 }
 
 .oc-chart__tooltip-sell-btn--pe {
-  background: rgba(239, 68, 68, 0.12);
-  border-color: rgba(239, 68, 68, 0.4);
-  color: #ef4444;
+  background: rgba(var(--loss-rgb), 0.12);
+  border-color: rgba(var(--loss-rgb), 0.4);
+  color: var(--loss);
 }
 
 .oc-chart__tooltip-sell-btn--pe:not(:disabled):hover {
-  background: rgba(239, 68, 68, 0.25);
+  background: rgba(var(--loss-rgb), 0.25);
 }
 
 .oc-chart__tooltip-sell-btn--ce {
-  background: rgba(34, 197, 94, 0.1);
-  border-color: rgba(34, 197, 94, 0.4);
-  color: #22c55e;
+  background: rgba(var(--profit-rgb), 0.1);
+  border-color: rgba(var(--profit-rgb), 0.4);
+  color: var(--profit);
 }
 
 .oc-chart__tooltip-sell-btn--ce:not(:disabled):hover {
-  background: rgba(34, 197, 94, 0.22);
+  background: rgba(var(--profit-rgb), 0.22);
 }
 
 
@@ -846,11 +846,11 @@
 }
 
 .oc-chart__pattern-label--up {
-  color: #4ade80;
+  color: var(--profit-light);
 }
 
 .oc-chart__pattern-label--down {
-  color: #f87171;
+  color: var(--loss-light);
 }
 
 .oc-chart__pattern-label--neutral {
@@ -898,24 +898,24 @@
 
 .oc-ltp-action-btn--buy {
   left: 4px;
-  background: rgba(34, 197, 94, 0.15);
-  color: #22c55e;
-  border: 1px solid rgba(34, 197, 94, 0.3);
+  background: rgba(var(--profit-rgb), 0.15);
+  color: var(--profit);
+  border: 1px solid rgba(var(--profit-rgb), 0.3);
 }
 
 .oc-ltp-action-btn--buy:hover {
-  background: rgba(34, 197, 94, 0.3);
+  background: rgba(var(--profit-rgb), 0.3);
 }
 
 .oc-ltp-action-btn--sell {
   right: 4px;
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
-  border: 1px solid rgba(239, 68, 68, 0.3);
+  background: rgba(var(--loss-rgb), 0.15);
+  color: var(--loss);
+  border: 1px solid rgba(var(--loss-rgb), 0.3);
 }
 
 .oc-ltp-action-btn--sell:hover {
-  background: rgba(239, 68, 68, 0.3);
+  background: rgba(var(--loss-rgb), 0.3);
 }
 
 .oc-cell-ltp--hover-btns:hover .oc-ltp-action-btn {
