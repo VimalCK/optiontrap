@@ -1,7 +1,7 @@
 -- The base schema: every table, constraint and index the migrations it
 -- replaces built, written as their end state (renamed tables and columns under
 -- their current names, added columns in their tables, indexes beside them).
--- replaces: 026_horizon_orders_and_renames.sql
+-- replaces: 001_boolean_flags_and_enum_values.sql
 --
 -- The line above names the last migration folded in. A new database runs this
 -- file; a database that has that migration recorded already has all of this,
@@ -12,6 +12,11 @@
 -- Tables come in dependency order (a table before the ones that reference it).
 -- Each index says which query or route it serves. Every foreign key column has
 -- an index, so joins and ON DELETE stay index lookups.
+--
+-- A column holding an enum value stores its member's name (shared/*Enums.js:
+-- 'Open' for OrderStatus.Open; Kite's own codes keep Kite's spelling, 'BUY',
+-- 'NFO') and has a CHECK listing the members. The app's SQL names them through
+-- sqlEnum (server/sql.js); this file, a fixed record, writes them as text.
 
 -- ── Users, subscriptions, sessions ──
 
@@ -20,13 +25,14 @@ CREATE TABLE IF NOT EXISTS users (
   user_id    TEXT PRIMARY KEY,
   user_name  TEXT,
   updated_at TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
-  is_admin   INTEGER NOT NULL DEFAULT 0
+  is_admin   BOOLEAN NOT NULL DEFAULT false
 );
 
 -- Admin user list: non-admins, most recently updated first, 500 at a time.
-CREATE INDEX IF NOT EXISTS users_non_admin_updated_idx ON users (updated_at DESC) WHERE is_admin = 0;
+CREATE INDEX IF NOT EXISTS users_non_admin_updated_idx ON users (updated_at DESC) WHERE NOT is_admin;
 
 -- The plans a user can subscribe to (self-activated until payments exist).
+-- duration_unit: DurationUnit.
 CREATE TABLE IF NOT EXISTS subscription_plans (
   id             TEXT PRIMARY KEY,
   name           TEXT NOT NULL,
@@ -34,22 +40,27 @@ CREATE TABLE IF NOT EXISTS subscription_plans (
   price          DOUBLE PRECISION NOT NULL DEFAULT 0,
   currency       TEXT NOT NULL DEFAULT 'INR',
   "interval"     TEXT NOT NULL DEFAULT 'month',
-  is_active      INTEGER NOT NULL DEFAULT 1,
+  is_active      BOOLEAN NOT NULL DEFAULT true,
   created_at     TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
   updated_at     TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
   duration_count INTEGER NOT NULL DEFAULT 1,
-  duration_unit  TEXT NOT NULL DEFAULT 'month'
+  duration_unit  TEXT NOT NULL DEFAULT 'Month' CHECK (duration_unit IN ('Day', 'Week', 'Month', 'Year'))
 );
 
+-- The plans list and the default plan (getActiveSubscriptionPlans,
+-- activateSubscription): active plans, cheapest first.
+CREATE INDEX IF NOT EXISTS subscription_plans_active_price_idx ON subscription_plans (price, id) WHERE is_active;
+
 -- A user's subscriptions to a plan (requireSubscription checks the latest).
+-- status: SubscriptionState as stored; provider: SubscriptionProvider.
 CREATE TABLE IF NOT EXISTS subscriptions (
   id                       TEXT PRIMARY KEY,
   user_id                  TEXT NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
   plan_id                  TEXT NOT NULL REFERENCES subscription_plans (id),
-  status                   TEXT NOT NULL,
+  status                   TEXT NOT NULL CHECK (status IN ('Active', 'Cancelled', 'Expired')),
   starts_at                TEXT,
   expires_at               TEXT,
-  provider                 TEXT,
+  provider                 TEXT CHECK (provider IN ('Internal', 'Admin')),
   provider_subscription_id TEXT,
   provider_payment_id      TEXT,
   created_at               TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
@@ -63,14 +74,15 @@ CREATE INDEX IF NOT EXISTS subscriptions_user_latest_idx ON subscriptions (user_
 CREATE INDEX IF NOT EXISTS idx_subscriptions_status ON subscriptions (status);
 
 -- Feedback users send from the app, read on the Admin Feedback page.
+-- type: FeedbackType; status: FeedbackStatus.
 CREATE TABLE IF NOT EXISTS feedback (
   id         TEXT PRIMARY KEY,
   user_id    TEXT NOT NULL REFERENCES users (user_id) ON DELETE CASCADE,
-  type       TEXT NOT NULL,
+  type       TEXT NOT NULL CHECK (type IN ('Bug', 'Feature', 'General', 'Subscription')),
   message    TEXT NOT NULL,
   page_url   TEXT,
   user_agent TEXT,
-  status     TEXT NOT NULL DEFAULT 'open',
+  status     TEXT NOT NULL DEFAULT 'Open' CHECK (status IN ('Open', 'Reviewed', 'Resolved')),
   created_at TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
   updated_at TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
 );
@@ -114,7 +126,7 @@ CREATE TABLE IF NOT EXISTS watchlist_items (
   watchlist_id     TEXT NOT NULL REFERENCES watchlists (id) ON DELETE CASCADE,
   instrument_token BIGINT NOT NULL,
   tradingsymbol    TEXT NOT NULL,
-  exchange         TEXT NOT NULL DEFAULT 'NSE',
+  exchange         TEXT NOT NULL DEFAULT 'NSE' CHECK (exchange IN ('NSE', 'BSE', 'NFO', 'BFO')),
   sort_order       BIGINT NOT NULL DEFAULT 0,
   added_at         TEXT DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS')
 );
@@ -136,13 +148,14 @@ CREATE INDEX IF NOT EXISTS watchlist_items_instrument_idx ON watchlist_items (in
 --   tradingview_symbol  TradingView symbol when it differs from the tradingsymbol.
 --   always_snapshot     Option-chain OI snapshot every trading day.
 --   is_market_reference The index the market's direction is read from.
+-- The index rows are seeded with these at the end of this file.
 CREATE TABLE IF NOT EXISTS instruments (
   instrument_token    BIGINT PRIMARY KEY,
   exchange_token      BIGINT NOT NULL,
   tradingsymbol       TEXT NOT NULL,
   name                TEXT NOT NULL,
-  exchange            TEXT NOT NULL DEFAULT 'NSE',
-  instrument_type     TEXT NOT NULL DEFAULT 'EQ',
+  exchange            TEXT NOT NULL DEFAULT 'NSE' CHECK (exchange IN ('NSE', 'BSE', 'NFO', 'BFO')),
+  instrument_type     TEXT NOT NULL DEFAULT 'EQ' CHECK (instrument_type IN ('CE', 'PE', 'FUT', 'EQ')),
   strike              DOUBLE PRECISION,
   expiry              TEXT,
   lot_size            BIGINT,
@@ -196,7 +209,7 @@ CREATE TABLE IF NOT EXISTS oi_history_options (
   instrument_token BIGINT NOT NULL,
   tradingsymbol    TEXT NOT NULL,
   strike           DOUBLE PRECISION,
-  option_type      TEXT,
+  option_type      TEXT CHECK (option_type IN ('CE', 'PE')),
   expiry           TEXT,
   open             DOUBLE PRECISION,
   high             DOUBLE PRECISION,
@@ -238,7 +251,9 @@ CREATE TABLE IF NOT EXISTS oi_history_futures (
 CREATE INDEX IF NOT EXISTS idx_oi_history_futures_scrip_expiry ON oi_history_futures (scrip, expiry, date);
 
 -- Option Analyzer trade setups recorded per user, with their outcomes checked
--- nightly. deleted_at soft-deletes a signal.
+-- nightly. deleted_at soft-deletes a signal. details holds the setup's
+-- analysis (SellingSetup, OiFlow, RolloverPattern … as member names), which
+-- the OI History signal stats slice by.
 CREATE TABLE IF NOT EXISTS trade_setup_signals (
   id                   BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
   user_id              TEXT NOT NULL,
@@ -246,16 +261,16 @@ CREATE TABLE IF NOT EXISTS trade_setup_signals (
   signal_date          TEXT NOT NULL,
   expiry               TEXT,
   strike               DOUBLE PRECISION NOT NULL,
-  option_type          TEXT NOT NULL,
-  action               TEXT NOT NULL,
-  status               TEXT NOT NULL,
+  option_type          TEXT NOT NULL CHECK (option_type IN ('CE', 'PE')),
+  action               TEXT NOT NULL CHECK (action IN ('BUY', 'SELL')),
+  status               TEXT NOT NULL CHECK (status IN ('Confirmed', 'Watch', 'Avoid')),
   entry_premium        DOUBLE PRECISION,
   spot_price           DOUBLE PRECISION,
   details              JSONB NOT NULL DEFAULT '{}'::jsonb,
   outcome_price        DOUBLE PRECISION,
   outcome_date         TEXT,
   outcome_return       DOUBLE PRECISION,
-  outcome_status       TEXT,
+  outcome_status       TEXT CHECK (outcome_status IN ('Open', 'Profit', 'Loss')),
   created_at           TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
   max_favorable_return DOUBLE PRECISION,
   max_adverse_return   DOUBLE PRECISION,
@@ -285,7 +300,9 @@ CREATE TABLE IF NOT EXISTS stock_daily_candles (
   PRIMARY KEY (instrument_token, date)
 );
 
--- Per stock: how far its candles are synced, and its last scan.
+-- Per stock: how far its candles are synced, and its last scan. scan_summary
+-- is what the watchlist's Setups column shows (StockState, MarketRelation and
+-- each setup's StockSetupType and side, as member names).
 CREATE TABLE IF NOT EXISTS stock_candle_sync (
   instrument_token   BIGINT PRIMARY KEY,
   latest_candle_date TEXT,
@@ -294,18 +311,20 @@ CREATE TABLE IF NOT EXISTS stock_candle_sync (
   scan_summary       JSONB
 );
 
--- Setups the stock scan found, tracked until stopped out or on target.
+-- Setups the stock scan found, tracked until stopped out or on target, shown
+-- on the stock setups scorecard (GET /api/stock-setups/scorecard).
+-- setup_type: StockSetupType; status: SetupOutcomeStatus.
 CREATE TABLE IF NOT EXISTS stock_setup_signals (
   id                BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
   instrument_token  BIGINT NOT NULL,
   tradingsymbol     TEXT NOT NULL,
   signal_date       TEXT NOT NULL,
-  setup_type        TEXT NOT NULL,
-  direction         TEXT NOT NULL,
+  setup_type        TEXT NOT NULL CHECK (setup_type IN ('Pullback', 'Reversal', 'Breakout', 'Rejection', 'Breakdown')),
+  direction         TEXT NOT NULL CHECK (direction IN ('BUY', 'SELL')),
   entry             DOUBLE PRECISION NOT NULL,
   stop              DOUBLE PRECISION NOT NULL,
   target            DOUBLE PRECISION NOT NULL,
-  status            TEXT NOT NULL DEFAULT 'open',
+  status            TEXT NOT NULL DEFAULT 'Open' CHECK (status IN ('Open', 'Target', 'Stop', 'Expired')),
   resolved_date     TEXT,
   sessions_held     INTEGER NOT NULL DEFAULT 0,
   max_favorable_pct DOUBLE PRECISION,
@@ -316,16 +335,16 @@ CREATE TABLE IF NOT EXISTS stock_setup_signals (
 );
 
 -- Open setups by stock, checked against each new candle.
-CREATE INDEX IF NOT EXISTS idx_stock_setup_signals_open ON stock_setup_signals (instrument_token) WHERE status = 'open';
+CREATE INDEX IF NOT EXISTS idx_stock_setup_signals_open ON stock_setup_signals (instrument_token) WHERE status = 'Open';
 
 -- ── Jobs and alerts ──
 
 -- One row per scheduled job per day, so a job runs once a day (and Admin
--- Services shows how it went).
+-- Services shows how it went). status: JobRunStatus.
 CREATE TABLE IF NOT EXISTS scheduled_job_runs (
   job         TEXT NOT NULL,
   run_date    TEXT NOT NULL,
-  status      TEXT NOT NULL,
+  status      TEXT NOT NULL CHECK (status IN ('Running', 'Done', 'Failed')),
   detail      JSONB NOT NULL DEFAULT '{}'::jsonb,
   started_at  TEXT NOT NULL DEFAULT to_char(now(), 'YYYY-MM-DD HH24:MI:SS'),
   finished_at TEXT,
@@ -333,17 +352,18 @@ CREATE TABLE IF NOT EXISTS scheduled_job_runs (
 );
 
 -- A user's price alerts, fired on live ticks.
+-- condition: PriceAlertCondition; status: PriceAlertStatus.
 CREATE TABLE IF NOT EXISTS price_alerts (
   id                   TEXT PRIMARY KEY,
   user_id              TEXT NOT NULL,
   instrument_token     BIGINT NOT NULL,
   tradingsymbol        TEXT NOT NULL,
-  exchange             TEXT NOT NULL,
-  condition            TEXT NOT NULL CHECK (condition IN ('above', 'below')),
+  exchange             TEXT NOT NULL CHECK (exchange IN ('NSE', 'BSE', 'NFO', 'BFO')),
+  condition            TEXT NOT NULL CHECK (condition IN ('Above', 'Below')),
   value                DOUBLE PRECISION NOT NULL,
   note                 TEXT,
   browser_notification BOOLEAN NOT NULL DEFAULT false,
-  status               TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'triggered')),
+  status               TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Triggered')),
   triggered_at         TIMESTAMPTZ,
   triggered_price      DOUBLE PRECISION,
   created_at           TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -351,29 +371,29 @@ CREATE TABLE IF NOT EXISTS price_alerts (
 
 -- A user's alerts.
 CREATE INDEX IF NOT EXISTS price_alerts_user_idx ON price_alerts (user_id);
--- Nightly purge of triggered alerts.
-CREATE INDEX IF NOT EXISTS price_alerts_triggered_idx ON price_alerts (user_id) WHERE status = 'triggered';
+-- Nightly purge of triggered alerts (040_purge_triggered_price_alerts.js).
+CREATE INDEX IF NOT EXISTS price_alerts_triggered_idx ON price_alerts (user_id) WHERE status = 'Triggered';
 
 -- ── Paper trading ──
 
 -- Paper positions, manual and automated. Same-instrument trades of the same
 -- source and horizon merge into one open position at the average price.
--- horizon: 1 intraday, 2 positional (the Horizon enum in shared/horizons.js).
--- Closing records Zerodha's charges (shared/paperCharges.js).
+-- mode: TradingMode; source: TradeSource; horizon: Horizon.
+-- Closing records Zerodha's charges (shared/tradeCharges.js).
 CREATE TABLE IF NOT EXISTS positions (
   id               TEXT PRIMARY KEY,
   user_id          TEXT NOT NULL,
-  mode             TEXT NOT NULL DEFAULT 'paper',
+  mode             TEXT NOT NULL DEFAULT 'Paper' CHECK (mode IN ('Paper', 'Live')),
   tradingsymbol    TEXT NOT NULL,
   instrument_token BIGINT NOT NULL,
   strike           DOUBLE PRECISION,
   option_type      TEXT,
-  side             TEXT NOT NULL,
+  side             TEXT NOT NULL CHECK (side IN ('BUY', 'SELL')),
   quantity         BIGINT NOT NULL,
   entry_price      DOUBLE PRECISION NOT NULL,
   entry_time       TEXT NOT NULL,
   expiry           TEXT,
-  exited           INTEGER NOT NULL DEFAULT 0,
+  exited           BOOLEAN NOT NULL DEFAULT false,
   exit_price       DOUBLE PRECISION,
   exit_time        TEXT,
   note             TEXT,
@@ -381,11 +401,11 @@ CREATE TABLE IF NOT EXISTS positions (
   stop_loss_price  DOUBLE PRECISION,
   confidence       BIGINT,
   instrument_type  TEXT NOT NULL CHECK (instrument_type IN ('CE', 'PE', 'FUT', 'EQ')),
-  exchange         TEXT NOT NULL DEFAULT 'NFO',
-  source           TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'auto')),
+  exchange         TEXT NOT NULL DEFAULT 'NFO' CHECK (exchange IN ('NSE', 'BSE', 'NFO', 'BFO')),
+  source           TEXT NOT NULL DEFAULT 'Manual' CHECK (source IN ('Manual', 'Auto')),
   charges          NUMERIC,
   charge_breakdown JSONB,
-  horizon          SMALLINT NOT NULL CHECK (horizon IN (1, 2)),
+  horizon          TEXT NOT NULL CHECK (horizon IN ('Intraday', 'Positional')),
   -- Options carry their strike, type and expiry; futures their expiry.
   CONSTRAINT positions_instrument_fields_check CHECK (
     (instrument_type IN ('CE', 'PE') AND strike IS NOT NULL AND option_type = instrument_type AND expiry IS NOT NULL)
@@ -396,18 +416,19 @@ CREATE TABLE IF NOT EXISTS positions (
 
 -- Open positions: the Positions page and Dashboard list them on every load,
 -- and the merge looks a trade's open position up among them.
-CREATE INDEX IF NOT EXISTS positions_open_idx ON positions (user_id, mode) WHERE exited = 0;
+CREATE INDEX IF NOT EXISTS positions_open_idx ON positions (user_id, mode) WHERE NOT exited;
 -- Closed trades: the Trade Journal and Dashboard select a user's exits by mode
--- and exit-time range (GET /api/positions?status=closed, /daily-pnl, /stats).
-CREATE INDEX IF NOT EXISTS positions_closed_idx ON positions (user_id, mode, exit_time) WHERE exited = 1;
+-- and exit-time range (GET /api/positions?status=Closed, /daily-pnl, /stats).
+CREATE INDEX IF NOT EXISTS positions_closed_idx ON positions (user_id, mode, exit_time) WHERE exited;
 -- The trade monitor: every open automated position across users when the
 -- market opens, and one user's again when their positions or settings change.
-CREATE INDEX IF NOT EXISTS positions_open_auto_idx ON positions (user_id) WHERE source = 'auto' AND exited = 0;
+CREATE INDEX IF NOT EXISTS positions_open_auto_idx ON positions (user_id) WHERE source = 'Auto' AND NOT exited;
 -- The session square-off: every user's open intraday paper positions opened
 -- before the last session ended, oldest first (getOpenIntradayPositionsBefore).
-CREATE INDEX IF NOT EXISTS positions_open_intraday_idx ON positions (mode, horizon, entry_time) WHERE exited = 0;
+CREATE INDEX IF NOT EXISTS positions_open_intraday_idx ON positions (mode, horizon, entry_time) WHERE NOT exited;
 
 -- A user's automation settings (the trade engine completes them with defaults).
+-- config names the trading mode, horizons and trade kinds by member name.
 CREATE TABLE IF NOT EXISTS algo_configuration (
   user_id    TEXT PRIMARY KEY,
   config     JSONB NOT NULL,
@@ -419,18 +440,20 @@ CREATE TABLE IF NOT EXISTS algo_configuration (
 CREATE INDEX IF NOT EXISTS algo_configuration_enabled_idx ON algo_configuration (user_id) WHERE config ->> 'enabled' = 'true';
 
 -- Automated trades and their lifecycle stage (shared/automation.js):
--- selected → validated → executed → closed, or rejected.
+-- Selected → Validated → Executed → Closed, or Rejected.
+-- horizon: Horizon; kind: TradeKind; mode: TradingMode; stage: LifecycleStage;
+-- setup: SetupPattern, grouped by GET /api/automation/results.
 CREATE TABLE IF NOT EXISTS algo_trades (
   id               TEXT PRIMARY KEY,
   user_id          TEXT NOT NULL,
-  horizon          SMALLINT NOT NULL CHECK (horizon IN (1, 2)),
-  kind             TEXT NOT NULL CHECK (kind IN ('stock', 'stock-option', 'stock-future', 'index-option', 'index-future')),
-  mode             TEXT NOT NULL CHECK (mode IN ('paper', 'live')),
+  horizon          TEXT NOT NULL CHECK (horizon IN ('Intraday', 'Positional')),
+  kind             TEXT NOT NULL CHECK (kind IN ('Stock', 'StockOption', 'StockFuture', 'IndexOption', 'IndexFuture')),
+  mode             TEXT NOT NULL CHECK (mode IN ('Paper', 'Live')),
   tradingsymbol    TEXT NOT NULL,
   instrument_token BIGINT NOT NULL,
   side             TEXT NOT NULL CHECK (side IN ('BUY', 'SELL')),
   quantity         BIGINT NOT NULL CHECK (quantity > 0),
-  stage            TEXT NOT NULL CHECK (stage IN ('selected', 'validated', 'rejected', 'executed', 'closed')),
+  stage            TEXT NOT NULL CHECK (stage IN ('Selected', 'Validated', 'Rejected', 'Executed', 'Closed')),
   reason           TEXT,
   entry_price      NUMERIC CHECK (entry_price > 0),
   exit_price       NUMERIC CHECK (exit_price > 0),
@@ -446,9 +469,9 @@ CREATE TABLE IF NOT EXISTS algo_trades (
 -- The Algo Trading page lists a user's trades newest first.
 CREATE INDEX IF NOT EXISTS algo_trades_user_created_idx ON algo_trades (user_id, created_at DESC);
 -- A user's trades still in progress.
-CREATE INDEX IF NOT EXISTS algo_trades_user_open_idx ON algo_trades (user_id, stage) WHERE stage NOT IN ('rejected', 'closed');
+CREATE INDEX IF NOT EXISTS algo_trades_user_open_idx ON algo_trades (user_id, stage) WHERE stage NOT IN ('Rejected', 'Closed');
 -- GET /api/automation/results: a user's closed trades entered in a date range.
-CREATE INDEX IF NOT EXISTS algo_trades_user_closed_idx ON algo_trades (user_id, created_at) WHERE stage = 'closed';
+CREATE INDEX IF NOT EXISTS algo_trades_user_closed_idx ON algo_trades (user_id, created_at) WHERE stage = 'Closed';
 -- The trades behind a position (closing them with it), and the foreign key.
 CREATE INDEX IF NOT EXISTS algo_trades_position_idx ON algo_trades (position_id) WHERE position_id IS NOT NULL;
 
@@ -456,7 +479,7 @@ CREATE INDEX IF NOT EXISTS algo_trades_position_idx ON algo_trades (position_id)
 CREATE TABLE IF NOT EXISTS algo_trade_events (
   id            BIGINT GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
   algo_trade_id TEXT NOT NULL REFERENCES algo_trades (id) ON DELETE CASCADE,
-  stage         TEXT NOT NULL CHECK (stage IN ('selected', 'validated', 'rejected', 'executed', 'closed')),
+  stage         TEXT NOT NULL CHECK (stage IN ('Selected', 'Validated', 'Rejected', 'Executed', 'Closed')),
   at            TIMESTAMPTZ NOT NULL DEFAULT now(),
   detail        JSONB
 );
@@ -468,16 +491,17 @@ CREATE INDEX IF NOT EXISTS algo_trade_events_trade_idx ON algo_trade_events (alg
 -- trade engine's order service (server/tradeEngine/services/orders.js).
 -- A limit order carries its limit price, a market order none. An exit is a
 -- filled market order with closes_position. Settled orders placed before today
--- are deleted nightly (server/jobs/nightly/050_purge_settled_orders.sql).
+-- are deleted nightly (server/jobs/nightly/050_purge_settled_orders.js).
+-- status: OrderStatus; source: TradeSource; horizon: Horizon; order_type: OrderType.
 CREATE TABLE IF NOT EXISTS orders (
   id               TEXT PRIMARY KEY,
   user_id          TEXT NOT NULL,
   tradingsymbol    TEXT NOT NULL,
   instrument_token BIGINT NOT NULL,
   instrument_type  TEXT NOT NULL CHECK (instrument_type IN ('CE', 'PE', 'FUT', 'EQ')),
-  exchange         TEXT NOT NULL,
+  exchange         TEXT NOT NULL CHECK (exchange IN ('NSE', 'BSE', 'NFO', 'BFO')),
   strike           DOUBLE PRECISION,
-  option_type      TEXT,
+  option_type      TEXT CHECK (option_type IN ('CE', 'PE')),
   expiry           TEXT,
   side             TEXT NOT NULL CHECK (side IN ('BUY', 'SELL')),
   quantity         BIGINT NOT NULL,
@@ -486,31 +510,31 @@ CREATE TABLE IF NOT EXISTS orders (
   target_price     DOUBLE PRECISION,
   stop_loss_price  DOUBLE PRECISION,
   confidence       BIGINT,
-  status           TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'filled', 'cancelled')),
+  status           TEXT NOT NULL DEFAULT 'Open' CHECK (status IN ('Open', 'Filled', 'Cancelled')),
   status_reason    TEXT,
   fill_price       DOUBLE PRECISION,
   position_id      TEXT REFERENCES positions (id) ON DELETE SET NULL,
   created_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at       TIMESTAMPTZ NOT NULL DEFAULT now(),
-  source           TEXT NOT NULL DEFAULT 'manual' CHECK (source IN ('manual', 'auto')),
+  source           TEXT NOT NULL DEFAULT 'Manual' CHECK (source IN ('Manual', 'Auto')),
   algo_trade_id    TEXT REFERENCES algo_trades (id) ON DELETE SET NULL,
-  horizon          SMALLINT NOT NULL CHECK (horizon IN (1, 2)),
-  order_type       TEXT NOT NULL CHECK (order_type IN ('limit', 'market')),
+  horizon          TEXT NOT NULL CHECK (horizon IN ('Intraday', 'Positional')),
+  order_type       TEXT NOT NULL CHECK (order_type IN ('Limit', 'Market')),
   closes_position  BOOLEAN NOT NULL DEFAULT false,
-  CONSTRAINT orders_limit_price_given_check CHECK ((order_type = 'limit') = (limit_price IS NOT NULL))
+  CONSTRAINT orders_limit_price_given_check CHECK ((order_type = 'Limit') = (limit_price IS NOT NULL))
 );
 
 -- GET /api/orders?from=…&to=…: a user's orders placed in a date range, newest first.
 CREATE INDEX IF NOT EXISTS orders_user_created_idx ON orders (user_id, created_at DESC);
 -- The Pending tab: a user's open orders whenever placed, newest first
--- (GET /api/orders?status=open, getUserOpenOrders).
-CREATE INDEX IF NOT EXISTS orders_user_open_idx ON orders (user_id, created_at DESC) WHERE status = 'open';
+-- (GET /api/orders?status=Open, getUserOpenOrders).
+CREATE INDEX IF NOT EXISTS orders_user_open_idx ON orders (user_id, created_at DESC) WHERE status = 'Open';
 -- The order service across all users: loading the open orders, and cancelling
 -- the open ones placed before a time (at the close).
-CREATE INDEX IF NOT EXISTS orders_open_idx ON orders (created_at) WHERE status = 'open';
+CREATE INDEX IF NOT EXISTS orders_open_idx ON orders (created_at) WHERE status = 'Open';
 -- The entry rules: a user's automated orders still waiting, which count like
 -- open positions (getWaitingAutoOrders).
-CREATE INDEX IF NOT EXISTS orders_open_auto_idx ON orders (user_id) WHERE status = 'open' AND source = 'auto';
+CREATE INDEX IF NOT EXISTS orders_open_auto_idx ON orders (user_id) WHERE status = 'Open' AND source = 'Auto';
 -- The foreign keys: clearing the link when a position or automated trade is
 -- deleted stays an index lookup.
 CREATE INDEX IF NOT EXISTS orders_position_idx ON orders (position_id) WHERE position_id IS NOT NULL;
@@ -521,11 +545,27 @@ CREATE INDEX IF NOT EXISTS orders_algo_trade_idx ON orders (algo_trade_id) WHERE
 -- The subscription plans.
 INSERT INTO subscription_plans (id, name, description, price, currency, "interval", is_active, duration_count, duration_unit)
 VALUES
-  ('one_month',     '1 Month',   'Monthly OptionTrap access. Payment integration coming soon.',        0, 'INR', 'month',    1,  1, 'month'),
-  ('six_months',    '6 Months',  'Half-yearly OptionTrap access. Payment integration coming soon.',  999, 'INR', '6 months', 1,  6, 'month'),
-  ('twelve_months', '12 Months', 'Annual OptionTrap access. Payment integration coming soon.',      2999, 'INR', 'year',     1, 12, 'month')
+  ('one_month',     '1 Month',   'Monthly OptionTrap access. Payment integration coming soon.',        0, 'INR', 'month',    true,  1, 'Month'),
+  ('six_months',    '6 Months',  'Half-yearly OptionTrap access. Payment integration coming soon.',  999, 'INR', '6 months', true,  6, 'Month'),
+  ('twelve_months', '12 Months', 'Annual OptionTrap access. Payment integration coming soon.',      2999, 'INR', 'year',     true, 12, 'Month')
 ON CONFLICT (id) DO NOTHING;
 
 -- The first admin.
-INSERT INTO users (user_id, is_admin) VALUES ('UR5452', 1)
-ON CONFLICT (user_id) DO UPDATE SET is_admin = 1;
+INSERT INTO users (user_id, is_admin) VALUES ('UR5452', true)
+ON CONFLICT (user_id) DO UPDATE SET is_admin = true;
+
+-- The index rows with their settings (see instruments above). Without them no
+-- index would be an underlying (GET /api/underlyings maps an index's F&O name
+-- to its row by fno_name), none would be OI-snapshotted daily and none would
+-- be the market reference. Zerodha's index tokens don't change; the instrument
+-- sync upserts by token, refreshing Zerodha's columns and keeping these.
+INSERT INTO instruments
+  (instrument_token, exchange_token, tradingsymbol, name, exchange, instrument_type,
+   fno_name, label, tradingview_symbol, always_snapshot, is_market_reference)
+VALUES
+  (256265, 1001, 'NIFTY 50',          'NIFTY 50',                         'NSE', 'EQ', 'NIFTY',      'NIFTY 50',   'NIFTY',            true,  true),
+  (260105, 1016, 'NIFTY BANK',        'NIFTY BANK',                       'NSE', 'EQ', 'BANKNIFTY',  'BANK NIFTY', 'BANKNIFTY',        true,  false),
+  (257801, 1007, 'NIFTY FIN SERVICE', 'NIFTY FIN SERVICE',                'NSE', 'EQ', 'FINNIFTY',   NULL,         'CNXFINANCE',       false, false),
+  (270857, 1058, 'NIFTY NEXT 50',     'NIFTY NEXT 50',                    'NSE', 'EQ', 'NIFTYNXT50', NULL,         'NIFTYNXT50',       false, false),
+  (288009, 1125, 'NIFTY MID SELECT',  'NIFTY MIDCAP SELECT (MIDCPNIFTY)', 'NSE', 'EQ', 'MIDCPNIFTY', NULL,         'NIFTY_MID_SELECT', false, false)
+ON CONFLICT (instrument_token) DO NOTHING;
