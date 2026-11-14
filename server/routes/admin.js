@@ -19,6 +19,7 @@ import { IS_PROD } from '../serverConfig.js';
 import { tradeEngine } from '../tradeEngine/index.js';
 import { SubscriptionAction } from '../../shared/appEnums.js';
 import { sendError, sendOk } from '../replies.js';
+import { exportFileName, exportRefusal, findTableExport, tableExportInfos, writeTableWorkbook } from '../tableExports.js';
 import { SUBSCRIPTION_UPDATE_FAILED, subscriptionChange } from './subscriptions.js';
 import { sendResult } from './sendResult.js';
 
@@ -94,3 +95,26 @@ adminRoutes.post('/api/admin/users/:userId/subscription', admin, withFailureMess
   const result = await subscriptionChange(change);
   sendResult(res, result, { data: result.subscription });
 }));
+
+// The tables an admin can download (Admin → Data).
+adminRoutes.get('/api/admin/table-exports', admin, (_req, res) => {
+  sendOk(res, tableExportInfos());
+});
+
+// One table as an .xlsx, streamed a page at a time. Refused (400) when a cell is too long for Excel.
+adminRoutes.get('/api/admin/table-exports/:table', admin, async (req, res) => {
+  const table = findTableExport(req.params.table);
+  if (!table) return sendError(res, 404, 'No export for that table');
+  const refusal = await exportRefusal(table);
+  if (refusal) return sendError(res, 400, refusal);
+
+  res.attachment(exportFileName(table));
+  try {
+    await writeTableWorkbook(table, res);
+  } catch (err) {
+    console.error(`[Server] Export of ${table.id} failed:`, err);
+    // Once the file has started, the only way to tell the browser is to end the download as failed.
+    if (res.headersSent) res.destroy(/** @type {Error} */ (err));
+    else sendError(res, 500, 'The export failed');
+  }
+});

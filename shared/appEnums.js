@@ -184,3 +184,8 @@ export const strikeModeFrom = (value) =>
 export const FetchEvent = Object.freeze({ Step: 'Step', Progress: 'Progress', Done: 'Done', Error: 'Error' });
 
 /** @typedef {typeof FetchEvent[keyof typeof FetchEvent]} FetchEventId */
+
+/** A table an admin can download as a spreadsheet (Admin → Data). */
+export const ExportTable = Object.freeze({ OiSnapshots: 'OiSnapshots' });
+
+/** @typedef {typeof ExportTable[keyof typeof ExportTable]} ExportTableId */

@@ -112,6 +112,7 @@ export {
   saveInstruments,
   setAlwaysSnapshot,
 } from './db/instruments.js';
+export { findLongTextCell, getExportColumns, getExportPage } from './db/tableExports.js';
 export {
   getLatestOiSnapshotTimestamp,
   getNewestOiSnapshotTimestamp,

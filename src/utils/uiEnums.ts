@@ -36,7 +36,7 @@ export const AccentTheme = Object.freeze({ Indigo: 'Indigo', Emerald: 'Emerald',
 export type AccentThemeId = typeof AccentTheme[keyof typeof AccentTheme];
 
 /** Admin's tabs (?tab=). */
-export const AdminTab = Object.freeze({ Feedback: 'Feedback', Users: 'Users', Diagnostics: 'Diagnostics' });
+export const AdminTab = Object.freeze({ Feedback: 'Feedback', Users: 'Users', Diagnostics: 'Diagnostics', Data: 'Data' });
 export type AdminTabId = typeof AdminTab[keyof typeof AdminTab];
 
 /** Analytics' tabs (?tab=). */

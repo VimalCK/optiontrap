@@ -431,6 +431,23 @@ export const RefreshIcon: React.FC<StrokeIconProps> = (props) => (
   </StrokeIcon>
 );
 
+/** Download a file: an arrow down into a tray. */
+export const DownloadIcon: React.FC<StrokeIconProps> = (props) => (
+  <StrokeIcon {...props}>
+    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+    <path d="M7 10l5 5 5-5" />
+    <path d="M12 15V3" />
+  </StrokeIcon>
+);
+
+/** A database table: a grid with a header row. */
+export const TableIcon: React.FC<StrokeIconProps> = (props) => (
+  <StrokeIcon {...props}>
+    <rect x="3" y="4" width="18" height="16" rx="2" />
+    <path d="M3 9h18M3 14.5h18M9 9v11M15 9v11" />
+  </StrokeIcon>
+);
+
 /** Undo a change: an arrow turning back. */
 export const ResetIcon: React.FC<StrokeIconProps> = (props) => (
   <StrokeIcon {...props}>

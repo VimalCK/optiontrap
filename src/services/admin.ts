@@ -1,5 +1,5 @@
-import { apiClient } from './apiClient';
-import type { FeedbackStatusId, FeedbackTypeId } from '../../shared/appEnums.js';
+import { ApiError, apiClient, responseErrorMessage } from './apiClient';
+import type { ExportTableId, FeedbackStatusId, FeedbackTypeId } from '../../shared/appEnums.js';
 import { type HealthStatusId } from '../../shared/appEnums.js';
 import type { SubscriptionActionId } from '../../shared/appEnums.js';
 
@@ -84,4 +84,29 @@ export async function getHealth(): Promise<HealthReport> {
 
 export async function updateFeedbackStatus(id: string, status: FeedbackStatusId): Promise<void> {
   await apiClient.patch(`/api/admin/feedback/${id}`, { status });
+}
+
+/** A table an admin can download as a spreadsheet. */
+export interface TableExport {
+  id: ExportTableId;
+  label: string;
+  description: string;
+}
+
+export function getTableExports(signal?: AbortSignal): Promise<TableExport[]> {
+  return apiClient.get<TableExport[]>('/api/admin/table-exports', { signal });
+}
+
+/** The file name a Content-Disposition header gives, or null without one. */
+export function attachmentFileName(disposition: string | null): string | null {
+  const match = disposition?.match(/filename="?([^";]+)"?/i);
+  return match ? match[1] : null;
+}
+
+/** Downloads one table as an .xlsx; throws ApiError with the server's message when it is refused. */
+export async function downloadTableExport(table: ExportTableId, signal?: AbortSignal): Promise<{ blob: Blob; fileName: string }> {
+  const response = await apiClient.raw(`/api/admin/table-exports/${encodeURIComponent(table)}`, { signal });
+  if (!response.ok) throw new ApiError(await responseErrorMessage(response), response.status);
+  const fileName = attachmentFileName(response.headers.get('content-disposition')) ?? `${table}.xlsx`;
+  return { blob: await response.blob(), fileName };
 }
