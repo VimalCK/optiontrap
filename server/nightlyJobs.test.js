@@ -5,9 +5,14 @@ import { runPlugin } from './tradeEngine/runPlugin.fixture.js';
 
 // Fake scheduled_job_runs: job -> date -> status (a failed run's error saved as 'boom'). Hoisted so the db.js mock can use it.
 const runs = vi.hoisted(() => new Map());
+// Status lookups: each hourly check reads every job's status once.
+const lookups = vi.hoisted(() => ({ count: 0 }));
 
 vi.mock('./db.js', () => ({
-  getScheduledJobStatus: async (job, date) => runs.get(job)?.get(date) ?? null,
+  getScheduledJobStatus: async (job, date) => {
+    lookups.count += 1;
+    return runs.get(job)?.get(date) ?? null;
+  },
   getScheduledJobRunsOn: async (jobs, date) => jobs
     .filter((job) => runs.get(job)?.has(date))
     .map((job) => ({ job, status: runs.get(job).get(date), detail: runs.get(job).get(date) === 'Failed' ? { error: 'boom' } : {} })),
@@ -44,6 +49,7 @@ describe('the nightly jobs plug-in', () => {
 
   beforeEach(async () => {
     runs.clear();
+    lookups.count = 0;
     vi.spyOn(console, 'log').mockImplementation(() => {});
     vi.resetModules(); // fresh runner state per test
     ({ nightlyJobsJob } = await import('./nightlyJobs.js'));
@@ -74,9 +80,17 @@ describe('the nightly jobs plug-in', () => {
     expect(runs.size).toBeGreaterThan(0);
     expect(ranDates().every((dates) => dates.length === 1 && dates[0] === '2026-11-04')).toBe(true);
 
-    // Hourly checks for the rest of the day find the runs done.
+    // Hourly checks for the rest of the day find the runs done. The market clock ticks every second, so the test
+    // steps through the 11:00 check, then jumps to the evening for the last check before midnight, rather than
+    // ticking through 13 hours (46,800 ticks, seconds under load).
     const finished = [...runs.values()].map((byDate) => byDate.size);
-    await vi.advanceTimersByTimeAsync(13 * 60 * 60 * 1000); // to 23:00
+    const afterStart = lookups.count;
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000); // 11:00 check
+    const afterMorning = lookups.count;
+    vi.setSystemTime(ist('22:30', '2026-11-04'));
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000); // 23:30
+    expect(afterMorning).toBeGreaterThan(afterStart);
+    expect(lookups.count).toBeGreaterThan(afterMorning);
     expect([...runs.values()].map((byDate) => byDate.size)).toEqual(finished);
   });
 
