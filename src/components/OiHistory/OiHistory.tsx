@@ -4,41 +4,38 @@ import { handleKiteAuthFailure } from '@/services/authSession';
 import { apiClient } from '@/services/apiClient';
 import { useAbortSignal } from '@/hooks/useAbortSignal';
 import { useKiteSession } from '@/hooks/useKiteSession';
-import { tradeErrorMessage } from '@/services/positions';
-import { placeMarketTrade, placedOrderMessage, placedOrderRefused } from '@/services/orders';
-import { getLotSize } from '@/services/optionChain';
-import { loadInstruments, getLotSizeByToken } from '@/services/instruments';
 import '@/styles/oihistory.css';
-import type { OiCellData } from './types';
 import { currentMonthIST } from './helpers';
-import { computeMonthlyExpiries } from './analysis';
+import { computeMonthlyExpiries } from './expiries';
 import { FuturesContext } from './FuturesContext';
 import { OiSnapshotTable } from './OiSnapshotTable';
 import OiHistoryShimmer from './OiHistoryShimmer';
 import StockSetupsPanel from '@/components/StockSetups/StockSetupsPanel';
-import { findNseStock } from '@/services/stockSetups';
 import { useUnderlyings } from '@/hooks/useUnderlyings';
 import { computeFlowReadings, type FlowReading } from '@/services/oiFlow';
-import { computeFairValues, realizedVol, volVerdict, type FairValueResult } from '@/services/fairValue';
-import { Horizon, type OptionTypeId, type SideId } from '../../../shared/tradeEnums.js';
+import { computeFairValues } from '@/services/fairValue';
+import type { SideId } from '../../../shared/tradeEnums.js';
 import { OiHistoryTab, ToastColor, type OiHistoryTabId } from '@/utils/uiEnums';
 import ToastStack from '@/components/Toast/ToastStack';
 import OrderModal from '@/components/OrderModal/OrderModal';
-import { useOrderChoices } from '@/components/OrderModal/useOrderChoices';
-import type { OrderOption } from '@/components/OrderModal/orderTicket';
 import { useToasts } from '@/hooks/useToasts';
 import {
-  STRIKE_RANGE, buildOiTable, cellOption, expiryColors as colorsForExpiries, fairInputs, flowInputs, latestVisibleDate,
+  STRIKE_RANGE, buildOiTable, expiryColors as colorsForExpiries, fairInputs, flowInputs, latestVisibleDate,
   maxConsolidatedOi as largestConsolidatedOi, nearestStrike, oiSeriesByToken, rowsByDate as groupRowsByDate, sortedUnique, strikesInRange,
 } from './oiTable';
 import { buildStrikeChart } from './strikeChart';
 import { setupOrder, signalToLog } from './setupSignals';
 import { useExpiryMonths, useScripChoice, useStrikeChoice } from './useOiHistorySelection';
-import { useOiHistoryData, useOiHistoryFetch } from './useOiHistoryData';
+import { useOiHistoryData } from './useOiHistoryData';
+import { useOiHistoryFetch } from './useOiHistoryFetch';
 import { useSignalLogging, useTradeSignals } from './useTradeSignals';
+import { useUnderlyingStock } from './useUnderlyingStock';
+import { useOiHistoryOrders } from './useOiHistoryOrders';
+import { useExpiryVisibility } from './useExpiryVisibility';
+import { useFairValueView } from './useFairValueView';
 import OiHistoryControls from './OiHistoryControls';
 import DateBar from './DateBar';
-import StrikeHistoryCard, { type FairSummary } from './StrikeHistoryCard';
+import StrikeHistoryCard from './StrikeHistoryCard';
 import DeleteScripDialog from './DeleteScripDialog';
 
 const OiHistory: React.FC = () => {
@@ -57,34 +54,11 @@ const OiHistory: React.FC = () => {
   const [filterDate, setFilterDate] = useState('');
   const [analysisTab, setAnalysisTab] = useState<OiHistoryTabId>(OiHistoryTab.History);
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
-  const [hiddenExpiries, setHiddenExpiries] = useState<Set<string>>(() => new Set());
   const [showVolume, setShowVolume] = useState(false);
-  const [showFairValue, setShowFairValue] = useState(false);
-  const [fairExpiry, setFairExpiry] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const isAdmin = useKiteSession().session?.isAdmin === true;
   const lastLoadedRef = useRef('');
-
-  // Entry & exit zones of the underlying stock (null for indices).
-  const [underlyingStock, setUnderlyingStock] = useState<{ instrumentToken: number; tradingsymbol: string } | null>(null);
-  const [showZones, setShowZones] = useState(false);
-  const closeZones = useCallback(() => setShowZones(false), []);
-
-  useEffect(() => {
-    let stale = false;
-    setUnderlyingStock(null);
-    setShowZones(false);
-    if (!scrip) return;
-    findNseStock(scrip)
-      .then((stock) => { if (!stale) setUnderlyingStock(stock); })
-      .catch(() => { /* no zones button */ });
-    return () => { stale = true; };
-  }, [scrip]);
-
-  // Warm the instruments cache so lot sizes are available for setup trades.
-  useEffect(() => {
-    loadInstruments().catch(() => { /* lot size falls back to 1 if unavailable */ });
-  }, []);
+  const { underlyingStock, showZones, openZones, closeZones } = useUnderlyingStock(scrip);
 
   const loadData = useCallback(async () => {
     const rows = await load();
@@ -146,36 +120,7 @@ const OiHistory: React.FC = () => {
   }, [scrip, clear]);
 
   const { toasts, showToast } = useToasts();
-  const orderChoices = useOrderChoices();
-  const [orderTicket, setOrderTicket] = useState<{ option: OrderOption; price: number } | null>(null);
-
-  const openOrder = useCallback((cell: OiCellData, optionType: OptionTypeId, strike: number, expiry: string) => {
-    const { token, tradingsymbol, close } = cellOption(cell, optionType);
-    if (!token || !tradingsymbol || !close) return;
-    const lotSize = getLotSizeByToken(token) ?? getLotSize(token);
-    setOrderTicket({ option: { tradingsymbol, instrumentToken: token, lotSize, strike, optionType, expiry }, price: close });
-  }, []);
-
-  const handleTrade = useCallback(async (cell: OiCellData, optionType: OptionTypeId, side: SideId, strike: number, expiry: string) => {
-    const { token, tradingsymbol, close } = cellOption(cell, optionType);
-    if (!token || !tradingsymbol || !close) return;
-    try {
-      // A market order: the server fills it at the live bid / ask, not the grid's historical close.
-      const placed = await placeMarketTrade({
-        tradingsymbol,
-        instrumentToken: token,
-        strike,
-        optionType,
-        side,
-        quantity: getLotSizeByToken(token) ?? getLotSize(token),
-        expiry,
-        horizon: Horizon.Intraday,
-      });
-      showToast(placedOrderMessage(placed, `${side} ${strike}${optionType}`), placedOrderRefused(placed) ? ToastColor.Red : ToastColor.Green);
-    } catch (err) {
-      showToast(tradeErrorMessage(err), ToastColor.Red);
-    }
-  }, [showToast]);
+  const { orderChoices, orderTicket, openOrder, closeOrder, handleTrade } = useOiHistoryOrders(showToast);
 
   const availableDates = useMemo(() => sortedUnique(data.map((r) => r.date)), [data]);
   const visibleDates = useMemo(() => availableDates.filter((date) => date.slice(0, 7) >= currentMonthIST()), [availableDates]);
@@ -188,7 +133,7 @@ const OiHistory: React.FC = () => {
   const filteredRows = useMemo(() => (filterDate ? data.filter((r) => r.date === filterDate) : []), [data, filterDate]);
   /** Expiries available on the selected date. Expired weekly contracts are not shown after expiry. */
   const tableExpiries = useMemo(() => sortedUnique(filteredRows.map((r) => r.expiry)), [filteredRows]);
-  const visibleTableExpiries = useMemo(() => tableExpiries.filter((exp) => !hiddenExpiries.has(exp)), [tableExpiries, hiddenExpiries]);
+  const { hiddenExpiries, visibleTableExpiries, toggleExpiryVisibility, showExpiry } = useExpiryVisibility(tableExpiries);
 
   const prevDate = useMemo(() => {
     const index = availableDates.indexOf(filterDate);
@@ -204,39 +149,10 @@ const OiHistory: React.FC = () => {
 
   /** Fair value for every option on the selected date (logged with signals, and the chart summary). */
   const fairToday = useMemo(() => computeFairValues(fairInputs(filteredRows, filterDate)), [filteredRows, filterDate]);
-
-  /**
-   * Expiry the fair-value chart shows: the picked one if still visible, else the nearest
-   * one still running after the selected date. An expiry ending that day has no time
-   * value left, so its IV is undefined and its straddle near zero.
-   */
-  const chartFairExpiry = useMemo(() => {
-    if (!showFairValue) return null;
-    if (fairExpiry && visibleTableExpiries.includes(fairExpiry)) return fairExpiry;
-    return visibleTableExpiries.find((exp) => exp.slice(0, 10) > filterDate) ?? visibleTableExpiries[0] ?? null;
-  }, [showFairValue, fairExpiry, visibleTableExpiries, filterDate]);
-
-  const chartExpiries = useMemo(() => (chartFairExpiry ? [chartFairExpiry] : visibleTableExpiries), [chartFairExpiry, visibleTableExpiries]);
   const rowsByDate = useMemo(() => groupRowsByDate(data), [data]);
-
-  /** Fair values of the chart's expiry on every date; only computed while the fair-value view is on. */
-  const fairByDate = useMemo(() => {
-    const map = new Map<string, FairValueResult>();
-    if (!chartFairExpiry) return map;
-    for (const [date, rows] of rowsByDate) map.set(date, computeFairValues(fairInputs(rows, date, chartFairExpiry)));
-    return map;
-  }, [rowsByDate, chartFairExpiry]);
-
-  const fairSummary = useMemo((): FairSummary | null => {
-    if (!chartFairExpiry || !filterDate) return null;
-    const stats = fairToday.byExpiry.get(chartFairExpiry) ?? null;
-    const spotCloses = availableDates
-      .filter((date) => date <= filterDate)
-      .map((date) => rowsByDate.get(date)?.find((r) => r.spotClose > 0)?.spotClose ?? 0);
-    const realized = realizedVol(spotCloses);
-    const spot = filteredRows.find((r) => r.spotClose > 0)?.spotClose ?? null;
-    return { stats, realized, verdict: volVerdict(stats?.atmIv ?? null, realized), spot };
-  }, [chartFairExpiry, filterDate, fairToday, availableDates, rowsByDate, filteredRows]);
+  const { showFairValue, setShowFairValue, chartFairExpiry, chartExpiries, fairByDate, fairSummary, selectFairExpiry } = useFairValueView({
+    visibleTableExpiries, filterDate, filteredRows, availableDates, rowsByDate, fairToday, showExpiry,
+  });
 
   const atmStrike = useMemo(() => nearestStrike(filteredRows), [filteredRows]);
   const selectedSpotClose = filteredRows[0]?.spotClose ?? null;
@@ -295,29 +211,6 @@ const OiHistory: React.FC = () => {
 
   const expiryColors = useMemo(() => colorsForExpiries(expiries), [expiries]);
 
-  /** In the fair-value view the legend picks the one expiry the chart shows. */
-  const selectFairExpiry = (expiry: string) => {
-    setFairExpiry(expiry);
-    setHiddenExpiries((prev) => {
-      if (!prev.has(expiry)) return prev;
-      const next = new Set(prev);
-      next.delete(expiry);
-      return next;
-    });
-  };
-
-  /** Hide or show an expiry in the table and chart; the last one shown stays. */
-  const toggleExpiryVisibility = (expiry: string) => {
-    setHiddenExpiries((prev) => {
-      const isHidden = prev.has(expiry);
-      if (!isHidden && tableExpiries.filter((exp) => !prev.has(exp)).length <= 1) return prev;
-      const next = new Set(prev);
-      if (isHidden) next.delete(expiry);
-      else next.add(expiry);
-      return next;
-    });
-  };
-
   // A fetch rewrites the history on screen, so its old rows give way to the outline until the fresh data loads.
   const showShimmer = fetching || (loading && data.length === 0);
 
@@ -331,7 +224,7 @@ const OiHistory: React.FC = () => {
           initialPrice={orderTicket.price}
           priceLabel="Day close"
           choices={orderChoices}
-          onClose={() => setOrderTicket(null)}
+          onClose={closeOrder}
           onToast={showToast}
         />
       )}
@@ -388,7 +281,7 @@ const OiHistory: React.FC = () => {
           tab={analysisTab}
           onTab={setAnalysisTab}
           zonesSymbol={underlyingStock?.tradingsymbol ?? null}
-          onShowZones={() => setShowZones(true)}
+          onShowZones={openZones}
           tableExpiries={tableExpiries}
           visibleExpiries={visibleTableExpiries}
           hiddenExpiries={hiddenExpiries}

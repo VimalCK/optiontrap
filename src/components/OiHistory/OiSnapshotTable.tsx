@@ -1,7 +1,8 @@
 import React, { useLayoutEffect, useRef, useState } from 'react';
 import type { OiCellData, OiTableRow } from './types';
 import { formatOiWithChg, formatFullDateLabel } from './helpers';
-import { patternColor, expiryLabel } from './analysis';
+import { patternColor } from './rolloverPatterns';
+import { expiryLabel } from './expiries';
 import { describeFlow, flowColor, type FlowReading } from '@/services/oiFlow';
 import { PatternGuide } from './PatternGuide';
 import IconButton from '@/components/IconButton/IconButton';

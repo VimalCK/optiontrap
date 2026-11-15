@@ -6,7 +6,7 @@ import { VolVerdict, volVerdictLabel, type VolVerdictId } from '../../../shared/
 import { OiHistoryTab, type OiHistoryTabId } from '@/utils/uiEnums';
 import type { SignalPerformanceSummary, TradeSignalRow } from './types';
 import type { StrikeChartData } from './strikeChart';
-import { expiryLabel } from './analysis';
+import { expiryLabel } from './expiries';
 import { StrikeOiChart } from './StrikeOiChart';
 import { TradeSetupDashboard } from './TradeSetupDashboard';
 

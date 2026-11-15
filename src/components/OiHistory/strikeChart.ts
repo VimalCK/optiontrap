@@ -1,8 +1,7 @@
 import type { OiHistoryRow, OiTableRow, StrikeHistoryEntry, TradeSetupData } from './types';
-import {
-  summarizeOptionMomentum, summarizePremiumDecay, summarizePriceTrend, summarizeSellingSetup, summarizeStrikeBias,
-  summarizeTradeBias, summarizeTradeLevels, summarizeTradeSetup,
-} from './analysis';
+import { summarizePriceTrend, summarizeStrikeBias, summarizeTradeBias } from './trendBias';
+import { summarizeOptionMomentum, summarizeTradeLevels, summarizeTradeSetup } from './tradeSetup';
+import { summarizePremiumDecay, summarizeSellingSetup } from './sellingSetup';
 import type { FairValueResult } from '@/services/fairValue';
 import { OptionType } from '../../../shared/tradeEnums.js';
 

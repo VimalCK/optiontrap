@@ -1,5 +1,5 @@
 import type { OiCellData, OiHistoryRow, OiTableRow } from './types';
-import { classifyPattern } from './analysis';
+import { classifyPattern } from './rolloverPatterns';
 import { todayIST } from './helpers';
 import { marketCloseIST, type FlowInput } from '@/services/oiFlow';
 import type { FairInput } from '@/services/fairValue';
