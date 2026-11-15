@@ -60,7 +60,7 @@ const ALLOWED = new Map([
  */
 const CSS_WORD_HELPERS = new Map([
   [path.join('src', 'components', 'OiHistory', 'StrikeHistoryCard.tsx'), [{ expressions: ['verdictClass(summary.verdict)'], reason: 'rich / cheap / fair, from verdictClass just above' }]],
-  [path.join('src', 'components', 'SellStrategy', 'SellStrategy.tsx'), [
+  [path.join('src', 'components', 'SellStrategy', 'RecommendationRow.tsx'), [
     { expressions: ['colorClass'], reason: 'scoreColorClass returns a CSS word' },
     { expressions: ['actionBtnClass(rec.type)'], reason: 'returns the lower-cased option type or a CSS word' },
   ]],
