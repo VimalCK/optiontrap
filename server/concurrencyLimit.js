@@ -18,3 +18,19 @@ export function createConcurrencyLimit(max) {
     },
   };
 }
+
+/**
+ * Run `fn` on every item, at most `max` at once, starting the next as each one finishes.
+ * `fn` handles its own errors: one that throws rejects the whole run while the others carry on.
+ * @template T
+ * @param {T[]} items
+ * @param {number} max
+ * @param {(item: T) => Promise<void>} fn
+ */
+export async function forEachLimited(items, max, fn) {
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) await fn(items[next++]);
+  };
+  await Promise.all(Array.from({ length: Math.min(max, items.length) }, worker));
+}

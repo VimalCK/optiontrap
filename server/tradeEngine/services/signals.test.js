@@ -232,6 +232,26 @@ describe('submitting a strategy\'s signals', () => {
     expect(run.db.createAutoTrade.mock.calls.map(([userId]) => userId)).toEqual(['U1', 'U2']);
   });
 
+  it("takes users at the same time: one user's slow checks don't hold up the next", async () => {
+    const run = setup({ users: [{ userId: 'U1', config: userConfig() }, { userId: 'U2', config: userConfig() }] });
+    let releaseU1;
+    run.db.getOpenAutoPositions.mockImplementation((userId) => (userId === 'U1' ? new Promise((resolve) => { releaseU1 = () => resolve([]); }) : Promise.resolve([])));
+    const submitted = run.submit();
+    await vi.waitFor(() => expect(run.db.createAutoTrade.mock.calls.map(([userId]) => userId)).toEqual(['U2']));
+    releaseU1();
+    await submitted;
+    expect(run.db.createAutoTrade.mock.calls.map(([userId]) => userId)).toEqual(['U2', 'U1']);
+  });
+
+  it("takes one user's signals in turn, each checked after the one before was placed", async () => {
+    const run = setup();
+    const order = [];
+    run.db.getOpenAutoPositions.mockImplementation(async () => { order.push('check'); return []; });
+    run.orders.placeAuto.mockImplementation(async () => { order.push('place'); return { ok: true, order: { status: 'Open' } }; });
+    await run.submit([sellOption, sellOption]);
+    expect(order).toEqual(['check', 'place', 'check', 'place']);
+  });
+
   it('lets a strategy pick only what the General settings allow, so nothing switched off is recorded', async () => {
     const buyOption = { instrumentToken: 101, side: 'BUY', reason: 'buy signal' };
     const run = setup(); // buying index options is off

@@ -49,6 +49,7 @@ import { marketDayStartMs } from '../../../shared/marketTime.js';
 import { engineLogger } from '../../engineLog.js';
 import { Horizon, LifecycleStage, OrderStatus, OrderType, TradeSource, isOptionType } from '../../../shared/tradeEnums.js';
 import { HealthStatus } from '../../../shared/appEnums.js';
+import { forEachLimited } from '../../concurrencyLimit.js';
 import { countLabel, healthTime } from '../../serviceHealth.js';
 
 /** This trade engine service's id: its key in ctx.services and on Admin Services. */
@@ -78,6 +79,11 @@ const STOCK_LOT = 1;
 const tradeLabel = (/** @type {{ side: string, quantity: number, tradingsymbol: string }} */ t) => `${t.side} ${t.quantity} ${t.tradingsymbol}`;
 /** A submit that had nothing to do. */
 const NO_WORK = Object.freeze({ users: 0, signals: 0, failed: 0 });
+/**
+ * Users whose signals are taken at once. Each runs four checks together on the shared DB pool (PG_POOL_MAX, 10 by
+ * default): two users use eight connections, leaving some for the app's own requests.
+ */
+const USERS_AT_ONCE = 2;
 
 /**
  * The service's health, from its last run: passes when it worked, warns when
@@ -263,7 +269,8 @@ export function createSignalsService({
 
     const now = clock();
     let failed = 0;
-    for (const { userId, config, signals } of work) {
+    // Users are independent; one user's signals stay in turn, so each is checked against the positions the one before opened.
+    await forEachLimited(work, USERS_AT_ONCE, async ({ userId, config, signals }) => {
       for (const signal of signals) {
         try {
           await take(userId, config, signal, { instrumentsByToken, indexNames, quotesByKey, now });
@@ -272,7 +279,7 @@ export function createSignalsService({
           log('signal failed', { user: userId, strategy: signal.strategyId, error: /** @type {Error} */ (err).message });
         }
       }
-    }
+    });
     return { users: users.length, signals: work.reduce((total, u) => total + u.signals.length, 0), failed };
   }
 
