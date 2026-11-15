@@ -171,3 +171,5 @@ export function formatPcr(value: number | null): string {
   return value.toFixed(2);
 }
 
+
+export const formatReturn = (value: number | null) => (value === null ? '-' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`);

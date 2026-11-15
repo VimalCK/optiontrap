@@ -1,13 +1,13 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { formatNumericDate } from '@/utils/marketStatus';
-import type { SignalPerformanceSummary, TradeSetupData, TradeSignalRow } from './types';
-import { summarizeSignalBreakdown, MIN_SCORED_FOR_VERDICT } from './signalStats';
-import { formatPct, formatPcr, todayIST } from './helpers';
-import { checklistStatusText, sortChecklistByStatus, readinessScore, setupReadinessLabel, setupReadinessWidth } from './tradeSetup';
+import type { OptionMomentumSide, PremiumDecaySide, SellingSetupSummary, SignalPerformanceSummary, TradeSetupData, TradeSetupSummary, TradeSignalRow } from './types';
 import { expiryLabel } from './expiries';
-import { OPTION_TYPES, OptionType, Side, type SideId } from '../../../shared/tradeEnums.js';
-import { Bias, SellingSetup, TradeSetupStatus, sellingSetupLabel, signalVerdictLabel } from '../../../shared/analysisEnums.js';
-import { SignalOutcome } from '../../../shared/appEnums.js';
+import { OptionType, Side, type SideId } from '../../../shared/tradeEnums.js';
+import { Bias, SellingSetup, TradeSetupStatus, sellingSetupLabel } from '../../../shared/analysisEnums.js';
+import { SetupModeCard } from './SetupModeCard';
+import { SetupSidesSummary, type SetupSideReading } from './SetupSidesSummary';
+import { SignalPerformancePanel } from './SignalPerformancePanel';
+import { SetupEvidenceDrawer } from './SetupEvidenceDrawer';
 
 interface TradeSetupDashboardProps {
   setup: TradeSetupData;
@@ -21,175 +21,36 @@ interface TradeSetupDashboardProps {
   onTrade: (side: SideId) => void;
 }
 
-const formatReturn = (value: number | null) => (value === null ? '-' : `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`);
-const formatPrice = (value: number | null) => (value === null || !(value > 0) ? '-' : value.toFixed(2));
-const shortDate = (date: string | null) => (date ? expiryLabel(date.slice(0, 10), false) : '-');
-
-/** Signals on an expiry that hasn't passed yet (expiry today counts as upcoming). */
-export function upcomingSignals(rows: TradeSignalRow[], today: string): TradeSignalRow[] {
-  return rows.filter((row) => !row.expiry || row.expiry >= today);
-}
-
-/** Upcoming expiries by default; All adds the expired ones. */
-export const SignalResultsGrid: React.FC<{ rows: TradeSignalRow[]; today?: string; onDelete?: (id: number) => void }> = ({ rows, today = todayIST(), onDelete }) => {
-  const [showExpired, setShowExpired] = useState(false);
-  const upcoming = upcomingSignals(rows, today);
-  const expiredCount = rows.length - upcoming.length;
-  const visibleRows = showExpired ? rows : upcoming;
-
-  return (
-    <div className="oi-history__signal-grid-wrap">
-      <div className="oi-history__signal-grid-toolbar">
-        <span>
-          {showExpired
-            ? `All ${rows.length} signals`
-            : `${upcoming.length} signal${upcoming.length === 1 ? '' : 's'} on upcoming expiries`}
-        </span>
-        <div className="oi-history__metric-toggle" role="group" aria-label="Signals to show">
-          <button type="button" className={`oi-history__volume-toggle ${!showExpired ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setShowExpired(false)} aria-pressed={!showExpired}>Upcoming</button>
-          <button type="button" className={`oi-history__volume-toggle ${showExpired ? 'oi-history__volume-toggle--active' : ''}`} onClick={() => setShowExpired(true)} aria-pressed={showExpired}>All{expiredCount > 0 ? ` (${rows.length})` : ''}</button>
-        </div>
-      </div>
-      {visibleRows.length === 0 ? (
-        <div className="oi-history__signal-grid-empty">
-          No signals on upcoming expiries.{expiredCount > 0 ? ` ${expiredCount} expired signal${expiredCount === 1 ? ' is' : 's are'} under All.` : ''}
-        </div>
-      ) : (
-        <div className="oi-history__signal-grid-scroll">
-          <table className="oi-history__signal-grid">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Signal</th>
-                <th>Expiry</th>
-                <th>Entry</th>
-                <th>Last</th>
-                <th>Return</th>
-                <th>Best</th>
-                <th>Worst</th>
-                <th>Result</th>
-                {onDelete && <th aria-label="Delete" />}
-              </tr>
-            </thead>
-            <tbody>
-              {visibleRows.map((row) => {
-                const status = row.outcome_status || SignalOutcome.Open;
-                return (
-                  <tr key={row.id} className={status === SignalOutcome.Loss ? 'is-loss' : status === SignalOutcome.Profit ? 'is-profit' : ''}>
-                    <td>{shortDate(row.signal_date)}</td>
-                    <td className="oi-history__signal-grid-signal">{row.action} {row.option_type} {row.strike}</td>
-                    <td>{shortDate(row.expiry)}</td>
-                    <td>{formatPrice(row.entry_premium)}</td>
-                    <td title={row.outcome_date ? `as of ${formatNumericDate(row.outcome_date)}` : undefined}>{formatPrice(row.outcome_price)}</td>
-                    <td className={row.outcome_return === null ? '' : row.outcome_return >= 0 ? 'is-up' : 'is-down'}>{formatReturn(row.outcome_return)}</td>
-                    <td>{formatReturn(row.max_favorable_return)}</td>
-                    <td>{formatReturn(row.max_adverse_return)}</td>
-                    <td>
-                      {status}
-                      {status !== SignalOutcome.Open && !row.outcome_final && <small> · live</small>}
-                    </td>
-                    {onDelete && (
-                      <td className="oi-history__signal-grid-delete">
-                        <button type="button" className="oi-history__signal-delete" onClick={() => onDelete(row.id)} title="Delete this signal" aria-label={`Delete ${row.action} ${row.option_type} ${row.strike} signal`}>×</button>
-                      </td>
-                    )}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
-    </div>
-  );
+/** Rising premium suits a buyer. */
+const momentumReading = (side: OptionMomentumSide | null): SetupSideReading | null => side && {
+  changePct: side.momentumPct,
+  favourable: side.momentumPct >= 0,
+  statusText: side.momentumPct >= 0 ? 'Momentum up' : 'Momentum down',
+  oiChangePct: side.oiChangePct,
+  latestVolume: side.latestVolume,
+  daysToExpiry: side.daysToExpiry,
 };
 
-export const SignalBreakdownTable: React.FC<{ signals: TradeSignalRow[] }> = ({ signals }) => {
-  const rows = summarizeSignalBreakdown(signals);
-  const groups = [...new Set(rows.map((row) => row.group))];
-  const hasPatterns = groups.includes('OI pattern');
-
-  return (
-    <div className="oi-history__signal-breakdown-wrap">
-      <div className="oi-history__signal-breakdown-title">
-        <strong>What works</strong>
-        <span>
-          Drop a slice that stays Losing. Verdicts need {MIN_SCORED_FOR_VERDICT}+ scored signals.
-          {!hasPatterns && ' OI pattern and flow are recorded on new signals from now on.'}
-        </span>
-      </div>
-      <div className="oi-history__signal-grid-scroll oi-history__signal-grid-scroll--auto">
-        <table className="oi-history__signal-grid oi-history__signal-breakdown-table">
-          <thead>
-            <tr>
-              <th>Slice</th>
-              <th>Signals</th>
-              <th>Scored</th>
-              <th>Win rate</th>
-              <th>Avg return</th>
-              <th>Avg worst</th>
-              <th>Verdict</th>
-            </tr>
-          </thead>
-          <tbody>
-            {groups.map((group) => (
-              <React.Fragment key={group}>
-                <tr className="is-group">
-                  <td colSpan={7}>{group}</td>
-                </tr>
-                {rows.filter((row) => row.group === group).map((row) => (
-                  <tr key={`${group}-${row.label}`}>
-                    <td>{row.label}</td>
-                    <td>{row.total}</td>
-                    <td>{row.scored}</td>
-                    <td>{row.winRate === null ? '-' : `${row.winRate.toFixed(0)}%`}</td>
-                    <td className={row.averageReturn === null ? '' : row.averageReturn >= 0 ? 'is-up' : 'is-down'}>{formatReturn(row.averageReturn)}</td>
-                    <td>{formatReturn(row.averageMaxAdverse)}</td>
-                    <td>
-                      <span className={`oi-history__signal-verdict oi-history__signal-verdict--${row.verdict.toLowerCase()}`}>{signalVerdictLabel(row.verdict)}</span>
-                    </td>
-                  </tr>
-                ))}
-              </React.Fragment>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
+/** Falling premium suits a seller. */
+const decayReading = (side: PremiumDecaySide | null): SetupSideReading | null => side && {
+  changePct: side.decayPct,
+  favourable: side.decayPct <= 0,
+  statusText: side.decayPct <= 0 ? 'Decay active' : 'Premium rising',
+  oiChangePct: side.oiChangePct,
+  latestVolume: side.latestVolume,
+  daysToExpiry: side.daysToExpiry,
 };
 
-const SignalPerformancePanel: React.FC<{ signalPerformance: SignalPerformanceSummary; signalRows: TradeSignalRow[]; onDeleteSignal?: (id: number) => void }> = ({ signalPerformance, signalRows, onDeleteSignal }) => (
-  <div className="oi-history__signal-performance oi-history__signal-performance--dashboard">
-    <div className="oi-history__signal-performance-head">
-      <span>Recorded setup performance</span>
-      <strong>{signalPerformance.total} signals · {signalPerformance.open} open · {signalPerformance.evaluated} evaluated</strong>
-    </div>
-    <div className={`oi-history__signal-confidence ${signalPerformance.evaluated >= 20 ? 'is-ready' : ''}`}>
-      {signalPerformance.evaluated >= 20
-        ? 'Performance sample is large enough for an initial review.'
-        : signalPerformance.open > 0
-          ? `${signalPerformance.open} signal${signalPerformance.open === 1 ? '' : 's'} remain open; current return is provisional until expiry.`
-          : `Preliminary sample: ${Math.max(0, 20 - signalPerformance.evaluated)} more evaluated signals needed before trusting the percentages.`}
-    </div>
-    <div className="oi-history__signal-performance-grid">
-      <span>Open <strong>{signalPerformance.open}</strong></span>
-      <span>Current open avg <strong>{signalPerformance.averageOpenReturn === null ? '-' : `${signalPerformance.averageOpenReturn >= 0 ? '+' : ''}${signalPerformance.averageOpenReturn.toFixed(1)}%`}</strong></span>
-      <span>Win rate <strong>{signalPerformance.winRate === null ? '-' : `${signalPerformance.winRate.toFixed(0)}%`}</strong></span>
-      <span>Avg return <strong>{signalPerformance.averageReturn === null ? '-' : `${signalPerformance.averageReturn >= 0 ? '+' : ''}${signalPerformance.averageReturn.toFixed(1)}%`}</strong></span>
-      <span>Avg best move <strong>{signalPerformance.averageMaxFavorable === null ? '-' : `+${signalPerformance.averageMaxFavorable.toFixed(1)}%`}</strong></span>
-      <span>Avg worst move <strong>{signalPerformance.averageMaxAdverse === null ? '-' : `${signalPerformance.averageMaxAdverse.toFixed(1)}%`}</strong></span>
-      <span>Sell <strong>{signalPerformance.sellWinRate === null ? '-' : `${signalPerformance.sellWinRate.toFixed(0)}% (${signalPerformance.sellEvaluated})`}</strong></span>
-      <span>Buy <strong>{signalPerformance.buyWinRate === null ? '-' : `${signalPerformance.buyWinRate.toFixed(0)}% (${signalPerformance.buyEvaluated})`}</strong></span>
-    </div>
-    <div className="oi-history__signal-quality">
-      <span>Avg win <strong>{signalPerformance.averageWin === null ? '-' : `+${signalPerformance.averageWin.toFixed(1)}%`}</strong></span>
-      <span>Avg loss <strong>{signalPerformance.averageLoss === null ? '-' : `${signalPerformance.averageLoss.toFixed(1)}%`}</strong></span>
-      <span>Profit factor <strong>{signalPerformance.profitFactor === null ? '-' : signalPerformance.profitFactor === Infinity ? '∞' : signalPerformance.profitFactor.toFixed(2)}</strong></span>
-    </div>
-    {signalRows.length > 0 && <SignalBreakdownTable signals={signalRows} />}
-    {signalRows.length > 0 && <SignalResultsGrid rows={signalRows} onDelete={onDeleteSignal} />}
-  </div>
+const buyTrade = (setup: TradeSetupSummary) => (
+  setup.status !== TradeSetupStatus.Avoid && (setup.direction === Bias.Bullish || setup.direction === Bias.Bearish)
+    ? { side: Side.BUY, label: `Buy ${setup.direction === Bias.Bullish ? OptionType.CE : OptionType.PE}` }
+    : null
+);
+
+const sellTrade = (setup: SellingSetupSummary) => (
+  setup.status !== TradeSetupStatus.Avoid && (setup.type === SellingSetup.CallSell || setup.type === SellingSetup.PutSell)
+    ? { side: Side.SELL, label: `Sell ${setup.type === SellingSetup.CallSell ? OptionType.CE : OptionType.PE}` }
+    : null
 );
 
 export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
@@ -202,259 +63,77 @@ export const TradeSetupDashboard: React.FC<TradeSetupDashboardProps> = ({
   signalRows,
   onDeleteSignal,
   onTrade,
-}) => (
-  <div className={`oi-history__setup-dashboard oi-history__setup-dashboard--${setup.tradeSetup.status.toLowerCase()}`}>
-    <div className="oi-history__setup-titlebar">
-      <div>
-        <span>TRADE SETUP</span>
-        <h3>Decision dashboard</h3>
-        <p>One view for buying momentum, selling decay, and the conditions that invalidate each idea.</p>
-      </div>
-      <div className="oi-history__setup-titlebar-meta">
-        <strong>{selectedStrike ?? '-'} STRIKE</strong>
-        <span>{formatNumericDate(filterDate)} · {expiries.length} expiry{expiries.length === 1 ? '' : 'ies'}</span>
-      </div>
-    </div>
-    <div className="oi-history__setup-choice-grid">
-      <div className={`oi-history__setup-mode-card oi-history__setup-mode-card--${setup.tradeSetup.status.toLowerCase()}`}>
-        <div className="oi-history__setup-mode-card-head">
-          <span>Option Buying Trade</span>
-          <strong>{setup.tradeSetup.direction} {setup.tradeSetup.status === TradeSetupStatus.Avoid ? 'No Trade' : setup.tradeSetup.status}</strong>
-        </div>
-        <div className="oi-history__readiness-meter">
-          <span>Buying setup</span>
-          <strong>{setupReadinessLabel(setup.tradeSetup.status, readinessScore(setup.tradeSetup.checklist))}</strong>
-          <div><span style={{ width: setupReadinessWidth(setup.tradeSetup.status, readinessScore(setup.tradeSetup.checklist)) }} /></div>
-        </div>
-        <p>{setup.tradeSetup.action}</p>
-        <div className="oi-history__buying-summary">
-          <div className="oi-history__buying-summary-head">
-            <div>
-              <span>Nearest-expiry momentum</span>
-              <strong>{setup.optionMomentum.nearestExpiry ? expiryLabel(setup.optionMomentum.nearestExpiry, isMonthlyExpiry(setup.optionMomentum.nearestExpiry)) : 'Unavailable'}</strong>
-            </div>
-            <em>Buying pressure</em>
-          </div>
-          <div className="oi-history__buying-summary-grid">
-            {OPTION_TYPES.map((optionType) => {
-              const side = optionType === OptionType.CE ? setup.optionMomentum.ce : setup.optionMomentum.pe;
-              return (
-                <div key={optionType} className="oi-history__buying-summary-side">
-                  <div className="oi-history__buying-summary-side-head">
-                    <strong>{optionType}</strong>
-                    <span>{side ? (side.momentumPct >= 0 ? 'Momentum up' : 'Momentum down') : 'No history'}</span>
-                  </div>
-                  <div className={`oi-history__buying-summary-value ${side && side.momentumPct >= 0 ? 'is-positive' : 'is-negative'}`}>
-                    <strong>{side ? formatPct(side.momentumPct) : '-'}</strong>
-                    <small>premium change</small>
-                  </div>
-                  <div className="oi-history__buying-summary-metrics">
-                    <span>OI <b>{side ? formatPct(side.oiChangePct) : '-'}</b></span>
-                    <span>Vol <b>{side && side.latestVolume > 0 ? side.latestVolume.toLocaleString('en-IN') : '-'}</b></span>
-                    <span>DTE <b>{side?.daysToExpiry ?? '-'}</b></span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        <div className="oi-history__setup-primary-action">
-          <span>Strategy</span>
-          <strong>{setup.tradeSetup.strategy}</strong>
-        </div>
-        <div className="oi-history__setup-mini-plan">
-          <div>
-            <span>Trigger</span>
-            <strong>{setup.tradeSetup.trigger}</strong>
-          </div>
-          <div>
-            <span>Stop</span>
-            <strong>{setup.tradeSetup.invalidation}</strong>
-          </div>
-          <div>
-            <span>Target</span>
-            <strong>{setup.tradeSetup.target}</strong>
-          </div>
-        </div>
-        {setup.tradeSetup.status !== TradeSetupStatus.Avoid &&
-          (setup.tradeSetup.direction === Bias.Bullish || setup.tradeSetup.direction === Bias.Bearish) && (
-          <button
-            type="button"
-            className="oi-history__setup-trade-btn oi-history__setup-trade-btn--buy"
-            onClick={() => onTrade(Side.BUY)}
-          >
-            Buy {setup.tradeSetup.direction === Bias.Bullish ? OptionType.CE : OptionType.PE}
-          </button>
-        )}
-      </div>
-
-      <div className={`oi-history__setup-mode-card oi-history__setup-mode-card--${setup.sellingSetup.status.toLowerCase()}`}>
-        <div className="oi-history__setup-mode-card-head">
-          <span>Option Selling Trade</span>
-          <strong>{sellingSetupLabel(setup.sellingSetup.type)} {setup.sellingSetup.status === TradeSetupStatus.Avoid ? 'No Trade' : setup.sellingSetup.status}</strong>
-        </div>
-        <div className="oi-history__readiness-meter">
-          <span>Selling setup</span>
-          <strong>{setupReadinessLabel(setup.sellingSetup.status, readinessScore(setup.sellingSetup.checklist))}</strong>
-          <div><span style={{ width: setupReadinessWidth(setup.sellingSetup.status, readinessScore(setup.sellingSetup.checklist)) }} /></div>
-        </div>
-        <p>{setup.sellingSetup.action}</p>
-        <div className="oi-history__buying-summary oi-history__decay-monitor">
-          <div className="oi-history__buying-summary-head">
-            <div>
-              <span>Nearest-expiry decay monitor</span>
-              <strong>{setup.premiumDecay.nearestExpiry ? expiryLabel(setup.premiumDecay.nearestExpiry, isMonthlyExpiry(setup.premiumDecay.nearestExpiry)) : 'Unavailable'}</strong>
-            </div>
-            <em>Time decay</em>
-          </div>
-          <div className="oi-history__buying-summary-grid">
-            {OPTION_TYPES.map((optionType) => {
-              const side = optionType === OptionType.CE ? setup.premiumDecay.ce : setup.premiumDecay.pe;
-              return (
-                <div key={optionType} className="oi-history__buying-summary-side">
-                  <div className="oi-history__buying-summary-side-head">
-                    <strong>{optionType}</strong>
-                    <span>{side ? (side.decayPct <= 0 ? 'Decay active' : 'Premium rising') : 'No history'}</span>
-                  </div>
-                  <div className={`oi-history__buying-summary-value ${side && side.decayPct <= 0 ? 'is-positive' : 'is-negative'}`}>
-                    <strong>{side ? formatPct(side.decayPct) : '-'}</strong>
-                    <small>premium change</small>
-                  </div>
-                  <div className="oi-history__buying-summary-metrics">
-                    <span>OI <b>{side ? formatPct(side.oiChangePct) : '-'}</b></span>
-                    <span>Vol <b>{side && side.latestVolume > 0 ? side.latestVolume.toLocaleString('en-IN') : '-'}</b></span>
-                    <span>DTE <b>{side?.daysToExpiry ?? '-'}</b></span>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-        <div className="oi-history__setup-primary-action">
-          <span>Structure</span>
-          <strong>{setup.sellingSetup.type === SellingSetup.NoSell ? 'Wait for support/resistance setup' : 'Prefer defined-risk credit spread'}</strong>
-        </div>
-        <div className="oi-history__setup-mini-plan">
-          <div>
-            <span>Trigger</span>
-            <strong>{setup.sellingSetup.trigger}</strong>
-          </div>
-          <div>
-            <span>Stop</span>
-            <strong>{setup.sellingSetup.invalidation}</strong>
-          </div>
-          <div>
-            <span>Target</span>
-            <strong>{setup.sellingSetup.target}</strong>
-          </div>
-        </div>
-        {setup.sellingSetup.status !== TradeSetupStatus.Avoid &&
-          (setup.sellingSetup.type === SellingSetup.CallSell || setup.sellingSetup.type === SellingSetup.PutSell) && (
-          <button
-            type="button"
-            className="oi-history__setup-trade-btn oi-history__setup-trade-btn--sell"
-            onClick={() => onTrade(Side.SELL)}
-          >
-            Sell {setup.sellingSetup.type === SellingSetup.CallSell ? OptionType.CE : OptionType.PE}
-          </button>
-        )}
-      </div>
-    </div>
-
-    {signalPerformance && <SignalPerformancePanel signalPerformance={signalPerformance} signalRows={signalRows} onDeleteSignal={onDeleteSignal} />}
-
-    <div className="oi-history__market-context" aria-label="Market context">
-      <span className="oi-history__market-context-title">Market context</span>
-      <div className="oi-history__market-context-items">
-        <span><small>Price</small><strong>{setup.priceTrend.direction}</strong></span>
-        <span><small>Flow</small><strong>{setup.biasSummary.bias} · {setup.biasSummary.strength}</strong></span>
-        <span><small>Support</small><strong>{setup.tradeLevels.supportStrike ?? '-'}</strong></span>
-        <span><small>Spot</small><strong>{setup.tradeLevels.spot !== null ? setup.tradeLevels.spot.toFixed(2) : '-'}</strong></span>
-        <span><small>Resistance</small><strong>{setup.tradeLevels.resistanceStrike ?? '-'}</strong></span>
-        <span><small>Max OI</small><strong>{setup.tradeLevels.maxOiStrike ?? '-'}</strong></span>
-      </div>
-    </div>
-
-    <details className="oi-history__setup-detail-drawer">
-      <summary>
-        <span>Why this setup?</span>
-        <em>Evidence, risk checks, and market context</em>
-      </summary>
-      <div className="oi-history__setup-evidence-grid">
-        <div className="oi-history__setup-detail-section oi-history__setup-detail-section--buying">
-          <div className="oi-history__setup-section-heading">
-            <span>Option buying</span>
-            <strong>{setupReadinessLabel(setup.tradeSetup.status, readinessScore(setup.tradeSetup.checklist))}</strong>
-          </div>
-        <div className="oi-history__setup-signal-strip">
-          {sortChecklistByStatus(setup.tradeSetup.checklist).map((item) => (
-            <div key={item.label} className={`oi-history__signal-tile oi-history__signal-tile--${item.status.toLowerCase()}`}>
-              <span>{item.label}</span>
-              <strong>{checklistStatusText(item.status)}</strong>
-              <em>{item.answer}</em>
-            </div>
-          ))}
-        </div>
-        </div>
-        <div className="oi-history__setup-detail-section oi-history__setup-detail-section--selling">
-          <div className="oi-history__setup-section-heading">
-            <span>Option selling</span>
-            <strong>{setupReadinessLabel(setup.sellingSetup.status, readinessScore(setup.sellingSetup.checklist))}</strong>
-          </div>
-        <div className="oi-history__setup-signal-strip">
-          {sortChecklistByStatus(setup.sellingSetup.checklist).map((item) => (
-            <div key={item.label} className={`oi-history__signal-tile oi-history__signal-tile--${item.status.toLowerCase()}`}>
-              <span>{item.label}</span>
-              <strong>{checklistStatusText(item.status)}</strong>
-              <em>{item.answer}</em>
-            </div>
-          ))}
-        </div>
-        </div>
-      </div>
-      <div className="oi-history__setup-context">
-        <div className={`oi-history__setup-context-item oi-history__setup-context-item--${setup.tradeBias.bias.toLowerCase()}`}>
-          <span>Trade bias</span>
-          <strong>{setup.tradeBias.title}</strong>
-          <em>{setup.tradeBias.action} {setup.tradeBias.reason}</em>
-        </div>
-        <div className={`oi-history__setup-context-item oi-history__setup-context-item--${setup.priceTrend.direction.toLowerCase()}`}>
-          <span>Price trend</span>
-          <strong>{setup.priceTrend.direction} - {setup.priceTrend.strength}</strong>
-          <em>
-            {setup.priceTrend.reason} Start {setup.priceTrend.startPrice !== null ? setup.priceTrend.startPrice.toFixed(2) : '-'} | End {setup.priceTrend.endPrice !== null ? setup.priceTrend.endPrice.toFixed(2) : '-'} | Change {formatPct(setup.priceTrend.changePct)} | Recent {formatPct(setup.priceTrend.recentChangePct)} | Sessions {setup.priceTrend.sessions}
-          </em>
-        </div>
-        <div className={`oi-history__setup-context-item oi-history__setup-context-item--${setup.biasSummary.bias.toLowerCase()}`}>
-          <span>Option flow</span>
-          <strong>{setup.biasSummary.bias} - {setup.biasSummary.strength}</strong>
-          <em>
-            {setup.biasSummary.reason} Confidence {setup.biasSummary.confidence}% | Days {setup.biasSummary.bullishDays}/{setup.biasSummary.bearishDays}/{setup.biasSummary.neutralDays} | CE OI {formatPct(setup.biasSummary.ceOiChangePct)} | PE OI {formatPct(setup.biasSummary.peOiChangePct)} | PCR {formatPcr(setup.biasSummary.pcrStart)} -&gt; {formatPcr(setup.biasSummary.pcrEnd)} | Score {setup.biasSummary.score}
-          </em>
-        </div>
-      </div>
-      <div className="oi-history__setup-details">
+}) => {
+  const expiryText = (expiry: string | null) => (expiry ? expiryLabel(expiry, isMonthlyExpiry(expiry)) : 'Unavailable');
+  return (
+    <div className={`oi-history__setup-dashboard oi-history__setup-dashboard--${setup.tradeSetup.status.toLowerCase()}`}>
+      <div className="oi-history__setup-titlebar">
         <div>
-          <span>Recent 3-session lean</span>
-          <strong className={`oi-history__bias-text--${setup.biasSummary.recentBias.toLowerCase()}`}>
-            {setup.biasSummary.recentBias} ({setup.biasSummary.recentScore > 0 ? '+' : ''}{setup.biasSummary.recentScore})
-          </strong>
+          <span>TRADE SETUP</span>
+          <h3>Decision dashboard</h3>
+          <p>One view for buying momentum, selling decay, and the conditions that invalidate each idea.</p>
         </div>
-        <div>
-          <span>Main driver</span>
-          <strong>{setup.biasSummary.driver}</strong>
+        <div className="oi-history__setup-titlebar-meta">
+          <strong>{selectedStrike ?? '-'} STRIKE</strong>
+          <span>{formatNumericDate(filterDate)} · {expiries.length} expiry{expiries.length === 1 ? '' : 'ies'}</span>
         </div>
-        <div>
-          <span>Visible expiries</span>
-          <strong>{expiries.map((exp) => expiryLabel(exp, isMonthlyExpiry(exp))).join(', ')}</strong>
-        </div>
-        {setup.biasSummary.warning && (
-          <div className="oi-history__bias-warning">
-            <span>Watch</span>
-            <strong>{setup.biasSummary.warning}</strong>
-          </div>
-        )}
       </div>
-    </details>
-  </div>
-);
+      <div className="oi-history__setup-choice-grid">
+        <SetupModeCard
+          title="Option Buying Trade"
+          setupName={setup.tradeSetup.direction}
+          meterLabel="Buying setup"
+          setup={setup.tradeSetup}
+          summary={(
+            <SetupSidesSummary
+              title="Nearest-expiry momentum"
+              expiryText={expiryText(setup.optionMomentum.nearestExpiry)}
+              tag="Buying pressure"
+              sides={{ [OptionType.CE]: momentumReading(setup.optionMomentum.ce), [OptionType.PE]: momentumReading(setup.optionMomentum.pe) }}
+            />
+          )}
+          approach={{ label: 'Strategy', value: setup.tradeSetup.strategy }}
+          trade={buyTrade(setup.tradeSetup)}
+          onTrade={onTrade}
+        />
+        <SetupModeCard
+          title="Option Selling Trade"
+          setupName={sellingSetupLabel(setup.sellingSetup.type)}
+          meterLabel="Selling setup"
+          setup={setup.sellingSetup}
+          summary={(
+            <SetupSidesSummary
+              title="Nearest-expiry decay monitor"
+              expiryText={expiryText(setup.premiumDecay.nearestExpiry)}
+              tag="Time decay"
+              className="oi-history__decay-monitor"
+              sides={{ [OptionType.CE]: decayReading(setup.premiumDecay.ce), [OptionType.PE]: decayReading(setup.premiumDecay.pe) }}
+            />
+          )}
+          approach={{
+            label: 'Structure',
+            value: setup.sellingSetup.type === SellingSetup.NoSell ? 'Wait for support/resistance setup' : 'Prefer defined-risk credit spread',
+          }}
+          trade={sellTrade(setup.sellingSetup)}
+          onTrade={onTrade}
+        />
+      </div>
+
+      {signalPerformance && <SignalPerformancePanel signalPerformance={signalPerformance} signalRows={signalRows} onDeleteSignal={onDeleteSignal} />}
+
+      <div className="oi-history__market-context" aria-label="Market context">
+        <span className="oi-history__market-context-title">Market context</span>
+        <div className="oi-history__market-context-items">
+          <span><small>Price</small><strong>{setup.priceTrend.direction}</strong></span>
+          <span><small>Flow</small><strong>{setup.biasSummary.bias} · {setup.biasSummary.strength}</strong></span>
+          <span><small>Support</small><strong>{setup.tradeLevels.supportStrike ?? '-'}</strong></span>
+          <span><small>Spot</small><strong>{setup.tradeLevels.spot !== null ? setup.tradeLevels.spot.toFixed(2) : '-'}</strong></span>
+          <span><small>Resistance</small><strong>{setup.tradeLevels.resistanceStrike ?? '-'}</strong></span>
+          <span><small>Max OI</small><strong>{setup.tradeLevels.maxOiStrike ?? '-'}</strong></span>
+        </div>
+      </div>
+
+      <SetupEvidenceDrawer setup={setup} expiries={expiries} isMonthlyExpiry={isMonthlyExpiry} />
+    </div>
+  );
+};

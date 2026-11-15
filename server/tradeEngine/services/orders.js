@@ -10,7 +10,7 @@
  *   (fillPrice.js), and a limit order that can fill at the last price fills at
  *   once at it; otherwise the order waits. Outside market hours (positional
  *   orders only) it always waits: orders fill only while the market is open.
- * - Waiting orders, across all users, are watched on live ticks from the
+ * - Waiting orders, across all users, are watched (orderWatch.js) on live ticks from the
  *   server's shared Kite ticker feed (sharedTickerFeed.js, admin session, the
  *   one the trade monitor uses), in market hours. The first tick that reaches
  *   a limit order's limit fills it at the limit; a waiting market order fills
@@ -49,11 +49,12 @@ import { NOT_FOUND, MANUAL_EXIT, closablePosition, closePosition, openPosition, 
 import { openSharedTickerFeed } from '../../sharedTickerFeed.js';
 import { findWorkingAdminSession } from '../../oiHistoryScheduler.js';
 import { fetchQuotes } from '../../kiteQuotes.js';
-import { isMarketOpen, lastSessionEnd, marketDate } from '../../../shared/marketTime.js';
+import { isMarketOpen, lastSessionEnd } from '../../../shared/marketTime.js';
 import { normalizeTradeInput } from '../../../shared/tradeRules.js';
 import { CANCELLED_AT_CLOSE, CANCELLED_BY_USER, canFill, parseOrder } from '../../../shared/orders.js';
 import { quotedFillPrice } from '../fillPrice.js';
 import { OrderStatus, OrderType, TradeSource, oppositeSide } from '../../../shared/tradeEnums.js';
+import { createOrderWatch } from './orderWatch.js';
 
 /** This trade engine service's id: its key in ctx.services and on Admin Services. */
 export const ORDERS_SERVICE_ID = 'orders';
@@ -97,33 +98,9 @@ export function createOrderService({
   clock = () => new Date(),
   log = (message) => console.log(`${LOG_PREFIX} ${message}`),
 } = {}) {
-  /** @type {Map<number, Map<string, Order>>} instrument token → its waiting orders by id */
-  const waiting = new Map();
   /** @type {((order: Order) => Promise<void> | void)[]} */
   const settledListeners = [];
-  /** @type {ReturnType<typeof openSharedTickerFeed> | null} */
-  let feed = null;
-  /** The feed's Kite session, to quote market fills on ticks. @type {KiteSession | null} */
-  let feedKite = null;
-  /** Whether the engine runs this service (it watches ticks only then); the day "no admin login" was logged. */
-  let started = false;
-  let waitingLoggedDate = null;
-
-  const waitingCount = () => [...waiting.values()].reduce((n, orders) => n + orders.size, 0);
-  const watchWaiting = () => feed?.watch([...waiting.keys()]);
-
-  function wait(/** @type {Order} */ order) {
-    if (!waiting.has(order.instrumentToken)) waiting.set(order.instrumentToken, new Map());
-    waiting.get(order.instrumentToken).set(order.id, order);
-  }
-
-  function unwait(/** @type {Order} */ order) {
-    const orders = waiting.get(order.instrumentToken);
-    if (!orders?.delete(order.id)) return false;
-    if (orders.size === 0) waiting.delete(order.instrumentToken);
-    watchWaiting();
-    return true;
-  }
+  const watch = createOrderWatch({ findKiteSession, createFeed, clock, log, fillPrice: tickFillPrice, fill });
 
   /** Tell every listener an order filled or was cancelled; a failing listener is logged, never thrown. */
   async function settled(/** @type {Order} */ order) {
@@ -185,52 +162,12 @@ export function createOrderService({
    * null when it doesn't fill.
    * @param {Order} order
    * @param {number} lastPrice
+   * @param {KiteSession | null} feedKite  the feed's session, to quote a market fill
    * @returns {number | Promise<number> | null}
    */
-  function tickFillPrice(order, lastPrice) {
+  function tickFillPrice(order, lastPrice, feedKite) {
     if (order.orderType === OrderType.Market) return marketPrice(order, lastPrice, { kite: feedKite });
     return canFill(order.side, /** @type {number} */ (order.limitPrice), lastPrice) ? order.limitPrice : null;
-  }
-
-  function onTicks(/** @type {import('../../../shared/kiteTicks.js').Tick[]} */ ticks) {
-    const fills = [];
-    for (const tick of ticks) {
-      for (const order of [...(waiting.get(tick.instrumentToken)?.values() ?? [])]) {
-        const price = tickFillPrice(order, tick.lastPrice);
-        if (price === null || !unwait(order)) continue;
-        fills.push(Promise.resolve(price).then((at) => fill(order, at))
-          .catch((err) => log(`${order.tradingsymbol} [${order.userId}] fill failed: ${err.message}`)));
-      }
-    }
-    return Promise.all(fills);
-  }
-
-  function stopFeed() {
-    feed?.close();
-    feed = null;
-    feedKite = null;
-  }
-
-  async function startFeed() {
-    const date = marketDate(clock());
-    const kite = await findKiteSession();
-    if (!kite) {
-      if (waitingLoggedDate !== date) log('waiting for an admin Kite login today to watch open orders');
-      waitingLoggedDate = date;
-      return;
-    }
-    feed = createFeed({
-      kite,
-      onTicks: (ticks) => { onTicks(ticks); },
-      onAuthError: () => { log('the admin Kite session expired; trying again at the next check'); stopFeed(); },
-    });
-    feedKite = kite;
-    watchWaiting();
-  }
-
-  /** Start the feed if the service runs, orders are waiting and it isn't running (market hours only). */
-  async function ensureFeed() {
-    if (started && !feed && waitingCount() > 0 && isMarketOpen(clock())) await startFeed();
   }
 
   /**
@@ -240,10 +177,9 @@ export function createOrderService({
   async function openSession() {
     const since = lastSessionEnd(clock()).toISOString();
     for (const order of await db.cancelOpenOrdersPlacedBefore(since, CANCELLED_AT_CLOSE)) await settled(order);
-    waiting.clear();
-    for (const order of await db.getOpenOrders(since)) wait(order);
-    log(`watching ${waitingCount()} open order(s)`);
-    await ensureFeed();
+    watch.replace(await db.getOpenOrders(since));
+    log(`watching ${watch.count()} open order(s)`);
+    await watch.ensureFeed();
   }
 
   /**
@@ -251,8 +187,7 @@ export function createOrderService({
    * the session. Orders placed since wait for the next one.
    */
   async function closeSession() {
-    stopFeed();
-    waiting.clear();
+    watch.clear();
     const cancelled = await db.cancelOpenOrdersPlacedBefore(lastSessionEnd(clock()).toISOString(), CANCELLED_AT_CLOSE);
     if (cancelled.length > 0) log(`market closed; cancelled ${cancelled.length} open order(s)`);
     for (const order of cancelled) await settled(order);
@@ -286,9 +221,8 @@ export function createOrderService({
     const order = await db.createOrder(userId, parsed, placedBy);
     const price = await placedFillPrice(order, lastPrice, source);
     if (price !== null) return { ok: true, order: await fill(order, price) };
-    wait(order);
-    watchWaiting();
-    await ensureFeed();
+    watch.add(order);
+    await watch.ensureFeed();
     return { ok: true, order };
   }
 
@@ -297,21 +231,19 @@ export function createOrderService({
 
     /** Run on the market clock: watch at each open, cancel the session's open orders after each close. */
     start(/** @type {import('../host.js').PluginContext} */ ctx) {
-      started = true;
+      watch.start();
       ctx.market.onOpen(openSession);
       ctx.market.onClose(closeSession);
-      ctx.market.every(FEED_CHECK_MS, ensureFeed);
+      ctx.market.every(FEED_CHECK_MS, watch.ensureFeed);
     },
 
     stop() {
-      started = false;
-      stopFeed();
-      waiting.clear();
+      watch.stop();
     },
 
-    status: () => ({ waitingOrders: waitingCount(), feedConnected: feed !== null }),
+    status: () => ({ waitingOrders: watch.count(), feedConnected: watch.connected() }),
 
-    onTicks,
+    onTicks: watch.onTicks,
 
     /**
      * Place a limit or market order for the user: filled at once when it can
@@ -407,7 +339,7 @@ export function createOrderService({
     async cancel(userId, id) {
       const cancelled = await db.cancelOrder(userId, id, CANCELLED_BY_USER);
       if (!cancelled) return { ok: false, code: NOT_FOUND, message: NOT_OPEN_MESSAGE };
-      unwait(cancelled);
+      watch.remove(cancelled);
       await settled(cancelled);
       return { ok: true, order: cancelled };
     },
@@ -425,6 +357,6 @@ export function createOrderService({
     },
 
     /** The ids of the orders waiting, for tests and logs. */
-    waitingOrderIds: () => [...waiting.values()].flatMap((orders) => [...orders.keys()]),
+    waitingOrderIds: watch.ids,
   };
 }

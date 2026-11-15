@@ -7,7 +7,8 @@ import type { FuturesHistoryRow, OiCellData, OiTableRow, StrikeHistoryEntry, Tra
 import { FuturesContext } from './FuturesContext';
 import { OiSnapshotTable } from './OiSnapshotTable';
 import { StrikeOiChart } from './StrikeOiChart';
-import { SignalBreakdownTable, SignalResultsGrid, upcomingSignals } from './TradeSetupDashboard';
+import { SignalBreakdownTable } from './SignalBreakdownTable';
+import { SignalResultsGrid, upcomingSignals } from './SignalResultsGrid';
 import { SignalVerdict } from '../../../shared/analysisEnums.js';
 
 const futuresRow = (date: string, expiry: string, close: number, oi: number): FuturesHistoryRow => ({
