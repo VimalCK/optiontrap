@@ -1,7 +1,7 @@
 /**
  * Option Analyzer setups: a trade engine strategy that trades what the Option
  * Analyzer's Strategy card suggests, scored by the same code
- * (shared/optionAnalysis/setups.js).
+ * (shared/optionAnalysis/sellSetups.js and buySetups.js).
  *
  * It runs itself on the market clock: every SNAPSHOT_CHECK_MS in market hours
  * it looks for an OI snapshot newer than the last one it acted on (the
@@ -23,7 +23,8 @@
  * setup with a tiny premium isn't taken.
  */
 import { atmStrikeOf, averageVolume, buildOptionChain, optionOf, strikeWindow, upcomingExpiries } from '../../../shared/optionAnalysis/chain.js';
-import { computeBuyRecommendations, computeSellRecommendations } from '../../../shared/optionAnalysis/setups.js';
+import { computeSellRecommendations } from '../../../shared/optionAnalysis/sellSetups.js';
+import { computeBuyRecommendations } from '../../../shared/optionAnalysis/buySetups.js';
 import { withSpot } from '../../../shared/optionAnalysis/velocityPattern.js';
 import { daysUntil, marketDate } from '../../../shared/marketTime.js';
 import { getLatestOiSnapshotTimestamp, getTodayOiSnapshots, getUnderlyings } from '../../db.js';
