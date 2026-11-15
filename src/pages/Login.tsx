@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import Modal from '@/components/Modal/Modal';
 import ParticleNetwork from '@/components/ParticleNetwork/ParticleNetwork';
-import { getLoginUrl, getLastAvatarUrl, saveCredentials, hasCredentials, getCredentials, SubscriptionPlan } from '@/services/kiteAuth';
-import { currencySymbol, getPublicPlans, formatDuration } from '@/services/subscription';
-import { AnalyticsIcon, CheckIcon, DashboardIcon, LogoIcon, PaperTradingIcon, ShieldIcon, TradesIcon, WatchlistIcon } from '@/components/icons/Icons';
-import { DurationUnit } from '../../shared/appEnums.js';
+import Showcase from '@/components/Landing/Showcase';
+import PricingPlans from '@/components/Landing/PricingPlans';
+import KiteLoginModal from '@/components/Landing/KiteLoginModal';
+import { hasCredentials } from '@/services/kiteAuth';
+import { AnalyticsIcon, DashboardIcon, LogoIcon, PaperTradingIcon, ShieldIcon, TradesIcon, WatchlistIcon } from '@/components/icons/Icons';
 import '@/styles/login.css';
-import Message from '@/components/Message/Message';
-import { MessageTone, ModalSize } from '@/utils/uiEnums';
 
 const FEATURES = [
   { icon: <AnalyticsIcon />, title: 'Live Option Chain', text: 'Real-time OI, intraday velocity and Greeks across every strike.' },
@@ -19,245 +17,18 @@ const FEATURES = [
   { icon: <WatchlistIcon />, title: 'Watchlists & Alerts', text: 'Track instruments and get notified on price moves.' },
 ];
 
-// Marketing metadata merged with live plan data from the DB (name/price/duration).
-const PLAN_META: Record<string, { badge?: string; features: string[] }> = {
-  one_month: { features: ['Full option chain & analytics', 'Paper trading + journal', 'Watchlists & price alerts'] },
-  six_months: { badge: 'Most popular', features: ['Everything in 1 Month', 'Priority access to new analytics', 'Longer strategy review window'] },
-  twelve_months: { features: ['Everything in 6 Months', 'Annual performance view', 'Priority roadmap access'] },
-};
-
-const DEFAULT_FEATURES = ['Full access to all analytics', 'Paper trading + journal', 'Watchlists & alerts'];
-
-// Shown until the live plans load (or if the request fails).
-const FALLBACK_PLANS: SubscriptionPlan[] = [
-  { id: 'one_month', name: '1 Month', description: null, currency: 'INR', price: 199, durationCount: 1, durationUnit: DurationUnit.Month, isActive: true },
-  { id: 'six_months', name: '6 Months', description: null, currency: 'INR', price: 999, durationCount: 6, durationUnit: DurationUnit.Month, isActive: true },
-  { id: 'twelve_months', name: '12 Months', description: null, currency: 'INR', price: 1799, durationCount: 12, durationUnit: DurationUnit.Month, isActive: true },
-];
-
-const monthsOf = (p: SubscriptionPlan): number => {
-  switch (p.durationUnit) {
-    case DurationUnit.Year: return p.durationCount * 12;
-    case DurationUnit.Week: return (p.durationCount * 7) / 30;
-    case DurationUnit.Day: return p.durationCount / 30;
-    default: return p.durationCount;
-  }
-};
-
-
-// The redirect URL that must be registered in the user's Kite Connect app.
-const REDIRECT_URL = 'https://optiontrap.com/redirect';
-
-const STRIKES = [
-  { strike: 24300, ce: 42, pe: 78 },
-  { strike: 24400, ce: 58, pe: 64 },
-  { strike: 24500, ce: 91, pe: 52, atm: true },
-  { strike: 24600, ce: 66, pe: 39 },
-  { strike: 24700, ce: 48, pe: 27 },
-];
-
-// Real product screenshots — drop the files into public/showcase/.
-const SHOTS = [
-  { src: '/showcase/oi-history.png', label: 'OI Price History', sub: 'Per-strike CE/PE open interest & price over time' },
-  { src: '/showcase/pnl-journal.png', label: 'Trade Journal', sub: 'Tick-accurate paper P&L, win rate & heatmap' },
-];
-
-const MockChain: React.FC = () => {
-  const [spot, setSpot] = useState(24512.35);
-  const [edge, setEdge] = useState(72);
-  const [rows, setRows] = useState(STRIKES);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      setSpot((prev) => +(prev + (Math.random() - 0.5) * 6).toFixed(2));
-      setEdge((prev) => Math.min(96, Math.max(48, prev + Math.round((Math.random() - 0.5) * 8))));
-      setRows((prev) => prev.map((r) => ({
-        ...r,
-        ce: Math.min(99, Math.max(15, r.ce + Math.round((Math.random() - 0.5) * 6))),
-        pe: Math.min(99, Math.max(15, r.pe + Math.round((Math.random() - 0.5) * 6))),
-      })));
-    }, 1600);
-    return () => clearInterval(id);
-  }, []);
-
-  return (
-    <div className="showcase__mock">
-      <div className="showcase__spot">
-        <span>NIFTY 50</span>
-        <strong>{spot.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
-      </div>
-
-      <div className="showcase__chain">
-        <div className="showcase__chain-head">
-          <span>CE OI</span><span>Strike</span><span>PE OI</span>
-        </div>
-        {rows.map((r) => (
-          <div key={r.strike} className={`showcase__row ${r.atm ? 'showcase__row--atm' : ''}`}>
-            <div className="showcase__oi showcase__oi--ce">
-              <span className="showcase__bar-fill showcase__bar-fill--ce" style={{ width: `${r.ce}%` }} />
-              <em>{r.ce}k</em>
-            </div>
-            <span className="showcase__strike">{r.strike}</span>
-            <div className="showcase__oi showcase__oi--pe">
-              <span className="showcase__bar-fill showcase__bar-fill--pe" style={{ width: `${r.pe}%` }} />
-              <em>{r.pe}k</em>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      <div className="showcase__footer">
-        <div className="showcase__gauge" style={{ ['--edge' as string]: `${edge}` }}>
-          <span className="showcase__gauge-value">{edge}</span>
-        </div>
-        <div className="showcase__footer-copy">
-          <span className="showcase__footer-label">Edge Score</span>
-          <span className="showcase__footer-sub">Sell signal · high conviction</span>
-        </div>
-        <div className="showcase__heatmap">
-          {Array.from({ length: 21 }).map((_, i) => (
-            <span key={i} className={`showcase__cell showcase__cell--${(i * 7) % 3}`} style={{ animationDelay: `${i * 0.08}s` }} />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const Showcase: React.FC = () => {
-  const [slide, setSlide] = useState(0);
-  // Only include screenshots that actually exist so we never show blank slides.
-  const [shots, setShots] = useState<typeof SHOTS>([]);
-  const total = shots.length + 1;
-
-  useEffect(() => {
-    let active = true;
-    const found = new Set<string>();
-    let pending = SHOTS.length;
-    if (pending === 0) return;
-
-    SHOTS.forEach((s) => {
-      const img = new Image();
-      const done = () => {
-        if (--pending === 0 && active) setShots(SHOTS.filter((x) => found.has(x.src)));
-      };
-      img.onload = () => { found.add(s.src); done(); };
-      img.onerror = done;
-      img.src = s.src;
-    });
-
-    return () => { active = false; };
-  }, []);
-
-  useEffect(() => {
-    if (total <= 1) return;
-    const id = setInterval(() => setSlide((s) => (s + 1) % total), 4500);
-    return () => clearInterval(id);
-  }, [total]);
-
-  const shot = slide > 0 ? shots[slide - 1] : null;
-  const label = shot ? shot.label : 'Live Option Chain';
-  const sub = shot ? shot.sub : 'Real-time OI, velocity & Greeks';
-
-  return (
-    <div className="showcase">
-      <div className="showcase__frame">
-        <div className="showcase__bar">
-          <span className="showcase__dot" /><span className="showcase__dot" /><span className="showcase__dot" />
-          <span className="showcase__url">optiontrap · {label}</span>
-          <span className="showcase__live"><i />LIVE</span>
-        </div>
-
-        <div className="showcase__stage">
-          {shot
-            ? <img className="showcase__shot" src={shot.src} alt={shot.label} loading="lazy" />
-            : <MockChain />}
-        </div>
-
-        <div className="showcase__caption">
-          <span>{label}</span>
-          <small>{sub}</small>
-        </div>
-
-        <div className="showcase__dots">
-          {Array.from({ length: total }).map((_, i) => (
-            <button
-              key={i}
-              type="button"
-              className={`showcase__dot-nav ${i === slide ? 'is-active' : ''}`}
-              onClick={() => setSlide(i)}
-              aria-label={`Show slide ${i + 1}`}
-            />
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-};
-
 const Login: React.FC = () => {
   const [searchParams] = useSearchParams();
   const expired = searchParams.get('expired') === '1';
 
-  const existingCreds = getCredentials();
-  const [apiKey, setApiKey] = useState(existingCreds?.apiKey ?? '');
-  const [apiSecret, setApiSecret] = useState(existingCreds?.apiSecret ?? '');
-  const [showSecret, setShowSecret] = useState(false);
   const [credsSaved, setCredsSaved] = useState(false);
-  const [loginLoading, setLoginLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [authOpen, setAuthOpen] = useState(expired);
-  const [plans, setPlans] = useState<SubscriptionPlan[]>(FALLBACK_PLANS);
-  const [copied, setCopied] = useState(false);
-
-  const copyRedirect = () => {
-    navigator.clipboard?.writeText(REDIRECT_URL).then(
-      () => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      },
-      () => { /* clipboard unavailable — ignore */ },
-    );
-  };
 
   useEffect(() => {
-    const lastAvatar = getLastAvatarUrl();
-    if (lastAvatar) setAvatarUrl(lastAvatar);
     if (hasCredentials()) setCredsSaved(true);
-
-    // Live pricing from the DB (falls back to static plans on failure).
-    getPublicPlans()
-      .then((data) => { if (data && data.length) setPlans(data); })
-      .catch(() => { /* keep fallback */ });
   }, []);
 
-  const baseMonthly = Math.max(...plans.map((p) => Math.round(p.price / monthsOf(p))));
-
-  const openAuth = () => {
-    setError(null);
-    setAuthOpen(true);
-  };
-
-  const handleSave = () => {
-    setError(null);
-    saveCredentials(apiKey.trim(), apiSecret.trim());
-    setCredsSaved(true);
-  };
-
-  const handleLogin = async () => {
-    setLoginLoading(true);
-    setError(null);
-    try {
-      const url = await getLoginUrl();
-      window.location.href = url;
-    } catch {
-      setError('Failed to get login URL. Is the server running?');
-      setLoginLoading(false);
-    }
-  };
-
-  const hasCreds = apiKey.trim().length > 0 && apiSecret.trim().length > 0;
+  const openAuth = () => setAuthOpen(true);
   const ctaLabel = credsSaved ? 'Login with Kite' : 'Connect with Kite';
 
   return (
@@ -326,41 +97,7 @@ const Login: React.FC = () => {
           One subscription unlocks every tool. Longer plans cost less per month.
         </p>
 
-        <div className="landing__price-grid">
-          {plans.map((p) => {
-            const months = monthsOf(p);
-            const perMonth = Math.round(p.price / months);
-            const save = Math.round(baseMonthly * months - p.price);
-            const cur = currencySymbol(p.currency);
-            const meta = PLAN_META[p.id] || {};
-            const features = meta.features || DEFAULT_FEATURES;
-            const term = months <= 1 ? 'per month' : `for ${formatDuration(p.durationCount, p.durationUnit)}`;
-            return (
-              <div className={`price-card ${meta.badge ? 'price-card--featured' : ''}`} key={p.id}>
-                {meta.badge && <span className="price-card__badge">{meta.badge}</span>}
-                <h3 className="price-card__name">{p.name}</h3>
-                <div className="price-card__amount">
-                  {cur}{p.price.toLocaleString('en-IN')}
-                </div>
-                <div className="price-card__term">{term}</div>
-                <div className="price-card__sub">
-                  {months <= 1
-                    ? 'Billed monthly'
-                    : `≈ ${cur}${perMonth.toLocaleString('en-IN')}/mo${save > 0 ? ` · Save ${cur}${save.toLocaleString('en-IN')}` : ''}`}
-                </div>
-                <ul className="price-card__features">
-                  {features.map((f) => (
-                    <li key={f}>
-                      <CheckIcon size={14} strokeWidth={3} />
-                      {f}
-                    </li>
-                  ))}
-                </ul>
-                <button className="price-card__cta" onClick={openAuth}>Get started</button>
-              </div>
-            );
-          })}
-        </div>
+        <PricingPlans onGetStarted={openAuth} />
 
         <p className="landing__price-note">
           Payment integration is coming soon — early users get full access on activation.
@@ -372,93 +109,7 @@ const Login: React.FC = () => {
       </footer>
 
       {authOpen && (
-        <Modal
-          title={credsSaved ? 'Welcome back' : 'Connect your Kite account'}
-          subtitle={credsSaved
-            ? 'Continue to Kite to authorise this session.'
-            : 'OptionTrap connects to your Zerodha account using Kite Connect.'}
-          leading={(
-            <div className="auth-modal__icon">
-              {avatarUrl ? <img src={avatarUrl} alt="" /> : <ShieldIcon size={22} />}
-            </div>
-          )}
-          size={ModalSize.Medium}
-          onClose={() => setAuthOpen(false)}
-        >
-          {error && <Message tone={MessageTone.Error} className="auth-modal__error">{error}</Message>}
-
-          {credsSaved ? (
-            <>
-              <button className="auth-modal__primary" onClick={handleLogin} disabled={loginLoading}>
-                {loginLoading ? 'Redirecting...' : 'Login with Kite'}
-              </button>
-              <button className="auth-modal__link" type="button" onClick={() => setCredsSaved(false)}>
-                Change credentials
-              </button>
-            </>
-          ) : (
-            <div className="auth-form">
-              <p className="auth-form__hint">
-                Enter your Kite Connect API credentials.{' '}
-                <a href="https://developers.kite.trade" target="_blank" rel="noopener noreferrer">Get keys</a>
-              </p>
-
-              <div className="auth-form__redirect">
-                <span className="auth-form__redirect-label">In your Kite app, set the Redirect URL to</span>
-                <div className="auth-form__redirect-row">
-                  <code>{REDIRECT_URL}</code>
-                  <button type="button" className="auth-form__copy" onClick={copyRedirect}>
-                    {copied ? 'Copied' : 'Copy'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="form-field">
-                <label className="form-field__label" htmlFor="login-api-key">API Key</label>
-                <input
-                  id="login-api-key"
-                  type="text"
-                  className="form-field__input"
-                  placeholder="Enter your Kite API key"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  autoComplete="off"
-                />
-              </div>
-
-              <div className="form-field">
-                <label className="form-field__label" htmlFor="login-api-secret">API Secret</label>
-                <div className="form-field__input-wrapper">
-                  <input
-                    id="login-api-secret"
-                    type={showSecret ? 'text' : 'password'}
-                    className="form-field__input"
-                    placeholder="Enter your Kite API secret"
-                    value={apiSecret}
-                    onChange={(e) => setApiSecret(e.target.value)}
-                    autoComplete="off"
-                  />
-                  <button
-                    type="button"
-                    className="form-field__toggle-visibility"
-                    onClick={() => setShowSecret((prev) => !prev)}
-                    aria-label={showSecret ? 'Hide secret' : 'Show secret'}
-                  >
-                    {showSecret ? 'Hide' : 'Show'}
-                  </button>
-                </div>
-              </div>
-
-              <p className="auth-form__privacy">
-                Stored only in this browser. Never sent to our servers for storage.
-              </p>
-
-              <button className="auth-modal__primary" onClick={handleSave} disabled={!hasCreds}>
-                Save &amp; Continue
-              </button>
-            </div>
-          )}
-        </Modal>
+        <KiteLoginModal credsSaved={credsSaved} onCredsSavedChange={setCredsSaved} onClose={() => setAuthOpen(false)} />
       )}
     </div>
   );

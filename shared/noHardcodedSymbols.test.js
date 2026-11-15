@@ -8,7 +8,7 @@ const SKIP_DIRS = new Set(['node_modules', 'dist', '.git', 'migrations']);
 
 const ALLOWED = new Map([
   // The login page's decorative preview: made-up numbers, shown before login, so it can't read the table.
-  [path.join('src', 'pages', 'Login.tsx'), 'demo card caption'],
+  [path.join('src', 'components', 'Landing', 'Showcase.tsx'), 'demo card caption'],
 ]);
 
 /** Index F&O names, index price rows ("NIFTY 50", "NIFTY BANK" …), TradingView index symbols, and index tokens. */

@@ -64,7 +64,7 @@ const CSS_WORD_HELPERS = new Map([
     { expressions: ['colorClass'], reason: 'scoreColorClass returns a CSS word' },
     { expressions: ['actionBtnClass(rec.type)'], reason: 'returns the lower-cased option type or a CSS word' },
   ]],
-  [path.join('src', 'pages', 'Login.tsx'), [{ expressions: ['(i * 7) % 3'], reason: 'a number picking one of three decorative variants' }]],
+  [path.join('src', 'components', 'Landing', 'Showcase.tsx'), [{ expressions: ['(i * 7) % 3'], reason: 'a number picking one of three decorative variants' }]],
 ]);
 
 /** A quoted lower-case CSS word, e.g. 'rich'. */
