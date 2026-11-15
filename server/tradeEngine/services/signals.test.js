@@ -47,7 +47,8 @@ const strategy = () => ({
  */
 function setup({ config = userConfig(), users = [{ userId: 'U1', config }], prices = { 'NFO:NIFTY26NOV24000PE': 120 }, placed = { ok: true, order: { status: 'Open' } }, fillRefused = null } = {}) {
   const db = {
-    getAutomatedUsers: vi.fn().mockResolvedValue(users),
+    // As the real one: the users with automation on and this strategy active.
+    getAutomatedUsers: vi.fn(async (strategyId) => users.filter(({ config: c }) => c.enabled && c.strategies[strategyId]?.active)),
     getUnderlyings: vi.fn().mockResolvedValue([{ name: 'NIFTY', isIndex: true }, { name: 'INFY', isIndex: false }]),
     createAutoTrade: vi.fn().mockResolvedValue('T1'),
     advanceAutoTrade: vi.fn().mockResolvedValue(true),
@@ -214,6 +215,7 @@ describe('submitting a strategy\'s signals', () => {
   it('does no work when no user has the strategy active, or it gives no signals', async () => {
     const inactive = setup({ config: userConfig({ strategies: { test: { active: false, params: {} } } }) });
     await inactive.submit();
+    expect(inactive.db.getAutomatedUsers).toHaveBeenCalledWith('test');
     expect(inactive.strategies[0].select).not.toHaveBeenCalled();
     expect(inactive.quotes).not.toHaveBeenCalled();
 

@@ -237,7 +237,7 @@ export function createSignalsService({
    * @returns {Promise<RunCounts>}
    */
   async function runFor(strategy, prepared) {
-    const users = (await db.getAutomatedUsers()).filter(({ config }) => config.strategies[strategy.id]?.active);
+    const users = await db.getAutomatedUsers(strategy.id);
     if (users.length === 0) return NO_WORK;
 
     const kite = await findKiteSession();

@@ -34,8 +34,13 @@ export async function getAutomationConfigs(userIds) {
 }
 
 /**
+ * Users with automation on and this strategy active. The database picks those whose stored configuration has it
+ * active; completing can still turn it off (a stored setting no longer valid falls back to inactive), so check again.
+ * @param {string} strategyId
  * @returns {Promise<{ userId: string, config: AutomationConfig }[]>}
  */
-export async function getAutomatedUsers() {
-  return (await getStoredAutomatedUsers()).map(({ userId, config }) => ({ userId, config: complete(config) }));
+export async function getAutomatedUsers(strategyId) {
+  return (await getStoredAutomatedUsers(strategyId))
+    .map(({ userId, config }) => ({ userId, config: complete(config) }))
+    .filter(({ config }) => config.enabled && config.strategies[strategyId]?.active);
 }

@@ -27,10 +27,14 @@ export async function getStoredAutomationConfigs(userIds) {
 }
 
 /**
- * Served by algo_configuration_enabled_idx.
+ * Users with automation on whose stored configuration has this strategy active. Served by algo_configuration_strategies_idx.
+ * @param {string} strategyId
  * @returns {Promise<{ userId: string, config: any }[]>}
  */
-export async function getStoredAutomatedUsers() {
-  const result = await rows("SELECT user_id, config FROM algo_configuration WHERE (config->>'enabled') = 'true'");
+export async function getStoredAutomatedUsers(strategyId) {
+  const result = await rows(
+    "SELECT user_id, config FROM algo_configuration WHERE (config->>'enabled') = 'true' AND config->'strategies' @> $1::jsonb",
+    [JSON.stringify({ [strategyId]: { active: true } })],
+  );
   return result.map((row) => ({ userId: row.user_id, config: row.config }));
 }
