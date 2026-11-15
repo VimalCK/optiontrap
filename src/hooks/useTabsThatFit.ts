@@ -36,6 +36,7 @@ export function useTabsThatFit(
   // The elements, checked after every render: a bar that first renders nothing
   // (e.g. until its data loads) gets measured once they appear.
   const [elements, setElements] = useState<(HTMLElement | null)[]>([null, null, null]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useLayoutEffect(() => {
     const now = [row.current, measure.current, trailing.current];
     if (now.some((el, i) => el !== elements[i])) setElements(now);

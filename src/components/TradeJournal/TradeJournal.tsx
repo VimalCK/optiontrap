@@ -151,8 +151,6 @@ const TradeJournal: React.FC<{
     setRangeStart(targetDate);
     setRangeEnd(targetDate);
     setExpandedDates(expand);
-    // Only when the link itself changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [initialDate, initialRange]);
 
   useEffect(() => {
@@ -273,7 +271,6 @@ const TradeJournal: React.FC<{
               dailyPnL={dailyPnL}
               totals={journalTotals(report?.days ?? [])}
               endDate={new Date(report?.filters.to ?? rangeEnd)}
-              months={12}
               loading={reportPending}
             />
           </div>

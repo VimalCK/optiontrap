@@ -35,6 +35,20 @@ const getDaysRemaining = (value: string | null | undefined) => {
   return Math.max(0, Math.ceil((expiresAt - Date.now()) / (1000 * 60 * 60 * 24)));
 };
 
+/** Kite's profile reply, as the server passes it on. */
+interface KiteProfileReply {
+  user_id: string;
+  user_name: string;
+  user_shortname: string;
+  email: string;
+  broker: string;
+  user_type: string;
+  exchanges?: string[];
+  products?: string[];
+  order_types?: string[];
+  avatar_url?: string | null;
+}
+
 interface UserProfile {
   userId: string;
   userName: string;
@@ -97,7 +111,7 @@ const Profile: React.FC = () => {
   const fetchProfile = async () => {
     setProfileLoading(true);
     try {
-      const data = await apiClient.get<any>('/api/user/profile');
+      const data = await apiClient.get<KiteProfileReply | null>('/api/user/profile');
       if (data) {
         setProfile({
           userId: data.user_id,

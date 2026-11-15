@@ -81,7 +81,7 @@ const OptionChain: React.FC = () => {
     fetchUnderlyings(signal).then(setUnderlyings).catch((err) => {
       if (!isAbortError(err)) console.error('[Option Analyzer] Could not load symbols:', err);
     });
-  }, []);
+  }, [signal]);
 
   useEffect(() => {
     if (!selectedSymbol) return;
@@ -97,7 +97,7 @@ const OptionChain: React.FC = () => {
         if (!isAbortError(err)) setError(err instanceof Error ? err.message : 'Failed to load option chain');
       })
       .finally(() => setLoading(false));
-  }, [selectedSymbol]);
+  }, [selectedSymbol, signal]);
 
   const expiries = useMemo(() => getExpiries(options), [options]);
   const chain: OptionChainRow[] = useMemo(() => (selectedExpiry ? buildOptionChain(options, selectedExpiry) : []), [options, selectedExpiry]);

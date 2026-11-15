@@ -97,6 +97,11 @@ const AppSelect: React.FC<AppSelectProps> = ({
     setTimeout(() => highlightedRef.current?.scrollIntoView({ block: 'nearest' }), 0);
   };
 
+  const toggleOpen = () => {
+    if (open) setOpen(false);
+    else handleOpen();
+  };
+
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
@@ -147,7 +152,7 @@ const AppSelect: React.FC<AppSelectProps> = ({
       }
       return;
     }
-    if (e.key === ' ' && !searchable) { open ? setOpen(false) : handleOpen(); return; }
+    if (e.key === ' ' && !searchable) { toggleOpen(); return; }
     if (!open) return;
     if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -173,7 +178,7 @@ const AppSelect: React.FC<AppSelectProps> = ({
         ref={triggerRef}
         type="button"
         className={`app-select-trigger ${open ? 'app-select-trigger--open' : ''} ${disabled ? 'app-select-trigger--disabled' : ''} ${className}`}
-        onClick={() => { if (disabled) return; open ? setOpen(false) : handleOpen(); }}
+        onClick={() => { if (!disabled) toggleOpen(); }}
         onKeyDown={!searchable ? handleKeyDown : undefined}
         aria-haspopup="listbox"
         aria-expanded={open}

@@ -127,8 +127,7 @@ export function useExpiryMonths(scrip: string, signal: AbortSignal, onError: (me
       stale = true;
       if (retryTimer) clearTimeout(retryTimer);
     };
-    // The page's signal only aborts on leaving the page; a new scrip is what restarts this.
-  }, [scrip]);
+  }, [scrip, signal]);
 
   const selectableExpiryMonthOptions = useMemo(() => {
     const options = expiryMonthOptions.filter((option) => option.value >= currentMonthIST());

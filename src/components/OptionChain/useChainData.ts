@@ -108,6 +108,7 @@ export function useLiveChain(input: {
     subscribedTokensRef.current = tokens;
     return tickerSubscribe('option-chain', tokens, handleTicks);
     // spotToken is read through handleTicks, which changes with it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visibleChain, handleTicks]);
 
   // Market closed: quote the spot and the strikes around the ATM once the chain is ready.
@@ -144,7 +145,9 @@ export function useLiveChain(input: {
         if (latest.spot) setSpotPrice(latest.spot);
       }).catch(() => { /* cancelled */ });
     });
-  }, [chain, atmStrike, expiry, spotQuoteKey]);
+    // spotToken is only the snapshot fallback's; a new spot changes spotQuoteKey, which restarts this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chain, atmStrike, expiry, spotQuoteKey, signal]);
 
   return { atmStrike, visibleChain, livePrices, closePrices, oiData, volumeData, spotPrice, spotPrevClose };
 }
@@ -197,7 +200,7 @@ export function useOiSnapshots(symbol: string, spotToken: number | null, signal:
     watchSnapshotSymbol(symbol, signal)
       .then(loadSnapshots)
       .catch((err) => { if (!isAbortError(err)) console.error('[OI Snapshots] Load failed:', err); });
-  }, [symbol, loadSnapshots]);
+  }, [symbol, loadSnapshots, signal]);
 
   useEffect(() => {
     const poll = async () => {
@@ -211,7 +214,7 @@ export function useOiSnapshots(symbol: string, spotToken: number | null, signal:
     };
     const id = setInterval(poll, SNAPSHOT_POLL_MS);
     return () => clearInterval(id);
-  }, [loadSnapshots]);
+  }, [loadSnapshots, signal]);
 
   return useMemo(() => withSpot(allSnapshots, spotToken), [allSnapshots, spotToken]);
 }

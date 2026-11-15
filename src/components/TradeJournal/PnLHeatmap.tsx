@@ -10,7 +10,6 @@ interface PnLHeatmapProps {
   /** The range's P&L before charges, its charges, and the realised P&L, for the summary strip. */
   totals: JournalTotals;
   endDate?: Date;
-  months?: number;
   /** The stats shimmer while the range's report loads; the calendar shows empty meanwhile. */
   loading?: boolean;
 }
@@ -59,7 +58,7 @@ function intensityLevel(pnl: number, maxAbs: number): number {
   return 4;
 }
 
-const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, totals, endDate, months = 12, loading = false }) => {
+const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, totals, endDate, loading = false }) => {
   const today = useMemo(() => {
     const d = new Date(endDate ?? new Date());
     d.setHours(0, 0, 0, 0);
@@ -121,7 +120,7 @@ const PnLHeatmap: React.FC<PnLHeatmapProps> = ({ dailyPnL, totals, endDate, mont
     });
 
     return { monthGroups: groups, winDays: wins, lossDays: losses, totalDays: traded };
-  }, [dailyPnL, today, months]);
+  }, [dailyPnL, today]);
 
   const maxAbs = useMemo(() => {
     let max = 0;

@@ -50,7 +50,7 @@ const AlwaysSnapshotSetting: React.FC = () => {
     fetchUnderlyings(signal)
       .then((list) => setUnderlyings(list.filter((u) => u.instrumentToken !== null)))
       .catch((err) => { if (!signal.aborted) setError(err.message); });
-  }, []);
+  }, [signal]);
 
   const toggle = async (name: string | number) => {
     const current = underlyings.find((u) => u.name === name);

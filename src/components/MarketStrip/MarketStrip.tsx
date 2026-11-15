@@ -66,6 +66,7 @@ const MarketStripSymbols: React.FC = () => {
     });
     return () => { controller.abort(); unsubscribe(); };
     // Re-run only when the set of tokens changes, not on every underlyings reload.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tokensKey]);
 
   useEffect(() => {

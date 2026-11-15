@@ -47,7 +47,9 @@ It never places real orders. The user is the sole developer; prod (optiontrap.co
   - A restart runs startup code (migrations, schedulers) against the real local DB.
 - `npx tsc --noEmit -p .` (CI runs `npx tsc -b`): type-check, must be clean.
 - `npx vitest run`: all tests, must pass.
-- Run both before every commit. CI (`.github/workflows/ci.yml`) runs the type-check, the tests and gitleaks.
+- `npm run lint` (ESLint, config in `eslint.config.js`): must be clean; it fails on warnings too. A deliberately
+  incomplete hook dependency list gets `// eslint-disable-next-line react-hooks/exhaustive-deps` under a comment saying why.
+- Run all three before every commit. CI (`.github/workflows/ci.yml`) runs the type-check, the lint, the tests and gitleaks.
 - Shell is Windows (PowerShell + Git Bash). In PowerShell, a commit message containing double quotes breaks argument passing;
   commit with `git commit -F -` and a heredoc from Bash.
 
