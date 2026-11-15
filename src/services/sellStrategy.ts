@@ -5,4 +5,3 @@
  */
 export { computeSellRecommendations, type SellRecommendation, type ScoreBreakdown } from '../../shared/optionAnalysis/sellSetups.js';
 export { computeBuyRecommendations, type BuyRecommendation, type BuyScoreBreakdown } from '../../shared/optionAnalysis/buySetups.js';
-export { strikeGap } from '../../shared/optionAnalysis/setupScoring.js';

@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { strikeGap } from './sellStrategy';
-import type { OptionChainRow } from './optionChain';
+import { strikeGap } from './setupScoring.js';
 
-const chainOf = (...strikes: number[]): OptionChainRow[] => strikes.map((strike) => ({ strike, ce: null, pe: null }));
+const chainOf = (...strikes) => strikes.map((strike) => ({ strike, ce: null, pe: null }));
 
 describe('strikeGap', () => {
   it("is the chain's own distance between neighbouring strikes", () => {

@@ -91,27 +91,28 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
 
   const summaryBar = <StrategySummaryBar maxPain={maxPain} pcr={pcr} spot={effectiveSpot} expectedMove={expectedMove} />;
   const toggle = <StrategyModeToggle mode={mode} onChange={handleModeChange} />;
+  const trapAnalyzer = (
+    <TrapAnalyzer
+      chain={chain}
+      oiData={effectiveOi}
+      prevDayOi={prevDayOi}
+      closePrices={closePrices}
+      livePrices={effectivePrices}
+      spotPrice={effectiveSpot}
+      atmStrike={atmStrike ?? 0}
+      daysToExpiry={daysToExpiry}
+      maxPain={maxPain}
+      expectedMove={expectedMove}
+      flowByToken={flowByToken}
+    />
+  );
 
   if (snapshots.length < 2 && oiData.size === 0) {
     return (
       <div className="sell-strategy">
         {summaryBar}
         {toggle}
-        {mode === StrategyMode.Analyzer ? (
-          <TrapAnalyzer
-            chain={chain}
-            oiData={effectiveOi}
-            prevDayOi={prevDayOi}
-            closePrices={closePrices}
-            livePrices={effectivePrices}
-            spotPrice={effectiveSpot}
-            atmStrike={atmStrike ?? 0}
-            daysToExpiry={daysToExpiry}
-            maxPain={maxPain}
-            expectedMove={expectedMove}
-            flowByToken={flowByToken}
-          />
-        ) : (
+        {mode === StrategyMode.Analyzer ? trapAnalyzer : (
           <div className="sell-strategy__empty">
             Waiting for market data — need at least 20 minutes of OI snapshots to generate recommendations.
           </div>
@@ -125,21 +126,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
       {summaryBar}
       {toggle}
 
-      {mode === StrategyMode.Analyzer ? (
-        <TrapAnalyzer
-          chain={chain}
-          oiData={effectiveOi}
-          prevDayOi={prevDayOi}
-          closePrices={closePrices}
-          livePrices={effectivePrices}
-          spotPrice={effectiveSpot}
-          atmStrike={atmStrike ?? 0}
-          daysToExpiry={daysToExpiry}
-          maxPain={maxPain}
-          expectedMove={expectedMove}
-          flowByToken={flowByToken}
-        />
-      ) : recommendations.length === 0 ? (
+      {mode === StrategyMode.Analyzer ? trapAnalyzer : recommendations.length === 0 ? (
         <div className="sell-strategy__empty">
           No {mode.toLowerCase()} opportunities detected — all strikes scored below threshold.
         </div>
