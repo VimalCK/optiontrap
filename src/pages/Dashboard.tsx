@@ -1,148 +1,19 @@
-import React, { useCallback, useEffect, useState } from 'react';
-import { formatNumericDate } from '@/utils/marketStatus';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { DashboardIcon, RefreshIcon } from '@/components/icons/Icons';
-import Shimmer, { ShimmerGroup, ShimmerText, shimmerKeys } from '@/components/Shimmer/Shimmer';
+import Shimmer, { ShimmerText } from '@/components/Shimmer/Shimmer';
+import MetricCard from '@/components/Dashboard/MetricCard';
+import TopHoldingsPanel from '@/components/Dashboard/TopHoldingsPanel';
+import RecentJournalPanel from '@/components/Dashboard/RecentJournalPanel';
+import { useDashboardMetrics } from '@/components/Dashboard/useDashboardMetrics';
+import { DASHBOARD_LIST_SIZE, formatCompactMoney, getTone, type DashboardTradeEntry } from '@/components/Dashboard/dashboardMetrics';
 import { heldQuantity } from '@/services/holdings';
 import { useHoldings } from '@/hooks/useHoldings';
 import { useLivePositions } from '@/hooks/useLivePositions';
-import { getPositions, Position } from '@/services/positions';
-import { getLiveTradeEntries, getPaperTradeStats, getPaperTrades, TradeEntry, TradeStats } from '@/services/tradeJournal';
-import { fetchPriceAlerts } from '@/services/priceAlerts';
-import { fetchWatchlists } from '@/services/watchlist';
-import { Side, TradingMode, type TradingModeId } from '../../shared/tradeEnums.js';
-import { PriceAlertStatus } from '../../shared/appEnums.js';
+import { TradingMode } from '../../shared/tradeEnums.js';
 import { saveTradingMode } from '@/utils/tradingModeStorage';
-import { AnalyticsTab, JournalRange, PortfolioTab, ShimmerShape, Tone, type ToneId } from '@/utils/uiEnums';
+import { AnalyticsTab, JournalRange, PortfolioTab, ShimmerShape, Tone } from '@/utils/uiEnums';
 import '@/styles/dashboard.css';
-
-/** Rows in the Top Holdings and Recent Journal lists. */
-const DASHBOARD_LIST_SIZE = 5;
-const PLACEHOLDER_ROWS = shimmerKeys(DASHBOARD_LIST_SIZE);
-
-type DashboardTradeEntry = TradeEntry & { mode: TradingModeId };
-
-interface DashboardMetrics {
-  tradePnl: number;
-  todayTrades: number;
-  watchlistCount: number;
-  watchlistLists: number;
-  openPaperPositions: number;
-  activeAlerts: number;
-  triggeredAlerts: number;
-  closedTrades: number;
-  winningTrades: number;
-  losingTrades: number;
-  winRate: number;
-  avgWin: number;
-  avgLoss: number;
-  bestTrade?: TradeEntry;
-  worstTrade?: TradeEntry;
-  recentTrades: DashboardTradeEntry[];
-}
-
-const emptyMetrics: DashboardMetrics = {
-  tradePnl: 0,
-  todayTrades: 0,
-  watchlistCount: 0,
-  watchlistLists: 0,
-  openPaperPositions: 0,
-  activeAlerts: 0,
-  triggeredAlerts: 0,
-  closedTrades: 0,
-  winningTrades: 0,
-  losingTrades: 0,
-  winRate: 0,
-  avgWin: 0,
-  avgLoss: 0,
-  recentTrades: [],
-};
-
-const formatMoney = (value: number, signed = false) => {
-  const prefix = signed && value > 0 ? '+' : '';
-  return `${prefix}${value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-};
-
-const formatCompactMoney = (value: number, signed = false) => {
-  const prefix = signed && value > 0 ? '+' : '';
-  const abs = Math.abs(value);
-  if (abs >= 10000000) return `${prefix}${(value / 10000000).toFixed(2)} Cr`;
-  if (abs >= 100000) return `${prefix}${(value / 100000).toFixed(2)} L`;
-  return formatMoney(value, signed);
-};
-
-const getTone = (value: number): ToneId => value > 0 ? Tone.Positive : value < 0 ? Tone.Negative : Tone.Neutral;
-
-/** A paper position's booked P&L, after charges once it has closed (open ones count 0). */
-const getPaperPositionPnl = (position: Position) => {
-  const exitPrice = position.exitPrice ?? position.entryPrice;
-  const gross = position.side === Side.BUY
-    ? (exitPrice - position.entryPrice) * position.quantity
-    : (position.entryPrice - exitPrice) * position.quantity;
-  return gross - (position.charges ?? 0);
-};
-
-const MetricCard: React.FC<{
-  title: string;
-  value: string;
-  detail: string;
-  tone?: ToneId;
-  loading?: boolean;
-  onClick?: () => void;
-}> = ({ title, value, detail, tone = Tone.Neutral, loading = false, onClick }) => {
-  const content = (
-    <>
-      <span className="dashboard-metric__label">{title}</span>
-      <strong className={`dashboard-metric__value dashboard-tone--${tone.toLowerCase()}`}><ShimmerText loading={loading} width="4.5em">{value}</ShimmerText></strong>
-      <span className="dashboard-metric__detail"><ShimmerText loading={loading} width="80%">{detail}</ShimmerText></span>
-    </>
-  );
-
-  if (onClick) {
-    return (
-      <button type="button" className="dashboard-metric dashboard-metric--clickable" onClick={onClick}>
-        {content}
-      </button>
-    );
-  }
-
-  return (
-    <div className="dashboard-metric">
-      {content}
-    </div>
-  );
-};
-
-const HoldingRowsShimmer: React.FC = () => (
-  <ShimmerGroup label="Loading top holdings" className="dashboard-list">
-    {PLACEHOLDER_ROWS.map((row) => (
-      <div className="dashboard-list__item" key={row}>
-        <div>
-          <strong><Shimmer width="6em" /></strong>
-          <span><Shimmer width="5em" /></span>
-        </div>
-        <div className="dashboard-list__right">
-          <strong><Shimmer width="4em" /></strong>
-          <span><Shimmer width="3em" /></span>
-        </div>
-      </div>
-    ))}
-  </ShimmerGroup>
-);
-
-const TradeRowsShimmer: React.FC = () => (
-  <ShimmerGroup label="Loading recent trades" className="dashboard-trades">
-    {PLACEHOLDER_ROWS.map((row) => (
-      <div className="dashboard-trade" key={row}>
-        <div>
-          <strong><Shimmer width="9em" /></strong>
-          <span><Shimmer width="14em" /></span>
-        </div>
-        <strong><Shimmer width="4em" /></strong>
-      </div>
-    ))}
-  </ShimmerGroup>
-);
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -163,73 +34,7 @@ const Dashboard: React.FC = () => {
     navigate(`/analytics?tab=${AnalyticsTab.Journal}&mode=${trade.mode}&date=${encodeURIComponent(trade.date)}&tradeId=${encodeURIComponent(trade.id)}`);
   };
 
-  const [metrics, setMetrics] = useState<DashboardMetrics>(emptyMetrics);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadMetrics = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-
-    try {
-      // Stats are totalled on the server, and only the latest trades are
-      // fetched, so the Dashboard never loads the full trade history.
-      // Holdings and live positions come from useHoldings and useLivePositions,
-      // shared with the Portfolio and Positions pages.
-      const [paperPositionsResult, paperStatsResult, paperTradesResult, liveTradesResult, watchlistsResult, alertsResult] = await Promise.allSettled([
-        getPositions(),
-        getPaperTradeStats(),
-        getPaperTrades({ limit: DASHBOARD_LIST_SIZE }),
-        getLiveTradeEntries(),
-        fetchWatchlists(),
-        fetchPriceAlerts(),
-      ]);
-
-      const paperPositions = paperPositionsResult.status === 'fulfilled' ? paperPositionsResult.value : [];
-      const paperStats: TradeStats = paperStatsResult.status === 'fulfilled'
-        ? paperStatsResult.value
-        : { closedTrades: 0, winningTrades: 0, losingTrades: 0, avgWin: 0, avgLoss: 0, todayTrades: 0 };
-      const paperTrades = paperTradesResult.status === 'fulfilled' ? paperTradesResult.value : [];
-      const liveTrades = liveTradesResult.status === 'fulfilled' ? liveTradesResult.value : [];
-      const recentTrades: DashboardTradeEntry[] = [
-        ...paperTrades.map((trade) => ({ ...trade, mode: TradingMode.Paper })),
-        ...liveTrades.map((trade) => ({ ...trade, mode: TradingMode.Live })),
-      ].sort((a, b) => b.date.localeCompare(a.date)).slice(0, DASHBOARD_LIST_SIZE);
-      const watchlists = watchlistsResult.status === 'fulfilled' ? watchlistsResult.value : [];
-      const alerts = alertsResult.status === 'fulfilled' ? alertsResult.value : [];
-
-      const tradePnl = paperPositions.reduce((sum, position) => sum + getPaperPositionPnl(position), 0);
-
-      setMetrics({
-        tradePnl,
-        todayTrades: paperStats.todayTrades,
-        watchlistCount: watchlists.reduce((sum, list) => sum + list.itemCount, 0),
-        watchlistLists: watchlists.length,
-        openPaperPositions: paperPositions.filter((position) => !position.exited).length,
-        activeAlerts: alerts.filter((alert) => alert.status === PriceAlertStatus.Active).length,
-        triggeredAlerts: alerts.filter((alert) => alert.status === PriceAlertStatus.Triggered).length,
-        closedTrades: paperStats.closedTrades,
-        winningTrades: paperStats.winningTrades,
-        losingTrades: paperStats.losingTrades,
-        winRate: paperStats.closedTrades > 0 ? (paperStats.winningTrades / paperStats.closedTrades) * 100 : 0,
-        avgWin: paperStats.avgWin,
-        avgLoss: paperStats.avgLoss,
-        bestTrade: paperStats.bestTrade,
-        worstTrade: paperStats.worstTrade,
-        recentTrades,
-      });
-
-      const failed = [paperPositionsResult, paperStatsResult, paperTradesResult, liveTradesResult, watchlistsResult]
-        .some((result) => result.status === 'rejected');
-      setError(failed ? 'Some dashboard data could not be loaded. Showing available metrics.' : null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadMetrics(); }, [loadMetrics]);
+  const { metrics, loading, error, reload: reloadMetrics } = useDashboardMetrics();
 
   // Holdings: the same source as the Portfolio page, live while the market is open.
   const holdingsData = useHoldings();
@@ -245,7 +50,7 @@ const Dashboard: React.FC = () => {
   const openLivePositions = liveData.openCount;
 
   const busy = loading || holdingsData.loading || liveData.loading;
-  const refresh = () => { loadMetrics(); holdingsData.reload(); liveData.reload(); };
+  const refresh = () => { reloadMetrics(); holdingsData.reload(); liveData.reload(); };
   const warning = error
     ?? (holdingsData.error || liveData.error ? 'Some dashboard data could not be loaded. Showing available metrics.' : null);
 
@@ -353,54 +158,9 @@ const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        <button type="button" className="dashboard-panel dashboard-panel--clickable" onClick={goToHoldings}>
-          <div className="dashboard-panel__header">
-            <div>
-              <h3>Top Holdings</h3>
-              <p>Largest equity exposures by current value.</p>
-            </div>
-          </div>
-          {holdingsData.loading ? <HoldingRowsShimmer /> : (
-            <div className="dashboard-list">
-              {topHoldings.length === 0 && <span className="dashboard-empty">No holdings loaded.</span>}
-              {topHoldings.map((holding) => (
-                <div className="dashboard-list__item" key={holding.symbol}>
-                  <div>
-                    <strong>{holding.symbol}</strong>
-                    <span>{holding.weight.toFixed(1)}% weight</span>
-                  </div>
-                  <div className="dashboard-list__right">
-                    <strong>{formatCompactMoney(holding.value)}</strong>
-                    <span className={`dashboard-tone--${getTone(holding.pnl).toLowerCase()}`}>{formatCompactMoney(holding.pnl, true)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </button>
+        <TopHoldingsPanel holdings={topHoldings} loading={holdingsData.loading} onClick={goToHoldings} />
 
-        <div className="dashboard-panel dashboard-panel--wide">
-          <div className="dashboard-panel__header">
-            <div>
-              <h3>Recent Journal</h3>
-              <p>Latest exited paper and live trades with realised P&L.</p>
-            </div>
-          </div>
-          {loading ? <TradeRowsShimmer /> : (
-            <div className="dashboard-trades">
-              {metrics.recentTrades.length === 0 && <span className="dashboard-empty">No closed trades yet.</span>}
-              {metrics.recentTrades.map((trade) => (
-                <button type="button" className="dashboard-trade dashboard-trade--clickable" key={trade.id} onClick={() => goToJournalTrade(trade)}>
-                  <div>
-                    <strong>{trade.symbol}</strong>
-                    <span>{trade.mode.toUpperCase()} | {trade.side} x {trade.quantity} | {formatNumericDate(trade.date)}</span>
-                  </div>
-                  <strong className={`dashboard-tone--${getTone(trade.pnl).toLowerCase()}`}>{formatMoney(trade.pnl, true)}</strong>
-                </button>
-              ))}
-            </div>
-          )}
-        </div>
+        <RecentJournalPanel trades={metrics.recentTrades} loading={loading} onOpenTrade={goToJournalTrade} />
 
       </section>
     </div>
