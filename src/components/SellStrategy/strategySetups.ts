@@ -1,4 +1,4 @@
-import type { BuyScoreBreakdown, ScoreBreakdown } from '@/services/sellStrategy';
+import { BUY_SCORE_MAX, SELL_SCORE_MAX, type BuyScoreBreakdown, type ScoreBreakdown } from '@/services/sellStrategy';
 import type { OiSnapshot } from '@/services/oiSnapshots';
 import { OptionType, type OptionTypeId } from '../../../shared/tradeEnums.js';
 import { OptionSetup, type OptionSetupId } from '../../../shared/analysisEnums.js';
@@ -39,19 +39,19 @@ export interface BreakdownItem<Breakdown> {
 }
 
 export const SELL_BREAKDOWN_LABELS: BreakdownItem<ScoreBreakdown>[] = [
-  { label: 'Pinning', key: 'pinning', max: 25 },
-  { label: 'OI Wall', key: 'oiWall', max: 25 },
-  { label: 'Velocity', key: 'velocity', max: 20 },
-  { label: 'PCR', key: 'pcrExtreme', max: 15 },
-  { label: 'Theta', key: 'timeDecay', max: 15 },
+  { label: 'POP', key: 'probability', max: SELL_SCORE_MAX.probability },
+  { label: 'OI Wall', key: 'oiWall', max: SELL_SCORE_MAX.oiWall },
+  { label: 'Velocity', key: 'velocity', max: SELL_SCORE_MAX.velocity },
+  { label: 'Premium', key: 'premiumValue', max: SELL_SCORE_MAX.premiumValue },
+  { label: 'Regime', key: 'regime', max: SELL_SCORE_MAX.regime },
 ];
 
 export const BUY_BREAKDOWN_LABELS: BreakdownItem<BuyScoreBreakdown>[] = [
-  { label: 'Breakout', key: 'breakout', max: 25 },
-  { label: 'Direction', key: 'directionalOi', max: 25 },
-  { label: 'Momentum', key: 'momentum', max: 20 },
-  { label: 'PCR Shift', key: 'pcrShift', max: 15 },
-  { label: 'Risk/Rwd', key: 'riskReward', max: 15 },
+  { label: 'POP', key: 'probability', max: BUY_SCORE_MAX.probability },
+  { label: 'Trend', key: 'trend', max: BUY_SCORE_MAX.trend },
+  { label: 'OI Flow', key: 'flow', max: BUY_SCORE_MAX.flow },
+  { label: 'Breakout', key: 'breakout', max: BUY_SCORE_MAX.breakout },
+  { label: 'Premium', key: 'premiumCost', max: BUY_SCORE_MAX.premiumCost },
 ];
 
 /** The live OI, prices and spot, or the latest snapshot's while the market is closed (no live OI). */

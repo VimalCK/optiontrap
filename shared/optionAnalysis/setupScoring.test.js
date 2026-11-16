@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { strikeGap } from './setupScoring.js';
+import { normalCdf, strikeGap } from './setupScoring.js';
 
 const chainOf = (...strikes) => strikes.map((strike) => ({ strike, ce: null, pe: null }));
 
@@ -17,5 +17,14 @@ describe('strikeGap', () => {
   it('is 0 with fewer than two strikes', () => {
     expect(strikeGap(chainOf(24500))).toBe(0);
     expect(strikeGap([])).toBe(0);
+  });
+});
+
+describe('normalCdf', () => {
+  it('matches the standard normal table', () => {
+    expect(normalCdf(0)).toBeCloseTo(0.5, 6);
+    expect(normalCdf(1)).toBeCloseTo(0.8413, 4);
+    expect(normalCdf(-1)).toBeCloseTo(0.1587, 4);
+    expect(normalCdf(1.96)).toBeCloseTo(0.975, 4);
   });
 });

@@ -16,7 +16,10 @@ interface RecommendationRowProps {
   onTrade: (rec: SellRecommendation | BuyRecommendation) => void;
 }
 
-/** One scored setup: its score, POP (sell), premium and pattern, a trade button, and the score breakdown when expanded. */
+/** One scored setup: its score, POP, premium and pattern, a trade button, and the score breakdown when expanded. */
+/** A sold option's POP tone; a bought option's POP is below 50% by nature, so it isn't coloured. */
+const sellPopTone = (pop: number): string => (pop >= 70 ? 'positive' : pop >= 50 ? '' : 'negative');
+
 const RecommendationRow: React.FC<RecommendationRowProps> = ({ rec, mode, orderMode, expiry, breakdownLabels, expanded, onToggle, onTrade }) => {
   const colorClass = scoreColorClass(rec.score);
 
@@ -43,14 +46,12 @@ const RecommendationRow: React.FC<RecommendationRowProps> = ({ rec, mode, orderM
           </span>
         </div>
 
-        {mode === StrategyMode.Sell && (
-          <span className="sell-strategy__pop">
-            <span className="sell-strategy__pop-label">POP</span>
-            <span className={`sell-strategy__pop-value ${(rec as SellRecommendation).pop >= 70 ? 'positive' : (rec as SellRecommendation).pop >= 50 ? '' : 'negative'}`}>
-              {(rec as SellRecommendation).pop.toFixed(0)}%
-            </span>
+        <span className="sell-strategy__pop">
+          <span className="sell-strategy__pop-label">POP</span>
+          <span className={`sell-strategy__pop-value ${mode === StrategyMode.Sell ? sellPopTone(rec.pop) : ''}`}>
+            {rec.pop.toFixed(0)}%
           </span>
-        )}
+        </span>
         <span className="sell-strategy__premium">₹{rec.premium.toFixed(1)}</span>
         <span className="sell-strategy__pattern">{setupPatternLabel(rec.pattern)}</span>
 

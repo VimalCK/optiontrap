@@ -7,6 +7,7 @@ vi.mock('../../instruments.js', () => ({ getOrFetchInstruments: vi.fn() }));
 
 const { createOptionAnalyzerSetups, optionAnalyzerSetups, underlyingSetups } = await import('./optionAnalyzerSetups.js');
 const { StrategyId } = await import('./index.js');
+const { setupPatternLabel } = await import('../../../shared/analysisEnums.js');
 
 const NOON = new Date('2026-11-05T06:30:00Z'); // Thu 12:00 IST
 const SPOT_TOKEN = 900;
@@ -54,7 +55,7 @@ describe('underlyingSetups', () => {
       expect(setup.side).toBe('SELL');
       expect(snapshots[3].prices[setup.instrumentToken]).toBe(setup.premium);
       expect(setup.reason).toContain(`premium ₹${setup.premium.toFixed(2)}`);
-      expect(setup.reason.startsWith(`${setup.setup} · `)).toBe(true); // the setup is the card's pattern
+      expect(setup.reason.startsWith(`${setupPatternLabel(setup.setup)} · `)).toBe(true); // the setup is the card's pattern
       expect(['CE', 'PE']).toContain(traded?.instrumentType);
     }
   });
