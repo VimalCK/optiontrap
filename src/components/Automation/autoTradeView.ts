@@ -1,6 +1,6 @@
 import { LIFECYCLE_STAGES } from '../../../shared/automation.js';
 import { marketDate } from '../../../shared/marketTime.js';
-import { tradePnl } from '../../../shared/tradePnl.js';
+import { tradePnl, tradePnlPercent } from '../../../shared/tradePnl.js';
 import { Tone, type ToneId } from '@/utils/uiEnums';
 import type { AutoTrade, AutoTradeEvent } from '@/services/automation';
 import type { StrategyInfo } from '@/services/strategies';
@@ -32,17 +32,17 @@ export const sideTone = (side: AutoTrade['side']): ToneId => (side === Side.BUY 
 
 export { sideLabel } from '../../../shared/tradeEnums.js';
 
-/** P&L after charges, once closed; null before that. */
+/** P&L at the fills, before charges (the Journal shows them), once closed; null before that. */
 export function closedPnl(trade: AutoTrade): number | null {
   if (trade.stage !== LifecycleStage.Closed || trade.entryPrice == null || trade.exitPrice == null) return null;
-  return tradePnl({ side: trade.side, quantity: trade.quantity, entryPrice: trade.entryPrice }, trade.exitPrice) - (trade.charges ?? 0);
+  return tradePnl({ side: trade.side, quantity: trade.quantity, entryPrice: trade.entryPrice }, trade.exitPrice);
 }
 
 export interface TradeDay {
   /** YYYY-MM-DD, IST. */
   day: string;
   trades: AutoTrade[];
-  /** The day's closed trades' P&L after charges; null while none has closed. */
+  /** The day's closed trades' P&L before charges; null while none has closed. */
   pnl: number | null;
 }
 
@@ -73,7 +73,14 @@ const amount = (value: unknown): string | null => (typeof value === 'number' ? `
 
 export const strategyLabel = (id: unknown, strategies: StrategyInfo[]): string | null => strategies.find((s) => s.id === id)?.label ?? text(id);
 
-export function eventSummary(event: AutoTradeEvent, strategies: StrategyInfo[]): string {
+/** P&L at the exit fill, which can be past the exit rule's trigger: the rule checks the last price, the exit fills at the bid / ask. */
+function exitPnl(trade: AutoTrade, exitPrice: unknown): string | null {
+  if (trade.entryPrice == null || typeof exitPrice !== 'number') return null;
+  const entry = { side: trade.side, quantity: trade.quantity, entryPrice: trade.entryPrice };
+  return `P&L ${amount(tradePnl(entry, exitPrice))} (${tradePnlPercent(entry, exitPrice).toFixed(2)}%)`;
+}
+
+export function eventSummary(event: AutoTradeEvent, trade: AutoTrade, strategies: StrategyInfo[]): string {
   const detail = detailOf(event);
   const joined = (...parts: (string | null)[]) => parts.filter(Boolean).join(' · ');
   switch (event.stage) {
@@ -86,8 +93,7 @@ export function eventSummary(event: AutoTradeEvent, strategies: StrategyInfo[]):
     case LifecycleStage.Executed:
       return amount(detail.entryPrice) ? `Opened a paper position at ${amount(detail.entryPrice)}` : 'Opened a paper position';
     case LifecycleStage.Closed:
-      // An exit rule's reason already names it ("Stop-loss hit: …").
-      return joined(amount(detail.exitPrice) ? `Closed at ${amount(detail.exitPrice)}` : 'Closed', text(detail.reason));
+      return joined(amount(detail.exitPrice) ? `Closed at ${amount(detail.exitPrice)}` : 'Closed', exitPnl(trade, detail.exitPrice), text(detail.reason));
     default:
       return '';
   }

@@ -61,7 +61,7 @@ const TradeTimeline: React.FC<{ trade: AutoTrade }> = ({ trade }) => {
           <div className="automation-timeline__head">
             <Badge tone={stepTone(event.stage)}>{stageLabel(event.stage)}</Badge>
           </div>
-          <p className="automation-timeline__text">{eventSummary(event, strategies ?? [])}</p>
+          <p className="automation-timeline__text">{eventSummary(event, trade, strategies ?? [])}</p>
         </div>
       </li>
     ))}

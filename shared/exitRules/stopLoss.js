@@ -10,6 +10,6 @@ export default {
   description: 'Exits a position once its loss is this percentage of its entry price.',
   params: [{ key: 'percent', label: 'Loss (%)', type: ParamType.Percent }],
   check: (position, _ctx, { percent }) => (position.pnlPercent <= -percent
-    ? `Stop-loss hit: P&L ${position.pnlPercent.toFixed(2)}% (₹${position.pnl.toFixed(2)}), stop-loss ${percent}%`
+    ? `Stop-loss hit (${percent}%)`
     : null),
 };

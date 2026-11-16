@@ -51,8 +51,8 @@ describe('stop-loss', () => {
   it("exits once the position's loss reaches the percentage of its entry price, not before", () => {
     expect(check('stop-loss', { percent: 20 }, position(-19.99))).toBeNull();
     expect(check('stop-loss', { percent: 20 }, position(5))).toBeNull();
-    expect(check('stop-loss', { percent: 20 }, position(-20))).toBe('Stop-loss hit: P&L -20.00% (₹-1500.00), stop-loss 20%');
-    expect(check('stop-loss', { percent: 20 }, position(-150))).toBe('Stop-loss hit: P&L -150.00% (₹-11250.00), stop-loss 20%');
+    expect(check('stop-loss', { percent: 20 }, position(-20))).toBe('Stop-loss hit (20%)');
+    expect(check('stop-loss', { percent: 20 }, position(-150))).toBe('Stop-loss hit (20%)');
   });
 });
 
@@ -60,7 +60,7 @@ describe('target', () => {
   it("exits once the position's profit reaches the percentage of its entry price, not before", () => {
     expect(check('target', { percent: 40 }, position(39.99))).toBeNull();
     expect(check('target', { percent: 40 }, position(-10))).toBeNull();
-    expect(check('target', { percent: 40 }, position(40))).toBe('Target hit: P&L 40.00% (₹3000.00), target 40%');
+    expect(check('target', { percent: 40 }, position(40))).toBe('Target hit (40%)');
   });
 });
 
@@ -83,7 +83,7 @@ describe('checkExitRules', () => {
 
   it('exits with the first active rule that fires, in list order', () => {
     const rules = settings({ 'stop-loss': { percent: 10 }, 'square-off': { time: '11:00' } });
-    expect(checkExitRules(position(-20), noon, rules)).toEqual({ ruleId: 'stop-loss', reason: 'Stop-loss hit: P&L -20.00% (₹-1500.00), stop-loss 10%' });
+    expect(checkExitRules(position(-20), noon, rules)).toEqual({ ruleId: 'stop-loss', reason: 'Stop-loss hit (10%)' });
     expect(checkExitRules(position(2), noon, rules)).toEqual({ ruleId: 'square-off', reason: 'Squared off at 11:00 IST' });
   });
 

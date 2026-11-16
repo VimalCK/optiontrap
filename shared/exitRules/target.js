@@ -10,6 +10,6 @@ export default {
   description: 'Exits a position once its profit is this percentage of its entry price.',
   params: [{ key: 'percent', label: 'Profit (%)', type: ParamType.Percent }],
   check: (position, _ctx, { percent }) => (position.pnlPercent >= percent
-    ? `Target hit: P&L ${position.pnlPercent.toFixed(2)}% (₹${position.pnl.toFixed(2)}), target ${percent}%`
+    ? `Target hit (${percent}%)`
     : null),
 };

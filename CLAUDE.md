@@ -356,7 +356,7 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   quote with the user's Kite session, or the server feed's for the engine; the last price when the quote has no bid / ask). Closing a position
   records Zerodha's charges (`shared/tradeCharges.js`: brokerage, STT, exchange, SEBI, stamp, GST, DP) in `positions.charges` /
   `charge_breakdown` and each automated trade's own in `algo_trades.charges`. Positions shows P&L before charges, as Kite does;
-  the Journal, Dashboard, Algo Trading, Win/Loss Patterns and the daily loss limit use P&L after them.
+  Algo Trading too (its Closed step gives the P&L at the exit fill); the Journal, Dashboard, Win/Loss Patterns and the daily loss limit use P&L after them.
 - Paper limit orders (`shared/orders.js`) work like Zerodha's: a buy fills at the limit or lower, a sell at the limit or
   higher. One that can fill when placed fills at once at the last price; otherwise it fills at its limit on the first live tick
   that reaches it, through `openPosition` with the order's source. Orders fill only in market hours; intraday ones are placed

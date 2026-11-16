@@ -18,8 +18,8 @@
  * its exit (the opposite side) at the same quantity. Stocks are intraday when
  * entered and exited on the same IST day, else delivery. STT on options
  * exercised at expiry is not charged: paper positions are exited, never
- * exercised. Positions shows P&L before charges, as Kite does; the Journal,
- * Algo Trading and Win/Loss Patterns show it after.
+ * exercised. Positions and Algo Trading show P&L before charges, as Kite does;
+ * the Journal and Win/Loss Patterns show it after.
  */
 import { marketDate } from './marketTime.js';
 import { ChargeSegment, InstrumentType, Side, isOptionType, oppositeSide } from './tradeEnums.js';

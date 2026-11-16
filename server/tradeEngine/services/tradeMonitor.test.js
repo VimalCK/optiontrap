@@ -42,8 +42,8 @@ describe('dueExits', () => {
   it("fires each owner's own rules on the position's P&L at the last price, exiting at that price", () => {
     const prices = new Map([[101, 120], [202, 210]]);
     expect(dueExits([sold, bought], state(prices))).toEqual([
-      { position: sold, exitPrice: 120, ruleId: 'stop-loss', reason: 'Stop-loss hit: P&L -20.00% (₹-1500.00), stop-loss 20%' },
-      { position: bought, exitPrice: 210, ruleId: 'target', reason: 'Target hit: P&L 5.00% (₹500.00), target 5%' },
+      { position: sold, exitPrice: 120, ruleId: 'stop-loss', reason: 'Stop-loss hit (20%)' },
+      { position: bought, exitPrice: 210, ruleId: 'target', reason: 'Target hit (5%)' },
     ]);
   });
 
@@ -142,7 +142,7 @@ describe('the monitor service', () => {
       exitPrice: 120,
       kite: ADMIN_KITE, // a market exit at the bid / ask, quoted with the feed's session
       source: 'Auto',
-      exitReason: { ruleId: 'stop-loss', reason: 'Stop-loss hit: P&L -20.00% (₹-1500.00), stop-loss 20%' },
+      exitReason: { ruleId: 'stop-loss', reason: 'Stop-loss hit (20%)' },
     });
     expect(monitor.watchedPositionIds()).toEqual(['p2']);
     expect(feeds[0].watching).toEqual([202]);
