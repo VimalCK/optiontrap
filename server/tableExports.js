@@ -31,6 +31,30 @@ export const TABLE_EXPORTS = [
     description: 'Every option-chain OI snapshot the table holds, one row per snapshot with its maps as JSON text. The nightly purge keeps only the latest trading day.',
     fileName: 'oi-snapshots',
   },
+  {
+    id: ExportTable.AlgoTrades,
+    table: 'algo_trades',
+    key: 'id',
+    label: 'Automated trades',
+    description: "Every user's automated trades: strategy, setup, side, entry and exit prices, stage, exit rule and reason, and charges.",
+    fileName: 'algo-trades',
+  },
+  {
+    id: ExportTable.AlgoTradeEvents,
+    table: 'algo_trade_events',
+    key: 'id',
+    label: 'Automated trade events',
+    description: "Each automated trade's steps (selected, validated, rejected, executed, closed) with their time and details as JSON text.",
+    fileName: 'algo-trade-events',
+  },
+  {
+    id: ExportTable.Positions,
+    table: 'positions',
+    key: 'id',
+    label: 'Paper positions',
+    description: "Every user's paper positions, manual and automated, with entry and exit prices and times, and charges.",
+    fileName: 'positions',
+  },
 ];
 
 /** What the Admin page lists of each export. */

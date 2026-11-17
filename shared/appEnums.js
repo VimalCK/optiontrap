@@ -186,6 +186,11 @@ export const FetchEvent = Object.freeze({ Step: 'Step', Progress: 'Progress', Do
 /** @typedef {typeof FetchEvent[keyof typeof FetchEvent]} FetchEventId */
 
 /** A table an admin can download as a spreadsheet (Admin → Data). */
-export const ExportTable = Object.freeze({ OiSnapshots: 'OiSnapshots' });
+export const ExportTable = Object.freeze({
+  OiSnapshots: 'OiSnapshots',
+  AlgoTrades: 'AlgoTrades',
+  AlgoTradeEvents: 'AlgoTradeEvents',
+  Positions: 'Positions',
+});
 
 /** @typedef {typeof ExportTable[keyof typeof ExportTable]} ExportTableId */

@@ -736,7 +736,7 @@
   background: rgba(var(--loss-rgb), 0.1);
 }
 
-/* Admin → Data: a Diagnostics-style panel, one row per table export. */
+/* Admin → Data: a Diagnostics-style panel with the table picked from a list. */
 .admin-export__title {
   text-transform: none;
   letter-spacing: normal;
@@ -763,6 +763,17 @@
 
 .admin-export__table .hx-service__body small {
   line-height: 1.5;
+}
+
+.admin-export__picker {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 320px;
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-secondary);
 }
 
 .admin-export__facts {

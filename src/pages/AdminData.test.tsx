@@ -1,28 +1,38 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { TableExportRow, fileSizeLabel, type SavedFile } from './AdminData';
+import { TableExportPicker, fileSizeLabel, type SavedFile } from './AdminData';
 import { ExportTable } from '../../shared/appEnums.js';
 
-const table = { id: ExportTable.OiSnapshots, label: 'OI snapshots', description: 'Every snapshot the table holds.' };
-const row = ({ downloading = false, saved = null, error = null }: { downloading?: boolean; saved?: SavedFile | null; error?: string | null } = {}) =>
-  renderToStaticMarkup(<TableExportRow table={table} downloading={downloading} saved={saved} error={error} onDownload={() => {}} />);
-const button = (markup: string) => markup.match(/<button[^>]*>.*?<\/button>/)?.[0] ?? '';
-const openingTag = (markup: string) => markup.match(/<button[^>]*>/)?.[0] ?? '';
+const tables = [
+  { id: ExportTable.OiSnapshots, label: 'OI snapshots', description: 'Every snapshot the table holds.' },
+  { id: ExportTable.AlgoTrades, label: 'Automated trades', description: 'Every automated trade.' },
+];
+const row = ({ table = tables[0], downloading = false, saved = null, error = null }: { table?: typeof tables[number]; downloading?: boolean; saved?: SavedFile | null; error?: string | null } = {}) =>
+  renderToStaticMarkup(
+    <TableExportPicker tables={tables} table={table} onSelect={() => {}} downloading={downloading} saved={saved} error={error} onDownload={() => {}} />,
+  );
+const downloadButton = (markup: string) => markup.match(/<button[^>]*admin-export__button[^>]*>.*?<\/button>/)?.[0] ?? '';
+const openingTag = (markup: string) => downloadButton(markup).match(/<button[^>]*>/)?.[0] ?? '';
 
-describe('TableExportRow', () => {
-  it('shows the table and an enabled download button', () => {
+describe('TableExportPicker', () => {
+  it('shows the picked table in the labelled list and only its description', () => {
+    const markup = row({ table: tables[1] });
+    expect(markup).toMatch(/<label[^>]*>.*Table.*Automated trades.*<\/label>/);
+    expect(markup).toContain('Every automated trade.');
+    expect(markup).not.toContain('Every snapshot the table holds.');
+  });
+
+  it('shows an enabled download button', () => {
     const markup = row();
-    expect(markup).toContain('OI snapshots');
-    expect(markup).toContain('Every snapshot the table holds.');
     expect(markup).toContain('Excel .xlsx');
-    expect(button(markup)).toContain('Download');
+    expect(downloadButton(markup)).toContain('Download');
     expect(openingTag(markup)).not.toContain('disabled');
     expect(markup).not.toContain('Saved');
   });
 
   it('disables the button while the file is prepared', () => {
     const markup = row({ downloading: true });
-    expect(button(markup)).toContain('Preparing…');
+    expect(downloadButton(markup)).toContain('Preparing…');
     expect(openingTag(markup)).toContain('disabled');
   });
 

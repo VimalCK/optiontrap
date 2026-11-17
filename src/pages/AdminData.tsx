@@ -3,6 +3,7 @@ import { downloadTableExport, getTableExports, type TableExport } from '@/servic
 import { isAbortError } from '@/services/apiClient';
 import { useAbortSignal } from '@/hooks/useAbortSignal';
 import { saveFile } from '@/utils/saveFile';
+import AppSelect from '@/components/AppSelect/AppSelect';
 import Message from '@/components/Message/Message';
 import { ShimmerGroup } from '@/components/Shimmer/Shimmer';
 import { ServiceRowsShimmer } from '@/components/AdminShimmer/AdminShimmer';
@@ -34,18 +35,27 @@ export interface SavedFile {
   size: number;
 }
 
-/** One table: what it holds, its download button, and the last download's file or error. */
-export const TableExportRow: React.FC<{
+/** The table picked from the list: what it holds, its download button, and its last download's file or error. */
+export const TableExportPicker: React.FC<{
+  tables: TableExport[];
   table: TableExport;
+  onSelect: (id: ExportTableId) => void;
   downloading: boolean;
   saved: SavedFile | null;
   error: string | null;
   onDownload: (id: ExportTableId) => void;
-}> = ({ table, downloading, saved, error, onDownload }) => (
+}> = ({ tables, table, onSelect, downloading, saved, error, onDownload }) => (
   <div className="hx-service admin-export__table">
     <span className="hx-service__icon"><TableIcon size={18} /></span>
     <div className="hx-service__body">
-      <strong>{table.label}</strong>
+      <label className="admin-export__picker">
+        <span>Table</span>
+        <AppSelect
+          value={table.id}
+          options={tables.map(({ id, label }) => ({ value: id, label }))}
+          onChange={(id) => onSelect(id as ExportTableId)}
+        />
+      </label>
       <small>{table.description}</small>
       <span className="admin-export__facts">
         {EXPORT_FACTS.map((fact) => <span key={fact} className="admin-export__fact">{fact}</span>)}
@@ -67,6 +77,7 @@ export const TableExportRow: React.FC<{
 const AdminData: React.FC = () => {
   const signal = useAbortSignal();
   const [tables, setTables] = useState<TableExport[] | null>(null);
+  const [selectedId, setSelectedId] = useState<ExportTableId | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<ExportTableId | null>(null);
   const [saved, setSaved] = useState<Partial<Record<ExportTableId, SavedFile>>>({});
@@ -95,6 +106,7 @@ const AdminData: React.FC = () => {
   };
 
   if (loadError) return <Message tone={MessageTone.Error}>{loadError}</Message>;
+  const selected = tables?.find((table) => table.id === selectedId) ?? tables?.[0] ?? null;
   return (
     <section className="hx-panel admin-export" aria-labelledby="admin-export-title">
       <div className="hx-panel__title admin-export__title">
@@ -102,18 +114,19 @@ const AdminData: React.FC = () => {
         <p>Built on the server from the live table, a page at a time, so a large table can take a while.</p>
       </div>
       {!tables && <ShimmerGroup label="Loading tables"><ServiceRowsShimmer rows={PLACEHOLDER_TABLES} /></ShimmerGroup>}
-      {tables && (tables.length === 0
-        ? <EmptyState icon={<TableIcon size={64} />} title="No tables to download" />
-        : tables.map((table) => (
-          <TableExportRow
-            key={table.id}
-            table={table}
-            downloading={downloading === table.id}
-            saved={saved[table.id] ?? null}
-            error={errors[table.id] ?? null}
+      {tables && (selected
+        ? (
+          <TableExportPicker
+            tables={tables}
+            table={selected}
+            onSelect={setSelectedId}
+            downloading={downloading === selected.id}
+            saved={saved[selected.id] ?? null}
+            error={errors[selected.id] ?? null}
             onDownload={download}
           />
-        )))}
+        )
+        : <EmptyState icon={<TableIcon size={64} />} title="No tables to download" />)}
     </section>
   );
 };
