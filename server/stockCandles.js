@@ -15,7 +15,8 @@ import {
 } from './db.js';
 import { AFTER_CLOSE_MINUTES } from './tradeEngine/market.js';
 import { addDays, marketClock } from '../shared/marketTime.js';
-import { KiteApiError, kiteClient } from './kiteClient.js';
+import { KiteApiError } from './kiteClient.js';
+import { fetchDayCandles } from './kiteCandles.js';
 import { SETUP_BACKFILL_DAYS, analyzeStock, evaluateSetup, parseKiteCandles, replaySetups, scanSummary } from '../shared/stockSetups.js';
 
 /** One day under Kite's 2000-day limit for daily candles. */
@@ -81,8 +82,7 @@ export function historyRewritten(stored, fetched) {
 /** One stock's daily candles from Kite; a rate-limited (429) call is tried once more after a pause. */
 async function fetchKiteDaily(instrumentToken, from, to, kite, { signal, retried = false } = {}) {
   try {
-    const data = await kiteClient(kite).get(`/instruments/historical/${instrumentToken}/day?from=${from}&to=${to}`, { signal });
-    return parseKiteCandles(data?.candles || []);
+    return parseKiteCandles((await fetchDayCandles(kite, instrumentToken, from, to, { signal })) || []);
   } catch (err) {
     if (!(err instanceof KiteApiError)) throw err;
     if (err.status === RATE_LIMITED && !retried) {

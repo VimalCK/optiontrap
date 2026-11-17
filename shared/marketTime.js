@@ -104,10 +104,17 @@ export function marketCloseTime(date) {
  */
 export function lastSessionEnd(now = new Date()) {
   let date = marketDate(now);
-  const end = (/** @type {string} */ day) => marketDateTime(day, MARKET_CLOSE_MINUTES + 1);
-  if (isTradingDay(date) && end(date) <= now) return end(date);
+  if (isTradingDay(date) && sessionEnd(date) <= now) return sessionEnd(date);
   do date = addDays(date, -1); while (!isTradingDay(date));
-  return end(date);
+  return sessionEnd(date);
+}
+
+/**
+ * When the session on `date` ended: the instant after its closing minute (15:31 IST).
+ * @param {string} date 'YYYY-MM-DD'
+ */
+export function sessionEnd(date) {
+  return marketDateTime(date, MARKET_CLOSE_MINUTES + 1);
 }
 
 /** Epoch ms of market-zone midnight starting the day that contains `timestamp`. */

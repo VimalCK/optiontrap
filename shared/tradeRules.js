@@ -13,7 +13,7 @@
  * ctx for Place: { trade, now }           an order's trade (shared/orders.js)
  * ctx for Exit: { position, exitPrice, now }  position is the open position
  * ctx for SquareOff: { position, exitPrice, now }  the engine closing an intraday position after its
- *   session ended, at its last price after the close (server/tradeEngine/services/sessionSquareOff.js)
+ *   session ended, at that session's closing price (server/tradeEngine/services/sessionSquareOff.js)
  */
 import { isMarketOpen } from './marketTime.js';
 import { HORIZONS, Horizon, INSTRUMENT_TYPES, InstrumentType, TradeAction, TradingMode, exchangeFor, isHorizon, isOptionType } from './tradeEnums.js';
