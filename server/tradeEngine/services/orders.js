@@ -334,10 +334,11 @@ export function createOrderService({
     /**
      * @param {string} userId
      * @param {string} id
+     * @param {string} [reason]  why, shown with the order: the user cancelled it, unless the engine says otherwise
      * @returns {Promise<OrderResult>}
      */
-    async cancel(userId, id) {
-      const cancelled = await db.cancelOrder(userId, id, CANCELLED_BY_USER);
+    async cancel(userId, id, reason = CANCELLED_BY_USER) {
+      const cancelled = await db.cancelOrder(userId, id, reason);
       if (!cancelled) return { ok: false, code: NOT_FOUND, message: NOT_OPEN_MESSAGE };
       watch.remove(cancelled);
       await settled(cancelled);
@@ -358,5 +359,8 @@ export function createOrderService({
 
     /** The ids of the orders waiting, for tests and logs. */
     waitingOrderIds: watch.ids,
+
+    /** The automated entry orders waiting to fill, across all users. */
+    waitingAutoOrders: () => watch.orders().filter((order) => order.source === TradeSource.Auto),
   };
 }

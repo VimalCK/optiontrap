@@ -7,7 +7,7 @@ vi.mock('../automationConfigs.js', () => ({}));
 vi.mock('../positions.js', () => ({ NOT_FOUND: 'NOT_FOUND' }));
 vi.mock('../../oiHistoryScheduler.js', () => ({ findWorkingAdminSession: vi.fn() }));
 
-const { createTradeMonitor, dueExits, monitorHealth, openPnlByUser } = await import('./tradeMonitor.js');
+const { createTradeMonitor, dueCancellations, dueExits, monitorHealth, openPnlByUser } = await import('./tradeMonitor.js');
 const { defaultRuleSettings } = await import('../../../shared/rules/ruleSettings.js');
 const { EXIT_RULES } = await import('../../../shared/exitRules/index.js');
 
@@ -26,6 +26,10 @@ const config = (active) => ({ exitRules: exitRules(active) });
 const sold = { id: 'p1', userId: 'U1', instrumentToken: 101, tradingsymbol: 'NIFTY26NOV24000PE', horizon: Horizon.Intraday, side: 'SELL', quantity: 75, entryPrice: 100 };
 // Bought 50 at 200, another user, another instrument.
 const bought = { id: 'p2', userId: 'U2', instrumentToken: 202, tradingsymbol: 'NIFTY26NOV24000CE', horizon: Horizon.Intraday, side: 'BUY', quantity: 50, entryPrice: 200 };
+// An automated limit order still waiting to fill, and a positional one.
+const waiting = { id: 'o1', userId: 'U3', instrumentToken: 303, tradingsymbol: 'NIFTY26NOV24100PE', horizon: Horizon.Intraday, side: 'SELL', quantity: 75 };
+const waitingPositional = { ...waiting, id: 'o2', horizon: Horizon.Positional };
+const AT_SQUARE_OFF = new Date('2026-11-05T09:30:00Z'); // Thu 15:00 IST
 
 describe('openPnlByUser', () => {
   it("totals each user's open P&L at the last prices, counting positions with no price yet as 0", () => {
@@ -60,6 +64,27 @@ describe('dueExits', () => {
   });
 });
 
+
+describe('dueCancellations', () => {
+  const squareOff = new Map([['U3', exitRules({ 'square-off': { time: '15:00' } })]]);
+  const state = (now, exitRulesByUser = squareOff, todayPnlByUser = new Map()) => ({ exitRulesByUser, todayPnlByUser, now });
+
+  it('cancels a waiting intraday order once the square-off time has come, with the rule as the reason', () => {
+    expect(dueCancellations([waiting], state(AT_SQUARE_OFF)))
+      .toEqual([{ order: waiting, ruleId: 'square-off', reason: 'Squared off at 15:00 IST' }]);
+  });
+
+  it('keeps it before the square-off time, a positional order, and an order whose owner has no rules loaded', () => {
+    expect(dueCancellations([waiting], state(new Date('2026-11-05T09:29:59Z')))).toEqual([]); // 14:59 IST
+    expect(dueCancellations([waitingPositional], state(AT_SQUARE_OFF))).toEqual([]);
+    expect(dueCancellations([{ ...waiting, userId: 'U9' }], state(AT_SQUARE_OFF))).toEqual([]);
+  });
+
+  it('leaves waiting orders to rules that close positions only: max loss per day does not cancel them', () => {
+    const maxLoss = new Map([['U3', exitRules({ 'max-daily-loss': { amount: 5000 } })]]);
+    expect(dueCancellations([waiting], state(NOON, maxLoss, new Map([['U3', -6000]])))).toEqual([]);
+  });
+});
 
 describe('the monitor service', () => {
   const ADMIN_KITE = { apiKey: 'key', accessToken: 'token' };
@@ -114,6 +139,9 @@ describe('the monitor service', () => {
       getTodayAutoRealisedPnl: vi.fn(async () => 0),
     };
     orders = {
+      waiting: [],
+      waitingAutoOrders: () => orders.waiting,
+      cancel: vi.fn(async (userId, id) => ({ ok: true, order: { id } })),
       exit: vi.fn(async (userId, positionId, { exitPrice }) => ({ ok: true, order: { fillPrice: exitPrice } })),
       onSettled: vi.fn((listener) => { orders.settledListener = listener; return () => { orders.settledListener = null; }; }),
     };
@@ -187,6 +215,19 @@ describe('the monitor service', () => {
     now = new Date('2026-11-05T09:30:00Z'); // 15:00 IST
     await market.clockCheck();
     expect(orders.exit.mock.calls.map((c) => [c[1], c[2].exitPrice])).toEqual([['p1', 101], ['p2', 199]]);
+  });
+
+  it("cancels a user's waiting automated orders at the square-off time, loading the rules of an owner with no position", async () => {
+    db.getAutomationConfigs.mockImplementation(async (ids) => new Map(ids.map((id) => [id, config({ 'square-off': { time: '15:00' } })])));
+    await market.open();
+    orders.waiting = [waiting];
+    await market.clockCheck();
+    expect(orders.cancel).not.toHaveBeenCalled();
+
+    now = AT_SQUARE_OFF;
+    await market.clockCheck();
+    expect(orders.cancel.mock.calls).toEqual([['U3', 'o1', 'Cancelled: Squared off at 15:00 IST']]);
+    expect(db.getAutomationConfigs).toHaveBeenLastCalledWith(['U3']);
   });
 
   it("squares off all of a user's positions, winners too, once their day's loss (booked + open) reaches the limit", async () => {

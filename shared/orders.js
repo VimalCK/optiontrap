@@ -19,6 +19,8 @@ import { ORDER_TYPES, OrderType, TradeAction, Side } from './tradeEnums.js';
 /** Cancel reasons: the close cancels orders the user left open; CANCELLED_BY_USER is the user's own cancel. */
 export const CANCELLED_AT_CLOSE = 'Cancelled at market close';
 export const CANCELLED_BY_USER = 'Cancelled';
+/** An automated order cancelled by one of the user's rules, e.g. "Cancelled: Squared off at 15:00 IST". */
+export const cancelledByRule = (/** @type {string} */ reason) => `${CANCELLED_BY_USER}: ${reason}`;
 
 /**
  * @param {import('./tradeEnums.js').SideId} side

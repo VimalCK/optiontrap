@@ -12,5 +12,7 @@ export default {
   description: 'Exits every open intraday automated position at this time (IST).',
   // 15:00 is the time the user asked for; they can change it.
   params: [{ key: 'time', label: 'Time (IST)', type: ParamType.Time, default: '15:00' }],
+  // An entry order from then on would open a position this closes at once: new ones are refused, waiting ones cancelled.
+  blocksEntryOrders: true,
   check: (position, ctx, { time }) => (position.horizon === Horizon.Intraday && marketTimeLabel(ctx.now) >= time ? `Squared off at ${time} IST` : null),
 };

@@ -138,6 +138,14 @@ describe('refusal', () => {
     expect(refusal(trade, config, ctx)).toEqual({ ruleId: null, reason: 'Sell Index option is off' });
   });
 
+  it('refuses it once the square-off time has come, as the square-off would close it at once', () => {
+    const config = userConfig();
+    config.exitRules['square-off'] = { active: true, params: { time: '15:00' } };
+    expect(refusal(trade, config, { ...ctx, now: new Date('2026-11-05T09:29:59Z') })).toBeNull(); // Thu 14:59 IST
+    expect(refusal(trade, config, { ...ctx, now: new Date('2026-11-05T09:30:00Z') })) // Thu 15:00 IST
+      .toEqual({ ruleId: 'square-off', reason: 'Squared off at 15:00 IST' });
+  });
+
   it('names the entry rule that refuses it', () => {
     const config = userConfig();
     config.entryRules['max-open-positions'] = { active: true, params: { max: 1 } };

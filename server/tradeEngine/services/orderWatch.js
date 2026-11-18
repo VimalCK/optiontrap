@@ -88,6 +88,7 @@ export function createOrderWatch({ findKiteSession, createFeed, clock, log, fill
     onTicks,
     connected: () => feed !== null,
     ids: () => [...waiting.values()].flatMap((orders) => [...orders.keys()]),
+    orders: () => [...waiting.values()].flatMap((orders) => [...orders.values()]),
 
     /** Watch a newly placed order. */
     add(/** @type {Order} */ order) {

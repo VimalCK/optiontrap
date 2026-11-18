@@ -23,6 +23,9 @@
  *   trades behind the position, with the rule's reason.
  * - Exit rules protect open positions whether automation is switched on or
  *   off; switching it off stops new trades, not exits.
+ * - A rule that closes positions at a time (square off at) also cancels the
+ *   owner's waiting automated entry orders, on the same every-second check,
+ *   so none fills only to be closed at once.
  */
 import {
   getAllOpenAutoPositions,
@@ -34,7 +37,8 @@ import { NOT_FOUND } from '../positions.js';
 import { openSharedTickerFeed } from '../../sharedTickerFeed.js';
 import { findWorkingAdminSession } from '../../oiHistoryScheduler.js';
 import { marketDate, marketDayStartMs } from '../../../shared/marketTime.js';
-import { checkExitRules } from '../../../shared/exitRules/index.js';
+import { checkEntryOrderBlocked, checkExitRules } from '../../../shared/exitRules/index.js';
+import { cancelledByRule } from '../../../shared/orders.js';
 import { tradePnl, tradePnlPercent } from '../../../shared/tradePnl.js';
 import { engineLogger } from '../../engineLog.js';
 import { TradeSource } from '../../../shared/tradeEnums.js';
@@ -78,6 +82,9 @@ const FEED_CHECK_MS = 60 * 1000;
  * @typedef {{ id: string, userId: string, instrumentToken: number, tradingsymbol: string, side: string, quantity: number, entryPrice: number }} WatchedPosition
  * @typedef {import('../../../shared/rules/ruleSettings.js').RuleSettings} RuleSettings
  * @typedef {{ position: WatchedPosition, exitPrice: number, ruleId: string, reason: string }} DueExit
+ * @typedef {{ id: string, userId: string, instrumentToken: number, tradingsymbol: string, side: string, quantity: number,
+ *             horizon: import('../../../shared/tradeEnums.js').HorizonId }} WaitingOrder
+ * @typedef {{ order: WaitingOrder, ruleId: string, reason: string }} DueCancellation
  */
 
 /**
@@ -118,6 +125,24 @@ export function dueExits(positions, { lastPrices, exitRulesByUser, todayPnlByUse
   return due;
 }
 
+
+/**
+ * The waiting automated entry orders a rule says to cancel now. Orders whose owner has no rules loaded stay.
+ * @param {WaitingOrder[]} orders
+ * @param {{ exitRulesByUser: Map<string, RuleSettings>, todayPnlByUser: Map<string, number>, now: Date }} state
+ * @returns {DueCancellation[]}
+ */
+export function dueCancellations(orders, { exitRulesByUser, todayPnlByUser, now }) {
+  /** @type {DueCancellation[]} */
+  const due = [];
+  for (const order of orders) {
+    const rules = exitRulesByUser.get(order.userId);
+    if (!rules) continue;
+    const fired = checkEntryOrderBlocked(order, { now, todayAutoPnl: todayPnlByUser.get(order.userId) ?? 0 }, rules);
+    if (fired) due.push({ order, ...fired });
+  }
+  return due;
+}
 
 /**
  * A trade monitor service. Everything it talks to is injectable, for tests;
@@ -175,12 +200,15 @@ export function createTradeMonitor({
     bookedPnlByUser.set(userId, await db.getTodayAutoRealisedPnl(userId, todayStart));
   }
 
+  async function loadExitRules(/** @type {string[]} */ userIds) {
+    const configs = await db.getAutomationConfigs(userIds);
+    for (const userId of userIds) exitRulesByUser.set(userId, configs.get(userId).exitRules);
+  }
+
   /** Track exactly these users' positions, exit rules and booked P&L, replacing what was held for them. */
   async function track(userIds, positions) {
-    const configs = await db.getAutomationConfigs(userIds);
-    await Promise.all(userIds.map(loadBookedPnl));
+    await Promise.all([loadExitRules(userIds), ...userIds.map(loadBookedPnl)]);
     for (const [id, position] of watched) if (userIds.includes(position.userId)) watched.delete(id);
-    for (const userId of userIds) exitRulesByUser.set(userId, configs.get(userId).exitRules);
     for (const position of positions) watched.set(position.id, position);
     feed?.watch(watchedTokens());
   }
@@ -223,6 +251,27 @@ export function createTradeMonitor({
   function check(positions) {
     const state = { lastPrices, exitRulesByUser, todayPnlByUser: todayPnlByUser(), now: clock() };
     return Promise.all(dueExits(positions, state).map(exit));
+  }
+
+  async function cancelWaitingOrder(/** @type {DueCancellation} */ { order, reason }) {
+    const result = await orders.cancel(order.userId, order.id, cancelledByRule(reason));
+    if (result.ok) log('order cancelled', { order: `${order.side} ${order.quantity} ${order.tradingsymbol}`, user: order.userId, reason });
+  }
+
+  /** Cancel the waiting automated entry orders a rule says to, e.g. once the square-off time has come. */
+  async function cancelDueWaitingOrders() {
+    const waiting = orders.waitingAutoOrders();
+    if (waiting.length === 0) return;
+    // Owners with waiting orders but no open position aren't tracked yet; their settings changes reload them (refreshUser).
+    const untracked = [...new Set(waiting.map((order) => order.userId))].filter((userId) => !exitRulesByUser.has(userId));
+    if (untracked.length > 0) await loadExitRules(untracked);
+    const state = { exitRulesByUser, todayPnlByUser: todayPnlByUser(), now: clock() };
+    await Promise.all(dueCancellations(waiting, state).map(cancelWaitingOrder));
+  }
+
+  /** The every-second check: time rules on positions with no new tick, and on waiting orders. */
+  function clockCheck() {
+    return Promise.all([feed ? check([...watched.values()]) : null, cancelDueWaitingOrders()]);
   }
 
   /** Each user's automated P&L today: booked plus every watched position at its last price. */
@@ -323,7 +372,7 @@ export function createTradeMonitor({
       stopListening = orders.onSettled(onOrderSettled);
       ctx.market.onOpen(openSession);
       ctx.market.onClose(closeSession);
-      ctx.market.every(CLOCK_CHECK_MS, () => (feed ? check([...watched.values()]) : []));
+      ctx.market.every(CLOCK_CHECK_MS, clockCheck);
       ctx.market.every(FEED_CHECK_MS, ensureFeed);
     },
 

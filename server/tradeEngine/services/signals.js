@@ -44,6 +44,7 @@ import { getOrFetchInstruments } from '../../instruments.js';
 import { marketFillPrice } from '../fillPrice.js';
 import { checkGeneralSettings, tradeKind } from '../../../shared/automation.js';
 import { checkEntryRules, entryLimitPrice, tradeLots } from '../../../shared/entryRules/index.js';
+import { checkEntryOrderBlocked } from '../../../shared/exitRules/index.js';
 import { STRATEGIES } from '../strategies/index.js';
 import { marketDayStartMs } from '../../../shared/marketTime.js';
 import { engineLogger } from '../../engineLog.js';
@@ -135,7 +136,7 @@ export function planTrade(signal, instrumentsByToken, indexNames, config) {
 }
 
 /**
- * Why the user's settings refuse this trade (General settings first, then the
+ * Why the user's settings refuse this trade (General settings, an exit rule that would close it at once, then the
  * entry rules in order), or null when it may be executed.
  * @param {PlannedTrade} trade
  * @param {AutomationConfig} config
@@ -145,6 +146,8 @@ export function planTrade(signal, instrumentsByToken, indexNames, config) {
 export function refusal(trade, config, ctx) {
   const general = checkGeneralSettings(trade, config);
   if (general) return { ruleId: null, reason: general };
+  const blocked = checkEntryOrderBlocked(trade, ctx, config.exitRules);
+  if (blocked) return blocked;
   const entry = checkEntryRules(trade, ctx, config.entryRules);
   return entry.ok ? null : { ruleId: entry.ruleId, reason: entry.reason };
 }

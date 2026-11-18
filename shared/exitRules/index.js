@@ -17,11 +17,15 @@ import maxDailyLoss from './maxDailyLoss.js';
  *   pnl in ₹; pnlPercent as a percentage of its entry price
  * @typedef {{ now: Date, todayAutoPnl: number }} ExitRuleContext
  *   todayAutoPnl is the owner's automated P&L today in ₹: booked plus open positions at their last price
- * @typedef {import('../rules/ruleSettings.js').Rule<OpenAutoPosition, ExitRuleContext>} ExitRule
+ * @typedef {import('../rules/ruleSettings.js').Rule<OpenAutoPosition, ExitRuleContext> & { blocksEntryOrders?: boolean }} ExitRule
+ *   blocksEntryOrders: while it fires, the owner's automated entry orders are refused, and waiting ones cancelled
+ * @typedef {{ instrumentToken: number, tradingsymbol: string, horizon: import('../tradeEnums.js').HorizonId }} EntryOrder
  */
 
 /** Every exit rule, in the order they're checked. @type {ExitRule[]} */
 export const EXIT_RULES = [stopLoss, target, squareOff, maxDailyLoss];
+
+const ENTRY_BLOCKING_RULES = EXIT_RULES.filter((rule) => rule.blocksEntryOrders);
 
 /** The id of the trade engine's square-off after the market close (server/tradeEngine/services/sessionSquareOff.js). */
 export const SESSION_SQUARE_OFF_ID = 'session-square-off';
@@ -37,4 +41,16 @@ export const ENGINE_EXITS = [{ id: SESSION_SQUARE_OFF_ID, label: 'Session square
  */
 export function checkExitRules(position, ctx, settings) {
   return firstRuleThatFires(EXIT_RULES, position, ctx, settings);
+}
+
+/**
+ * The rule that blocks an automated entry order now (refused if new, cancelled if waiting), if any: checked on the
+ * position the order would open, at no P&L yet.
+ * @param {EntryOrder} order
+ * @param {ExitRuleContext} ctx
+ * @param {RuleSettings} settings
+ * @returns {{ ruleId: string, reason: string } | null}
+ */
+export function checkEntryOrderBlocked(order, ctx, settings) {
+  return firstRuleThatFires(ENTRY_BLOCKING_RULES, { ...order, pnl: 0, pnlPercent: 0 }, ctx, settings);
 }
