@@ -5,7 +5,7 @@ import { defaultAutomationConfig } from '../../shared/automation.js';
 import type { AutoTrade } from '@/services/automation';
 import { marketDate } from '../../shared/marketTime.js';
 import { formatNumericDate } from '@/utils/marketStatus';
-import Automation, { AutoTradesTable, DayRow, TradeRow, automationStatus } from './Automation';
+import Automation, { AutoTradesTable, TradeRow, automationStatus } from './Automation';
 import { Horizon } from '../../shared/tradeEnums.js';
 import { TEST_STRATEGIES } from '@/services/strategies.fixture';
 
@@ -97,7 +97,7 @@ describe('AutoTradesTable', () => {
     const lateWin = { ...trade, id: 'w', stage: 'Closed' as const, entryPrice: 100, exitPrice: 90, createdAt: '2026-11-05T19:00:00.000Z' }; // Fri 6 Nov 00:30 IST
     const morning = { ...trade, id: 'm' }; // Thu 5 Nov 10:30 IST
     const table = renderToStaticMarkup(<AutoTradesTable trades={[lateWin, morning]} />);
-    const days = [...table.matchAll(/<tr class="automation-trades__day"><th[^>]*>([^<]+)<span[^>]*>([^<]+)<\/span><\/th><td class="([^"]*)">([^<]+)</g)]
+    const days = [...table.matchAll(/<tr class="day-group-row"><th[^>]*>([^<]+)<span[^>]*>([^<]+)<\/span><\/th><td class="([^"]*)">([^<]+)</g)]
       .map(([, label, count, , pnl]) => [label, count, pnl]);
     expect(days).toEqual([['Fri, 6 Nov, 2026', ' · 1 trade', '+750.00'], ['Thu, 5 Nov, 2026', ' · 1 trade', '–']]);
     expect(table.match(/<tbody>/g)).toHaveLength(2);
@@ -108,10 +108,6 @@ describe('AutoTradesTable', () => {
     const chevron = [...table.matchAll(/<button[^>]*>/g)].map((m) => m[0]).find((tag) => tag.includes('aria-label="Hide this day&#x27;s trades"')) ?? '';
     expect(chevron).toContain('aria-expanded="true"');
     expect(table).toContain('NIFTY26NOV24000PE');
-    const group = { day: '2026-11-05', trades: [trade], pnl: null };
-    const folded = renderToStaticMarkup(<table><tbody><DayRow group={group} expanded={false} onToggle={() => {}} /></tbody></table>);
-    expect(folded).toContain('automation-trades__day--collapsed');
-    expect(folded).toContain('aria-label="Show this day&#x27;s trades"');
   });
 
   it('marks an open position live, and shows closed P&L in profit or loss colours', () => {

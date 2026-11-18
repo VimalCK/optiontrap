@@ -1,10 +1,10 @@
 import { LIFECYCLE_STAGES } from '../../../shared/automation.js';
-import { marketDate } from '../../../shared/marketTime.js';
 import { tradePnl, tradePnlPercent } from '../../../shared/tradePnl.js';
 import { Tone, type ToneId } from '@/utils/uiEnums';
 import type { AutoTrade, AutoTradeEvent } from '@/services/automation';
 import type { StrategyInfo } from '@/services/strategies';
 import { formatAmount } from '@/utils/formatAmount';
+import { groupByMarketDay } from '@/utils/groupByMarketDay';
 import { LifecycleStage, Side } from '../../../shared/tradeEnums.js';
 
 type Stage = AutoTrade['stage'];
@@ -48,19 +48,10 @@ export interface TradeDay {
 
 /** Groups by the IST day created, keeping the server's order (newest first). */
 export function tradesByDay(trades: AutoTrade[]): TradeDay[] {
-  const days: TradeDay[] = [];
-  for (const trade of trades) {
-    const day = marketDate(new Date(trade.createdAt));
-    let group = days.find((d) => d.day === day);
-    if (!group) {
-      group = { day, trades: [], pnl: null };
-      days.push(group);
-    }
-    group.trades.push(trade);
-    const pnl = closedPnl(trade);
-    if (pnl !== null) group.pnl = (group.pnl ?? 0) + pnl;
-  }
-  return days;
+  return groupByMarketDay(trades, (trade) => trade.createdAt).map(({ day, items }) => {
+    const closed = items.map(closedPnl).filter((pnl): pnl is number => pnl !== null);
+    return { day, trades: items, pnl: closed.length === 0 ? null : closed.reduce((sum, pnl) => sum + pnl, 0) };
+  });
 }
 
 type Detail = Record<string, unknown>;

@@ -1,0 +1,62 @@
+/* A grouped table's day heading row: its date, row count and P&L. */
+table .day-group-row th,
+table .day-group-row td {
+  /* In the body's flow, under a table whose header cells stick. */
+  position: static;
+  padding: 6px 10px;
+  background: var(--card-hover-bg);
+  border-top: 1px solid var(--card-border);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: left;
+  color: var(--text-primary);
+}
+
+.day-group-row {
+  cursor: pointer;
+}
+
+.day-group-row:hover th,
+.day-group-row:hover td {
+  color: var(--accent);
+}
+
+.day-group-row__count {
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+table .day-group-row .day-group-row__pnl {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+table .day-group-row .day-group-row__pnl--profit {
+  color: var(--profit);
+}
+
+table .day-group-row .day-group-row__pnl--loss {
+  color: var(--loss);
+}
+
+table .day-group-row .day-group-row__toggle {
+  width: 40px;
+  text-align: right;
+}
+
+/* A smaller chevron than the shared 32px one, so it doesn't set the row height. */
+.day-group-row .day-group-row__chevron {
+  width: 24px;
+  height: 24px;
+}
+
+.day-group-row__chevron svg {
+  transition: transform var(--transition-speed);
+}
+
+.day-group-row__chevron[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}

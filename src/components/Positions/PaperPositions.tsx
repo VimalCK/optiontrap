@@ -94,7 +94,7 @@ const PaperPositions: React.FC = () => {
         <PositionsTotal pnl={0} loading />
         {positionsCard(
           <ShimmerGroup label="Loading paper positions">
-            <PaperPositionsFrame><ShimmerTableRows rows={PLACEHOLDER_ROWS} columns={PAPER_POSITION_COLUMNS.length} /></PaperPositionsFrame>
+            <PaperPositionsFrame><tbody><ShimmerTableRows rows={PLACEHOLDER_ROWS} columns={PAPER_POSITION_COLUMNS.length} /></tbody></PaperPositionsFrame>
           </ShimmerGroup>,
         )}
       </>

@@ -7,20 +7,21 @@ import { useNavigate } from 'react-router-dom';
 import { marketDate } from '../../shared/marketTime.js';
 import { rangeProblem } from '@/components/TradeJournal/journalRange';
 import IconButton from '@/components/IconButton/IconButton';
+import DayGroupRow, { useDayGroups } from '@/components/DayGroupRow/DayGroupRow';
 import EmptyState from '@/components/EmptyState/EmptyState';
 import DateRangePicker, { type DateRange } from '@/components/DateRangePicker/DateRangePicker';
 import Badge from '@/components/Badge/Badge';
 import TradeHorizon from '@/components/TradeSource/TradeHorizon';
 import { AnalyticsIcon, AutomationIcon, ChevronDownIcon, SettingsIcon } from '@/components/icons/Icons';
 import {
-  closedPnl, eventSummary, sideLabel, sideTone, stageIsLive, stageLabel, stageTone, stepTone, tradesByDay, type TradeDay,
+  closedPnl, eventSummary, sideLabel, sideTone, stageIsLive, stageLabel, stageTone, stepTone, tradesByDay,
 } from '@/components/Automation/autoTradeView';
 import { AutomationConfig, AutoTrade, fetchAutomationConfig, fetchAutoTrades } from '@/services/automation';
 import { isAbortError } from '@/services/apiClient';
 import { useStrategies } from '@/hooks/useStrategies';
 import type { StrategyInfo } from '@/services/strategies';
 import { formatAmount, formatSignedAmount } from '@/utils/formatAmount';
-import { formatCalendarDate, istTimeLabel } from '@/utils/marketStatus';
+import { istTimeLabel } from '@/utils/marketStatus';
 import { AnalyticsTab, MessageTone } from '@/utils/uiEnums';
 import Message from '@/components/Message/Message';
 import { ShimmerGroup, ShimmerTableRows, ShimmerText } from '@/components/Shimmer/Shimmer';
@@ -31,8 +32,6 @@ const errorText = (err: unknown, fallback: string) => (err instanceof Error ? er
 
 const price = (value: number | null) => (value == null ? '–' : formatAmount(value));
 
-const dayLabel = (day: string) => formatCalendarDate(day, { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
-const tradeCount = (n: number) => `${n} ${n === 1 ? 'trade' : 'trades'}`;
 const eventTime = (at: string) => istTimeLabel(new Date(at));
 
 /** Wait this long after the last range change before fetching. */
@@ -106,27 +105,6 @@ export const TradeRow: React.FC<{ trade: AutoTrade; open: boolean; onToggle: () 
   );
 };
 
-/** A day's heading row; clicking it hides or shows that day's trades. */
-export const DayRow: React.FC<{ group: TradeDay; expanded: boolean; onToggle: () => void }> = ({ group, expanded, onToggle }) => (
-  <tr className={`automation-trades__day${expanded ? '' : ' automation-trades__day--collapsed'}`} onClick={onToggle}>
-    <th scope="colgroup" colSpan={PNL_COLUMN}>
-      {dayLabel(group.day)}
-      <span className="automation-trades__day-count"> · {tradeCount(group.trades.length)}</span>
-    </th>
-    <PnlCell pnl={group.pnl} />
-    <td />
-    <td className="automation-trades__toggle" onClick={(e) => e.stopPropagation()}>
-      <IconButton
-        icon={<ChevronDownIcon />}
-        label={expanded ? "Hide this day's trades" : "Show this day's trades"}
-        expanded={expanded}
-        onClick={onToggle}
-        className="automation-trades__chevron"
-      />
-    </td>
-  </tr>
-);
-
 /** The trades table with its headings; its day groups (or placeholder rows) come as children. */
 const AutoTradesFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="automation-trades__scroll">
@@ -151,13 +129,7 @@ const AutoTradesFrame: React.FC<{ children: React.ReactNode }> = ({ children }) 
 
 export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean; error?: string | null; controls?: React.ReactNode }> = ({ trades, loading, error, controls }) => {
   const [open, setOpen] = useState<string | null>(null);
-  // Every day starts expanded; these are the ones the user folded away.
-  const [collapsedDays, setCollapsedDays] = useState<ReadonlySet<string>>(() => new Set());
-  const toggleDay = (day: string) => setCollapsedDays((days) => {
-    const next = new Set(days);
-    if (!next.delete(day)) next.add(day);
-    return next;
-  });
+  const days = useDayGroups();
 
   return (
     <section className="card automation-trades-card" aria-labelledby="automation-trades-title">
@@ -182,8 +154,17 @@ export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean;
         <AutoTradesFrame>
           {tradesByDay(trades).map((group) => (
             <tbody key={group.day}>
-              <DayRow group={group} expanded={!collapsedDays.has(group.day)} onToggle={() => toggleDay(group.day)} />
-              {!collapsedDays.has(group.day) && group.trades.map((t) => (
+              <DayGroupRow
+                day={group.day}
+                count={group.trades.length}
+                noun="trade"
+                pnl={group.pnl}
+                pnlColumn={PNL_COLUMN}
+                columns={TRADE_COLUMNS}
+                expanded={days.isExpanded(group.day)}
+                onToggle={() => days.toggle(group.day)}
+              />
+              {days.isExpanded(group.day) && group.trades.map((t) => (
                 <TradeRow key={t.id} trade={t} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} />
               ))}
             </tbody>

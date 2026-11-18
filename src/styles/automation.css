@@ -255,38 +255,6 @@
   background: var(--card-hover-bg);
 }
 
-/* A day's heading row: its date, trade count and closed P&L. */
-.automation-trades .automation-trades__day th,
-.automation-trades .automation-trades__day td {
-  padding: 6px 10px;
-  background: var(--card-hover-bg);
-  border-top: 1px solid var(--card-border);
-  font-size: 12px;
-  font-weight: 600;
-  letter-spacing: normal;
-  text-transform: none;
-  text-align: left;
-  color: var(--text-primary);
-}
-
-.automation-trades .automation-trades__day .automation-trades__num {
-  text-align: right;
-}
-
-.automation-trades__day {
-  cursor: pointer;
-}
-
-.automation-trades__day:hover th,
-.automation-trades__day:hover td {
-  color: var(--accent);
-}
-
-.automation-trades__day-count {
-  font-weight: 400;
-  color: var(--text-secondary);
-}
-
 .automation-trades__time,
 .automation-trades__symbol {
   display: block;
@@ -430,7 +398,7 @@
 
 .automation-timeline__text {
   margin: 0;
-  font-size: 13px;
+  font-size: 12px;
   color: var(--text-primary);
   overflow-wrap: anywhere;
 }
