@@ -37,7 +37,7 @@ export const OiChartGuide: React.FC = () => {
     { term: 'Cross-hatched top', meaning: 'OI added since yesterday’s close' },
     { term: 'Dashed marker', meaning: 'OI was higher yesterday: positions unwound' },
     { term: 'Glowing border', meaning: 'Volume-confirmed: OI moved and volume backs it' },
-    { term: 'Velocity ▲ / ▼', meaning: 'OI moved 5%+ in 10 minutes (build / unwind)' },
+    { term: 'Green ▲ / red ▼', meaning: 'Velocity: OI built (▲) or unwound (▼) 5%+ since the last snapshot. C marks the call, P the put; hover for the exact %' },
     { term: 'Shaded zone', meaning: 'Expected range from the ATM straddle; walls outside it are stronger' },
   ];
   const heatmap: GuideRow[] = [

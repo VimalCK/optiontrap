@@ -545,6 +545,12 @@
   color: var(--loss);
 }
 
+.oc-chart__velocity-side {
+  font-size: 8px;
+  font-weight: 600;
+  margin-left: 1px;
+}
+
 /* Signal heatmap row */
 .oc-chart__signal-heatmap {
   display: flex;

@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import IconButton from '@/components/IconButton/IconButton';
 import { InfoIcon } from '@/components/icons/Icons';
+import { useDismissOnOutside } from '@/hooks/useDismissOnOutside';
 import { useElementWidth } from '@/hooks/useElementWidth';
 import type { OptionChainRow } from '@/services/optionChain';
 import type { OiSnapshot, OiVelocity } from '@/services/oiSnapshots';
@@ -43,11 +44,16 @@ const OiBarView: React.FC<{ bar: OiBar; optionType: OptionTypeId }> = ({ bar, op
   </div>
 );
 
-const VelocityArrow: React.FC<{ velocity: OiVelocity; optionType: OptionTypeId }> = ({ velocity, optionType }) => (
-  <span className={`oc-chart__velocity oc-chart__velocity--${optionType.toLowerCase()} ${velocity.changePct > 0 ? 'oc-chart__velocity--up' : 'oc-chart__velocity--down'}`}>
-    {velocity.changePct > 0 ? '▲' : '▼'}
-  </span>
-);
+const VelocityArrow: React.FC<{ velocity: OiVelocity; optionType: OptionTypeId }> = ({ velocity, optionType }) => {
+  const built = velocity.changePct > 0;
+  const title = `${optionType} OI ${built ? '+' : ''}${velocity.changePct.toFixed(1)}% in ${velocity.intervalMinutes} min`;
+  return (
+    <span className={`oc-chart__velocity ${built ? 'oc-chart__velocity--up' : 'oc-chart__velocity--down'}`} title={title}>
+      {built ? '▲' : '▼'}
+      <span className="oc-chart__velocity-side">{optionType.charAt(0)}</span>
+    </span>
+  );
+};
 
 /**
  * The OI chart: CE and PE OI per strike against the previous day (added OI highlighted, shed OI marked), the
@@ -58,6 +64,9 @@ const OiChart: React.FC<OiChartProps> = ({ chain, atmStrike, prices, averageVolu
   const [selectedStrike, setSelectedStrike] = useState<number | null>(null);
   const [showInfo, setShowInfo] = useState(false);
   const [chartWidth, barsRef] = useElementWidth();
+  const chartRef = useRef<HTMLDivElement>(null);
+  const closeTooltip = useCallback(() => setSelectedStrike(null), []);
+  useDismissOnOutside(selectedStrike !== null, chartRef, closeTooltip);
   const { oiData, prevDayOi, volumeData } = prices;
   const maxOi = maxChainOi(chain, oiData);
   const band = expectedRangeBand(chain, spotPrice, expectedMove);
@@ -72,13 +81,13 @@ const OiChart: React.FC<OiChartProps> = ({ chain, atmStrike, prices, averageVolu
         </div>
       </div>
       {showInfo && <OiChartGuide />}
-      <div className="oc-chart">
+      <div className="oc-chart" ref={chartRef}>
         <div className="oc-chart__body">
           <div className="oc-chart__yaxis">
             {AXIS_LINES.map((i) => <span key={i}>{oiAxisLabel(maxOi * (AXIS_STEPS - i) / AXIS_STEPS)}</span>)}
           </div>
           <div className="oc-chart__main">
-            <div className="oc-chart__bars" ref={barsRef} onClick={() => setSelectedStrike(null)}>
+            <div className="oc-chart__bars" ref={barsRef} onClick={closeTooltip}>
               <div className="oc-chart__gridlines">
                 {AXIS_LINES.map((i) => <div key={i} className="oc-chart__gridline" style={{ top: `${(i / AXIS_STEPS) * 100}%` }} />)}
               </div>
