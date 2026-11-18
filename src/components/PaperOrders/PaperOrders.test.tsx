@@ -40,7 +40,7 @@ describe('PaperOrdersTable', () => {
     expect(html).toContain('<span class="positions-table__name">NIFTY</span>');
     expect(html).toContain('<td>12:00</td>');
     expect(html).toContain('positions-table__side--sell');
-    expect(html).toContain('<td>50.00</td>');
+    expect(html).toContain('<td class="table-num">50.00</td>');
     expect(html).toContain('Filled @ 50.00');
   });
 
@@ -56,14 +56,14 @@ describe('PaperOrdersTable', () => {
     const priced = renderToStaticMarkup(
       <PaperOrdersTable orders={[order('p'), order('q', { instrumentToken: 202 })]} prices={new Map([[101, 48.35]])} onCancel={() => {}} />,
     );
-    expect(priced).toContain('<th>LTP</th>');
-    expect(priced).toContain('<td>48.35</td>');
-    expect(priced).toContain('<td>-</td>');
+    expect(priced).toContain('<th class="table-num">LTP</th>');
+    expect(priced).toContain('<td class="table-num">48.35</td>');
+    expect(priced).toContain('<td class="table-num">-</td>');
   });
 
   it('shows Market in the Limit column for a market order', () => {
     const market = renderToStaticMarkup(<PaperOrdersTable orders={[order('m', { orderType: 'Market', limitPrice: null, horizon: Horizon.Positional })]} prices={new Map()} onCancel={() => {}} />);
-    expect(market).toContain('<td>Market</td>');
+    expect(market).toContain('<td class="table-num">Market</td>');
   });
 
   it('offers Cancel only on open orders', () => {

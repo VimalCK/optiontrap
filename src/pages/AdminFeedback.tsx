@@ -122,7 +122,7 @@ const AdminFeedback: React.FC = () => {
         <div className="admin-empty">No feedback matches the current filters.</div>
       ) : (
         <div className="admin-table">
-          <div className="admin-table__head">
+          <div className="admin-table__head sticky-head">
             <span>Submitted</span>
             <span>User</span>
             <span>Type</span>

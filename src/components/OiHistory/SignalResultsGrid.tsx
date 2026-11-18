@@ -40,7 +40,7 @@ export const SignalResultsGrid: React.FC<{ rows: TradeSignalRow[]; today?: strin
       ) : (
         <div className="oi-history__signal-grid-scroll">
           <table className="oi-history__signal-grid">
-            <thead>
+            <thead className="sticky-head">
               <tr>
                 <th>Date</th>
                 <th>Signal</th>

@@ -91,7 +91,7 @@ function BreakdownTable<K>({ title, column, groups, label }: {
       <h4 className="winloss-panel__title">{title}</h4>
       <div className="winloss-panel__scroll">
         <table className="winloss-table">
-          <thead>
+          <thead className="sticky-head">
             <tr><th>{column}</th><th>Trades</th><th>Win rate</th><th>P&amp;L</th><th>Avg P&amp;L</th></tr>
           </thead>
           <tbody>
@@ -142,7 +142,7 @@ export const DailyPnl: React.FC<{ days: AutoTradeResults['byDay'] }> = ({ days }
       <details className="winloss-details">
         <summary>Show as table</summary>
         <table className="winloss-table">
-          <thead>
+          <thead className="sticky-head">
             <tr><th>Day</th><th>Trades</th><th>Win rate</th><th>P&amp;L</th><th>Running total</th></tr>
           </thead>
           <tbody>

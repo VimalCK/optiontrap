@@ -171,15 +171,8 @@
 
 .portfolio-content .holdings-table th,
 .portfolio-content .positions-table th {
-  background: rgba(var(--tint-rgb), 0.035);
   font-size: 10px;
   font-weight: 800;
-}
-
-.portfolio-content .holdings-table-card .holdings-table th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
 }
 
 .portfolio-content .holdings-table-card .holdings-table th,
@@ -198,12 +191,14 @@
   position: sticky;
   left: 0;
   z-index: 2;
+}
+
+.portfolio-content .holdings-table-card .holdings-table td:first-child {
   background: var(--card-bg-solid);
 }
 
 .portfolio-content .holdings-table-card .holdings-table th:first-child {
   z-index: 3;
-  background: rgba(var(--tint-rgb), 0.04);
 }
 
 .portfolio-content .holdings-table tbody tr,

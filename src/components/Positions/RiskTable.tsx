@@ -21,12 +21,12 @@ const RiskTable: React.FC<{ groups: RiskGroup[]; spotPrices: Map<string, number>
     <>
       <div className="positions-table-scroll">
         <table className="positions-table">
-          <thead>
+          <thead className="sticky-head">
             <tr>
               <th>Strategy</th>
-              <th>Live P&L</th>
-              <th>Max Loss</th>
-              <th>Max Profit</th>
+              <th className="table-num">Live P&L</th>
+              <th className="table-num">Max Loss</th>
+              <th className="table-num">Max Profit</th>
               <th>Breakeven</th>
             </tr>
           </thead>
@@ -53,9 +53,9 @@ const RiskTable: React.FC<{ groups: RiskGroup[]; spotPrices: Map<string, number>
                     </div>
                   )}
                 </td>
-                <td className={pnlTone(g.livePnL)}>{g.livePnL == null ? '—' : formatSignedAmount(g.livePnL)}</td>
-                <td className="negative">{maxLossLabel(g)}</td>
-                <td className="positive">{maxProfitLabel(g)}</td>
+                <td className={`table-num ${pnlTone(g.livePnL)}`}>{g.livePnL == null ? '—' : formatSignedAmount(g.livePnL)}</td>
+                <td className="table-num negative">{maxLossLabel(g)}</td>
+                <td className="table-num positive">{maxProfitLabel(g)}</td>
                 <td>{breakevenLabel(g)}</td>
               </tr>
             ))}

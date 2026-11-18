@@ -109,7 +109,7 @@ export const TradeRow: React.FC<{ trade: AutoTrade; open: boolean; onToggle: () 
 const AutoTradesFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="automation-trades__scroll">
     <table className="automation-table automation-trades">
-      <thead>
+      <thead className="sticky-head">
         <tr>
           <th>Time</th>
           <th>Instrument</th>

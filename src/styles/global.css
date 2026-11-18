@@ -138,6 +138,8 @@
   --card-bg: rgba(var(--tint-rgb), 0.03);
   --card-hover-bg: rgba(var(--tint-rgb), 0.05);
   --card-border: rgba(var(--tint-rgb), 0.06);
+  /* Every table and grid header: a faint tint over the solid card colour, so it is opaque. */
+  --table-head-bg: linear-gradient(rgba(var(--tint-rgb), 0.035), rgba(var(--tint-rgb), 0.035)), var(--card-bg-solid);
   --card-hover-border: rgba(var(--indigo-rgb), 0.3);
   --card-shadow: rgba(var(--shade-rgb), 0.3);
   --radius: 12px;
@@ -375,4 +377,29 @@ ol {
 .app-btn--secondary {
   background: var(--card-border);
   color: var(--text-primary);
+}
+
+/* Every table and grid header: `sticky-head` on a <thead> (or a grid's header row) keeps it in view while the rows
+   scroll under it; the whole <thead> sticks, so a header of several rows stays together. Every header has the one
+   opaque colour, --table-head-bg, so rows never show through and no table looks different. The cell selector outranks
+   a table's plain `.x th` rules; src/styles/stickyHeads.test.ts checks every header uses it and none sets its own. */
+.sticky-head {
+  position: sticky;
+  top: 0;
+  /* Above body cells that stick to the left (the OI history grid's go up to 4). */
+  z-index: 5;
+}
+
+thead.sticky-head > tr > th,
+div.sticky-head {
+  background: var(--table-head-bg);
+}
+
+/* A number column in any table: `table-num` on its header and its cells right-aligns both, and the digits are all
+   one width, so values line up under their heading. Outranks a table's plain `.x th` / `.x td` alignment. */
+table th.table-num,
+table td.table-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }

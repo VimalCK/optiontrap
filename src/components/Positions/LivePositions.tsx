@@ -15,6 +15,7 @@ import { pnlTone } from './riskLabels';
 /** Kite's live position lists, in the order their tabs show. */
 const LIVE_VIEWS: LiveViewId[] = [LiveView.Net, LiveView.Day];
 const ACTIVE_COLUMNS = ['Instrument', 'Product', 'Side', 'Qty', 'Avg', 'LTP', 'P&L'];
+const NUMBER_COLUMNS = new Set(['Qty', 'Avg', 'LTP', 'P&L']);
 /** Placeholder rows in the Active table while the positions load. */
 const PLACEHOLDER_ROWS = 4;
 
@@ -50,9 +51,9 @@ const ActivePositionsCard: React.FC<{ children: React.ReactNode }> = ({ children
     <h4 className="live-positions__section-title">Active</h4>
     <div className="positions-table-scroll">
       <table className="positions-table live-positions-table">
-        <thead>
+        <thead className="sticky-head">
           <tr>
-            {ACTIVE_COLUMNS.map((column) => <th key={column}>{column}</th>)}
+            {ACTIVE_COLUMNS.map((column) => <th key={column} className={NUMBER_COLUMNS.has(column) ? 'table-num' : undefined}>{column}</th>)}
           </tr>
         </thead>
         <tbody>{children}</tbody>
@@ -70,10 +71,10 @@ const ActivePositionsTable: React.FC<{ list: KitePosition[] }> = ({ list }) => (
           <td><LiveInstrument pos={pos} /></td>
           <td><span className="live-positions__product">{pos.product}</span></td>
           <td><span className={`positions-table__side positions-table__side--${side.toLowerCase()}`}>{side}</span></td>
-          <td>{Math.abs(pos.quantity)}</td>
-          <td>{pos.average_price > 0 ? pos.average_price.toFixed(2) : '-'}</td>
-          <td>{pos.last_price > 0 ? pos.last_price.toFixed(2) : '-'}</td>
-          <td className={pnlTone(pos.pnl)}>{formatSignedAmount(pos.pnl)}</td>
+          <td className="table-num">{Math.abs(pos.quantity)}</td>
+          <td className="table-num">{pos.average_price > 0 ? pos.average_price.toFixed(2) : '-'}</td>
+          <td className="table-num">{pos.last_price > 0 ? pos.last_price.toFixed(2) : '-'}</td>
+          <td className={`table-num ${pnlTone(pos.pnl)}`}>{formatSignedAmount(pos.pnl)}</td>
         </tr>
       );
     })}
@@ -85,17 +86,17 @@ const ExitedPositionsTable: React.FC<{ list: KitePosition[] }> = ({ list }) => (
     <h4 className="live-positions__section-title">Exited</h4>
     <div className="positions-table-scroll">
       <table className="positions-table live-positions-table">
-        <thead>
+        <thead className="sticky-head">
           <tr>
             <th>Instrument</th>
-            <th>P&L</th>
+            <th className="table-num">P&L</th>
           </tr>
         </thead>
         <tbody>
           {list.map((pos) => (
             <tr key={positionKey(pos)} className="positions-table__row--exited">
               <td><LiveInstrument pos={pos} /></td>
-              <td className={pnlTone(pos.pnl)}>{formatSignedAmount(pos.pnl)}</td>
+              <td className={`table-num ${pnlTone(pos.pnl)}`}>{formatSignedAmount(pos.pnl)}</td>
             </tr>
           ))}
         </tbody>

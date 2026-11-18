@@ -245,16 +245,12 @@
 }
 
 .wl-table__th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   padding: 10px 14px;
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   color: var(--text-secondary);
-  background: var(--card-bg-solid);
   border-bottom: 1px solid var(--card-border);
   white-space: nowrap;
 }
@@ -875,8 +871,6 @@
 }
 
 .wl-table__th {
-  /* Same faint tint, laid over a solid base so scrolled rows don't show through the sticky header. */
-  background: linear-gradient(rgba(var(--tint-rgb), 0.035), rgba(var(--tint-rgb), 0.035)), var(--card-bg-solid);
   font-size: 10px;
   font-weight: 800;
 }
@@ -937,7 +931,6 @@
 }
 
 .wl-alerts-table th {
-  background: rgba(var(--tint-rgb), 0.035);
   font-weight: 800;
 }
 
@@ -1418,12 +1411,6 @@ button.wl-setup-chip:hover { border-color: var(--accent); color: var(--text-prim
 .wl-scorecard__recent-wrap::-webkit-scrollbar-track { background: transparent; }
 .wl-scorecard__recent-wrap::-webkit-scrollbar-thumb { background: var(--card-border); border-radius: 4px; }
 .wl-scorecard__recent-wrap::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
-.wl-scorecard__recent th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: linear-gradient(rgba(var(--tint-rgb), 0.035), rgba(var(--tint-rgb), 0.035)), var(--card-bg-solid);
-}
 .wl-scorecard__status { font-size: 11px; font-weight: 700; color: var(--text-secondary); }
 .wl-scorecard__status--target { color: var(--profit); }
 .wl-scorecard__status--stop { color: var(--loss); }

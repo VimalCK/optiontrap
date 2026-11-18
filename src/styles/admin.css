@@ -137,10 +137,6 @@
 }
 
 .admin-table__head {
-  position: sticky;
-  top: 0;
-  z-index: 2;
-  background: var(--card-bg-solid);
   border-bottom: 1px solid var(--card-border);
   font-size: 11px;
   font-weight: 800;

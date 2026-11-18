@@ -84,7 +84,7 @@ const AdminUsers: React.FC = () => {
         <div className="admin-empty">No registered users yet.</div>
       ) : (
         <div className="admin-table admin-table--users">
-          <div className="admin-table__head">
+          <div className="admin-table__head sticky-head">
             <span>User</span>
             <span>Subscription</span>
             <span>Last login</span>

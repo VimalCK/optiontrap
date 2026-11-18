@@ -86,7 +86,7 @@ const GeneralSettings: React.FC<SectionProps> = ({ config, onChange }) => {
       </div>
 
       <table className="automation-table automation-kinds">
-        <thead>
+        <thead className="sticky-head">
           <tr>
             <th>Trade type</th>
             {SIDES.map((side) => <th key={side.id}>{side.label}</th>)}

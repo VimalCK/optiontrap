@@ -4,6 +4,7 @@ import TradingViewLink from '@/components/TradingViewLink/TradingViewLink';
 import PositionInstrument from '@/components/PositionInstrument/PositionInstrument';
 import DayGroupRow, { useDayGroups } from '@/components/DayGroupRow/DayGroupRow';
 import { groupByMarketDay } from '@/utils/groupByMarketDay';
+import { istTimeLabel } from '@/utils/marketStatus';
 import { paperPositionPnl, paperPositionsPnl } from './paperPnl';
 import { pnlTone } from './riskLabels';
 
@@ -12,6 +13,8 @@ const hasJournalNotes = (pos: Position) => pos.confidence != null || pos.targetP
 /** The last column holds the Exit button or the Exited badge, so it has no heading. */
 export const PAPER_POSITION_COLUMNS = ['Instrument', 'Side', 'Qty', 'Avg', 'LTP/Exit', 'P&L', ''];
 
+const NUMBER_COLUMNS = new Set(['Qty', 'Avg', 'LTP/Exit', 'P&L']);
+
 /** Columns before P&L, so a day's P&L lines up under it. */
 const PNL_COLUMN = PAPER_POSITION_COLUMNS.indexOf('P&L');
 
@@ -19,9 +22,9 @@ const PNL_COLUMN = PAPER_POSITION_COLUMNS.indexOf('P&L');
 export const PaperPositionsFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="positions-table-scroll">
     <table className="positions-table">
-      <thead>
+      <thead className="sticky-head">
         <tr>
-          {PAPER_POSITION_COLUMNS.map((column, index) => <th key={index}>{column}</th>)}
+          {PAPER_POSITION_COLUMNS.map((column, index) => <th key={index} className={NUMBER_COLUMNS.has(column) ? 'table-num' : undefined}>{column}</th>)}
         </tr>
       </thead>
       {children}
@@ -34,7 +37,8 @@ const PaperPositionRow: React.FC<{ pos: Position; ltp: number | undefined; onExi
   return (
     <tr className={pos.exited ? 'positions-table__row--exited' : ''}>
       <td>
-        <PositionInstrument instrument={pos}>
+        {/* The entry time only: the day is in the group's heading row. */}
+        <PositionInstrument instrument={pos} detail={istTimeLabel(new Date(pos.entryTime))}>
           <TradingViewLink symbol={pos.tradingsymbol} exchange={pos.exchange} />
         </PositionInstrument>
         {hasJournalNotes(pos) && (
@@ -47,12 +51,12 @@ const PaperPositionRow: React.FC<{ pos: Position; ltp: number | undefined; onExi
         )}
       </td>
       <td><span className={`positions-table__side positions-table__side--${pos.side.toLowerCase()}`}>{pos.side}</span></td>
-      <td>{pos.quantity}</td>
-      <td>{pos.entryPrice.toFixed(2)}</td>
-      <td>{pos.exited ? pos.exitPrice!.toFixed(2) : (ltp !== undefined ? ltp.toFixed(2) : '-')}</td>
-      <td className={pnlTone(pnl.value)}>
+      <td className="table-num">{pos.quantity}</td>
+      <td className="table-num">{pos.entryPrice.toFixed(2)}</td>
+      <td className="table-num">{pos.exited ? pos.exitPrice!.toFixed(2) : (ltp !== undefined ? ltp.toFixed(2) : '-')}</td>
+      <td className={`table-num ${pnlTone(pnl.value)}`}>
         {pnl.value >= 0 ? '+' : ''}{pnl.value.toFixed(2)}
-        <span className="positions-table__pct"> ({pnl.pct >= 0 ? '+' : ''}{pnl.pct.toFixed(2)}%)</span>
+        <span className="positions-table__pct">{pnl.pct >= 0 ? '+' : ''}{pnl.pct.toFixed(2)}%</span>
       </td>
       <td>
         {pos.exited

@@ -46,14 +46,14 @@ export const lastPriceLabel = (order: PaperOrder, prices: LastPrices): string =>
 export const PaperOrdersTable: React.FC<{ orders: PaperOrder[]; prices: LastPrices; onCancel: (id: string) => void }> = ({ orders, prices, onCancel }) => (
   <div className="positions-table-scroll">
     <table className="positions-table">
-      <thead>
+      <thead className="sticky-head">
         <tr>
           <th>Instrument</th>
           <th>Time</th>
           <th>Side</th>
-          <th>Qty</th>
-          <th>Limit</th>
-          <th>LTP</th>
+          <th className="table-num">Qty</th>
+          <th className="table-num">Limit</th>
+          <th className="table-num">LTP</th>
           <th>Status</th>
           <th aria-label="Actions" />
         </tr>
@@ -66,9 +66,9 @@ export const PaperOrdersTable: React.FC<{ orders: PaperOrder[]; prices: LastPric
               <td><PositionInstrument instrument={order} /></td>
               <td>{istTimeLabel(new Date(order.createdAt))}</td>
               <td><span className={`positions-table__side positions-table__side--${order.side.toLowerCase()}`}>{order.side}</span></td>
-              <td>{order.quantity}</td>
-              <td>{order.limitPrice === null ? 'Market' : order.limitPrice.toFixed(2)}</td>
-              <td>{lastPriceLabel(order, prices)}</td>
+              <td className="table-num">{order.quantity}</td>
+              <td className="table-num">{order.limitPrice === null ? 'Market' : order.limitPrice.toFixed(2)}</td>
+              <td className="table-num">{lastPriceLabel(order, prices)}</td>
               <td><Badge tone={status.tone} dot={order.status === OrderStatus.Open}>{status.text}</Badge></td>
               <td>
                 {order.status === OrderStatus.Open && (

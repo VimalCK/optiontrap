@@ -414,22 +414,9 @@
   overflow-x: auto;
 }
 
-/* OI Snapshot grid: height is set in JS to ATM ± 10 strikes; extra rows scroll
-   under a header pinned to the top. Pinned header corners sit above both. */
+/* OI Snapshot grid: height is set in JS to ATM ± 10 strikes; extra rows scroll under its sticky header. */
 .oi-history__table-scroll--grid {
   overflow: auto;
-}
-
-.oi-history__table-scroll--grid .oi-history__table th {
-  position: sticky;
-  top: 0;
-  z-index: 5;
-}
-
-.oi-history__table-scroll--grid .oi-history__table th:first-child,
-.oi-history__table-scroll--grid .oi-history__table th:last-child,
-.oi-history__table-scroll--grid .oi-history__table th.oi-history__th-strike {
-  z-index: 7;
 }
 
 .oi-history__table-scroll,
@@ -487,10 +474,6 @@
 .oi-history__table.oi-history__futures-table td:last-child {
   position: static;
   box-shadow: none;
-}
-
-.oi-history__futures-table th {
-  background: var(--bg-secondary);
 }
 
 .oi-history__futures-th--date { color: var(--text-primary) !important; border-bottom-color: var(--accent) !important; }
@@ -589,7 +572,6 @@
   color: var(--text-secondary);
   text-align: center;
   white-space: nowrap;
-  background: var(--card-bg-solid);
   border-bottom: 2px solid var(--card-border);
   letter-spacing: 0.4px;
   text-transform: uppercase;
@@ -627,8 +609,6 @@
 
 .oi-history__th-strike {
   color: var(--text-primary);
-  /* Sticky column: must be opaque so scrolled headers don't show through. */
-  background: var(--card-bg-solid);
   border-bottom-color: var(--accent);
   width: 64px;
   min-width: 64px;
@@ -1416,12 +1396,8 @@
 }
 
 .oi-history__signal-grid th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   padding: 7px 8px;
   color: var(--text-secondary);
-  background: var(--content-bg);
   font-weight: 600;
   text-align: right;
   border-bottom: 1px solid var(--card-border);

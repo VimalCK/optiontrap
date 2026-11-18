@@ -28,6 +28,12 @@ describe('PaperPositionsTable', () => {
     expect(markup.match(/<tbody>/g)).toHaveLength(2);
   });
 
+  it('shows when each position was entered, in IST, on the line under its instrument', () => {
+    const open = position('100', '2026-11-18T08:49:22.000Z', { exited: false, exitPrice: undefined }); // Wed 14:19 IST
+    const markup = renderToStaticMarkup(<MemoryRouter><PaperPositionsTable positions={[open]} livePrices={new Map()} onExit={() => {}} /></MemoryRouter>);
+    expect(markup).toContain('<span class="positions-table__labels"><span class="positions-table__detail">14:19</span>');
+  });
+
   it("prices an open position's day at its live price", () => {
     const open = position('100', '2026-11-17T06:51:00.000Z', { exited: false, exitPrice: undefined });
     const markup = renderToStaticMarkup(<MemoryRouter><PaperPositionsTable positions={[open]} livePrices={new Map([[100, 75]])} onExit={() => {}} /></MemoryRouter>);

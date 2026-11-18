@@ -97,7 +97,7 @@ export const OiSnapshotTable: React.FC<OiSnapshotTableProps> = ({
 
       <div ref={scrollRef} className="oi-history__table-scroll oi-history__table-scroll--grid">
         <table className="oi-history__table">
-          <thead>
+          <thead className="sticky-head">
             <tr>
               <th className="oi-history__th-pattern">CE Pattern</th>
               {expiries.map((exp) => (

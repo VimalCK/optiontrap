@@ -120,15 +120,8 @@
 
 .analytics-content .tj-table th,
 .analytics-content .oi-history__table th {
-  background: rgba(var(--tint-rgb), 0.035);
   font-size: 10px;
   font-weight: 800;
-}
-
-/* The OI grid pins its pattern and strike columns, so its headers need an
-   opaque base under the tint or scrolled headers show through them. */
-.analytics-content .oi-history__table th {
-  background: linear-gradient(rgba(var(--tint-rgb), 0.035), rgba(var(--tint-rgb), 0.035)), var(--card-bg-solid);
 }
 
 .analytics-content .tj-table tbody tr,

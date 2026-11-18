@@ -15,7 +15,7 @@ const PLACEHOLDER_ROWS = 3;
 const AlertsTableFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="wl-alerts__table-wrap">
     <table className="wl-alerts-table">
-      <thead>
+      <thead className="sticky-head">
         <tr>
           <th>Symbol</th>
           <th className="wl-alerts-table__center">Condition</th>

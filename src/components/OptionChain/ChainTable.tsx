@@ -78,7 +78,7 @@ export const ChainTableFrame: React.FC<{ children: React.ReactNode }> = ({ child
         <col className="oc-col-ltp" />
         <col className="oc-col-oi" />
       </colgroup>
-      <thead>
+      <thead className="sticky-head">
         <tr>
           <th className="oc-header-ce" colSpan={2}>CALLS</th>
           <th className="oc-header-strike">STRIKE</th>

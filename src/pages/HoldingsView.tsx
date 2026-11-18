@@ -198,7 +198,7 @@ const HoldingsView: React.FC = () => {
           <div className="card holdings-table-card" style={{ marginTop: 'var(--card-gap)', overflow: 'auto' }}>
             <h3 className="card__title" style={{ marginBottom: 16 }}>All Holdings</h3>
             <table className="holdings-table">
-              <thead>
+              <thead className="sticky-head">
                 <tr>
                   {HOLDINGS_COLUMNS.map((column) => <th key={column}>{column}</th>)}
                 </tr>

@@ -28,7 +28,7 @@ const PLACEHOLDER_ROWS = 3;
 /** The per-setup summary table and its header, around the rows given. */
 const ScorecardSummaryFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <table className="wl-alerts-table wl-scorecard__summary">
-    <thead>
+    <thead className="sticky-head">
       <tr>
         <th>Setup</th>
         <th className="wl-alerts-table__num">Tracked</th>
@@ -96,7 +96,7 @@ const SetupScorecard: React.FC<{
           {data.recent.length > 0 && (
             <div className="wl-scorecard__recent-wrap">
               <table className="wl-alerts-table wl-scorecard__recent">
-                <thead>
+                <thead className="sticky-head">
                   <tr>
                     <th>Recent</th>
                     <th>Setup</th>

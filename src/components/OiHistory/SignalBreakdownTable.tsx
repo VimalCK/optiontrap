@@ -20,7 +20,7 @@ export const SignalBreakdownTable: React.FC<{ signals: TradeSignalRow[] }> = ({ 
       </div>
       <div className="oi-history__signal-grid-scroll oi-history__signal-grid-scroll--auto">
         <table className="oi-history__signal-grid oi-history__signal-breakdown-table">
-          <thead>
+          <thead className="sticky-head">
             <tr>
               <th>Slice</th>
               <th>Signals</th>

@@ -279,7 +279,7 @@ const TradeJournal: React.FC<{
             <div className="card">
               <h4 className="tj-section-title" style={{ marginBottom: 16 }}>Trade Log</h4>
               <table className="tj-table">
-                <thead>
+                <thead className="sticky-head">
                   <tr>
                     <th>Symbol</th>
                     <th>Segment</th>

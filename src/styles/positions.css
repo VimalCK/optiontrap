@@ -66,19 +66,16 @@
   table-layout: fixed;
 }
 
-/* Room for the instrument on one line: name, strike, type, expiry, source and horizon badges, and the chart link. */
+/* Room for the instrument's first line: name, strike, type, expiry and the chart link. */
 .positions-table th:first-child,
 .positions-table td:first-child {
   width: 35%;
 }
 
+/* The same side padding as the cells, so a heading lines up with its column's values. */
 .positions-table th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  background: var(--card-bg-solid);
   text-align: left;
-  padding: 8px 12px;
+  padding: 8px;
   font-size: 10px;
   font-weight: 600;
   color: var(--text-secondary);
@@ -105,6 +102,20 @@
   align-items: center;
   gap: 6px;
   white-space: nowrap;
+}
+
+/* The instrument's second line: the entry time (positions only), then the source and horizon labels. */
+.positions-table__labels {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.positions-table__detail {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
 }
 
 .positions-table__meta {
@@ -182,7 +193,9 @@
   color: var(--loss);
 }
 
+/* The P&L's percentage, on its own line under the amount so the column stays narrow. */
 .positions-table__pct {
+  display: block;
   font-size: 11px;
   opacity: 0.7;
 }

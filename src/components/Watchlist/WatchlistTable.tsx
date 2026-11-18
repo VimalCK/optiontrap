@@ -19,7 +19,7 @@ export const WATCHLIST_COLUMN_COUNT = 8;
 export const WatchlistTableFrame: React.FC<{ children: React.ReactNode }> = ({ children }) => (
   <div className="wl-table-wrap">
     <table className="wl-table">
-      <thead>
+      <thead className="sticky-head">
         <tr>
           <th className="wl-table__th wl-table__th--symbol">Symbol</th>
           <th className="wl-table__th wl-table__th--num">LTP</th>

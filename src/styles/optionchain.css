@@ -161,18 +161,15 @@
 .oc-header-ce {
   text-align: center;
   color: var(--profit) !important;
-  background: rgba(var(--profit-rgb), 0.05);
 }
 
 .oc-header-pe {
   text-align: center;
   color: var(--loss) !important;
-  background: rgba(var(--loss-rgb), 0.05);
 }
 
 .oc-header-strike {
   text-align: center;
-  background: var(--sidebar-hover);
 }
 
 /* The strike column is narrow; small side padding keeps the label and value

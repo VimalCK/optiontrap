@@ -219,7 +219,7 @@ export const FuturesContext: React.FC<FuturesContextProps> = ({ futuresData, fil
       ) : (
       <div className="oi-history__table-scroll">
         <table className="oi-history__table oi-history__futures-table">
-          <thead><tr>
+          <thead className="sticky-head"><tr>
             <th className="oi-history__futures-th--date">Month</th>
             <th className="oi-history__futures-th--price">Close</th>
             <th className="oi-history__futures-th--price">Price</th>

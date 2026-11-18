@@ -1,9 +1,9 @@
 /* A grouped table's day heading row: its date, row count and P&L. */
 table .day-group-row th,
 table .day-group-row td {
-  /* In the body's flow, under a table whose header cells stick. */
-  position: static;
-  padding: 6px 10px;
+  /* Only the height: the side padding is the table's own, so the day's P&L lines up with the rows' P&L. */
+  padding-top: 6px;
+  padding-bottom: 6px;
   background: var(--card-hover-bg);
   border-top: 1px solid var(--card-border);
   font-size: 12px;
