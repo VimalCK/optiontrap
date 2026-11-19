@@ -29,7 +29,7 @@ import { optionAnalyzerSetups } from './optionAnalyzerSetups.js';
  * "Bull put"), so Win/Loss Patterns can group results by it.
  * @typedef {{ instrumentToken: number, side: import('../../../shared/tradeEnums.js').SideId, reason: string, setup?: string }} Signal
  * @typedef {{ instrumentToken: number, tradingsymbol: string, name: string, exchange: string, instrumentType: string,
- *             strike: number, expiry: string | null }} StrategyInstrument
+ *             strike: number, expiry: string | null, lotSize?: number | null }} StrategyInstrument
  * @typedef {{ name: string, instrumentToken: number | null, isIndex: boolean }} StrategyUnderlying
  * @typedef {import('../../../shared/rules/ruleSettings.js').RuleInfo} StrategyInfo  what the Automation page shows of a strategy
  */

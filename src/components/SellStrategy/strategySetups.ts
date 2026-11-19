@@ -39,19 +39,18 @@ export interface BreakdownItem<Breakdown> {
 }
 
 export const SELL_BREAKDOWN_LABELS: BreakdownItem<ScoreBreakdown>[] = [
-  { label: 'POP', key: 'probability', max: SELL_SCORE_MAX.probability },
+  { label: 'Direction', key: 'direction', max: SELL_SCORE_MAX.direction },
+  { label: 'Today', key: 'today', max: SELL_SCORE_MAX.today },
   { label: 'OI Wall', key: 'oiWall', max: SELL_SCORE_MAX.oiWall },
   { label: 'Velocity', key: 'velocity', max: SELL_SCORE_MAX.velocity },
-  { label: 'Premium', key: 'premiumValue', max: SELL_SCORE_MAX.premiumValue },
   { label: 'Regime', key: 'regime', max: SELL_SCORE_MAX.regime },
 ];
 
 export const BUY_BREAKDOWN_LABELS: BreakdownItem<BuyScoreBreakdown>[] = [
-  { label: 'POP', key: 'probability', max: BUY_SCORE_MAX.probability },
-  { label: 'Trend', key: 'trend', max: BUY_SCORE_MAX.trend },
+  { label: 'Direction', key: 'direction', max: BUY_SCORE_MAX.direction },
+  { label: 'Today', key: 'today', max: BUY_SCORE_MAX.today },
   { label: 'OI Flow', key: 'flow', max: BUY_SCORE_MAX.flow },
   { label: 'Breakout', key: 'breakout', max: BUY_SCORE_MAX.breakout },
-  { label: 'Premium', key: 'premiumCost', max: BUY_SCORE_MAX.premiumCost },
 ];
 
 /** The live OI, prices and spot, or the latest snapshot's while the market is closed (no live OI). */

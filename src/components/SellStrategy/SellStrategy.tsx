@@ -70,13 +70,13 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
   const expectedMove = useMemo(() => calculateExpectedMove(chain, atmStrike ?? 0, effectivePrices), [chain, atmStrike, effectivePrices]);
 
   const sellRecs = useMemo(
-    () => computeSellRecommendations(chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, daysToExpiry, atmStrike, volumeData, avgVolume),
-    [chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, daysToExpiry, atmStrike, volumeData, avgVolume],
+    () => computeSellRecommendations(chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, { now: new Date(), expiry }, atmStrike, volumeData, avgVolume),
+    [chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, expiry, atmStrike, volumeData, avgVolume],
   );
 
   const buyRecs = useMemo(
-    () => computeBuyRecommendations(chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, daysToExpiry, atmStrike, volumeData, avgVolume),
-    [chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, daysToExpiry, atmStrike, volumeData, avgVolume],
+    () => computeBuyRecommendations(chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, { now: new Date(), expiry }, atmStrike, volumeData, avgVolume),
+    [chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, expiry, atmStrike, volumeData, avgVolume],
   );
 
   const handleTrade = useStrategyTrade({ chain, effectivePrices, orderMode, expiry, mode, onToast });

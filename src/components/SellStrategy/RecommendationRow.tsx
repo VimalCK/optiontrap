@@ -16,9 +16,10 @@ interface RecommendationRowProps {
   onTrade: (rec: SellRecommendation | BuyRecommendation) => void;
 }
 
-/** One scored setup: its score, POP, premium and pattern, a trade button, and the score breakdown when expanded. */
-/** A sold option's POP tone; a bought option's POP is below 50% by nature, so it isn't coloured. */
-const sellPopTone = (pop: number): string => (pop >= 70 ? 'positive' : pop >= 50 ? '' : 'negative');
+/** A sold option's profit-chance tone; a bought option's is below 50% by nature (it pays time decay), so it isn't coloured. */
+const sellWinTone = (winChance: number): string => (winChance >= 70 ? 'positive' : winChance >= 50 ? '' : 'negative');
+
+/** One scored setup: its score, chance of profit by today's close, premium and pattern, a trade button, and the score breakdown when expanded. */
 
 const RecommendationRow: React.FC<RecommendationRowProps> = ({ rec, mode, orderMode, expiry, breakdownLabels, expanded, onToggle, onTrade }) => {
   const colorClass = scoreColorClass(rec.score);
@@ -47,9 +48,9 @@ const RecommendationRow: React.FC<RecommendationRowProps> = ({ rec, mode, orderM
         </div>
 
         <span className="sell-strategy__pop">
-          <span className="sell-strategy__pop-label">POP</span>
-          <span className={`sell-strategy__pop-value ${mode === StrategyMode.Sell ? sellPopTone(rec.pop) : ''}`}>
-            {rec.pop.toFixed(0)}%
+          <span className="sell-strategy__pop-label" title="Chance of being in profit at today's close, after charges">Today</span>
+          <span className={`sell-strategy__pop-value ${mode === StrategyMode.Sell ? sellWinTone(rec.winChance) : ''}`}>
+            {rec.winChance.toFixed(0)}%
           </span>
         </span>
         <span className="sell-strategy__premium">₹{rec.premium.toFixed(1)}</span>

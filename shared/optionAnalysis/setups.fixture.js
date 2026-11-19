@@ -8,16 +8,17 @@ import { OptionType } from '../tradeEnums.js';
 
 /** A chain around a 25000 ATM, 50 points apart, for the setup tests. */
 export const STRIKES = [24800, 24850, 24900, 24950, 25000, 25050, 25100, 25150, 25200];
+const LOT_SIZE = 65;
 export const ceToken = (/** @type {number} */ strike) => 1000 + STRIKES.indexOf(strike);
 export const peToken = (/** @type {number} */ strike) => 2000 + STRIKES.indexOf(strike);
 export const chain = STRIKES.map((strike) => ({
   strike,
-  ce: { instrumentToken: ceToken(strike), strike, expiry: null, instrumentType: OptionType.CE },
-  pe: { instrumentToken: peToken(strike), strike, expiry: null, instrumentType: OptionType.PE },
+  ce: { instrumentToken: ceToken(strike), strike, expiry: null, instrumentType: OptionType.CE, lotSize: LOT_SIZE },
+  pe: { instrumentToken: peToken(strike), strike, expiry: null, instrumentType: OptionType.PE, lotSize: LOT_SIZE },
 }));
 
-/** Premiums falling away from the 25000 ATM (100 each, so the expected move is 200). */
-const premiumOf = (/** @type {number} */ strike) => Math.max(5, 100 - Math.abs(strike - 25000) * 0.8);
+/** Premiums falling away from the 25000 ATM (100 each, so the expected move is 200), every one above the 30% floor. */
+const premiumOf = (/** @type {number} */ strike) => 100 - Math.abs(strike - 25000) * 0.3;
 
 /**
  * A market with every option at 1000 OI and its premium, except the overrides.
@@ -35,6 +36,9 @@ export function market({ oi = {}, prices = {} } = {}) {
   }
   return { oiData, livePrices };
 }
+
+/** When the setup tests score: Thu 19 Nov 2026, 10:30 IST, with the chain expiring Mon 23 Nov. */
+export const TIMING = { now: new Date('2026-11-19T05:00:00Z'), expiry: '2026-11-23' };
 
 /**
  * Snapshots with the given spots, each holding the market `then`.

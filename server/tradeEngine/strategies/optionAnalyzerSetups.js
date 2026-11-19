@@ -26,7 +26,7 @@ import { atmStrikeOf, averageVolume, buildOptionChain, optionOf, strikeWindow, u
 import { computeSellRecommendations } from '../../../shared/optionAnalysis/sellSetups.js';
 import { computeBuyRecommendations } from '../../../shared/optionAnalysis/buySetups.js';
 import { withSpot } from '../../../shared/optionAnalysis/velocityPattern.js';
-import { daysUntil, marketDate } from '../../../shared/marketTime.js';
+import { marketDate } from '../../../shared/marketTime.js';
 import { getLatestOiSnapshotTimestamp, getTodayOiSnapshots, getUnderlyings } from '../../db.js';
 import { findWorkingAdminSession } from '../../oiHistoryScheduler.js';
 import { getOrFetchInstruments } from '../../instruments.js';
@@ -78,8 +78,7 @@ export function underlyingSetups(underlying, options, { now, snapshots }) {
   const oi = tokenMap(latest.data);
   const prices = tokenMap(latest.prices);
   const volumes = tokenMap(latest.volumes);
-  const daysToExpiry = Math.max(0, daysUntil(expiry, now));
-  const args = /** @type {const} */ ([rows, oi, prices, new Map(), new Map(), withSpot(snapshots, underlying.instrumentToken), spot, daysToExpiry, atm, volumes, averageVolume(rows, volumes)]);
+  const args = /** @type {const} */ ([rows, oi, prices, new Map(), new Map(), withSpot(snapshots, underlying.instrumentToken), spot, { now, expiry }, atm, volumes, averageVolume(rows, volumes)]);
   const suggested = [...computeSellRecommendations(...args), ...computeBuyRecommendations(...args)];
 
   /** @type {Setup[]} */
@@ -88,7 +87,6 @@ export function underlyingSetups(underlying, options, { now, snapshots }) {
     const single = SINGLE_OPTION_SETUPS[suggestion.type];
     const option = single && optionOf(rows.find((r) => r.strike === suggestion.strikes[0]), single.optionType);
     if (!option) continue;
-    const pop = 'pop' in suggestion ? ` · POP ${Math.round(suggestion.pop)}%` : '';
     setups.push({
       underlying: underlying.name,
       instrumentToken: option.instrumentToken,
@@ -96,7 +94,7 @@ export function underlyingSetups(underlying, options, { now, snapshots }) {
       score: suggestion.score,
       premium: suggestion.premium,
       setup: suggestion.pattern,
-      reason: `${setupPatternLabel(suggestion.pattern)} · score ${Math.round(suggestion.score)}${pop} · premium ₹${suggestion.premium.toFixed(2)}`,
+      reason: `${setupPatternLabel(suggestion.pattern)} · score ${Math.round(suggestion.score)} · ${Math.round(suggestion.winChance)}% profit chance by close · premium ₹${suggestion.premium.toFixed(2)}`,
     });
   }
   return setups.sort((a, b) => b.score - a.score);

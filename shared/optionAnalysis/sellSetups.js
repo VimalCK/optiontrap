@@ -3,29 +3,46 @@
  * Shared, so the card (browser) and the setups strategy
  * (server/tradeEngine/strategies/optionAnalyzerSetups.js) score a chain the same way.
  *
- * A side is only sold when spot isn't trending against it. Each strike is then
- * scored on what makes that strike good to sell: its probability of profit, a
- * wall protecting it, sellers building at it, the premium it pays, and whether
- * the day's regime (pinning or a PCR bias) favours it.
+ * A side is only sold when spot isn't trending against it, and a strike only
+ * when it pays at least MIN_PREMIUM_SHARE of the ATM option's premium. Each
+ * strike is then scored on the day's direction (dayBias.js), its chance of
+ * being in profit at today's close (sessionOutcome.js), a wall protecting it,
+ * sellers building at it, and whether the day is pinning or has a PCR bias.
  */
 
 import { analyzeVelocityPattern } from './velocityPattern.js';
-import { OptionType } from '../tradeEnums.js';
+import { OptionType, Side } from '../tradeEnums.js';
 import { LevelSide, OiSignal, OptionSetup, SetupPattern, VelocityTrend } from '../analysisEnums.js';
 import { calculateMaxPain, calculatePCR, findOiWalls, classifyOiSignal } from './oiLevels.js';
-import { TREND_AGAINST_SHARE, atmStraddle, optionChange, rangePop, recentSpotMove, strikeGap, volumeMultiplier } from './setupScoring.js';
+import { MIN_PREMIUM_SHARE, TREND_AGAINST_SHARE, atmStraddle, optionChange, recentSpotMove, strikeGap, volumeMultiplier } from './setupScoring.js';
+import { dayBias, scoreDirection } from './dayBias.js';
+import { sessionOutcome, sessionWindow, winChanceShare } from './sessionOutcome.js';
 
 /** Each part's maximum points; they add up to 100. */
 export const SELL_SCORE_MAX = Object.freeze({
-  probability: 30,
-  oiWall: 25,
-  velocity: 20,
-  premiumValue: 15,
+  direction: 40,
+  today: 25,
+  oiWall: 15,
+  velocity: 10,
   regime: 10,
 });
 
+/** A sold option's chance of profit by the close earns no points at a coin flip, all of them at this. */
+const FULL_WIN_CHANCE = 75;
+
 const PINNING_MAX = 25;
 const PCR_EXTREME_MAX = 15;
+const VELOCITY_POINTS_MAX = 20;
+/** A wall this many times the average OI earns its full strength points. */
+const WALL_FULL_STRENGTH = 5;
+/** Short buildup at the wall this large (OI % since the first snapshot) earns its full points. */
+const WALL_FULL_BUILDUP_PCT = 100;
+/** The wall part's split: its strength, then sellers adding at it. */
+const WALL_STRENGTH_SHARE = 0.6;
+/** What a wall built on thin volume keeps of its points. */
+const THIN_VOLUME_KEEPS = 0.6;
+/** findOiWalls' threshold: OI this many times the average marks a wall. */
+const WALL_THRESHOLD = 1.3;
 
 /** OI unwinding through the day: no reason to sell. */
 const UNWIND_TRENDS = /** @type {import('../analysisEnums.js').VelocityTrendId[]} */ ([
@@ -35,6 +52,7 @@ const UNWIND_TRENDS = /** @type {import('../analysisEnums.js').VelocityTrendId[]
 /**
  * @typedef {import('./chain.js').ChainRow} ChainRow
  * @typedef {import('./velocityPattern.js').OiSnapshot} OiSnapshot
+ * @typedef {{ now: Date, expiry: string }} SetupTiming  when the setups are scored, and the chain's expiry
  */
 
 /**
@@ -43,10 +61,10 @@ const UNWIND_TRENDS = /** @type {import('../analysisEnums.js').VelocityTrendId[]
 
 /**
  * @typedef {object} ScoreBreakdown
- * @property {number} probability 0–30
- * @property {number} oiWall 0–25
- * @property {number} velocity 0–20
- * @property {number} premiumValue 0–15
+ * @property {number} direction 0–40
+ * @property {number} today 0–25
+ * @property {number} oiWall 0–15
+ * @property {number} velocity 0–10
  * @property {number} regime 0–10
  */
 
@@ -58,7 +76,7 @@ const UNWIND_TRENDS = /** @type {import('../analysisEnums.js').VelocityTrendId[]
  * @property {import('../analysisEnums.js').SetupPatternId} pattern dominant pattern
  * @property {string[]} reasons
  * @property {ScoreBreakdown} breakdown
- * @property {number} pop Probability of Profit (1–99)
+ * @property {number} winChance chance (1–99) of being in profit at today's close, after charges
  * @property {number} premium Premium amount (per unit)
  */
 
@@ -200,56 +218,25 @@ export function trendsAgainst(type, snapshots, spotPrice, expectedMove) {
 }
 
 /**
- * Probability of profit (1–99) of selling one option and holding it to
- * expiry: the chance spot ends on the safe side of its breakeven (strike plus
- * the premium for a call, minus it for a put), with the move to expiry
- * normally distributed and its standard deviation taken from the ATM straddle.
- * @param {number} strike
- * @param {number} premium
- * @param {number} spotPrice
- * @param {number} expectedMove ATM straddle premium
- * @param {import('../tradeEnums.js').OptionTypeId} type
- * @returns {number}
- */
-export function sellPop(strike, premium, spotPrice, expectedMove, type) {
-  if (type === OptionType.CE) return rangePop(-Infinity, strike + premium, spotPrice, expectedMove);
-  return rangePop(strike - premium, Infinity, spotPrice, expectedMove);
-}
-
-/**
- * Probability (0–30): POP above a coin flip, in proportion. 50% scores 0, 100% scores 30.
- * @param {number} pop
+ * Today (0–25): the sold option's chance of being in profit at today's close,
+ * after charges; a coin flip scores 0, FULL_WIN_CHANCE or more scores 25.
+ * @param {import('./sessionOutcome.js').SessionOutcome | null} outcome
  * @returns {PartScore}
  */
-function scoreProbability(pop) {
-  const share = Math.min(1, Math.max(0, (pop - 50) / 50));
-  const score = Math.round(SELL_SCORE_MAX.probability * share);
-  return { score, reasons: score > 0 ? [`POP ${pop.toFixed(0)}% from the breakeven`] : [] };
+function scoreToday(outcome) {
+  if (!outcome) return { score: 0, reasons: [] };
+  const sign = outcome.expectedPnl >= 0 ? '+' : '−';
+  return {
+    score: Math.round(SELL_SCORE_MAX.today * winChanceShare(outcome.winChance, 50, FULL_WIN_CHANCE)),
+    reasons: [`${outcome.winChance.toFixed(0)}% chance of profit by today's close · expected ${sign}₹${Math.abs(outcome.expectedPnl).toFixed(2)} per unit after charges`],
+  };
 }
 
 /**
- * Premium value (0–15): what the strike pays against the ATM option's
- * premium (half the straddle), so a far strike paying almost nothing for its
- * high POP isn't favoured.
- * @param {number} premium
- * @param {number} expectedMove ATM straddle premium
- * @returns {PartScore}
- */
-function scorePremiumValue(premium, expectedMove) {
-  if (expectedMove <= 0 || premium <= 0) return { score: 0, reasons: [] };
-  const share = premium / (expectedMove / 2);
-  const percent = `${(share * 100).toFixed(0)}% of the ATM premium`;
-  if (share >= 0.5) return { score: 15, reasons: [`Rich premium ₹${premium.toFixed(2)} (${percent})`] };
-  if (share >= 0.3) return { score: 10, reasons: [`Good premium ₹${premium.toFixed(2)} (${percent})`] };
-  if (share >= 0.15) return { score: 5, reasons: [`Thin premium ₹${premium.toFixed(2)} (${percent})`] };
-  return { score: 0, reasons: [] };
-}
-
-/**
- * OI wall (0–25): the strongest wall between spot and the strike, the side
+ * OI wall (0–15): the strongest wall between spot and the strike, the side
  * that protects a seller: resistance above spot and at or below a sold call's
- * strike, support below spot and at or above a sold put's. Points for its
- * strength, and more when fresh short buildup confirms sellers are adding.
+ * strike, support below spot and at or above a sold put's. Points grow with
+ * its strength, and with fresh short buildup there (sellers adding).
  * @param {number} strike
  * @param {import('../tradeEnums.js').OptionTypeId} type
  * @param {ChainRow[]} chain
@@ -262,55 +249,46 @@ function scorePremiumValue(premium, expectedMove) {
  * @returns {PartScore}
  */
 function scoreOiWall(strike, type, chain, oiData, snapshots, livePrices, spotPrice, volumeData, avgVolume) {
-  /** @type {string[]} */ const reasons = [];
-  let score = 0;
-
   const wallType = type === OptionType.CE ? LevelSide.Resistance : LevelSide.Support;
   const protects = type === OptionType.CE
     ? (/** @type {number} */ wallStrike) => wallStrike > spotPrice && wallStrike <= strike
     : (/** @type {number} */ wallStrike) => wallStrike < spotPrice && wallStrike >= strike;
-  const bestWall = findOiWalls(chain, oiData, 1.3)
+  const bestWall = findOiWalls(chain, oiData, WALL_THRESHOLD)
     .filter((w) => w.type === wallType && protects(w.strike))
     .sort((a, b) => b.strength - a.strength)[0];
 
-  if (!bestWall) return { score: 0, reasons };
+  if (!bestWall) return { score: 0, reasons: [] };
 
-  const where = bestWall.strike === strike ? 'at the strike' : `before the strike`;
-  if (bestWall.strength >= 2.0) {
-    score += 15;
-    reasons.push(`Strong ${wallType} wall at ${bestWall.strike}, ${where} (${bestWall.strength.toFixed(1)}x avg OI)`);
-  } else if (bestWall.strength >= 1.5) {
-    score += 10;
-    reasons.push(`${wallType} wall at ${bestWall.strike}, ${where} (${bestWall.strength.toFixed(1)}x avg OI)`);
-  } else {
-    score += 5;
-    reasons.push(`Mild ${wallType} at ${bestWall.strike}, ${where} (${bestWall.strength.toFixed(1)}x avg OI)`);
-  }
+  const where = bestWall.strike === strike ? 'at the strike' : 'before the strike';
+  const reasons = [`${wallType} wall at ${bestWall.strike}, ${where} (${bestWall.strength.toFixed(1)}x avg OI)`];
+  const strengthShare = Math.min(1, (bestWall.strength - WALL_THRESHOLD) / (WALL_FULL_STRENGTH - WALL_THRESHOLD));
 
   const wallRow = chain.find((r) => r.strike === bestWall.strike);
   const wallToken = type === OptionType.CE ? wallRow?.ce?.instrumentToken : wallRow?.pe?.instrumentToken;
 
+  let buildupShare = 0;
+  if (wallToken && snapshots.length > 0) {
+    const change = optionChange(wallToken, snapshots[0], oiData, livePrices);
+    if (change && change.oiPct > 0 && classifyOiSignal(change.oiPct, change.pricePct).signal === OiSignal.ShortBuildup) {
+      buildupShare = Math.min(1, change.oiPct / WALL_FULL_BUILDUP_PCT);
+      reasons.push(`Short buildup at the wall — sellers adding (OI +${change.oiPct.toFixed(1)}%)`);
+    }
+  }
+
+  let points = SELL_SCORE_MAX.oiWall * (WALL_STRENGTH_SHARE * strengthShare + (1 - WALL_STRENGTH_SHARE) * buildupShare);
   const volMul = volumeMultiplier(wallToken, volumeData, avgVolume);
   if (volMul >= 1.3) {
     reasons.push('Wall built on high volume — strong institutional defense');
   } else if (volMul <= 0.6) {
-    score = Math.round(score * 0.6);
+    points *= THIN_VOLUME_KEEPS;
     reasons.push('Wall on thin volume — may break easily');
   }
 
-  if (wallToken && snapshots.length > 0) {
-    const change = optionChange(wallToken, snapshots[0], oiData, livePrices);
-    if (change && change.oiPct > 0 && classifyOiSignal(change.oiPct, change.pricePct).signal === OiSignal.ShortBuildup) {
-      score += 10;
-      reasons.push(`Short buildup confirmed at wall — new sellers entering (OI +${change.oiPct.toFixed(1)}%)`);
-    }
-  }
-
-  return { score: Math.min(SELL_SCORE_MAX.oiWall, score), reasons };
+  return { score: Math.round(points), reasons };
 }
 
 /**
- * Velocity (0–20): sellers building at this strike through the day. OI rising
+ * Velocity (0–10): sellers building at this strike through the day. OI rising
  * while the option's price rises is buyers (long buildup), not sellers, and scores nothing.
  * @param {number} token
  * @param {number} currentOi
@@ -336,26 +314,26 @@ function scoreVelocity(token, currentOi, snapshots, oiData, livePrices, volumeDa
     if (change && classifyOiSignal(change.oiPct, change.pricePct).signal === OiSignal.LongBuildup) return { score: 0, reasons };
   }
 
-  let score = 0;
+  let points = 0;
   if (trend === VelocityTrend.AcceleratingBuildup) {
-    score = 20;
+    points = 20;
     reasons.push('Accelerating OI buildup — sellers adding aggressively');
   } else if (trend === VelocityTrend.SteadyBuildup) {
-    score = 15;
+    points = 15;
     reasons.push('Steady OI buildup — consistent seller positioning');
   } else if (trend === VelocityTrend.Buildup || trend === VelocityTrend.MildBuildup || trend === VelocityTrend.SlowingBuildup) {
-    score = 10;
+    points = 10;
     reasons.push('OI buildup detected — sellers are positioning');
   } else if (trend === VelocityTrend.Stable) {
-    score = 5;
+    points = 5;
     reasons.push('OI stable — no exit pressure from sellers');
   } else if (trend === VelocityTrend.Volatile) {
-    score = 2;
+    points = 2;
   }
 
-  if (score > 0) {
+  if (points > 0) {
     const volMul = volumeMultiplier(token, volumeData, avgVolume);
-    score = Math.round(score * volMul);
+    points *= volMul;
     if (volMul >= 1.3) {
       reasons.push('Volume-confirmed buildup — high conviction');
     } else if (volMul <= 0.6) {
@@ -363,7 +341,7 @@ function scoreVelocity(token, currentOi, snapshots, oiData, livePrices, volumeDa
     }
   }
 
-  return { score: Math.min(SELL_SCORE_MAX.velocity, score), reasons };
+  return { score: Math.round(SELL_SCORE_MAX.velocity * Math.min(1, points / VELOCITY_POINTS_MAX)), reasons };
 }
 
 /**
@@ -374,12 +352,12 @@ function scoreVelocity(token, currentOi, snapshots, oiData, livePrices, volumeDa
  * @property {import('../analysisEnums.js').SetupPatternId} pattern
  * @property {string[]} reasons
  * @property {ScoreBreakdown} breakdown
- * @property {number} pop
+ * @property {number} winChance
  * @property {number} premium
  */
 
 /** @param {ScoreBreakdown} breakdown */
-const totalOf = (breakdown) => breakdown.probability + breakdown.oiWall + breakdown.velocity + breakdown.premiumValue + breakdown.regime;
+const totalOf = (breakdown) => breakdown.direction + breakdown.today + breakdown.oiWall + breakdown.velocity + breakdown.regime;
 
 /**
  * Compute sell recommendations for the visible option chain.
@@ -393,7 +371,7 @@ const totalOf = (breakdown) => breakdown.probability + breakdown.oiWall + breakd
  * @param {Map<number, number>} _closePrices
  * @param {OiSnapshot[]} snapshots
  * @param {number} spotPrice
- * @param {number} [_daysToExpiry]  time to expiry is already in the ATM straddle the POP reads
+ * @param {SetupTiming} timing
  * @param {number} [atmStrike]
  * @param {Map<number, number>} [volumeData=new Map()]
  * @param {number} [avgVolume=0]
@@ -407,7 +385,7 @@ export function computeSellRecommendations(
   _closePrices,
   snapshots,
   spotPrice,
-  _daysToExpiry,
+  timing,
   atmStrike,
   volumeData = new Map(),
   avgVolume = 0,
@@ -415,11 +393,18 @@ export function computeSellRecommendations(
   if (chain.length === 0 || spotPrice === 0 || snapshots.length < 2) return [];
 
   const expectedMove = atmStraddle(chain, atmStrike, livePrices);
+  const minPremium = MIN_PREMIUM_SHARE * (expectedMove / 2);
+  const window = sessionWindow(timing.now, timing.expiry);
+  const day = dayBias(chain, oiData, snapshots, spotPrice, expectedMove, window);
 
   const pinningResult = scorePinning(snapshots, chain, oiData, spotPrice);
   const regimeByType = {
     [OptionType.CE]: scoreRegime(pinningResult, scorePcrExtreme(snapshots, chain, oiData, OptionType.CE)),
     [OptionType.PE]: scoreRegime(pinningResult, scorePcrExtreme(snapshots, chain, oiData, OptionType.PE)),
+  };
+  const directionByType = {
+    [OptionType.CE]: scoreDirection(day, false, SELL_SCORE_MAX.direction),
+    [OptionType.PE]: scoreDirection(day, true, SELL_SCORE_MAX.direction),
   };
   const sellable = {
     [OptionType.CE]: !trendsAgainst(OptionType.CE, snapshots, spotPrice, expectedMove),
@@ -436,20 +421,20 @@ export function computeSellRecommendations(
     const token = option.instrumentToken;
     const currentOi = oiData.get(token) || 0;
     const premium = livePrices.get(token) || 0;
-    if (premium <= 0 || currentOi <= 0) return null;
+    if (premium <= 0 || currentOi <= 0 || premium < minPremium) return null;
 
-    const pop = sellPop(strike, premium, spotPrice, expectedMove, type);
-    const probability = scoreProbability(pop);
+    const outcome = sessionOutcome({ side: Side.SELL, optionType: type, strike, premium, lotSize: option.lotSize }, { spotPrice, expectedMove, window });
+    const direction = directionByType[type];
+    const today = scoreToday(outcome);
     const wall = scoreOiWall(strike, type, chain, oiData, snapshots, livePrices, spotPrice, volumeData, avgVolume);
     const velocity = scoreVelocity(token, currentOi, snapshots, oiData, livePrices, volumeData, avgVolume);
-    const premiumValue = scorePremiumValue(premium, expectedMove);
     const regime = regimeByType[type];
 
     /** @type {ScoreBreakdown} */ const breakdown = {
-      probability: probability.score,
+      direction: direction.score,
+      today: today.score,
       oiWall: wall.score,
       velocity: velocity.score,
-      premiumValue: premiumValue.score,
       regime: regime.score,
     };
     return {
@@ -457,9 +442,9 @@ export function computeSellRecommendations(
       type,
       score: totalOf(breakdown),
       pattern: getDominantPattern(breakdown, regime.pattern),
-      reasons: [...probability.reasons, ...wall.reasons, ...velocity.reasons, ...premiumValue.reasons, ...regime.reasons],
+      reasons: [...direction.reasons, ...today.reasons, ...wall.reasons, ...velocity.reasons, ...regime.reasons],
       breakdown,
-      pop,
+      winChance: outcome?.winChance ?? 50,
       premium,
     };
   }
@@ -487,7 +472,7 @@ export function computeSellRecommendations(
         pattern: ss.pattern,
         reasons: ss.reasons,
         breakdown: ss.breakdown,
-        pop: ss.pop,
+        winChance: ss.winChance,
         premium: ss.premium,
       });
     }
@@ -497,16 +482,15 @@ export function computeSellRecommendations(
   const peScores = strikeScores.filter((s) => s.type === OptionType.PE);
   const gap = strikeGap(chain);
 
+  // Two sold legs: the day's lean helps one and hurts the other, so the direction part is the weaker leg's.
   for (const ce of ceScores) {
     const pe = peScores.find((p) => p.strike === ce.strike);
     if (pe && Math.abs(ce.strike - spotPrice) <= gap) {
-      const premium = ce.premium + pe.premium;
-      const pop = rangePop(ce.strike - premium, ce.strike + premium, spotPrice, expectedMove);
       /** @type {ScoreBreakdown} */ const mergedBreakdown = {
-        probability: scoreProbability(pop).score,
+        direction: Math.min(ce.breakdown.direction, pe.breakdown.direction),
+        today: Math.min(ce.breakdown.today, pe.breakdown.today),
         oiWall: Math.min(ce.breakdown.oiWall, pe.breakdown.oiWall),
         velocity: Math.min(ce.breakdown.velocity, pe.breakdown.velocity),
-        premiumValue: Math.min(ce.breakdown.premiumValue, pe.breakdown.premiumValue),
         regime: Math.min(ce.breakdown.regime, pe.breakdown.regime),
       };
       const straddleScore = totalOf(mergedBreakdown);
@@ -518,8 +502,8 @@ export function computeSellRecommendations(
           pattern: getDominantPattern(mergedBreakdown, regimeByType[OptionType.CE].pattern),
           reasons: [...new Set([...ce.reasons, ...pe.reasons])],
           breakdown: mergedBreakdown,
-          pop,
-          premium,
+          winChance: Math.min(ce.winChance, pe.winChance),
+          premium: ce.premium + pe.premium,
         });
       }
     }
@@ -529,13 +513,11 @@ export function computeSellRecommendations(
   const topPe = peScores.filter((s) => s.score >= 40).sort((a, b) => b.score - a.score)[0];
 
   if (topCe && topPe && topCe.strike !== topPe.strike) {
-    const premium = topCe.premium + topPe.premium;
-    const pop = rangePop(topPe.strike - premium, topCe.strike + premium, spotPrice, expectedMove);
     /** @type {ScoreBreakdown} */ const mergedBreakdown = {
-      probability: scoreProbability(pop).score,
+      direction: Math.min(topCe.breakdown.direction, topPe.breakdown.direction),
+      today: Math.round((topCe.breakdown.today + topPe.breakdown.today) / 2),
       oiWall: Math.round((topCe.breakdown.oiWall + topPe.breakdown.oiWall) / 2),
       velocity: Math.round((topCe.breakdown.velocity + topPe.breakdown.velocity) / 2),
-      premiumValue: Math.round((topCe.breakdown.premiumValue + topPe.breakdown.premiumValue) / 2),
       regime: Math.round((topCe.breakdown.regime + topPe.breakdown.regime) / 2),
     };
     const strangleScore = totalOf(mergedBreakdown);
@@ -547,8 +529,8 @@ export function computeSellRecommendations(
         pattern: getDominantPattern(mergedBreakdown, regimeByType[OptionType.CE].pattern),
         reasons: [...new Set([...topCe.reasons, ...topPe.reasons])],
         breakdown: mergedBreakdown,
-        pop,
-        premium,
+        winChance: Math.min(topCe.winChance, topPe.winChance),
+        premium: topCe.premium + topPe.premium,
       });
     }
   }
@@ -564,10 +546,10 @@ export function computeSellRecommendations(
  */
 function getDominantPattern(breakdown, regimePattern) {
   /** @type {[import('../analysisEnums.js').SetupPatternId, number][]} */ const entries = [
-    [SetupPattern.HighProbability, breakdown.probability / SELL_SCORE_MAX.probability],
+    [SetupPattern.DirectionalOi, breakdown.direction / SELL_SCORE_MAX.direction],
+    [SetupPattern.HighProbability, breakdown.today / SELL_SCORE_MAX.today],
     [SetupPattern.WallDefense, breakdown.oiWall / SELL_SCORE_MAX.oiWall],
     [SetupPattern.VelocityConfirmed, breakdown.velocity / SELL_SCORE_MAX.velocity],
-    [SetupPattern.PremiumValue, breakdown.premiumValue / SELL_SCORE_MAX.premiumValue],
     [regimePattern, breakdown.regime / SELL_SCORE_MAX.regime],
   ];
 

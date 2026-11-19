@@ -7,7 +7,7 @@
 import { InstrumentType, OptionType } from '../tradeEnums.js';
 
 /**
- * @typedef {{ instrumentToken: number, strike: number, expiry: string | null, instrumentType: string }} ChainOption
+ * @typedef {{ instrumentToken: number, strike: number, expiry: string | null, instrumentType: string, lotSize?: number | null }} ChainOption
  */
 
 /**

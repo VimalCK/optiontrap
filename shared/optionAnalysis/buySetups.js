@@ -4,26 +4,36 @@
  * (server/tradeEngine/strategies/optionAnalyzerSetups.js) score a chain the same way.
  *
  * A side is only bought with a sign of its move (spot already moving its way,
- * or buyers entering it) and spot not trending against it. Each strike is
- * then scored on its probability of profit, spot's move in its favour, the OI
- * flow behind its direction, whether a wall blocks its path to breakeven, and
- * what its premium costs against the ATM option.
+ * or buyers entering it) and spot not trending against it, and a strike only
+ * when it pays at least MIN_PREMIUM_SHARE of the ATM option's premium. Each
+ * strike is then scored on the day's direction (dayBias.js), its chance of
+ * being in profit at today's close (sessionOutcome.js), the OI flow behind its
+ * direction, and whether a wall blocks its path to breakeven.
  */
 
-import { OptionType } from '../tradeEnums.js';
+import { OptionType, Side } from '../tradeEnums.js';
 import { LevelSide, OiSignal, OptionSetup, SetupPattern } from '../analysisEnums.js';
 import { calculatePCR, findOiWalls, classifyOiSignal } from './oiLevels.js';
-import { TREND_AGAINST_SHARE, atmStraddle, optionChange, rangePop, recentSpotMove, strikeGap, volumeMultiplier } from './setupScoring.js';
+import { MIN_PREMIUM_SHARE, TREND_AGAINST_SHARE, atmStraddle, optionChange, recentSpotMove, strikeGap, volumeMultiplier } from './setupScoring.js';
+import { dayBias, scoreDirection } from './dayBias.js';
+import { sessionOutcome, sessionWindow, winChanceShare } from './sessionOutcome.js';
 
 /** Each part's maximum points; they add up to 100. */
 export const BUY_SCORE_MAX = Object.freeze({
-  probability: 25,
-  trend: 20,
+  direction: 40,
+  today: 20,
   flow: 25,
   breakout: 15,
-  premiumCost: 15,
 });
 
+/**
+ * A bought option pays time decay, so its chance of profit by the close sits
+ * below a coin flip whatever the strike: none of the today points at
+ * BUY_WIN_FROM, all of them at a coin flip.
+ */
+const BUY_WIN_FROM = 25;
+/** Spot's 30-minute move in a side's favour, as a share of the expected move, that counts as a sign of its move. */
+const EARLY_MOVE_SHARE = 0.05;
 /** How many strike gaps either side of spot the OI flow reads. */
 const FLOW_STRIKE_GAPS = 4;
 
@@ -38,11 +48,10 @@ const FLOW_STRIKE_GAPS = 4;
 
 /**
  * @typedef {object} BuyScoreBreakdown
- * @property {number} probability 0–25
- * @property {number} trend 0–20
+ * @property {number} direction 0–40
+ * @property {number} today 0–20
  * @property {number} flow 0–25
  * @property {number} breakout 0–15
- * @property {number} premiumCost 0–15
  */
 
 /**
@@ -53,7 +62,7 @@ const FLOW_STRIKE_GAPS = 4;
  * @property {import('../analysisEnums.js').SetupPatternId} pattern
  * @property {string[]} reasons
  * @property {BuyScoreBreakdown} breakdown
- * @property {number} pop Probability of Profit (1–99)
+ * @property {number} winChance chance (1–99) of being in profit at today's close, after charges
  * @property {number} premium
  */
 
@@ -67,22 +76,6 @@ const opposite = (type) => (type === OptionType.CE ? OptionType.PE : OptionType.
  * @param {import('../tradeEnums.js').OptionTypeId} type
  */
 const tokenOf = (row, type) => (type === OptionType.CE ? row.ce?.instrumentToken : row.pe?.instrumentToken);
-
-/**
- * Probability of profit (1–99) of buying one option and holding it to expiry:
- * the chance spot ends beyond its breakeven (strike plus the premium for a
- * call, minus it for a put).
- * @param {number} strike
- * @param {number} premium
- * @param {number} spotPrice
- * @param {number} expectedMove ATM straddle premium
- * @param {import('../tradeEnums.js').OptionTypeId} type
- * @returns {number}
- */
-export function buyPop(strike, premium, spotPrice, expectedMove, type) {
-  if (type === OptionType.CE) return rangePop(strike + premium, Infinity, spotPrice, expectedMove);
-  return rangePop(-Infinity, strike - premium, spotPrice, expectedMove);
-}
 
 /**
  * Spot's move over the last 30 minutes in the bought side's favour, as a
@@ -100,27 +93,17 @@ export function moveInFavour(type, snapshots, spotPrice, expectedMove) {
 }
 
 /**
- * Probability (0–25): a bought option rarely wins more often than not, so
- * POP scores in proportion up to 50%, which gets the full 25.
- * @param {number} pop
+ * Today (0–20): the bought option's chance of being in profit at today's close, after charges.
+ * @param {import('./sessionOutcome.js').SessionOutcome | null} outcome
  * @returns {PartScore}
  */
-function scoreProbability(pop) {
-  const score = Math.round(BUY_SCORE_MAX.probability * Math.min(1, pop / 50));
-  return { score, reasons: [`POP ${pop.toFixed(0)}% from the breakeven`] };
-}
-
-/**
- * Trend (0–20): spot already moving the bought side's way over the last 30 minutes.
- * @param {number} share  move in favour, as a share of the expected move
- * @returns {PartScore}
- */
-function scoreTrend(share) {
-  const percent = `${(share * 100).toFixed(0)}% of the expected move in 30 min`;
-  if (share >= 0.25) return { score: 20, reasons: [`Strong move in favour (${percent})`] };
-  if (share >= 0.15) return { score: 14, reasons: [`Spot moving in favour (${percent})`] };
-  if (share >= 0.05) return { score: 7, reasons: [`Early move in favour (${percent})`] };
-  return { score: 0, reasons: [] };
+function scoreToday(outcome) {
+  if (!outcome) return { score: 0, reasons: [] };
+  const sign = outcome.expectedPnl >= 0 ? '+' : '−';
+  return {
+    score: Math.round(BUY_SCORE_MAX.today * winChanceShare(outcome.winChance, BUY_WIN_FROM, 50)),
+    reasons: [`${outcome.winChance.toFixed(0)}% chance of profit by today's close · expected ${sign}₹${Math.abs(outcome.expectedPnl).toFixed(2)} per unit after charges`],
+  };
 }
 
 /**
@@ -280,26 +263,8 @@ function scoreBreakout(breakeven, type, chain, oiData, snapshots, livePrices, sp
   return { score: BUY_SCORE_MAX.breakout, reasons };
 }
 
-/**
- * Premium cost (0–15): the premium against the ATM option's (half the
- * straddle). Cheaper gives more leverage on the move; probability already
- * counts how much less likely a cheaper, further strike is to pay off.
- * @param {number} premium
- * @param {number} expectedMove ATM straddle premium
- * @returns {PartScore}
- */
-function scorePremiumCost(premium, expectedMove) {
-  if (expectedMove <= 0 || premium <= 0) return { score: 0, reasons: [] };
-  const share = premium / (expectedMove / 2);
-  const percent = `${(share * 100).toFixed(0)}% of the ATM premium`;
-  if (share <= 0.6) return { score: 15, reasons: [`Low cost ₹${premium.toFixed(2)} (${percent})`] };
-  if (share <= 0.85) return { score: 10, reasons: [`Moderate cost ₹${premium.toFixed(2)} (${percent})`] };
-  if (share <= 1.1) return { score: 5, reasons: [`ATM cost ₹${premium.toFixed(2)} (${percent})`] };
-  return { score: 0, reasons: [] };
-}
-
 /** @param {BuyScoreBreakdown} breakdown */
-const totalOf = (breakdown) => breakdown.probability + breakdown.trend + breakdown.flow + breakdown.breakout + breakdown.premiumCost;
+const totalOf = (breakdown) => breakdown.direction + breakdown.today + breakdown.flow + breakdown.breakout;
 
 /**
  * The part that contributed the most, as a share of its own maximum.
@@ -308,11 +273,10 @@ const totalOf = (breakdown) => breakdown.probability + breakdown.trend + breakdo
  */
 function getBuyDominantPattern(breakdown) {
   /** @type {[import('../analysisEnums.js').SetupPatternId, number][]} */ const entries = [
-    [SetupPattern.HighProbability, breakdown.probability / BUY_SCORE_MAX.probability],
-    [SetupPattern.Momentum, breakdown.trend / BUY_SCORE_MAX.trend],
+    [SetupPattern.Momentum, breakdown.direction / BUY_SCORE_MAX.direction],
+    [SetupPattern.HighProbability, breakdown.today / BUY_SCORE_MAX.today],
     [SetupPattern.DirectionalOi, breakdown.flow / BUY_SCORE_MAX.flow],
     [SetupPattern.Breakout, breakdown.breakout / BUY_SCORE_MAX.breakout],
-    [SetupPattern.RiskReward, breakdown.premiumCost / BUY_SCORE_MAX.premiumCost],
   ];
 
   entries.sort((a, b) => b[1] - a[1]);
@@ -327,7 +291,7 @@ function getBuyDominantPattern(breakdown) {
  * @property {import('../analysisEnums.js').SetupPatternId} pattern
  * @property {string[]} reasons
  * @property {BuyScoreBreakdown} breakdown
- * @property {number} pop
+ * @property {number} winChance
  * @property {number} premium
  */
 
@@ -344,7 +308,7 @@ function getBuyDominantPattern(breakdown) {
  * @param {Map<number, number>} _closePrices
  * @param {OiSnapshot[]} snapshots
  * @param {number} spotPrice
- * @param {number} [_daysToExpiry]  time to expiry is already in the ATM straddle the POP reads
+ * @param {import('./sellSetups.js').SetupTiming} timing
  * @param {number} [atmStrike]
  * @param {Map<number, number>} [volumeData=new Map()]
  * @param {number} [avgVolume=0]
@@ -358,7 +322,7 @@ export function computeBuyRecommendations(
   _closePrices,
   snapshots,
   spotPrice,
-  _daysToExpiry,
+  timing,
   atmStrike,
   volumeData = new Map(),
   avgVolume = 0,
@@ -366,49 +330,50 @@ export function computeBuyRecommendations(
   if (chain.length === 0 || spotPrice === 0 || snapshots.length < 2) return [];
 
   const expectedMove = atmStraddle(chain, atmStrike, livePrices);
+  const minPremium = MIN_PREMIUM_SHARE * (expectedMove / 2);
   const gap = strikeGap(chain);
+  const window = sessionWindow(timing.now, timing.expiry);
+  const day = dayBias(chain, oiData, snapshots, spotPrice, expectedMove, window);
 
   const sideOf = (/** @type {import('../tradeEnums.js').OptionTypeId} */ type) => {
     const share = moveInFavour(type, snapshots, spotPrice, expectedMove);
-    const trend = scoreTrend(share);
     const flow = scoreFlow(type, chain, oiData, livePrices, snapshots, spotPrice);
-    const directionSeen = trend.score > 0 || flow.buyersEntering;
-    return { buyable: directionSeen && share >= -TREND_AGAINST_SHARE, trend, flow };
+    const directionSeen = share >= EARLY_MOVE_SHARE || flow.buyersEntering;
+    const direction = scoreDirection(day, type === OptionType.CE, BUY_SCORE_MAX.direction);
+    return { buyable: directionSeen && share >= -TREND_AGAINST_SHARE, direction, flow };
   };
   const sides = { [OptionType.CE]: sideOf(OptionType.CE), [OptionType.PE]: sideOf(OptionType.PE) };
 
   /**
    * @param {number} strike
-   * @param {number} token
+   * @param {import('./chain.js').ChainOption} option
    * @param {import('../tradeEnums.js').OptionTypeId} type
    * @returns {BuyStrikeScore | null}
    */
-  function scoreStrike(strike, token, type) {
-    const premium = livePrices.get(token) || 0;
-    if (premium <= 0) return null;
+  function scoreStrike(strike, option, type) {
+    const premium = livePrices.get(option.instrumentToken) || 0;
+    if (premium <= 0 || premium < minPremium) return null;
 
-    const pop = buyPop(strike, premium, spotPrice, expectedMove, type);
+    const outcome = sessionOutcome({ side: Side.BUY, optionType: type, strike, premium, lotSize: option.lotSize }, { spotPrice, expectedMove, window });
     const breakeven = type === OptionType.CE ? strike + premium : strike - premium;
-    const probability = scoreProbability(pop);
-    const { trend, flow } = sides[type];
+    const { direction, flow } = sides[type];
+    const today = scoreToday(outcome);
     const breakout = scoreBreakout(breakeven, type, chain, oiData, snapshots, livePrices, spotPrice, volumeData, avgVolume);
-    const premiumCost = scorePremiumCost(premium, expectedMove);
 
     /** @type {BuyScoreBreakdown} */ const breakdown = {
-      probability: probability.score,
-      trend: trend.score,
+      direction: direction.score,
+      today: today.score,
       flow: flow.score,
       breakout: breakout.score,
-      premiumCost: premiumCost.score,
     };
     return {
       strike,
       type,
       score: totalOf(breakdown),
       pattern: getBuyDominantPattern(breakdown),
-      reasons: [...probability.reasons, ...trend.reasons, ...flow.reasons, ...breakout.reasons, ...premiumCost.reasons],
+      reasons: [...direction.reasons, ...today.reasons, ...flow.reasons, ...breakout.reasons],
       breakdown,
-      pop,
+      winChance: outcome?.winChance ?? 50,
       premium,
     };
   }
@@ -418,11 +383,11 @@ export function computeBuyRecommendations(
   /** @type {BuyStrikeScore[]} */ const strikeScores = [];
   for (const row of chain) {
     if (row.ce && sides[OptionType.CE].buyable && inRange(row.strike - spotPrice)) {
-      const scored = scoreStrike(row.strike, row.ce.instrumentToken, OptionType.CE);
+      const scored = scoreStrike(row.strike, row.ce, OptionType.CE);
       if (scored) strikeScores.push(scored);
     }
     if (row.pe && sides[OptionType.PE].buyable && inRange(spotPrice - row.strike)) {
-      const scored = scoreStrike(row.strike, row.pe.instrumentToken, OptionType.PE);
+      const scored = scoreStrike(row.strike, row.pe, OptionType.PE);
       if (scored) strikeScores.push(scored);
     }
   }
@@ -438,7 +403,7 @@ export function computeBuyRecommendations(
         pattern: ss.pattern,
         reasons: ss.reasons,
         breakdown: ss.breakdown,
-        pop: ss.pop,
+        winChance: ss.winChance,
         premium: ss.premium,
       });
     }
@@ -448,21 +413,18 @@ export function computeBuyRecommendations(
   const peScores = strikeScores.filter((s) => s.type === OptionType.PE);
 
   /**
-   * A two-leg buy pays off when spot ends outside both breakevens.
+   * A two-leg buy: either leg can carry it, so it takes the stronger leg's direction, flow and chance of profit.
    * @param {BuyStrikeScore} ce
    * @param {BuyStrikeScore} pe
    * @param {typeof OptionSetup.BuyStraddle | typeof OptionSetup.BuyStrangle} type
    * @returns {BuyRecommendation}
    */
   function twoLegs(ce, pe, type) {
-    const premium = ce.premium + pe.premium;
-    const pop = Math.min(99, Math.max(1, 100 - rangePop(pe.strike - premium, ce.strike + premium, spotPrice, expectedMove)));
     /** @type {BuyScoreBreakdown} */ const breakdown = {
-      probability: scoreProbability(pop).score,
-      trend: Math.max(ce.breakdown.trend, pe.breakdown.trend),
+      direction: Math.max(ce.breakdown.direction, pe.breakdown.direction),
+      today: Math.round((ce.breakdown.today + pe.breakdown.today) / 2),
       flow: Math.max(ce.breakdown.flow, pe.breakdown.flow),
       breakout: Math.round((ce.breakdown.breakout + pe.breakdown.breakout) / 2),
-      premiumCost: Math.round((ce.breakdown.premiumCost + pe.breakdown.premiumCost) / 2),
     };
     return {
       type,
@@ -471,8 +433,8 @@ export function computeBuyRecommendations(
       pattern: getBuyDominantPattern(breakdown),
       reasons: [...new Set([...ce.reasons, ...pe.reasons])],
       breakdown,
-      pop,
-      premium,
+      winChance: Math.max(ce.winChance, pe.winChance),
+      premium: ce.premium + pe.premium,
     };
   }
 

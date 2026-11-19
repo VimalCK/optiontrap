@@ -106,16 +106,16 @@ export const OiChartGuide: React.FC = () => {
 export const SellStrategyGuide: React.FC = () => (
   <InfoGuide
     title="How Sell Strategy works"
-    intro="Scores each OTM strike on five factors to find option-selling setups. Needs 20+ minutes of OI snapshots."
+    intro="Scores each OTM strike paying at least 30% of the ATM option's premium on five factors to find option-selling setups. Needs 20+ minutes of OI snapshots."
   >
     <GuideGrid>
       <GuideSection title="Scoring factors" subtitle="Total 0–100" wide>
         <GuideRows rows={[
-          { label: 'Pinning', tone: GuideTone.Plain, rule: '0–25', meaning: 'Spot near max pain with balanced PCR: sellers defend both sides.' },
-          { label: 'OI Wall', tone: GuideTone.Plain, rule: '0–25', meaning: 'Heavy OI wall at the strike with fresh short buildup (OI + Price). Volume-backed walls score higher.' },
-          { label: 'Velocity', tone: GuideTone.Plain, rule: '0–20', meaning: 'OI building through the day. Volume-confirmed buildup scores higher.' },
-          { label: 'PCR Extreme', tone: GuideTone.Plain, rule: '0–15', meaning: 'Sustained extreme PCR on the sell side: low for calls, high for puts.' },
-          { label: 'Theta Decay', tone: GuideTone.Plain, rule: '0–15', meaning: 'Closer to expiry, more decay working for sellers.' },
+          { label: 'Direction', tone: GuideTone.Plain, rule: '0–40', meaning: 'How the day leans (spot since the first snapshot and in the last 30 min, put vs call OI added near spot, PCR change). Half on a neutral day; more when it favours the side sold (rising for puts, falling for calls).' },
+          { label: 'Today', tone: GuideTone.Plain, rule: '0–25', meaning: "Chance of being in profit at today's close after charges for one lot, from time decay and the expected move left today." },
+          { label: 'OI Wall', tone: GuideTone.Plain, rule: '0–15', meaning: 'Strongest OI wall between spot and the strike, graded by its size and fresh short buildup (OI + Price). Thin-volume walls score lower.' },
+          { label: 'Velocity', tone: GuideTone.Plain, rule: '0–10', meaning: 'OI building through the day. Volume-confirmed buildup scores higher.' },
+          { label: 'Regime', tone: GuideTone.Plain, rule: '0–10', meaning: 'Spot pinned near max pain with balanced PCR, or a sustained extreme PCR on the sell side.' },
         ]} />
       </GuideSection>
       <GuideSection title="Recommendations" subtitle="What gets suggested">
@@ -137,16 +137,15 @@ export const SellStrategyGuide: React.FC = () => (
 export const BuyStrategyGuide: React.FC = () => (
   <InfoGuide
     title="How Buy Strategy works"
-    intro="Scores ATM and slightly OTM strikes on five factors to find directional buying setups. Needs 20+ minutes of OI snapshots."
+    intro="Scores ATM and slightly OTM strikes paying at least 30% of the ATM option's premium on four factors to find directional buying setups. Needs 20+ minutes of OI snapshots."
   >
     <GuideGrid>
       <GuideSection title="Scoring factors" subtitle="Total 0–100" wide>
         <GuideRows rows={[
-          { label: 'Breakout', tone: GuideTone.Plain, rule: '0–25', meaning: 'OI walls weakening. Breakouts on surging volume score higher; thin volume may be fake.' },
-          { label: 'Directional OI', tone: GuideTone.Plain, rule: '0–25', meaning: 'Sustained Long Buildup (OI + Price) across nearby strikes.' },
-          { label: 'Momentum', tone: GuideTone.Plain, rule: '0–20', meaning: 'Velocity accelerating on the buy side while the other side unwinds.' },
-          { label: 'PCR Shift', tone: GuideTone.Plain, rule: '0–15', meaning: 'PCR trending your way: rising for CE, falling for PE.' },
-          { label: 'Risk / Reward', tone: GuideTone.Plain, rule: '0–15', meaning: 'Distance vs expected move and premium. Near ATM with a low breakeven is best.' },
+          { label: 'Direction', tone: GuideTone.Plain, rule: '0–40', meaning: 'How the day leans (spot since the first snapshot and in the last 30 min, put vs call OI added near spot, PCR change). Half on a neutral day; more when it favours the side bought.' },
+          { label: 'Today', tone: GuideTone.Plain, rule: '0–20', meaning: "Chance of being in profit at today's close after charges for one lot. A bought option pays time decay, so this stays below 50% without a move." },
+          { label: 'OI Flow', tone: GuideTone.Plain, rule: '0–25', meaning: 'Long buildup on your side near spot, the other side retreating, and PCR moving your way.' },
+          { label: 'Breakout', tone: GuideTone.Plain, rule: '0–15', meaning: 'No wall before the breakeven, or one cracking as its writers cover. Thin-volume breakouts score lower.' },
         ]} />
       </GuideSection>
       <GuideSection title="Recommendations" subtitle="What gets suggested">

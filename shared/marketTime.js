@@ -18,7 +18,7 @@ export const MARKET_TIME_ZONE = 'Asia/Kolkata';
 
 /** Pre-open starts 09:00; the session runs 09:15–15:30 (market time). */
 const PRE_OPEN_MINUTES = 9 * 60;
-const MARKET_OPEN_MINUTES = 9 * 60 + 15;
+export const MARKET_OPEN_MINUTES = 9 * 60 + 15;
 export const MARKET_CLOSE_MINUTES = 15 * 60 + 30;
 
 

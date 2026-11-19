@@ -1,41 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { computeSellRecommendations, sellPop, trendsAgainst } from './sellSetups.js';
-import { rangePop } from './setupScoring.js';
+import { computeSellRecommendations, trendsAgainst } from './sellSetups.js';
 import { OptionType } from '../tradeEnums.js';
 import { OptionSetup } from '../analysisEnums.js';
-import { ceToken, chain, market, single, snapshotsOf } from './setups.fixture.js';
+import { TIMING, ceToken, chain, market, peToken, single, snapshotsOf } from './setups.fixture.js';
 
 function recommend({ oiData, livePrices }, snapshots, spot = 25010) {
-  return computeSellRecommendations(chain, oiData, livePrices, new Map(), new Map(), snapshots, spot, 1, 25000);
+  return computeSellRecommendations(chain, oiData, livePrices, new Map(), new Map(), snapshots, spot, TIMING, 25000);
 }
-
-describe('sellPop', () => {
-  it('is the chance spot ends inside the breakeven, the straddle being 0.8 standard deviations', () => {
-    // Straddle 200 → SD 250. Call 25200 sold at 50: breakeven 25250, one SD above 25000.
-    expect(sellPop(25200, 50, 25000, 200, OptionType.CE)).toBeCloseTo(84.13, 1);
-    expect(sellPop(24800, 50, 25000, 200, OptionType.PE)).toBeCloseTo(84.13, 1);
-  });
-
-  it('counts the premium received, so an at-the-money sale is better than a coin flip', () => {
-    expect(sellPop(25000, 100, 25000, 200, OptionType.CE)).toBeGreaterThan(60);
-  });
-
-  it('is 50 without an expected move', () => {
-    expect(sellPop(25200, 50, 25000, 0, OptionType.CE)).toBe(50);
-  });
-});
-
-describe('rangePop', () => {
-  it('needs spot to stay between both breakevens, so a strangle is less likely than either leg', () => {
-    const ce = sellPop(25200, 40, 25000, 200, OptionType.CE);
-    const pe = sellPop(24800, 40, 25000, 200, OptionType.PE);
-    const strangle = rangePop(24800 - 80, 25200 + 80, 25000, 200);
-    expect(strangle).toBeLessThan(Math.min(ce, pe));
-    const ceAtStranglePremium = sellPop(25200, 80, 25000, 200, OptionType.CE);
-    const peAtStranglePremium = sellPop(24800, 80, 25000, 200, OptionType.PE);
-    expect(strangle).toBeCloseTo(ceAtStranglePremium + peAtStranglePremium - 100, 6);
-  });
-});
 
 describe('trendsAgainst', () => {
   const snaps = (spots) => spots.map((spot) => ({ spot, data: {}, timestamp: 0, timeLabel: '' }));
@@ -66,9 +37,17 @@ describe('computeSellRecommendations', () => {
     expect(single(recs, OptionSetup.SellCe, 25050)?.breakdown.oiWall ?? 0).toBe(0);
   });
 
+  it('grades the wall by its strength instead of giving every wall full points', () => {
+    const weaker = market({ oi: { [ceToken(25100)]: 2500 } });
+    const strong = recommend(callWall, snapshotsOf([25010, 25010, 25010], callWall));
+    const weak = recommend(weaker, snapshotsOf([25010, 25010, 25010], weaker));
+    expect(single(weak, OptionSetup.SellCe, 25150)?.breakdown.oiWall)
+      .toBeLessThan(single(strong, OptionSetup.SellCe, 25150)?.breakdown.oiWall ?? 0);
+  });
+
   it('gives no points for call buyers (long buildup) adding at the wall', () => {
-    const before = market({ oi: { [ceToken(25100)]: 4000 }, prices: { [ceToken(25100)]: 10 } });
-    const now = market({ oi: { [ceToken(25100)]: 6000 }, prices: { [ceToken(25100)]: 30 } });
+    const before = market({ oi: { [ceToken(25100)]: 4000 }, prices: { [ceToken(25100)]: 50 } });
+    const now = market({ oi: { [ceToken(25100)]: 6000 }, prices: { [ceToken(25100)]: 80 } });
     const plain = recommend(callWall, snapshotsOf([25010, 25010, 25010], before));
     const longBuildup = recommend(now, snapshotsOf([25010, 25010, 25010], before));
     expect(single(longBuildup, OptionSetup.SellCe, 25150)?.breakdown.oiWall)
@@ -76,23 +55,42 @@ describe('computeSellRecommendations', () => {
   });
 
   it('adds points for sellers (short buildup) at the wall', () => {
-    const before = market({ oi: { [ceToken(25100)]: 4000 }, prices: { [ceToken(25100)]: 40 } });
+    const before = market({ oi: { [ceToken(25100)]: 4000 }, prices: { [ceToken(25100)]: 90 } });
     const plain = recommend(callWall, snapshotsOf([25010, 25010, 25010], callWall));
     const shortBuildup = recommend(callWall, snapshotsOf([25010, 25010, 25010], before));
     expect(single(shortBuildup, OptionSetup.SellCe, 25150)?.breakdown.oiWall)
-      .toBe((single(plain, OptionSetup.SellCe, 25150)?.breakdown.oiWall ?? 0) + 10);
+      .toBeGreaterThan(single(plain, OptionSetup.SellCe, 25150)?.breakdown.oiWall ?? 0);
   });
 
-  it('makes POP part of the score, and the score the sum of its parts', () => {
+  it('makes the score the sum of its parts, with a chance of profit by today\'s close', () => {
     const recs = recommend(callWall, snapshotsOf([25010, 25010, 25010], callWall));
+    expect(recs.length).toBeGreaterThan(0);
     for (const rec of recs) {
-      const { probability, oiWall, velocity, premiumValue, regime } = rec.breakdown;
-      expect(rec.score).toBe(probability + oiWall + velocity + premiumValue + regime);
+      const { direction, today, oiWall, velocity, regime } = rec.breakdown;
+      expect(rec.score).toBe(direction + today + oiWall + velocity + regime);
+      expect(rec.winChance).toBeGreaterThan(0);
+      expect(rec.winChance).toBeLessThan(100);
     }
-    const near = single(recs, OptionSetup.SellCe, 25100);
-    const far = single(recs, OptionSetup.SellCe, 25200);
-    expect(far?.pop).toBeGreaterThan(near?.pop ?? 100);
-    expect(far?.breakdown.probability).toBeGreaterThan(near?.breakdown.probability ?? 30);
+  });
+
+  it('scores no strike paying under 30% of the ATM option\'s premium', () => {
+    // ATM premium 100: a 25 call is below the 30 floor, a 35 one above it. Every other put is under it too,
+    // so the calls aren't crowded out of the top five.
+    const cheapPuts = Object.fromEntries(chain.filter((row) => row.strike !== 25000).map((row) => [peToken(row.strike), 20]));
+    const cheap = market({ prices: { ...cheapPuts, [ceToken(25150)]: 25, [ceToken(25200)]: 35 } });
+    const recs = recommend(cheap, snapshotsOf([25010, 25010, 25010], cheap));
+    expect(single(recs, OptionSetup.SellCe, 25150)).toBeUndefined();
+    expect(single(recs, OptionSetup.SellCe, 25200)).toBeDefined();
+  });
+
+  it('gives sold puts the direction points on a day rising with put writing, and sold calls fewer', () => {
+    const then = market();
+    const putsWritten = market({ oi: Object.fromEntries(chain.map((row) => [peToken(row.strike), 1500])) });
+    const recs = recommend(putsWritten, snapshotsOf([24950, 24970, 24990, 25000], then), 25010);
+    const put = single(recs, OptionSetup.SellPe, 24950);
+    const call = single(recs, OptionSetup.SellCe, 25100);
+    expect(put?.breakdown.direction).toBeGreaterThan(20);
+    expect(call?.breakdown.direction ?? 0).toBeLessThan(20);
   });
 
   it('sells no calls while spot trends up through the last 30 minutes', () => {
