@@ -1,20 +1,31 @@
 import React, { useMemo, useState, useCallback } from 'react';
 import { OptionChainRow } from '@/services/optionChain';
 import { OiSnapshot } from '@/services/oiSnapshots';
-import { computeSellRecommendations, computeBuyRecommendations, SellRecommendation, BuyRecommendation } from '@/services/sellStrategy';
+import { autoPickOf, computeSellRecommendations, computeBuyRecommendations, rankSetups, setupOverview } from '@/services/sellStrategy';
 import { calculateMaxPain, calculatePCR } from '@/services/trapAnalysis';
 import { calculateExpectedMove } from '@/services/edgeScore';
 import TrapAnalyzer from '@/components/TrapAnalyzer/TrapAnalyzer';
 import type { FlowReading } from '@/services/oiFlow';
 import '@/styles/sellstrategy.css';
-import type { TradingModeId } from '../../../shared/tradeEnums.js';
+import { Side, type TradingModeId } from '../../../shared/tradeEnums.js';
 import { StrategyMode, type StrategyModeId } from '../../../shared/appEnums.js';
 import type { ToastColorId } from '@/utils/uiEnums';
-import { BUY_BREAKDOWN_LABELS, SELL_BREAKDOWN_LABELS, effectiveMarketData } from './strategySetups';
+import { effectiveMarketData, type StrategySetup } from './strategySetups';
 import { useStrategyTrade } from './useStrategyTrade';
 import StrategySummaryBar from './StrategySummaryBar';
 import StrategyModeToggle from './StrategyModeToggle';
 import RecommendationRow from './RecommendationRow';
+import DayLeanStrip from './DayLeanStrip';
+
+/** How many setups a tab lists. */
+const SHOWN_SETUPS = 5;
+
+/** Which sides' missing setups each tab explains. */
+const GAP_SIDES: Partial<Record<StrategyModeId, string[]>> = {
+  [StrategyMode.Best]: [Side.SELL, Side.BUY],
+  [StrategyMode.Sell]: [Side.SELL],
+  [StrategyMode.Buy]: [Side.BUY],
+};
 
 interface SellStrategyProps {
   chain: OptionChainRow[];
@@ -28,6 +39,8 @@ interface SellStrategyProps {
   atmStrike?: number;
   orderMode: TradingModeId;
   expiry: string;
+  /** Whether `expiry` is the nearest one, the expiry the Option Analyzer setups automation trades. */
+  nearestExpiry: boolean;
   onToast: (text: string, color: ToastColorId) => void;
   mode: StrategyModeId;
   onModeChange: (mode: StrategyModeId) => void;
@@ -35,6 +48,12 @@ interface SellStrategyProps {
   avgVolume: number;
   /** IV-based flow per option token, shown in the trap analyzer. */
   flowByToken?: Map<number, FlowReading>;
+}
+
+/** The setups a tab lists, best first. */
+function setupsFor(mode: StrategyModeId, ranked: StrategySetup[], sell: StrategySetup[], buy: StrategySetup[]): StrategySetup[] {
+  if (mode === StrategyMode.Best) return ranked.slice(0, SHOWN_SETUPS);
+  return mode === StrategyMode.Sell ? sell : buy;
 }
 
 const SellStrategy: React.FC<SellStrategyProps> = ({
@@ -49,6 +68,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
   atmStrike,
   orderMode,
   expiry,
+  nearestExpiry,
   onToast,
   mode,
   onModeChange,
@@ -79,15 +99,24 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
     [chain, effectiveOi, effectivePrices, prevDayOi, closePrices, snapshots, effectiveSpot, expiry, atmStrike, volumeData, avgVolume],
   );
 
-  const handleTrade = useStrategyTrade({ chain, effectivePrices, orderMode, expiry, mode, onToast });
+  const overview = useMemo(
+    () => setupOverview(chain, effectiveOi, effectivePrices, snapshots, effectiveSpot, { now: new Date(), expiry }, atmStrike),
+    [chain, effectiveOi, effectivePrices, snapshots, effectiveSpot, expiry, atmStrike],
+  );
+
+  const ranked = useMemo<StrategySetup[]>(() => rankSetups<StrategySetup>(sellRecs, buyRecs), [sellRecs, buyRecs]);
+  const autoPick = nearestExpiry ? autoPickOf(ranked) : null;
+
+  const handleTrade = useStrategyTrade({ chain, effectivePrices, orderMode, expiry, onToast });
 
   const handleModeChange = useCallback((newMode: StrategyModeId) => {
     onModeChange(newMode);
     setExpandedIdx(null);
   }, [onModeChange]);
 
-  const recommendations: (SellRecommendation | BuyRecommendation)[] = mode === StrategyMode.Sell ? sellRecs : buyRecs;
-  const breakdownLabels = mode === StrategyMode.Sell ? SELL_BREAKDOWN_LABELS : BUY_BREAKDOWN_LABELS;
+  const recommendations = setupsFor(mode, ranked, sellRecs, buyRecs);
+  const gapSides = GAP_SIDES[mode] ?? [];
+  const gaps = overview.gaps.filter((gap) => gapSides.includes(gap.side));
 
   const summaryBar = <StrategySummaryBar maxPain={maxPain} pcr={pcr} spot={effectiveSpot} expectedMove={expectedMove} />;
   const toggle = <StrategyModeToggle mode={mode} onChange={handleModeChange} />;
@@ -125,10 +154,11 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
     <div className="sell-strategy">
       {summaryBar}
       {toggle}
+      {mode !== StrategyMode.Analyzer && overview.day && <DayLeanStrip day={overview.day} />}
 
       {mode === StrategyMode.Analyzer ? trapAnalyzer : recommendations.length === 0 ? (
         <div className="sell-strategy__empty">
-          No {mode.toLowerCase()} opportunities detected — all strikes scored below threshold.
+          No {mode === StrategyMode.Best ? '' : `${mode.toLowerCase()} `}opportunities detected — all strikes scored below threshold.
         </div>
       ) : (
         <div className="sell-strategy__list">
@@ -136,16 +166,22 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
             <RecommendationRow
               key={`${rec.type}-${rec.strikes.join('-')}`}
               rec={rec}
-              mode={mode}
+              spot={effectiveSpot}
               orderMode={orderMode}
               expiry={expiry}
-              breakdownLabels={breakdownLabels}
+              autoPick={rec === autoPick}
               expanded={expandedIdx === idx}
               onToggle={() => setExpandedIdx(expandedIdx === idx ? null : idx)}
               onTrade={handleTrade}
             />
           ))}
         </div>
+      )}
+
+      {gaps.length > 0 && (
+        <ul className="sell-strategy__gaps">
+          {gaps.map((gap) => <li key={gap.text} className="sell-strategy__gap">{gap.text}</li>)}
+        </ul>
       )}
     </div>
   );

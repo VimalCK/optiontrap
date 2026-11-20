@@ -53,14 +53,14 @@ describe('computeBuyRecommendations', () => {
     const { now, then } = putsMoved(0.8, 1.3); // put OI down, put prices up: short covering
     const recs = calls(recommend(now, snapshotsOf(RISING, then)));
     expect(recs.length).toBeGreaterThan(0);
-    expect(recs.some((r) => r.reasons.some((reason) => reason.includes('opposite side retreating')))).toBe(false);
+    expect(recs.some((r) => Object.values(r.reasons).flat().some((reason) => reason.includes('opposite side retreating')))).toBe(false);
   });
 
   it('counts put writers adding as puts fall (bullish) as support for a call buy', () => {
     const { now, then } = putsMoved(1.2, 0.8); // put OI up, put prices down: short buildup
     const recs = calls(recommend(now, snapshotsOf(RISING, then)));
     expect(recs.length).toBeGreaterThan(0);
-    expect(recs.every((r) => r.reasons.some((reason) => reason.includes('opposite side retreating')))).toBe(true);
+    expect(recs.every((r) => Object.values(r.reasons).flat().some((reason) => reason.includes('opposite side retreating')))).toBe(true);
   });
 
   it('gives no breakout points when the call wall in the way is only losing its buyers (long unwinding)', () => {

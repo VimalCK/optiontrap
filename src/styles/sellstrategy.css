@@ -32,6 +32,11 @@
   background: var(--sidebar-hover);
 }
 
+.sell-strategy__toggle-btn--active-best {
+  background: rgba(var(--indigo-rgb), 0.15);
+  color: var(--accent);
+}
+
 .sell-strategy__toggle-btn--active-sell {
   background: rgba(var(--loss-rgb), 0.15);
   color: var(--loss);
@@ -45,6 +50,62 @@
 .sell-strategy__toggle-btn--active-analyzer {
   background: rgba(var(--indigo-rgb), 0.15);
   color: var(--accent);
+}
+
+/* ── The day's lean ── */
+
+.sell-strategy__day {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--card-border);
+  border-left-width: 3px;
+  border-radius: 6px;
+  font-size: 12px;
+}
+
+.sell-strategy__day--bullish { border-left-color: var(--profit); }
+.sell-strategy__day--bearish { border-left-color: var(--loss); }
+.sell-strategy__day--neutral { border-left-color: var(--text-secondary); }
+
+.sell-strategy__day-lean {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.sell-strategy__day--bullish .sell-strategy__day-bias { color: var(--profit); }
+.sell-strategy__day--bearish .sell-strategy__day-bias { color: var(--loss); }
+
+.sell-strategy__day-bias {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.sell-strategy__day-detail {
+  color: var(--text-secondary);
+}
+
+/* ── Why a side has no setups ── */
+
+.sell-strategy__gaps {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sell-strategy__gap {
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 .sell-strategy__empty {
@@ -73,6 +134,21 @@
 
 .sell-strategy__row:hover {
   border-color: var(--accent);
+}
+
+.sell-strategy__row--auto {
+  border-color: rgba(var(--indigo-rgb), 0.6);
+}
+
+/* What the automation would take */
+.sell-strategy__auto {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  background: rgba(var(--indigo-rgb), 0.15);
+  color: var(--accent);
 }
 
 .sell-strategy__row-main {
@@ -227,26 +303,29 @@
   white-space: nowrap;
 }
 
-/* ── Pattern label ── */
+/* ── Breakeven ── */
 
-.sell-strategy__pattern {
+.sell-strategy__breakeven {
   font-size: 11px;
   font-weight: 500;
   color: var(--text-secondary);
   white-space: nowrap;
-  min-width: 100px;
+  min-width: 110px;
+  font-variant-numeric: tabular-nums;
 }
 
-/* ── Expand arrow ── */
+/* ── Expand button ── */
 
 .sell-strategy__expand {
-  font-size: 10px;
-  color: var(--text-secondary);
-  transition: transform 0.2s;
+  display: inline-flex;
   margin-left: auto;
 }
 
-.sell-strategy__expand--open {
+.sell-strategy__chevron {
+  transition: transform 0.2s;
+}
+
+.sell-strategy__chevron--open {
   transform: rotate(180deg);
 }
 
@@ -257,19 +336,29 @@
   border-top: 1px solid var(--card-border);
 }
 
-/* Score breakdown grid */
-.sell-strategy__breakdown {
-  display: flex;
-  gap: 12px;
-  padding: 10px 0;
-  flex-wrap: wrap;
+.sell-strategy__details-pattern {
+  padding-top: 10px;
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
-.sell-strategy__breakdown-item {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 80px;
+/* Each score part: its label, points and reasons */
+.sell-strategy__parts {
+  display: grid;
+  grid-template-columns: max-content max-content 1fr;
+  gap: 6px 12px;
+  padding-top: 8px;
+  align-items: baseline;
+}
+
+.sell-strategy__part {
+  display: contents;
+}
+
+.sell-strategy__part-reasons {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
 }
 
 .sell-strategy__breakdown-label {
@@ -293,21 +382,6 @@
 .sell-strategy__breakdown-value--zero {
   color: var(--text-secondary);
   opacity: 0.4;
-}
-
-/* ── Reasons ── */
-
-.sell-strategy__reasons {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding-top: 8px;
-}
-
-.sell-strategy__reason {
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.4;
 }
 
 /* ── Sell button ── */

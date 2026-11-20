@@ -11,9 +11,10 @@
  *   added (writers adding puts defend the downside, calls the upside);
  * - PCR now against the first snapshot's.
  */
+import { DayLean } from '../analysisEnums.js';
 import { calculatePCR } from './oiLevels.js';
-import { recentSpotMove, strikeGap } from './setupScoring.js';
-import { SESSION_MINUTES, daySpread } from './sessionOutcome.js';
+import { atmStraddle, recentSpotMove, strikeGap } from './setupScoring.js';
+import { SESSION_MINUTES, daySpread, sessionWindow } from './sessionOutcome.js';
 
 /** A day's move of this many day spreads reads fully bullish or bearish. */
 const DAY_MOVE_FULL = 0.5;
@@ -31,14 +32,20 @@ const WEIGHTS = Object.freeze({ dayMove: 0.3, flow: 0.3, pcr: 0.2, recentMove: 0
 /**
  * @typedef {import('./chain.js').ChainRow} ChainRow
  * @typedef {import('./velocityPattern.js').OiSnapshot} OiSnapshot
- * @typedef {{ bias: number, reasons: string[] }} DayBias
+ * @typedef {{ bias: number, lean: import('../analysisEnums.js').DayLeanId, reasons: string[] }} DayBias
  */
+
+/** @type {DayBias} */
+const NO_READING = Object.freeze({ bias: 0, lean: DayLean.Neutral, reasons: [] });
 
 /** @param {number} value */
 const clampUnit = (value) => Math.min(1, Math.max(-1, value));
 
 /** @param {number} value */
 const lakhs = (value) => `${value >= 0 ? '+' : '−'}${(Math.abs(value) / 1e5).toFixed(1)}L`;
+
+/** @param {number} bias */
+const signedBias = (bias) => `${bias >= 0 ? '+' : '−'}${Math.abs(bias).toFixed(2)}`;
 
 /** @param {number} value */
 const signed = (value) => `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(0)}`;
@@ -59,7 +66,7 @@ function sideTotals(rows, oiOf) {
 }
 
 /**
- * Today's lean, or 0 with no reasons before there are two snapshots and an expected move.
+ * Today's lean, or neutral with no reasons before there are two snapshots and an expected move.
  * @param {ChainRow[]} chain
  * @param {Map<number, number>} oiData
  * @param {OiSnapshot[]} snapshots  today's, oldest first, with spot
@@ -71,7 +78,7 @@ function sideTotals(rows, oiOf) {
 export function dayBias(chain, oiData, snapshots, spotPrice, expectedMove, window) {
   const first = snapshots.find((snap) => (snap.spot ?? 0) > 0);
   const spread = daySpread(expectedMove, window);
-  if (!first || snapshots.length < 2 || spread <= 0) return { bias: 0, reasons: [] };
+  if (!first || snapshots.length < 2 || spread <= 0) return NO_READING;
 
   const dayMove = spotPrice - /** @type {number} */ (first.spot);
   const recentMove = recentSpotMove(snapshots, spotPrice);
@@ -99,11 +106,12 @@ export function dayBias(chain, oiData, snapshots, spotPrice, expectedMove, windo
     + WEIGHTS.flow * readings.flow + WEIGHTS.pcr * readings.pcr,
   );
 
-  const lean = Math.abs(bias) < NEUTRAL_BIAS ? 'neutral' : bias > 0 ? 'bullish' : 'bearish';
+  const lean = Math.abs(bias) < NEUTRAL_BIAS ? DayLean.Neutral : bias > 0 ? DayLean.Bullish : DayLean.Bearish;
   return {
     bias,
+    lean,
     reasons: [
-      `Day leans ${lean} (${bias >= 0 ? '+' : '−'}${Math.abs(bias).toFixed(2)}): spot ${signed(dayMove)} since ${first.timeLabel}, ${signed(recentMove)} in 30 min`,
+      `Spot ${signed(dayMove)} since ${first.timeLabel}, ${signed(recentMove)} in 30 min`,
       `Near spot: put OI ${lakhs(added.pe)}, call OI ${lakhs(added.ce)} · PCR ${firstPcr.toFixed(2)} → ${pcr.toFixed(2)}`,
     ],
   };
@@ -119,5 +127,31 @@ export function dayBias(chain, oiData, snapshots, spotPrice, expectedMove, windo
  */
 export function scoreDirection(day, favoursRise, max) {
   const aligned = favoursRise ? day.bias : -day.bias;
-  return { score: Math.round(max * (0.5 + aligned / 2)), reasons: day.reasons };
+  return { score: Math.round(max * (0.5 + aligned / 2)), reasons: day.reasons.length > 0 ? [directionReason(day, aligned)] : [] };
+}
+
+/**
+ * @param {DayBias} day
+ * @param {number} aligned  the lean in the trade's favour
+ */
+function directionReason(day, aligned) {
+  if (day.lean === DayLean.Neutral) return `Day neutral (${signedBias(day.bias)})`;
+  return `Day leans ${day.lean.toLowerCase()} (${signedBias(day.bias)}) · ${aligned > 0 ? 'with' : 'against'} this trade`;
+}
+
+/**
+ * What every setup on a chain is scored against: the expected move (ATM
+ * straddle), the session window and the day's lean.
+ * @param {ChainRow[]} chain
+ * @param {Map<number, number>} oiData
+ * @param {Map<number, number>} livePrices
+ * @param {OiSnapshot[]} snapshots
+ * @param {number} spotPrice
+ * @param {{ now: Date, expiry: string }} timing
+ * @param {number} [atmStrike]
+ */
+export function dayContext(chain, oiData, livePrices, snapshots, spotPrice, timing, atmStrike) {
+  const expectedMove = atmStraddle(chain, atmStrike, livePrices);
+  const window = sessionWindow(timing.now, timing.expiry);
+  return { expectedMove, window, day: dayBias(chain, oiData, snapshots, spotPrice, expectedMove, window) };
 }

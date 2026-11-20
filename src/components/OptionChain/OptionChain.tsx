@@ -11,7 +11,7 @@ import { placeMarketTrade, placedOrderMessage, placedOrderRefused } from '@/serv
 import OrderModal from '@/components/OrderModal/OrderModal';
 import { useOrderChoices } from '@/components/OrderModal/useOrderChoices';
 import { computeLiveFlow } from '@/services/oiFlow';
-import { SellStrategyGuide, BuyStrategyGuide, PositionAnalyzerGuide } from './AnalyzerGuides';
+import { BestSetupsGuide, SellStrategyGuide, BuyStrategyGuide, PositionAnalyzerGuide } from './AnalyzerGuides';
 import { MessageTone, ShimmerShape, ToastColor } from '@/utils/uiEnums';
 import Message from '@/components/Message/Message';
 import ToastStack from '@/components/Toast/ToastStack';
@@ -69,7 +69,7 @@ const OptionChain: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [selectedExpiry, setSelectedExpiry] = useState('');
   const [showStrategyInfo, setShowStrategyInfo] = useState(false);
-  const [strategyMode, setStrategyMode] = useState<StrategyModeId>(StrategyMode.Sell);
+  const [strategyMode, setStrategyMode] = useState<StrategyModeId>(StrategyMode.Best);
   const [orderForm, setOrderForm] = useState<{ strike: number; optionType: OptionTypeId; price: number } | null>(null);
   const orderChoices = useOrderChoices();
   const orderMode = orderChoices.mode;
@@ -243,7 +243,8 @@ const OptionChain: React.FC = () => {
             </div>
           </div>
           {showStrategyInfo && (
-            strategyMode === StrategyMode.Sell ? <SellStrategyGuide />
+            strategyMode === StrategyMode.Best ? <BestSetupsGuide />
+              : strategyMode === StrategyMode.Sell ? <SellStrategyGuide />
               : strategyMode === StrategyMode.Buy ? <BuyStrategyGuide />
                 : <PositionAnalyzerGuide />
           )}
@@ -259,6 +260,7 @@ const OptionChain: React.FC = () => {
             atmStrike={atmStrike}
             orderMode={orderMode}
             expiry={selectedExpiry}
+            nearestExpiry={selectedExpiry === expiries[0]}
             onToast={showToast}
             mode={strategyMode}
             onModeChange={setStrategyMode}

@@ -110,12 +110,13 @@ export const SignalOutcome = Object.freeze({ Open: 'Open', Profit: 'Profit', Los
 
 /** @typedef {typeof SignalOutcome[keyof typeof SignalOutcome]} SignalOutcomeId */
 
-/** Which card the Option Analyzer's Strategy panel shows: sell setups, buy setups, or the trap analyzer. */
-export const StrategyMode = Object.freeze({ Sell: 'Sell', Buy: 'Buy', Analyzer: 'Analyzer' });
+/** Which card the Option Analyzer's Strategy panel shows: buys and sells ranked together, sell setups, buy setups, or the trap analyzer. */
+export const StrategyMode = Object.freeze({ Best: 'Best', Sell: 'Sell', Buy: 'Buy', Analyzer: 'Analyzer' });
 
 /** @typedef {typeof StrategyMode[keyof typeof StrategyMode]} StrategyModeId */
 
 export const STRATEGY_MODES = /** @type {{ id: StrategyModeId, label: string }[]} */ ([
+  { id: StrategyMode.Best, label: 'Best' },
   { id: StrategyMode.Sell, label: 'Sell' },
   { id: StrategyMode.Buy, label: 'Buy' },
   { id: StrategyMode.Analyzer, label: 'Analyzer' },

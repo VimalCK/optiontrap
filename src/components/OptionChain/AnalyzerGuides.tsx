@@ -103,6 +103,28 @@ export const OiChartGuide: React.FC = () => {
   );
 };
 
+export const BestSetupsGuide: React.FC = () => (
+  <InfoGuide
+    title="How Best works"
+    intro="Ranks the Sell and Buy tabs' setups together by score and lists the top five, so buys and sells compete on one list. Each tab's scoring is explained on its own tab. Needs 20+ minutes of OI snapshots."
+  >
+    <GuideGrid>
+      <GuideSection title="On this tab" subtitle="What each part shows" wide>
+        <GuideRows rows={[
+          { label: 'Day strip', tone: GuideTone.Plain, rule: 'Top', meaning: "Which way the day leans, from −1 (bearish) to +1 (bullish): spot since the first snapshot and in the last 30 min, put vs call OI added near spot, PCR change. Every setup's Direction part reads it." },
+          { label: 'Auto pick', tone: GuideTone.Plain, rule: 'Badge', meaning: 'The single option (CE or PE) the Option Analyzer setups automation takes for this underlying on the nearest expiry, if your General settings allow it and it reaches your Min score and Min premium. Straddles and strangles are never taken.' },
+          { label: 'BE', tone: GuideTone.Plain, rule: 'Row', meaning: 'Breakeven at expiry, and its distance from spot.' },
+          { label: 'Missing sides', tone: GuideTone.Plain, rule: 'Bottom', meaning: 'Why a side has no setups now, e.g. no call sells while spot rises fast.' },
+        ]} />
+      </GuideSection>
+      <GuideSection title="Score scale" subtitle="Badge colour">
+        <GuideRows rows={SCORE_SCALE} />
+      </GuideSection>
+    </GuideGrid>
+    {PRICE_CAVEAT}
+  </InfoGuide>
+);
+
 export const SellStrategyGuide: React.FC = () => (
   <InfoGuide
     title="How Sell Strategy works"

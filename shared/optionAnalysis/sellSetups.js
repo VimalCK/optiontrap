@@ -14,9 +14,9 @@ import { analyzeVelocityPattern } from './velocityPattern.js';
 import { OptionType, Side } from '../tradeEnums.js';
 import { LevelSide, OiSignal, OptionSetup, SetupPattern, VelocityTrend } from '../analysisEnums.js';
 import { calculateMaxPain, calculatePCR, findOiWalls, classifyOiSignal } from './oiLevels.js';
-import { MIN_PREMIUM_SHARE, TREND_AGAINST_SHARE, atmStraddle, optionChange, recentSpotMove, strikeGap, volumeMultiplier } from './setupScoring.js';
-import { dayBias, scoreDirection } from './dayBias.js';
-import { sessionOutcome, sessionWindow, winChanceShare } from './sessionOutcome.js';
+import { MIN_PREMIUM_SHARE, TREND_AGAINST_SHARE, mergePartReasons, optionChange, recentSpotMove, strikeGap, volumeMultiplier } from './setupScoring.js';
+import { dayContext, scoreDirection } from './dayBias.js';
+import { sessionOutcome, winChanceShare } from './sessionOutcome.js';
 
 /** Each part's maximum points; they add up to 100. */
 export const SELL_SCORE_MAX = Object.freeze({
@@ -68,13 +68,15 @@ const UNWIND_TRENDS = /** @type {import('../analysisEnums.js').VelocityTrendId[]
  * @property {number} regime 0–10
  */
 
+/** @typedef {Record<keyof ScoreBreakdown, string[]>} SellReasons  why each part scored what it did */
+
 /**
  * @typedef {object} SellRecommendation
  * @property {SellType} type
  * @property {number[]} strikes 1 for CE/PE, 1 for straddle, 2 for strangle [CE, PE]
  * @property {number} score 0–100
  * @property {import('../analysisEnums.js').SetupPatternId} pattern dominant pattern
- * @property {string[]} reasons
+ * @property {SellReasons} reasons
  * @property {ScoreBreakdown} breakdown
  * @property {number} winChance chance (1–99) of being in profit at today's close, after charges
  * @property {number} premium Premium amount (per unit)
@@ -218,6 +220,20 @@ export function trendsAgainst(type, snapshots, spotPrice, expectedMove) {
 }
 
 /**
+ * Why no options of one type are sold now (spot trending against them), or null when they are.
+ * @param {import('../tradeEnums.js').OptionTypeId} type
+ * @param {OiSnapshot[]} snapshots
+ * @param {number} spotPrice
+ * @param {number} expectedMove
+ * @returns {string | null}
+ */
+export function sellSideGap(type, snapshots, spotPrice, expectedMove) {
+  if (!trendsAgainst(type, snapshots, spotPrice, expectedMove)) return null;
+  const move = recentSpotMove(snapshots, spotPrice);
+  return `No ${type} sells · spot ${move > 0 ? 'up' : 'down'} ${Math.abs(move).toFixed(0)} in 30 min`;
+}
+
+/**
  * Today (0–25): the sold option's chance of being in profit at today's close,
  * after charges; a coin flip scores 0, FULL_WIN_CHANCE or more scores 25.
  * @param {import('./sessionOutcome.js').SessionOutcome | null} outcome
@@ -350,7 +366,7 @@ function scoreVelocity(token, currentOi, snapshots, oiData, livePrices, volumeDa
  * @property {import('../tradeEnums.js').OptionTypeId} type
  * @property {number} score
  * @property {import('../analysisEnums.js').SetupPatternId} pattern
- * @property {string[]} reasons
+ * @property {SellReasons} reasons
  * @property {ScoreBreakdown} breakdown
  * @property {number} winChance
  * @property {number} premium
@@ -392,10 +408,8 @@ export function computeSellRecommendations(
 ) {
   if (chain.length === 0 || spotPrice === 0 || snapshots.length < 2) return [];
 
-  const expectedMove = atmStraddle(chain, atmStrike, livePrices);
+  const { expectedMove, window, day } = dayContext(chain, oiData, livePrices, snapshots, spotPrice, timing, atmStrike);
   const minPremium = MIN_PREMIUM_SHARE * (expectedMove / 2);
-  const window = sessionWindow(timing.now, timing.expiry);
-  const day = dayBias(chain, oiData, snapshots, spotPrice, expectedMove, window);
 
   const pinningResult = scorePinning(snapshots, chain, oiData, spotPrice);
   const regimeByType = {
@@ -407,8 +421,8 @@ export function computeSellRecommendations(
     [OptionType.PE]: scoreDirection(day, true, SELL_SCORE_MAX.direction),
   };
   const sellable = {
-    [OptionType.CE]: !trendsAgainst(OptionType.CE, snapshots, spotPrice, expectedMove),
-    [OptionType.PE]: !trendsAgainst(OptionType.PE, snapshots, spotPrice, expectedMove),
+    [OptionType.CE]: sellSideGap(OptionType.CE, snapshots, spotPrice, expectedMove) === null,
+    [OptionType.PE]: sellSideGap(OptionType.PE, snapshots, spotPrice, expectedMove) === null,
   };
 
   /**
@@ -442,7 +456,7 @@ export function computeSellRecommendations(
       type,
       score: totalOf(breakdown),
       pattern: getDominantPattern(breakdown, regime.pattern),
-      reasons: [...direction.reasons, ...today.reasons, ...wall.reasons, ...velocity.reasons, ...regime.reasons],
+      reasons: { direction: direction.reasons, today: today.reasons, oiWall: wall.reasons, velocity: velocity.reasons, regime: regime.reasons },
       breakdown,
       winChance: outcome?.winChance ?? 50,
       premium,
@@ -500,7 +514,7 @@ export function computeSellRecommendations(
           strikes: [ce.strike],
           score: straddleScore,
           pattern: getDominantPattern(mergedBreakdown, regimeByType[OptionType.CE].pattern),
-          reasons: [...new Set([...ce.reasons, ...pe.reasons])],
+          reasons: mergePartReasons(ce.reasons, pe.reasons),
           breakdown: mergedBreakdown,
           winChance: Math.min(ce.winChance, pe.winChance),
           premium: ce.premium + pe.premium,
@@ -527,7 +541,7 @@ export function computeSellRecommendations(
         strikes: [topCe.strike, topPe.strike],
         score: strangleScore,
         pattern: getDominantPattern(mergedBreakdown, regimeByType[OptionType.CE].pattern),
-        reasons: [...new Set([...topCe.reasons, ...topPe.reasons])],
+        reasons: mergePartReasons(topCe.reasons, topPe.reasons),
         breakdown: mergedBreakdown,
         winChance: Math.min(topCe.winChance, topPe.winChance),
         premium: topCe.premium + topPe.premium,

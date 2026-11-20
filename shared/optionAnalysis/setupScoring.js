@@ -70,6 +70,17 @@ export function normalCdf(z) {
 export const STRADDLE_TO_SD = 0.8;
 /** How far back "recent" spot moves look: 3 snapshots, 30 minutes. */
 const RECENT_SNAPSHOTS = 3;
+/**
+ * Two legs' reasons merged part by part, without repeats.
+ * @template {Record<string, string[]>} Reasons
+ * @param {Reasons} first
+ * @param {Reasons} second
+ * @returns {Reasons}
+ */
+export const mergePartReasons = (first, second) => /** @type {Reasons} */ (Object.fromEntries(
+  Object.keys(first).map((part) => [part, [...new Set([...first[part], ...second[part]])]]),
+));
+
 /** No strike paying less than this share of the ATM option's premium (half the straddle) is scored. */
 export const MIN_PREMIUM_SHARE = 0.3;
 /** A recent move against a side larger than this share of the expected move is a trend against it: no setups on that side. */

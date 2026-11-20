@@ -26,12 +26,13 @@ import { atmStrikeOf, averageVolume, buildOptionChain, optionOf, strikeWindow, u
 import { computeSellRecommendations } from '../../../shared/optionAnalysis/sellSetups.js';
 import { computeBuyRecommendations } from '../../../shared/optionAnalysis/buySetups.js';
 import { withSpot } from '../../../shared/optionAnalysis/velocityPattern.js';
+import { SINGLE_OPTION_SETUPS, rankSetups } from '../../../shared/optionAnalysis/setupOverview.js';
 import { marketDate } from '../../../shared/marketTime.js';
 import { getLatestOiSnapshotTimestamp, getTodayOiSnapshots, getUnderlyings } from '../../db.js';
 import { findWorkingAdminSession } from '../../oiHistoryScheduler.js';
 import { getOrFetchInstruments } from '../../instruments.js';
-import { Exchange, OptionType, ParamType, Side, isOptionType } from '../../../shared/tradeEnums.js';
-import { OptionSetup, setupPatternLabel } from '../../../shared/analysisEnums.js';
+import { Exchange, ParamType, isOptionType } from '../../../shared/tradeEnums.js';
+import { setupPatternLabel } from '../../../shared/analysisEnums.js';
 
 /** How often, in market hours, it looks for a new OI snapshot. */
 const SNAPSHOT_CHECK_MS = 30 * 1000;
@@ -42,17 +43,6 @@ const SNAPSHOT_CHECK_MS = 30 * 1000;
  * @typedef {import('./index.js').StrategyInstrument} StrategyInstrument
  * @typedef {Signal & { underlying: string, score: number, premium: number }} Setup
  */
-
-/**
- * The card's single-option setups, by side and option type; straddles and strangles have none.
- * @type {Partial<Record<import('../../../shared/analysisEnums.js').OptionSetupId, { side: import('../../../shared/tradeEnums.js').SideId, optionType: import('../../../shared/tradeEnums.js').OptionTypeId }>>}
- */
-const SINGLE_OPTION_SETUPS = {
-  [OptionSetup.SellCe]: { side: Side.SELL, optionType: OptionType.CE },
-  [OptionSetup.SellPe]: { side: Side.SELL, optionType: OptionType.PE },
-  [OptionSetup.BuyCe]: { side: Side.BUY, optionType: OptionType.CE },
-  [OptionSetup.BuyPe]: { side: Side.BUY, optionType: OptionType.PE },
-};
 
 /** A snapshot's token → number record as a map. */
 const tokenMap = (/** @type {Record<string, number> | undefined} */ record) =>
@@ -79,7 +69,7 @@ export function underlyingSetups(underlying, options, { now, snapshots }) {
   const prices = tokenMap(latest.prices);
   const volumes = tokenMap(latest.volumes);
   const args = /** @type {const} */ ([rows, oi, prices, new Map(), new Map(), withSpot(snapshots, underlying.instrumentToken), spot, { now, expiry }, atm, volumes, averageVolume(rows, volumes)]);
-  const suggested = [...computeSellRecommendations(...args), ...computeBuyRecommendations(...args)];
+  const suggested = rankSetups(computeSellRecommendations(...args), computeBuyRecommendations(...args));
 
   /** @type {Setup[]} */
   const setups = [];
@@ -97,7 +87,7 @@ export function underlyingSetups(underlying, options, { now, snapshots }) {
       reason: `${setupPatternLabel(suggestion.pattern)} · score ${Math.round(suggestion.score)} · ${Math.round(suggestion.winChance)}% profit chance by close · premium ₹${suggestion.premium.toFixed(2)}`,
     });
   }
-  return setups.sort((a, b) => b.score - a.score);
+  return setups;
 }
 
 /**

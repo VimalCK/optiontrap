@@ -1,19 +1,17 @@
 import { useCallback } from 'react';
 import type { OptionChainRow, OptionInstrument } from '@/services/optionChain';
-import type { BuyRecommendation, SellRecommendation } from '@/services/sellStrategy';
+import { SINGLE_OPTION_SETUPS, setupSide } from '@/services/sellStrategy';
 import { tradeErrorMessage } from '@/services/positions';
 import { placeMarketTrade, placedOrderMessage, placedOrderRefused, type PaperOrder } from '@/services/orders';
-import { Horizon, OptionType, OrderStatus, Side, TradingMode, type OptionTypeId, type SideId, type TradingModeId } from '../../../shared/tradeEnums.js';
-import { StrategyMode, type StrategyModeId } from '../../../shared/appEnums.js';
+import { Horizon, OptionType, OrderStatus, TradingMode, type OptionTypeId, type SideId, type TradingModeId } from '../../../shared/tradeEnums.js';
 import { ToastColor, type ToastColorId } from '@/utils/uiEnums';
-import { SINGLE_OPTION_SETUPS, STRADDLE_SETUPS, STRANGLE_SETUPS } from './strategySetups';
+import { STRADDLE_SETUPS, STRANGLE_SETUPS, allReasons, type StrategySetup } from './strategySetups';
 
 interface StrategyTradeOptions {
   chain: OptionChainRow[];
   effectivePrices: Map<number, number>;
   orderMode: TradingModeId;
   expiry: string;
-  mode: StrategyModeId;
   onToast: (text: string, color: ToastColorId) => void;
 }
 
@@ -41,7 +39,7 @@ const placeLeg = (instrument: OptionInstrument, strike: number, optionType: Opti
   });
 
 /** Places a recommendation as intraday paper market orders, one per leg, and toasts the result. */
-export function useStrategyTrade({ chain, effectivePrices, orderMode, expiry, mode, onToast }: StrategyTradeOptions) {
+export function useStrategyTrade({ chain, effectivePrices, orderMode, expiry, onToast }: StrategyTradeOptions) {
   /**
    * The toast for a two-leg trade: `filledTitle` when both legs filled at once,
    * otherwise what happened to each leg (e.g. orders waiting for the open).
@@ -53,21 +51,21 @@ export function useStrategyTrade({ chain, effectivePrices, orderMode, expiry, mo
     onToast(text, refused ? ToastColor.Red : ToastColor.Green);
   }, [onToast]);
 
-  return useCallback(async (rec: SellRecommendation | BuyRecommendation) => {
+  return useCallback(async (rec: StrategySetup) => {
     if (orderMode !== TradingMode.Paper || !expiry) return;
 
-    const side = mode === StrategyMode.Sell ? Side.SELL : Side.BUY;
+    const side = setupSide(rec.type);
     const verb = side;
     const order: LegOrder = {
       side,
       expiry,
-      note: rec.reasons.slice(0, 3).join(' | '),
+      note: allReasons(rec).slice(0, 3).join(' | '),
       confidence: Math.max(0, Math.min(100, Math.round(rec.score))),
     };
 
     try {
       const type = rec.type;
-      const optionType = SINGLE_OPTION_SETUPS[type];
+      const optionType = SINGLE_OPTION_SETUPS[type]?.optionType;
       if (optionType) {
         const row = chain.find((r) => r.strike === rec.strikes[0]);
         const instrument = optionType === OptionType.CE ? row?.ce : row?.pe;
@@ -101,5 +99,5 @@ export function useStrategyTrade({ chain, effectivePrices, orderMode, expiry, mo
     } catch (err) {
       onToast(tradeErrorMessage(err), ToastColor.Red);
     }
-  }, [chain, effectivePrices, orderMode, expiry, onToast, mode, showLegs]);
+  }, [chain, effectivePrices, orderMode, expiry, onToast, showLegs]);
 }

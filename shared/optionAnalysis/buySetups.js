@@ -14,9 +14,9 @@
 import { OptionType, Side } from '../tradeEnums.js';
 import { LevelSide, OiSignal, OptionSetup, SetupPattern } from '../analysisEnums.js';
 import { calculatePCR, findOiWalls, classifyOiSignal } from './oiLevels.js';
-import { MIN_PREMIUM_SHARE, TREND_AGAINST_SHARE, atmStraddle, optionChange, recentSpotMove, strikeGap, volumeMultiplier } from './setupScoring.js';
-import { dayBias, scoreDirection } from './dayBias.js';
-import { sessionOutcome, sessionWindow, winChanceShare } from './sessionOutcome.js';
+import { MIN_PREMIUM_SHARE, TREND_AGAINST_SHARE, mergePartReasons, optionChange, recentSpotMove, strikeGap, volumeMultiplier } from './setupScoring.js';
+import { dayContext, scoreDirection } from './dayBias.js';
+import { sessionOutcome, winChanceShare } from './sessionOutcome.js';
 
 /** Each part's maximum points; they add up to 100. */
 export const BUY_SCORE_MAX = Object.freeze({
@@ -54,13 +54,15 @@ const FLOW_STRIKE_GAPS = 4;
  * @property {number} breakout 0–15
  */
 
+/** @typedef {Record<keyof BuyScoreBreakdown, string[]>} BuyReasons  why each part scored what it did */
+
 /**
  * @typedef {object} BuyRecommendation
  * @property {BuyType} type
  * @property {number[]} strikes
  * @property {number} score
  * @property {import('../analysisEnums.js').SetupPatternId} pattern
- * @property {string[]} reasons
+ * @property {BuyReasons} reasons
  * @property {BuyScoreBreakdown} breakdown
  * @property {number} winChance chance (1–99) of being in profit at today's close, after charges
  * @property {number} premium
@@ -118,19 +120,46 @@ function scoreToday(outcome) {
  * @param {Map<number, number>} livePrices
  * @param {OiSnapshot[]} snapshots
  * @param {number} spotPrice
- * @returns {PartScore & { buyersEntering: boolean }}
+ * @returns {PartScore}
  */
 function scoreFlow(type, chain, oiData, livePrices, snapshots, spotPrice) {
-  if (snapshots.length < 2) return { score: 0, reasons: [], buyersEntering: false };
-  const reach = FLOW_STRIKE_GAPS * strikeGap(chain);
-  const nearRows = chain.filter((r) => Math.abs(r.strike - spotPrice) <= reach);
-  const buyers = longBuildupShare(type, nearRows, snapshots[0], oiData, livePrices);
-  const parts = [buyers, oppositeRetreat(type, nearRows, snapshots[0], oiData, livePrices), pcrShift(type, chain, oiData, snapshots)];
+  if (snapshots.length < 2) return { score: 0, reasons: [] };
+  const nearRows = rowsNearSpot(chain, spotPrice);
+  const parts = [longBuildupShare(type, nearRows, snapshots[0], oiData, livePrices), oppositeRetreat(type, nearRows, snapshots[0], oiData, livePrices), pcrShift(type, chain, oiData, snapshots)];
   return {
     score: Math.min(BUY_SCORE_MAX.flow, parts.reduce((sum, part) => sum + part.score, 0)),
     reasons: parts.flatMap((part) => part.reasons),
-    buyersEntering: buyers.score > 0,
   };
+}
+
+/**
+ * @param {ChainRow[]} chain
+ * @param {number} spotPrice
+ */
+const rowsNearSpot = (chain, spotPrice) => chain.filter((r) => Math.abs(r.strike - spotPrice) <= FLOW_STRIKE_GAPS * strikeGap(chain));
+
+/**
+ * Why no options of one type are bought now, or null when they are: spot
+ * trending against them, or no sign of their move yet (spot not moving their
+ * way and no buyers entering them near spot).
+ * @param {import('../tradeEnums.js').OptionTypeId} type
+ * @param {ChainRow[]} chain
+ * @param {Map<number, number>} oiData
+ * @param {Map<number, number>} livePrices
+ * @param {OiSnapshot[]} snapshots  at least two
+ * @param {number} spotPrice
+ * @param {number} expectedMove
+ * @returns {string | null}
+ */
+export function buySideGap(type, chain, oiData, livePrices, snapshots, spotPrice, expectedMove) {
+  const share = moveInFavour(type, snapshots, spotPrice, expectedMove);
+  if (share < -TREND_AGAINST_SHARE) {
+    const move = recentSpotMove(snapshots, spotPrice);
+    return `No ${type} buys · spot ${move > 0 ? 'up' : 'down'} ${Math.abs(move).toFixed(0)} in 30 min`;
+  }
+  if (share >= EARLY_MOVE_SHARE) return null;
+  const buyers = longBuildupShare(type, rowsNearSpot(chain, spotPrice), snapshots[0], oiData, livePrices);
+  return buyers.score > 0 ? null : `No ${type} buys · no sign of a move: spot not moving its way and no ${type} buyers entering`;
 }
 
 /**
@@ -289,7 +318,7 @@ function getBuyDominantPattern(breakdown) {
  * @property {import('../tradeEnums.js').OptionTypeId} type
  * @property {number} score
  * @property {import('../analysisEnums.js').SetupPatternId} pattern
- * @property {string[]} reasons
+ * @property {BuyReasons} reasons
  * @property {BuyScoreBreakdown} breakdown
  * @property {number} winChance
  * @property {number} premium
@@ -329,19 +358,15 @@ export function computeBuyRecommendations(
 ) {
   if (chain.length === 0 || spotPrice === 0 || snapshots.length < 2) return [];
 
-  const expectedMove = atmStraddle(chain, atmStrike, livePrices);
+  const { expectedMove, window, day } = dayContext(chain, oiData, livePrices, snapshots, spotPrice, timing, atmStrike);
   const minPremium = MIN_PREMIUM_SHARE * (expectedMove / 2);
   const gap = strikeGap(chain);
-  const window = sessionWindow(timing.now, timing.expiry);
-  const day = dayBias(chain, oiData, snapshots, spotPrice, expectedMove, window);
 
-  const sideOf = (/** @type {import('../tradeEnums.js').OptionTypeId} */ type) => {
-    const share = moveInFavour(type, snapshots, spotPrice, expectedMove);
-    const flow = scoreFlow(type, chain, oiData, livePrices, snapshots, spotPrice);
-    const directionSeen = share >= EARLY_MOVE_SHARE || flow.buyersEntering;
-    const direction = scoreDirection(day, type === OptionType.CE, BUY_SCORE_MAX.direction);
-    return { buyable: directionSeen && share >= -TREND_AGAINST_SHARE, direction, flow };
-  };
+  const sideOf = (/** @type {import('../tradeEnums.js').OptionTypeId} */ type) => ({
+    buyable: buySideGap(type, chain, oiData, livePrices, snapshots, spotPrice, expectedMove) === null,
+    direction: scoreDirection(day, type === OptionType.CE, BUY_SCORE_MAX.direction),
+    flow: scoreFlow(type, chain, oiData, livePrices, snapshots, spotPrice),
+  });
   const sides = { [OptionType.CE]: sideOf(OptionType.CE), [OptionType.PE]: sideOf(OptionType.PE) };
 
   /**
@@ -371,7 +396,7 @@ export function computeBuyRecommendations(
       type,
       score: totalOf(breakdown),
       pattern: getBuyDominantPattern(breakdown),
-      reasons: [...direction.reasons, ...today.reasons, ...flow.reasons, ...breakout.reasons],
+      reasons: { direction: direction.reasons, today: today.reasons, flow: flow.reasons, breakout: breakout.reasons },
       breakdown,
       winChance: outcome?.winChance ?? 50,
       premium,
@@ -431,7 +456,7 @@ export function computeBuyRecommendations(
       strikes: type === OptionSetup.BuyStraddle ? [ce.strike] : [ce.strike, pe.strike],
       score: totalOf(breakdown),
       pattern: getBuyDominantPattern(breakdown),
-      reasons: [...new Set([...ce.reasons, ...pe.reasons])],
+      reasons: mergePartReasons(ce.reasons, pe.reasons),
       breakdown,
       winChance: Math.max(ce.winChance, pe.winChance),
       premium: ce.premium + pe.premium,

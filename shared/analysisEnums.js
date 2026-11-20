@@ -129,6 +129,19 @@ const OPTION_SETUPS = /** @type {{ id: OptionSetupId, label: string }[]} */ ([
 
 export const optionSetupLabel = labelFrom(OPTION_SETUPS);
 
+/** Which way today's market leans (dayBias.js). */
+export const DayLean = Object.freeze({ Bullish: 'Bullish', Bearish: 'Bearish', Neutral: 'Neutral' });
+
+/** @typedef {typeof DayLean[keyof typeof DayLean]} DayLeanId */
+
+const DAY_LEANS = /** @type {{ id: DayLeanId, label: string }[]} */ ([
+  { id: DayLean.Bullish, label: 'Bullish' },
+  { id: DayLean.Bearish, label: 'Bearish' },
+  { id: DayLean.Neutral, label: 'Neutral' },
+]);
+
+export const dayLeanLabel = labelFrom(DAY_LEANS);
+
 /** The pattern that scored most in a suggested setup; stored with each automated trade (algo_trades.setup). */
 export const SetupPattern = Object.freeze({
   Pinning: 'Pinning',
