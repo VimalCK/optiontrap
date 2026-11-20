@@ -147,7 +147,8 @@ export function analyzeTrap(
       trapScore += 1;
       reasons.push(`High PCR (${pcr.toFixed(2)}) — market skewed bullish, puts may struggle`);
     }
-    if (oiSignal.sentiment === Bias.Bullish) {
+    // The signal reads the put's own price: a falling put (short buildup, long unwinding) works against its buyer.
+    if (oiSignal.sentiment === Bias.Bearish) {
       trapScore += 2;
       reasons.push(`${oiSignal.label} at this strike — ${oiSignal.description}`);
     }
@@ -167,16 +168,17 @@ export function analyzeTrap(
       trapScore += 2;
       reasons.push(`Sold PE at ${strike} which is above max pain ${maxPain} — price may fall toward max pain`);
     }
-    if (oiSignal.signal === OiSignal.ShortBuildup) {
+    // Put buyers adding as the put rises means spot is falling toward the strike.
+    if (oiSignal.signal === OiSignal.LongBuildup) {
       trapScore += 2;
-      reasons.push(`Short Buildup at this strike — aggressive selling may push price through`);
+      reasons.push(`Long Buildup at this strike — aggressive buying may push price through`);
     }
   }
 
   if (reasons.length === 0) {
     if (positionType === OptionSetup.BuyCe && oiSignal.sentiment === Bias.Bullish) {
       reasons.push(`${oiSignal.label} — supportive for your long call position`);
-    } else if (positionType === OptionSetup.BuyPe && oiSignal.sentiment === Bias.Bearish) {
+    } else if (positionType === OptionSetup.BuyPe && oiSignal.sentiment === Bias.Bullish) {
       reasons.push(`${oiSignal.label} — supportive for your long put position`);
     } else {
       reasons.push('No significant trap signals detected');

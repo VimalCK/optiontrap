@@ -7,6 +7,7 @@ import { OptionType, SIDES, Side, type OptionTypeId, type SideId } from '../../.
 import { OiFlow, TrapVerdict, oiFlowLabel } from '../../../shared/analysisEnums.js';
 import { AnalyzerView, type AnalyzerViewId } from '@/utils/uiEnums';
 import '@/styles/trapanalyzer.css';
+import { isLabelledStrike, strikeLabelStep } from './trapMap';
 
 interface TrapAnalyzerProps {
   chain: OptionChainRow[];
@@ -48,6 +49,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
   }, [atmStrike]);
 
   const strikes = useMemo(() => chain.map((r) => r.strike), [chain]);
+  const labelStep = useMemo(() => strikeLabelStep(chain), [chain]);
 
   // Built once per tick and shared: otherwise each analyzeTrap() call would recompute max pain,
   // PCR and OI walls for every strike (O(n³) overall).
@@ -240,7 +242,7 @@ const TrapAnalyzer: React.FC<TrapAnalyzerProps> = ({
             <div className="trap-map__xaxis">
               {mapDataCe.map((item) => (
                 <span key={item.strike} className="trap-map__strike-label">
-                  {item.strike % 100 === 0 ? item.strike : ''}
+                  {isLabelledStrike(item.strike, labelStep) ? item.strike : ''}
                 </span>
               ))}
             </div>
