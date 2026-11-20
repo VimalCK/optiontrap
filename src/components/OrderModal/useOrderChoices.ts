@@ -1,6 +1,7 @@
 import { useCallback, useState } from 'react';
 import { saveTradingMode, storedTradingMode } from '@/utils/tradingModeStorage';
-import { Horizon, OrderType, type HorizonId, type OrderTypeId, type TradingModeId } from '../../../shared/tradeEnums.js';
+import type { PaperOrder } from '@/services/orders';
+import { Horizon, OrderType, TradingMode, type HorizonId, type OrderTypeId, type TradingModeId } from '../../../shared/tradeEnums.js';
 
 export interface OrderChoices {
   mode: TradingModeId;
@@ -25,4 +26,15 @@ export function useOrderChoices(): OrderChoices {
     saveTradingMode(next);
   }, []);
   return { mode, chooseMode, orderType, setOrderType, horizon, setHorizon };
+}
+
+const keepAsPlaced = () => {};
+
+/**
+ * The popup's switches while it modifies a pending paper order: only its order type changes; it stays a paper
+ * order of the trade type it was placed with (the popup shows those switches locked).
+ */
+export function usePendingOrderChoices(order: PaperOrder): OrderChoices {
+  const [orderType, setOrderType] = useState<OrderTypeId>(order.orderType);
+  return { mode: TradingMode.Paper, chooseMode: keepAsPlaced, orderType, setOrderType, horizon: order.horizon, setHorizon: keepAsPlaced };
 }

@@ -76,6 +76,10 @@ describe('the order service', () => {
         userId, side: order.side, orderType: order.orderType, limitPrice: order.limitPrice, horizon: order.horizon, ...placedBy,
       })),
       getOpenOrders: vi.fn(async () => []),
+      getUserOrder: vi.fn(async (userId, id) => stored(id, { userId })),
+      modifyOpenOrder: vi.fn(async (userId, id, order) => stored(id, {
+        userId, quantity: order.quantity, orderType: order.orderType, limitPrice: order.limitPrice, note: order.note,
+      })),
       claimOrderFill: vi.fn(async (id, fillPrice) => stored(id, { status: 'Filled', fillPrice })),
       setOrderPosition: vi.fn(async () => {}),
       cancelUnfilledOrder: vi.fn(async (id, reason) => stored(id, { status: 'Cancelled', statusReason: reason })),
@@ -124,7 +128,7 @@ describe('the order service', () => {
     it('fills a buy at or above the last price at once, at the last price, opening its position', async () => {
       lastPrice = 40;
       const result = await service.place('U1', input(), USER_KITE);
-      expect(db.claimOrderFill).toHaveBeenCalledWith('o1', 40);
+      expect(db.claimOrderFill).toHaveBeenCalledWith('o1', 40, expect.objectContaining({ quantity: 75, orderType: 'Limit', limitPrice: 50 }));
       expect(positions.openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ instrumentToken: 101, side: 'BUY', quantity: 75, entryPrice: 40 }), { now: NOON, source: 'Manual' });
       expect(db.setOrderPosition).toHaveBeenCalledWith('o1', 'pos1');
       expect(result).toEqual({ ok: true, order: expect.objectContaining({ status: 'Filled', fillPrice: 40, positionId: 'pos1' }) });
@@ -154,7 +158,7 @@ describe('the order service', () => {
       const result = await service.place('U1', positionalMarket(), USER_KITE);
       expect(db.createOrder).toHaveBeenCalledWith('U1', expect.objectContaining({ orderType: 'Market', limitPrice: null, entryPrice: 60 }), { source: 'Manual' });
       expect(quotes).toHaveBeenLastCalledWith(USER_KITE, [QUOTE_KEY]);
-      expect(db.claimOrderFill).toHaveBeenCalledWith('o1', 61.5);
+      expect(db.claimOrderFill).toHaveBeenCalledWith('o1', 61.5, expect.anything());
       expect(result).toEqual({ ok: true, order: expect.objectContaining({ status: 'Filled', fillPrice: 61.5 }) });
     });
 
@@ -193,7 +197,7 @@ describe('the order service', () => {
       await service.onTicks([{ instrumentToken: 101, lastPrice: 50.05 }]);
       expect(db.claimOrderFill).not.toHaveBeenCalled();
       await service.onTicks([{ instrumentToken: 101, lastPrice: 49.5 }]);
-      expect(db.claimOrderFill).toHaveBeenCalledWith('o1', 50);
+      expect(db.claimOrderFill).toHaveBeenCalledWith('o1', 50, expect.anything());
       expect(positions.openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ entryPrice: 50 }), { now: NOON, source: 'Manual' });
       expect(db.setOrderPosition).toHaveBeenCalledWith('o1', 'pos1');
       expect(service.waitingOrderIds()).toEqual([]);
@@ -305,6 +309,82 @@ describe('the order service', () => {
     });
   });
 
+  describe('modifying', () => {
+    const NOT_MODIFIED = { ok: false, code: 'NOT_FOUND', message: 'The order is no longer pending (it filled or was cancelled), so it was not modified' };
+
+    it('saves the new terms of an open order and watches it on them: a tick fills it only at the new limit', async () => {
+      await service.place('U1', input(), USER_KITE);
+      const result = await service.modify('U1', 'o1', { limitPrice: 55, quantity: 150 }, USER_KITE);
+      expect(db.modifyOpenOrder).toHaveBeenCalledWith('U1', 'o1', expect.objectContaining({
+        side: 'BUY', horizon: Horizon.Intraday, quantity: 150, orderType: 'Limit', limitPrice: 55,
+      }));
+      expect(result).toEqual({ ok: true, order: expect.objectContaining({ status: 'Open', quantity: 150, limitPrice: 55 }) });
+      expect(service.waitingOrderIds()).toEqual(['o1']);
+      await service.onTicks([{ instrumentToken: 101, lastPrice: 56 }]);
+      expect(db.claimOrderFill).not.toHaveBeenCalled();
+      await service.onTicks([{ instrumentToken: 101, lastPrice: 54 }]);
+      expect(db.claimOrderFill).toHaveBeenCalledWith('o1', 55, expect.objectContaining({ quantity: 150, limitPrice: 55 }));
+    });
+
+    it('fills a modified order at once when it can fill now, like a new one', async () => {
+      await service.place('U1', input(), USER_KITE);
+      const result = await service.modify('U1', 'o1', { limitPrice: 65 }, USER_KITE);
+      expect(db.claimOrderFill).toHaveBeenCalledWith('o1', 60, expect.objectContaining({ limitPrice: 65 }));
+      expect(result).toEqual({ ok: true, order: expect.objectContaining({ status: 'Filled', positionId: 'pos1' }) });
+      expect(service.waitingOrderIds()).toEqual([]);
+    });
+
+    it('turns a limit order into a market order, which fills at once in market hours', async () => {
+      await service.place('U1', input(), USER_KITE);
+      await service.modify('U1', 'o1', { orderType: 'Market' }, USER_KITE);
+      expect(db.modifyOpenOrder).toHaveBeenCalledWith('U1', 'o1', expect.objectContaining({ orderType: 'Market', limitPrice: null }));
+      expect(db.claimOrderFill).toHaveBeenCalledWith('o1', 60, expect.objectContaining({ orderType: 'Market', limitPrice: null }));
+    });
+
+    it('changes nothing once the order has filled or been cancelled', async () => {
+      db.getUserOrder.mockResolvedValueOnce(stored('o1', { status: 'Filled' }));
+      expect(await service.modify('U1', 'o1', { limitPrice: 55 }, USER_KITE)).toEqual(NOT_MODIFIED);
+      expect(db.modifyOpenOrder).not.toHaveBeenCalled();
+    });
+
+    it('changes nothing when the order fills while it is being modified', async () => {
+      await service.place('U1', input(), USER_KITE);
+      db.modifyOpenOrder.mockResolvedValueOnce(null); // filled between the read and the update
+      expect(await service.modify('U1', 'o1', { limitPrice: 55 }, USER_KITE)).toEqual(NOT_MODIFIED);
+      expect(service.waitingOrderIds()).toEqual([]);
+      expect(positions.openPosition).not.toHaveBeenCalled();
+    });
+
+    it('answers not found for an order that is not theirs', async () => {
+      db.getUserOrder.mockResolvedValueOnce(null);
+      expect(await service.modify('U2', 'o1', { limitPrice: 55 }, USER_KITE)).toEqual(NOT_MODIFIED);
+    });
+
+    it('refuses to modify an automated order: those are only cancelled', async () => {
+      db.getUserOrder.mockResolvedValueOnce(stored('o1', { source: 'Auto', autoTradeId: 't1' }));
+      expect(await service.modify('U1', 'o1', { limitPrice: 55 }, USER_KITE))
+        .toEqual({ ok: false, code: 'INVALID_TRADE', message: 'Automated orders can only be cancelled, not modified' });
+      expect(db.modifyOpenOrder).not.toHaveBeenCalled();
+    });
+
+    it('refuses invalid terms before quoting, leaving the order as it was and still watched', async () => {
+      await service.place('U1', input(), USER_KITE);
+      quotes.mockClear();
+      expect(await service.modify('U1', 'o1', { limitPrice: 0 }, USER_KITE))
+        .toEqual({ ok: false, code: 'INVALID_TRADE', message: 'Limit price must be more than 0' });
+      expect(quotes).not.toHaveBeenCalled();
+      expect(db.modifyOpenOrder).not.toHaveBeenCalled();
+      expect(service.waitingOrderIds()).toEqual(['o1']);
+    });
+
+    it('watches the old order again when saving the new terms fails', async () => {
+      await service.place('U1', input(), USER_KITE);
+      db.modifyOpenOrder.mockRejectedValueOnce(new Error('db down'));
+      await expect(service.modify('U1', 'o1', { limitPrice: 55 }, USER_KITE)).rejects.toThrow('db down');
+      expect(service.waitingOrderIds()).toEqual(['o1']);
+    });
+  });
+
   describe('automated orders', () => {
     it("places a limit order for an automated trade at the engine's last price, linked to the trade, with no quote of its own", async () => {
       const result = await service.placeAuto('U1', input({ limitPrice: 48 }), { lastPrice: 60, autoTradeId: 't1' });
@@ -317,10 +397,10 @@ describe('the order service', () => {
     it("fills an automated market order at once at the engine's quoted bid / ask, else its last price", async () => {
       const market = input({ orderType: 'Market', limitPrice: undefined });
       await service.placeAuto('U1', market, { lastPrice: 60, fillPrice: 60.5, autoTradeId: 't1' });
-      expect(db.claimOrderFill).toHaveBeenLastCalledWith('o1', 60.5);
+      expect(db.claimOrderFill).toHaveBeenLastCalledWith('o1', 60.5, expect.anything());
       expect(positions.openPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ entryPrice: 60.5 }), { now: NOON, source: 'Auto' });
       await service.placeAuto('U1', market, { lastPrice: 60, autoTradeId: 't2' });
-      expect(db.claimOrderFill).toHaveBeenLastCalledWith('o1', 60);
+      expect(db.claimOrderFill).toHaveBeenLastCalledWith('o1', 60, expect.anything());
       expect(quotes).not.toHaveBeenCalled();
     });
 
@@ -420,7 +500,7 @@ describe('the order service', () => {
       await market.open();
       await service.onTicks([{ instrumentToken: 101, lastPrice: 51.5 }]);
       expect(quotes).toHaveBeenLastCalledWith(ADMIN_KITE, [QUOTE_KEY]);
-      expect(db.claimOrderFill).toHaveBeenCalledWith('o9', 52);
+      expect(db.claimOrderFill).toHaveBeenCalledWith('o9', 52, expect.anything());
       expect(positions.openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ entryPrice: 52, horizon: Horizon.Positional }), { now: NOON, source: 'Manual' });
       expect(service.waitingOrderIds()).toEqual([]);
     });
@@ -429,7 +509,7 @@ describe('the order service', () => {
       db.getOpenOrders.mockResolvedValueOnce([stored('o9', { orderType: 'Market', limitPrice: null, horizon: Horizon.Positional })]);
       await market.open();
       await service.onTicks([{ instrumentToken: 101, lastPrice: 51.5 }]);
-      expect(db.claimOrderFill).toHaveBeenCalledWith('o9', 51.5);
+      expect(db.claimOrderFill).toHaveBeenCalledWith('o9', 51.5, expect.anything());
     });
 
     it('fills a positional limit order placed while closed at its limit once a tick in market hours reaches it', async () => {
@@ -438,7 +518,7 @@ describe('the order service', () => {
       await service.onTicks([{ instrumentToken: 101, lastPrice: 55 }]);
       expect(db.claimOrderFill).not.toHaveBeenCalled();
       await service.onTicks([{ instrumentToken: 101, lastPrice: 49 }]);
-      expect(db.claimOrderFill).toHaveBeenCalledWith('o9', 50);
+      expect(db.claimOrderFill).toHaveBeenCalledWith('o9', 50, expect.anything());
     });
 
     it('waits for an admin login before watching, keeps the order open, and watches once a check finds one', async () => {

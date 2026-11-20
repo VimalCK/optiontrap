@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { canFill, parseOrder } from './orders.js';
+import { canFill, modifiedOrderInput, parseOrder, parseOrderChanges } from './orders.js';
 import { INTRADAY_CLOSED_MESSAGE, RULE_CODES } from './tradeRules.js';
 import { Horizon } from './tradeEnums.js';
 
@@ -69,5 +69,24 @@ describe('parseOrder', () => {
     expect(parseOrder({ ...input, horizon: Horizon.Positional }, { now: CLOSED }).order).toMatchObject({ horizon: Horizon.Positional, orderType: 'Limit' });
     expect(parseOrder({ ...input, horizon: Horizon.Positional, orderType: 'Market' }, { now: SATURDAY, lastPrice: 48 }).order)
       .toMatchObject({ orderType: 'Market', limitPrice: null });
+  });
+});
+
+describe('parseOrderChanges', () => {
+  it('takes the fields a modify may change', () => {
+    expect(parseOrderChanges({ quantity: 150, limitPrice: 55, note: '' })).toEqual({ changes: { quantity: 150, limitPrice: 55, note: '' } });
+  });
+
+  it('refuses a change to the instrument, side or product, and an empty one', () => {
+    expect(parseOrderChanges({ limitPrice: 55, side: 'SELL', horizon: Horizon.Positional }).error).toMatch(/not side, horizon/);
+    expect(parseOrderChanges({})).toEqual({ error: 'Nothing to change' });
+  });
+});
+
+describe('modifiedOrderInput', () => {
+  it('puts the changes over the stored order, clearing a field set to null and keeping the rest', () => {
+    const stored = { ...input, side: 'BUY', quantity: 75, orderType: 'Limit', limitPrice: 50, targetPrice: 80, note: 'x' };
+    expect(modifiedOrderInput(stored, { limitPrice: 55, targetPrice: null, side: 'SELL' }))
+      .toEqual({ ...stored, limitPrice: 55, targetPrice: null });
   });
 });

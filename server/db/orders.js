@@ -115,13 +115,44 @@ export async function getOpenOrders(since) {
   return result.map(toOrder);
 }
 
-/** Only if still open, so an order fills once even when a cancel or another tick races it. Served by the primary key. */
-export async function claimOrderFill(id, fillPrice) {
+/** Served by the primary key. */
+export async function getUserOrder(userId, id) {
+  const row = await firstRow('SELECT * FROM orders WHERE id = $1 AND user_id = $2', [id, userId]);
+  return row ? toOrder(row) : null;
+}
+
+/**
+ * Only if still open and placed by hand, so a modify never changes an order that has filled or was cancelled.
+ * Served by the primary key.
+ * @param {string} userId
+ * @param {string} id
+ * @param {import('../shared/orders.js').Order} order  the modified order
+ */
+export async function modifyOpenOrder(userId, id, order) {
+  const row = await firstRow(
+    `UPDATE orders SET quantity = $3, order_type = $4, limit_price = $5, note = $6, target_price = $7, stop_loss_price = $8,
+       confidence = $9, updated_at = now()
+     WHERE id = $1 AND user_id = $2 AND status = ${sqlEnum(OrderStatus.Open)} AND source = ${sqlEnum(TradeSource.Manual)}
+     RETURNING *`,
+    [id, userId, order.quantity, order.orderType, order.limitPrice, ...positionMetaValues(order)],
+  );
+  return row ? toOrder(row) : null;
+}
+
+/**
+ * Only if still open on the terms it was priced on, so an order fills once even when a cancel or another tick
+ * races it, and a fill priced before a modify doesn't fill the modified order. Served by the primary key.
+ * @param {string} id
+ * @param {number} fillPrice
+ * @param {{ quantity: number, orderType: string, limitPrice: number | null }} terms  the order as it was priced
+ */
+export async function claimOrderFill(id, fillPrice, { quantity, orderType, limitPrice }) {
   const row = await firstRow(
     `UPDATE orders SET status = ${sqlEnum(OrderStatus.Filled)}, fill_price = $2, updated_at = now()
      WHERE id = $1 AND status = ${sqlEnum(OrderStatus.Open)}
+       AND quantity = $3 AND order_type = $4 AND limit_price IS NOT DISTINCT FROM $5
      RETURNING *`,
-    [id, fillPrice],
+    [id, fillPrice, quantity, orderType, limitPrice],
   );
   return row ? toOrder(row) : null;
 }

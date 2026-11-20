@@ -22,6 +22,11 @@
  * - An exit is an order too: it closes the whole position at the bid / ask at
  *   once (market hours only), and is recorded as a filled closing order. So is
  *   the engine's square-off after the close (squareOff), at the closing price.
+ * - A manual order still open can be modified (quantity, type, limit, target,
+ *   stop-loss, confidence, note): it is checked and priced like a new one,
+ *   saved only if still open, then filled at once or watched again. A fill is
+ *   claimed only on the terms it was priced on, so a tick priced before the
+ *   modify can't fill the modified order.
  * - Whenever an order fills or is cancelled (by the user, at the close, or
  *   because its trade was refused), listeners are told (onSettled): the
  *   signals service moves an automated order's trade on through its lifecycle.
@@ -42,6 +47,8 @@ import {
   claimOrderFill,
   createOrder,
   getOpenOrders,
+  getUserOrder,
+  modifyOpenOrder,
   recordClosingOrder,
   setOrderPosition,
 } from '../../db.js';
@@ -50,8 +57,8 @@ import { openSharedTickerFeed } from '../../sharedTickerFeed.js';
 import { findWorkingAdminSession } from '../../oiHistoryScheduler.js';
 import { fetchQuotes } from '../../kiteQuotes.js';
 import { isMarketOpen, lastSessionEnd } from '../../../shared/marketTime.js';
-import { normalizeTradeInput } from '../../../shared/tradeRules.js';
-import { CANCELLED_AT_CLOSE, CANCELLED_BY_USER, canFill, parseOrder } from '../../../shared/orders.js';
+import { RULE_CODES, normalizeTradeInput } from '../../../shared/tradeRules.js';
+import { CANCELLED_AT_CLOSE, CANCELLED_BY_USER, canFill, modifiedOrderInput, parseOrder } from '../../../shared/orders.js';
 import { quotedFillPrice } from '../fillPrice.js';
 import { OrderStatus, OrderType, TradeSource, oppositeSide } from '../../../shared/tradeEnums.js';
 import { createOrderWatch } from './orderWatch.js';
@@ -61,6 +68,8 @@ export const ORDERS_SERVICE_ID = 'orders';
 
 export const NO_PRICE = 'NO_PRICE';
 const NOT_OPEN_MESSAGE = 'Order not found or no longer open';
+const NOT_MODIFIED_MESSAGE = 'The order is no longer pending (it filled or was cancelled), so it was not modified';
+const AUTO_NOT_MODIFIABLE_MESSAGE = 'Automated orders can only be cancelled, not modified';
 /** How often, in market hours, the feed is started if orders wait and it isn't running (e.g. no admin login yet). */
 const FEED_CHECK_MS = 60 * 1000;
 const LOG_PREFIX = '[Orders]';
@@ -77,6 +86,7 @@ const LOG_PREFIX = '[Orders]';
  * An order service. Everything it talks to is injectable, for tests.
  * @param {{
  *   db?: { createOrder: typeof createOrder, getOpenOrders: typeof getOpenOrders,
+ *          getUserOrder: typeof getUserOrder, modifyOpenOrder: typeof modifyOpenOrder,
  *          claimOrderFill: typeof claimOrderFill, setOrderPosition: typeof setOrderPosition,
  *          cancelUnfilledOrder: typeof cancelUnfilledOrder, cancelOrder: typeof cancelOrder,
  *          cancelOpenOrdersPlacedBefore: typeof cancelOpenOrdersPlacedBefore, recordClosingOrder: typeof recordClosingOrder },
@@ -90,7 +100,7 @@ const LOG_PREFIX = '[Orders]';
  * }} [deps]
  */
 export function createOrderService({
-  db = { createOrder, getOpenOrders, claimOrderFill, setOrderPosition, cancelUnfilledOrder, cancelOrder, cancelOpenOrdersPlacedBefore, recordClosingOrder },
+  db = { createOrder, getOpenOrders, getUserOrder, modifyOpenOrder, claimOrderFill, setOrderPosition, cancelUnfilledOrder, cancelOrder, cancelOpenOrdersPlacedBefore, recordClosingOrder },
   positions = { openPosition, closablePosition, closePosition, squareOffable },
   quotes = fetchQuotes,
   findKiteSession = findWorkingAdminSession,
@@ -121,8 +131,8 @@ export function createOrderService({
    * @returns {Promise<Order>}
    */
   async function fill(order, price) {
-    const claimed = await db.claimOrderFill(order.id, price);
-    if (!claimed) return order; // cancelled or filled meanwhile
+    const claimed = await db.claimOrderFill(order.id, price, order);
+    if (!claimed) return order; // cancelled, filled or modified meanwhile
     const opened = await positions.openPosition(order.userId, { ...order, entryPrice: price }, { now: clock(), source: order.source });
     if (!opened.ok) {
       const cancelled = (await db.cancelUnfilledOrder(order.id, opened.message))
@@ -218,12 +228,45 @@ export function createOrderService({
    * @returns {Promise<OrderResult>}
    */
   async function enter(userId, parsed, lastPrice, placedBy, source) {
-    const order = await db.createOrder(userId, parsed, placedBy);
+    return fillOrWatch(await db.createOrder(userId, parsed, placedBy), lastPrice, source);
+  }
+
+  /**
+   * Fill a saved open order at once when it can fill now; otherwise watch it.
+   * @param {Order} order
+   * @param {number} lastPrice
+   * @param {PriceSource} source
+   * @returns {Promise<OrderResult>}
+   */
+  async function fillOrWatch(order, lastPrice, source) {
     const price = await placedFillPrice(order, lastPrice, source);
     if (price !== null) return { ok: true, order: await fill(order, price) };
     watch.add(order);
     await watch.ensureFeed();
     return { ok: true, order };
+  }
+
+  /**
+   * Check a manual order and quote its last price with the user's session.
+   * A market order's checks need the last price; anything else is checked
+   * before quoting, so a failing quote can't hide why it was refused.
+   * @param {Record<string, unknown>} input
+   * @param {KiteSession} kite
+   * @returns {Promise<{ ok: true, order: import('../../../shared/orders.js').Order, lastPrice: number } | { ok: false, code: string, message: string }>}
+   */
+  async function checkAndQuote(input, kite) {
+    const checkedFirst = input.orderType === OrderType.Market ? null : parseOrder(input, { now: clock() });
+    if (checkedFirst?.error !== undefined) return { ok: false, code: checkedFirst.code, message: checkedFirst.error };
+    const { exchange, tradingsymbol } = normalizeTradeInput(input);
+    let lastPrice;
+    if (tradingsymbol) {
+      const key = `${exchange}:${tradingsymbol}`;
+      lastPrice = (await quotes(kite, [key]))[key]?.last_price;
+      if (!lastPrice) return { ok: false, code: NO_PRICE, message: `No last price for ${tradingsymbol}` };
+    }
+    const parsed = checkedFirst ?? parseOrder(input, { now: clock(), lastPrice });
+    if (parsed.error !== undefined) return { ok: false, code: parsed.code, message: parsed.error };
+    return { ok: true, order: parsed.order, lastPrice: /** @type {number} */ (lastPrice) };
   }
 
   return {
@@ -254,20 +297,40 @@ export function createOrderService({
      * @returns {Promise<OrderResult>}
      */
     async place(userId, input, kite) {
-      // A market order's checks need the last price; anything else is checked
-      // before quoting, so a failing quote can't hide why it was refused.
-      const checkedFirst = input.orderType === OrderType.Market ? null : parseOrder(input, { now: clock() });
-      if (checkedFirst?.error !== undefined) return { ok: false, code: checkedFirst.code, message: checkedFirst.error };
-      const { exchange, tradingsymbol } = normalizeTradeInput(input);
-      let lastPrice;
-      if (tradingsymbol) {
-        const key = `${exchange}:${tradingsymbol}`;
-        lastPrice = (await quotes(kite, [key]))[key]?.last_price;
-        if (!lastPrice) return { ok: false, code: NO_PRICE, message: `No last price for ${tradingsymbol}` };
+      const checked = await checkAndQuote(input, kite);
+      if (!checked.ok) return checked;
+      return enter(userId, checked.order, checked.lastPrice, { source: TradeSource.Manual }, { kite });
+    },
+
+    /**
+     * Modify one of the user's pending manual orders: checked and priced like a
+     * new order, saved only while it is still open (one that filled or was
+     * cancelled meanwhile is left as it is), then filled at once when it can
+     * fill now, otherwise watched on its new terms.
+     * @param {string} userId
+     * @param {string} id
+     * @param {Record<string, unknown>} changes  fields from MODIFIABLE_ORDER_FIELDS (shared/orders.js)
+     * @param {KiteSession} kite  the user's own session, for the quotes
+     * @returns {Promise<OrderResult>}
+     */
+    async modify(userId, id, changes, kite) {
+      const current = await db.getUserOrder(userId, id);
+      if (!current || current.status !== OrderStatus.Open) return { ok: false, code: NOT_FOUND, message: NOT_MODIFIED_MESSAGE };
+      if (current.source !== TradeSource.Manual) return { ok: false, code: RULE_CODES.INVALID_TRADE, message: AUTO_NOT_MODIFIABLE_MESSAGE };
+      const checked = await checkAndQuote(modifiedOrderInput(current, changes), kite);
+      if (!checked.ok) return checked;
+      // Off the watch first, so no tick fills it on its old terms while it changes.
+      const wasWatched = watch.remove(current);
+      let modified;
+      try {
+        modified = await db.modifyOpenOrder(userId, id, checked.order);
+      } catch (err) {
+        if (wasWatched) watch.add(current);
+        throw err;
       }
-      const parsed = checkedFirst ?? parseOrder(input, { now: clock(), lastPrice });
-      if (parsed.error !== undefined) return { ok: false, code: parsed.code, message: parsed.error };
-      return enter(userId, parsed.order, /** @type {number} */ (lastPrice), { source: TradeSource.Manual }, { kite });
+      if (!modified) return { ok: false, code: NOT_FOUND, message: NOT_MODIFIED_MESSAGE };
+      log(`${modified.side} ${modified.quantity} ${modified.tradingsymbol} [${userId}] modified`);
+      return fillOrWatch(modified, checked.lastPrice, { kite });
     },
 
     /**

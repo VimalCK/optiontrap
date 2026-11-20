@@ -54,6 +54,14 @@
   transition: all 0.1s;
 }
 
+.order-modal__mode-btn:disabled {
+  cursor: not-allowed;
+}
+
+.order-modal__mode-btn:disabled:not(.active) {
+  opacity: 0.55;
+}
+
 .order-modal__mode-btn:not(:last-child) {
   border-right: 1px solid var(--card-border);
 }

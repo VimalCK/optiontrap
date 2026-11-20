@@ -219,6 +219,28 @@
   background: rgba(var(--loss-rgb), 0.1);
 }
 
+.positions-table__actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.positions-table__exit--modify:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--sidebar-active);
+}
+
+.positions-table__exit:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.positions-table__exit:disabled:hover {
+  color: var(--text-secondary);
+  border-color: var(--card-border);
+  background: none;
+}
+
 .positions-table__row--exited {
   opacity: 0.5;
 }

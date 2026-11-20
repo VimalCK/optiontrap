@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
-import PaperOrders, { PaperOrdersTable, orderStatus, settledSince, pendingCount } from './PaperOrders';
+import PaperOrders, { PaperOrdersTable, modifyBlockedReason, orderStatus, settledSince, pendingCount } from './PaperOrders';
 import type { PaperOrder } from '@/services/orders';
 import { Horizon } from '../../../shared/tradeEnums.js';
 import { Tone } from '@/utils/uiEnums';
@@ -8,7 +8,7 @@ import { Tone } from '@/utils/uiEnums';
 const order = (id: string, extra: Partial<PaperOrder> = {}): PaperOrder => ({
   id, tradingsymbol: 'NIFTY26N1024000CE', instrumentToken: 101, instrumentType: 'CE', exchange: 'NFO', strike: 24000,
   optionType: 'CE', expiry: '2026-11-10', side: 'BUY', quantity: 75, orderType: 'Limit', limitPrice: 50, status: 'Open', statusReason: null,
-  fillPrice: null, positionId: null, closesPosition: false, source: 'Manual', horizon: Horizon.Intraday, autoTradeId: null, createdAt: '2026-11-05T06:30:00.000Z', updatedAt: '2026-11-05T06:30:00.000Z', ...extra, // Thu 12:00 IST
+  fillPrice: null, positionId: null, closesPosition: false, note: '', targetPrice: null, stopLossPrice: null, confidence: null, source: 'Manual', horizon: Horizon.Intraday, autoTradeId: null, createdAt: '2026-11-05T06:30:00.000Z', updatedAt: '2026-11-05T06:30:00.000Z', ...extra, // Thu 12:00 IST
 });
 
 describe('orderStatus', () => {
@@ -33,7 +33,7 @@ describe('settledSince', () => {
 
 describe('PaperOrdersTable', () => {
   const html = renderToStaticMarkup(
-    <PaperOrdersTable orders={[order('a'), order('b', { status: 'Filled', fillPrice: 50, side: 'SELL' })]} prices={new Map()} onCancel={() => {}} />,
+    <PaperOrdersTable orders={[order('a'), order('b', { status: 'Filled', fillPrice: 50, side: 'SELL' })]} prices={new Map()} onCancel={() => {}} onModify={() => {}} />,
   );
 
   it('lists each order with its instrument, IST time, side, quantity, limit and status', () => {
@@ -45,7 +45,7 @@ describe('PaperOrdersTable', () => {
   });
 
   it('says who placed each order, Auto or Manual, like its position', () => {
-    const auto = renderToStaticMarkup(<PaperOrdersTable orders={[order('c', { source: 'Auto', autoTradeId: 't1' })]} prices={new Map()} onCancel={() => {}} />);
+    const auto = renderToStaticMarkup(<PaperOrdersTable orders={[order('c', { source: 'Auto', autoTradeId: 't1' })]} prices={new Map()} onCancel={() => {}} onModify={() => {}} />);
     expect(auto).toContain('>Auto</span>');
     expect(auto).not.toContain('>Manual</span>');
     expect(html.match(/>Manual<\/span>/g)).toHaveLength(2);
@@ -54,7 +54,7 @@ describe('PaperOrdersTable', () => {
 
   it('shows each order\'s last price, or a dash until it is priced', () => {
     const priced = renderToStaticMarkup(
-      <PaperOrdersTable orders={[order('p'), order('q', { instrumentToken: 202 })]} prices={new Map([[101, 48.35]])} onCancel={() => {}} />,
+      <PaperOrdersTable orders={[order('p'), order('q', { instrumentToken: 202 })]} prices={new Map([[101, 48.35]])} onCancel={() => {}} onModify={() => {}} />,
     );
     expect(priced).toContain('<th class="table-num">LTP</th>');
     expect(priced).toContain('<td class="table-num">48.35</td>');
@@ -62,7 +62,7 @@ describe('PaperOrdersTable', () => {
   });
 
   it('shows Market in the Limit column for a market order', () => {
-    const market = renderToStaticMarkup(<PaperOrdersTable orders={[order('m', { orderType: 'Market', limitPrice: null, horizon: Horizon.Positional })]} prices={new Map()} onCancel={() => {}} />);
+    const market = renderToStaticMarkup(<PaperOrdersTable orders={[order('m', { orderType: 'Market', limitPrice: null, horizon: Horizon.Positional })]} prices={new Map()} onCancel={() => {}} onModify={() => {}} />);
     expect(market).toContain('<td class="table-num">Market</td>');
   });
 
@@ -70,6 +70,23 @@ describe('PaperOrdersTable', () => {
     expect(html.match(/title="Cancel order"/g)).toHaveLength(1);
     const button = html.match(/<button[^>]*title="Cancel order"[^>]*>/)?.[0] ?? '';
     expect(button).toContain('type="button"');
+  });
+
+  it('offers Modify only on open orders, disabled with the reason on an automated one', () => {
+    expect(html.match(/title="Modify order"/g)).toHaveLength(1);
+    expect(html.match(/<button[^>]*title="Modify order"[^>]*>/)?.[0]).not.toContain('disabled');
+    const auto = renderToStaticMarkup(<PaperOrdersTable orders={[order('c', { source: 'Auto', autoTradeId: 't1' })]} prices={new Map()} onCancel={() => {}} onModify={() => {}} />);
+    const button = auto.match(/<button[^>]*>MODIFY<\/button>/)?.[0] ?? '';
+    expect(button).toContain('disabled');
+    expect(button).toContain('title="Automated orders can only be cancelled"');
+  });
+});
+
+describe('modifyBlockedReason', () => {
+  it('lets a manual option order be modified, not an automated one or one for a stock or future', () => {
+    expect(modifyBlockedReason(order('a'))).toBeNull();
+    expect(modifyBlockedReason(order('a', { source: 'Auto', autoTradeId: 't1' }))).toBe('Automated orders can only be cancelled');
+    expect(modifyBlockedReason(order('a', { instrumentType: 'FUT', strike: null, optionType: null }))).toBe('Only option orders can be modified');
   });
 });
 
@@ -84,14 +101,14 @@ describe('PaperOrders', () => {
   const closed = [order('f', { status: 'Filled', fillPrice: 50 }), order('c', { status: 'Cancelled', statusReason: 'Cancelled at market close' })];
 
   it('lists only the orders still waiting to fill, not those filled or cancelled today', () => {
-    const html = renderToStaticMarkup(<PaperOrders orders={[order('a'), ...closed]} error={null} prices={new Map()} onCancel={() => {}} />);
+    const html = renderToStaticMarkup(<PaperOrders orders={[order('a'), ...closed]} error={null} prices={new Map()} onCancel={() => {}} onModified={() => {}} />);
     expect(html.match(/title="Cancel order"/g)).toHaveLength(1);
     expect(html).not.toContain('Filled @');
     expect(html).not.toContain('Cancelled at market close');
   });
 
   it('shows the empty state when nothing is pending, and the error when loading failed', () => {
-    const html = renderToStaticMarkup(<PaperOrders orders={closed} error="Failed to load orders" prices={new Map()} onCancel={() => {}} />);
+    const html = renderToStaticMarkup(<PaperOrders orders={closed} error="Failed to load orders" prices={new Map()} onCancel={() => {}} onModified={() => {}} />);
     expect(html).toContain('No pending orders');
     expect(html).toContain('Failed to load orders');
     expect(html).not.toContain('positions-table');

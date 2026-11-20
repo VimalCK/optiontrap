@@ -32,9 +32,20 @@ export interface PaperOrder extends Pick<Position, 'tradingsymbol' | 'instrument
   positionId: string | null;
   /** Whether it exits a position (a closing order) rather than opening or adding to one. */
   closesPosition: boolean;
+  note: string;
+  targetPrice: number | null;
+  stopLossPrice: number | null;
+  confidence: number | null;
   createdAt: string; // ISO timestamp
   updatedAt: string;
 }
+
+/**
+ * What a pending order's modify changes (shared/orders.js MODIFIABLE_ORDER_FIELDS): like Zerodha's, never the
+ * instrument, side or trade type. A limit order has its limit price.
+ */
+export type OrderChanges = Pick<NewOrder, 'quantity' | 'note' | 'targetPrice' | 'stopLossPrice' | 'confidence'>
+  & ({ orderType: typeof OrderType.Limit; limitPrice: number } | { orderType: typeof OrderType.Market });
 
 /** A trade to place as an order: no entry price, as the server prices it (from a quote, or the limit). */
 export type OrderTrade = Omit<NewPosition, 'entryPrice' | 'mode'>;
@@ -70,6 +81,20 @@ export function fetchOpenOrders(signal?: AbortSignal): Promise<PaperOrder[]> {
 
 export function cancelOrder(id: string): Promise<PaperOrder> {
   return apiClient.patch(`/api/orders/${id}`, { status: OrderStatus.Cancelled });
+}
+
+/**
+ * Modify a pending manual order. The server saves it only while it is still open: one that filled or was
+ * cancelled meanwhile is refused (404) and left as it is. A modified order that can fill now fills at once.
+ */
+export function modifyOrder(id: string, changes: OrderChanges): Promise<PaperOrder> {
+  return apiClient.patch(`/api/orders/${id}`, changes);
+}
+
+/** What to tell the user about an order just modified: still waiting on its new terms, or filled / refused at once. */
+export function modifiedOrderMessage(order: PaperOrder, label: string): string {
+  if (order.status !== OrderStatus.Open) return placedOrderMessage(order, label);
+  return `${label} modified · ${order.limitPrice === null ? 'market order' : `limit @ ${order.limitPrice.toFixed(2)}`}`;
 }
 
 /** Whether paper trading refused an order just placed (it was cancelled), for a red toast. */

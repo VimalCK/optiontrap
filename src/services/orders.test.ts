@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { cancelOrder, exitPosition, fetchOpenOrders, placeMarketTrade, placeOrder, placedOrderMessage, placedOrderRefused, type PaperOrder } from './orders';
+import { cancelOrder, exitPosition, fetchOpenOrders, modifiedOrderMessage, modifyOrder, placeMarketTrade, placeOrder, placedOrderMessage, placedOrderRefused, type PaperOrder } from './orders';
 import { ApiError } from './apiClient';
 import { Horizon, type HorizonId } from '../../shared/tradeEnums.js';
 
@@ -20,7 +20,7 @@ afterEach(() => {
 const order = (extra: Partial<PaperOrder> = {}): PaperOrder => ({
   id: 'o1', tradingsymbol: 'NIFTY26N1024000CE', instrumentToken: 101, instrumentType: 'CE', exchange: 'NFO', strike: 24000,
   optionType: 'CE', expiry: '2026-11-10', side: 'BUY', quantity: 75, orderType: 'Limit', limitPrice: 50, status: 'Open', statusReason: null,
-  fillPrice: null, positionId: null, closesPosition: false, source: 'Manual', horizon: Horizon.Intraday, autoTradeId: null, createdAt: '2026-11-05T06:30:00.000Z', updatedAt: '2026-11-05T06:30:00.000Z', ...extra,
+  fillPrice: null, positionId: null, closesPosition: false, note: '', targetPrice: null, stopLossPrice: null, confidence: null, source: 'Manual', horizon: Horizon.Intraday, autoTradeId: null, createdAt: '2026-11-05T06:30:00.000Z', updatedAt: '2026-11-05T06:30:00.000Z', ...extra,
 });
 
 describe('placeOrder', () => {
@@ -104,5 +104,33 @@ describe('exitPosition', () => {
     expect(init?.method).toBe('POST');
     expect(JSON.parse(String(init?.body))).toEqual({ positionId: 'p1', exitPrice: 120 });
     expect(exit.closesPosition).toBe(true);
+  });
+});
+
+describe('modifyOrder', () => {
+  it('patches the order with its new terms and returns it', async () => {
+    const fetchMock = serverReplies(200, { status: 'ok', data: order({ limitPrice: 55, quantity: 150 }) });
+    const changes = { quantity: 150, orderType: 'Limit', limitPrice: 55, note: '', targetPrice: null, stopLossPrice: null, confidence: 70 } as const;
+    const modified = await modifyOrder('o1', changes);
+    expect(modified).toMatchObject({ limitPrice: 55, quantity: 150 });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/orders/o1');
+    expect(init?.method).toBe('PATCH');
+    expect(JSON.parse(String(init?.body))).toEqual(changes);
+  });
+
+  it("throws the server's message when the order is no longer pending", async () => {
+    const message = 'The order is no longer pending (it filled or was cancelled), so it was not modified';
+    serverReplies(404, { status: 'error', message, code: 'NOT_FOUND' });
+    await expect(modifyOrder('o1', { quantity: 75, orderType: 'Market', note: '', targetPrice: null, stopLossPrice: null, confidence: 70 }))
+      .rejects.toThrow(message);
+  });
+});
+
+describe('modifiedOrderMessage', () => {
+  it('says the order was modified while it still waits, or how it settled at once', () => {
+    expect(modifiedOrderMessage(order({ limitPrice: 55 }), 'BUY 24000CE')).toBe('BUY 24000CE modified · limit @ 55.00');
+    expect(modifiedOrderMessage(order({ orderType: 'Market', limitPrice: null }), 'BUY 24000CE')).toBe('BUY 24000CE modified · market order');
+    expect(modifiedOrderMessage(order({ status: 'Filled', fillPrice: 54.5 }), 'BUY 24000CE')).toBe('BUY 24000CE filled @ 54.50');
   });
 });

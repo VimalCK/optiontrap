@@ -20,4 +20,15 @@ describe('OrderModalSwitch', () => {
     expect(limit).toContain('order-modal__mode-btn active');
     expect(limit).toContain('type="button"');
   });
+
+  it('locks every button when disabled, still showing the chosen one', () => {
+    const locked = renderToStaticMarkup(
+      <OrderModalSwitch label="Side" value="SELL" onChange={() => {}} disabled
+        options={[{ value: 'BUY', label: 'Buy' }, { value: 'SELL', label: 'Sell' }]} />,
+    );
+    const buttons = locked.match(/<button[^>]*>/g) ?? [];
+    expect(buttons.every((button) => button.includes('disabled'))).toBe(true);
+    expect(buttons[1]).toContain('aria-pressed="true"');
+    expect(html).not.toContain('disabled');
+  });
 });

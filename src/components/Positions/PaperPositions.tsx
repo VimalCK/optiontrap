@@ -82,7 +82,7 @@ const PaperPositions: React.FC = () => {
           ariaLabel="Paper positions and orders"
         />
       </div>
-      {tab === PaperTab.Orders && <PaperOrders orders={orderBook.orders} prices={livePrices} error={orderBook.error} onCancel={orderBook.cancel} />}
+      {tab === PaperTab.Orders && <PaperOrders orders={orderBook.orders} prices={livePrices} error={orderBook.error} onCancel={orderBook.cancel} onModified={orderBook.reload} />}
       {tab === PaperTab.Risk && <RiskTable groups={riskGroups} spotPrices={spotPrices} />}
       {tab === PaperTab.Positions && positionsView}
     </section>

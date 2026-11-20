@@ -95,7 +95,9 @@ export {
   getOpenOrders,
   getOrders,
   getUserOpenOrders,
+  getUserOrder,
   getWaitingAutoOrders,
+  modifyOpenOrder,
   recordClosingOrder,
   setOrderPosition,
 } from './db/orders.js';

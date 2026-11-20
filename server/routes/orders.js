@@ -5,6 +5,7 @@ import { getOrders, getUserOpenOrders } from '../db.js';
 import { parseRange } from '../positionsQuery.js';
 import { tradeEngine } from '../tradeEngine/index.js';
 import { OrderStatus } from '../../shared/tradeEnums.js';
+import { parseOrderChanges } from '../../shared/orders.js';
 import { sendError, sendOk } from '../replies.js';
 import { sendResult } from './sendResult.js';
 
@@ -39,9 +40,20 @@ orderRoutes.post('/api/orders', subscriber, withFailureMessage('Failed to place 
   sendResult(res, result, { data: result.order, created: true });
 }));
 
-// Cancel an open order: the only change an order takes, { status: 'Cancelled' }.
-orderRoutes.patch('/api/orders/:id', subscriber, async (req, res) => {
-  if (req.body?.status !== OrderStatus.Cancelled) return sendError(res, 400, `status must be '${OrderStatus.Cancelled}'`);
-  const result = await tradeEngine.services.orders.cancel(req.session.kiteSession.userId, req.params.id);
+// Change an open order: { status: 'Cancelled' } cancels it; otherwise the body modifies a manual
+// order's terms (shared/orders.js MODIFIABLE_ORDER_FIELDS), only while it is still open (404 once
+// it has filled or was cancelled). A modified order fills at once when it can fill now.
+orderRoutes.patch('/api/orders/:id', subscriber, withFailureMessage('Failed to modify the order', async (req, res) => {
+  const { userId, apiKey, accessToken } = req.session.kiteSession;
+  const body = req.body || {};
+  const { orders } = tradeEngine.services;
+  if (body.status !== undefined) {
+    if (body.status !== OrderStatus.Cancelled) return sendError(res, 400, `status must be '${OrderStatus.Cancelled}'`);
+    const result = await orders.cancel(userId, req.params.id);
+    return sendResult(res, result, { data: result.order });
+  }
+  const parsed = parseOrderChanges(body);
+  if (parsed.error !== undefined) return sendError(res, 400, parsed.error);
+  const result = await orders.modify(userId, req.params.id, parsed.changes, { apiKey, accessToken });
   sendResult(res, result, { data: result.order });
-});
+}));

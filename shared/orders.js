@@ -53,3 +53,34 @@ export function parseOrder(input, { now = new Date(), lastPrice } = {}) {
   if (!result.ok) return { error: result.violations[0].message, code: result.violations[0].code };
   return { order: { ...trade, orderType, limitPrice } };
 }
+
+/**
+ * What a pending order's modify may change. Like Zerodha's, the instrument, side and product (intraday /
+ * positional) stay as placed.
+ */
+export const MODIFIABLE_ORDER_FIELDS = Object.freeze(['quantity', 'orderType', 'limitPrice', 'targetPrice', 'stopLossPrice', 'confidence', 'note']);
+
+/**
+ * The changes asked for in a modify request; a field that can't change is refused rather than ignored.
+ * @param {Record<string, unknown>} body
+ * @returns {{ changes: Record<string, unknown>, error?: undefined } | { error: string, changes?: undefined }}
+ */
+export function parseOrderChanges(body) {
+  const fixed = Object.keys(body).filter((field) => !MODIFIABLE_ORDER_FIELDS.includes(field));
+  if (fixed.length > 0) return { error: `Only ${MODIFIABLE_ORDER_FIELDS.join(', ')} can be changed (not ${fixed.join(', ')})` };
+  if (Object.keys(body).length === 0) return { error: 'Nothing to change' };
+  return { changes: body };
+}
+
+/**
+ * The order as modified: its stored terms with the changes over them, to parse again like a new order.
+ * @param {Record<string, unknown>} order
+ * @param {Record<string, unknown>} changes
+ */
+export function modifiedOrderInput(order, changes) {
+  const modified = { ...order };
+  for (const field of MODIFIABLE_ORDER_FIELDS) {
+    if (changes[field] !== undefined) modified[field] = changes[field];
+  }
+  return modified;
+}
