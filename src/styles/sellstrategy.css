@@ -4,108 +4,171 @@
   margin-top: 16px;
 }
 
-/* ── Sell / Buy toggle ── */
+/* ── Context: market numbers and the day's lean ── */
 
-.sell-strategy__toggle {
+.sell-strategy__context {
   display: flex;
-  gap: 0;
-  margin-bottom: 12px;
-  border: 1px solid var(--card-border);
-  border-radius: 6px;
-  overflow: hidden;
-  width: fit-content;
-}
-
-.sell-strategy__toggle-btn {
-  padding: 5px 16px;
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--text-secondary);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-
-.sell-strategy__toggle-btn:hover {
-  color: var(--text-primary);
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 12px 16px;
   background: var(--sidebar-hover);
+  border-radius: 8px;
 }
 
-.sell-strategy__toggle-btn--active-best {
-  background: rgba(var(--indigo-rgb), 0.15);
-  color: var(--accent);
-}
-
-.sell-strategy__toggle-btn--active-sell {
-  background: rgba(var(--loss-rgb), 0.15);
-  color: var(--loss);
-}
-
-.sell-strategy__toggle-btn--active-buy {
-  background: rgba(var(--profit-light-rgb), 0.15);
-  color: var(--profit-light);
-}
-
-.sell-strategy__toggle-btn--active-analyzer {
-  background: rgba(var(--indigo-rgb), 0.15);
-  color: var(--accent);
-}
-
-/* ── The day's lean ── */
-
-.sell-strategy__day {
+.sell-strategy__metrics {
   display: flex;
-  align-items: baseline;
   flex-wrap: wrap;
-  gap: 4px 12px;
-  margin-bottom: 12px;
-  padding: 8px 12px;
-  border: 1px solid var(--card-border);
-  border-left-width: 3px;
-  border-radius: 6px;
-  font-size: 12px;
+  gap: 8px 16px;
 }
 
-.sell-strategy__day--bullish { border-left-color: var(--profit); }
-.sell-strategy__day--bearish { border-left-color: var(--loss); }
-.sell-strategy__day--neutral { border-left-color: var(--text-secondary); }
+.sell-strategy__metric {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 80px; /* fixed width so changing values don't shift siblings */
+}
 
-.sell-strategy__day-lean {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
+.sell-strategy__metric-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sell-strategy__metric-value {
+  font-size: 14px;
   font-weight: 700;
   color: var(--text-primary);
-  white-space: nowrap;
-}
-
-.sell-strategy__day--bullish .sell-strategy__day-bias { color: var(--profit); }
-.sell-strategy__day--bearish .sell-strategy__day-bias { color: var(--loss); }
-
-.sell-strategy__day-bias {
   font-variant-numeric: tabular-nums;
+}
+
+.sell-strategy__metric-value.positive { color: var(--profit); }
+.sell-strategy__metric-value.negative { color: var(--loss); }
+
+.sell-strategy__lean {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 12px;
+  border-top: 1px solid var(--card-border);
+}
+
+.sell-strategy__lean-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.sell-strategy__lean-end {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.sell-strategy__gauge {
+  position: relative;
+  flex: 1;
+  max-width: 360px;
+  height: 8px;
+  border-radius: 4px;
+  background: linear-gradient(90deg, rgba(var(--loss-rgb), 0.5), rgba(var(--tint-rgb), 0.12) 50%, rgba(var(--profit-rgb), 0.5));
+}
+
+.sell-strategy__gauge-centre {
+  position: absolute;
+  left: 50%;
+  top: -3px;
+  bottom: -3px;
+  width: 1px;
+  background: var(--text-secondary);
+}
+
+.sell-strategy__gauge-marker {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 2px solid var(--card-bg);
+  transform: translate(-50%, -50%);
+  background: var(--text-secondary);
+  transition: left 0.3s ease;
+}
+
+.sell-strategy__gauge-marker--bullish { background: var(--profit); }
+.sell-strategy__gauge-marker--bearish { background: var(--loss); }
+
+.sell-strategy__lean-value {
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
   color: var(--text-secondary);
 }
 
-.sell-strategy__day-detail {
-  color: var(--text-secondary);
+.sell-strategy__lean-value--bullish { color: var(--profit); }
+.sell-strategy__lean-value--bearish { color: var(--loss); }
+
+.sell-strategy__readings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 24px;
 }
 
-/* ── Why a side has no setups ── */
-
-.sell-strategy__gaps {
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
+.sell-strategy__reading {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
+.sell-strategy__reading-value {
+  font-size: 13px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.sell-strategy__reading-value--bullish { color: var(--profit); }
+.sell-strategy__reading-value--bearish { color: var(--loss); }
+
+.sell-strategy__reading-note {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+/* ── Tabs, with why a side has no setups ── */
+
+.sell-strategy__tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin-bottom: 12px;
+}
+
+.sell-strategy__gaps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .sell-strategy__gap {
+  padding: 3px 8px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
   font-size: 11px;
   color: var(--text-secondary);
+  white-space: nowrap;
+  cursor: help;
 }
 
 .sell-strategy__empty {
@@ -140,24 +203,158 @@
   border-color: rgba(var(--indigo-rgb), 0.6);
 }
 
-/* What the automation would take */
-.sell-strategy__auto {
-  padding: 2px 6px;
+/* Two lines: the breakeven sits under the bar; everything else is centred across both, so the price lines up with the button. */
+.sell-strategy__row-main {
+  display: grid;
+  grid-template-columns: 190px 32px minmax(90px, 1fr) 72px 80px 64px 32px;
+  grid-template-areas:
+    'name score bar today premium action expand'
+    'name score sub today premium action expand';
+  align-items: center;
+  gap: 2px 12px;
+  padding: 10px 16px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sell-strategy__name { grid-area: name; display: flex; align-items: center; gap: 10px; }
+.sell-strategy__row-main > .sell-strategy__score-value { grid-area: score; }
+.sell-strategy__bar { grid-area: bar; }
+.sell-strategy__row-main > .sell-strategy__pop { grid-area: today; }
+.sell-strategy__row-main > .sell-strategy__premium { grid-area: premium; text-align: right; }
+.sell-strategy__action { grid-area: action; justify-self: stretch; }
+.sell-strategy__action .sell-strategy__sell-btn { width: 100%; }
+.sell-strategy__row-main > .sell-strategy__expand { grid-area: expand; }
+.sell-strategy__subline { grid-area: sub; }
+
+@media (max-width: 640px) {
+  .sell-strategy__row-main {
+    grid-template-columns: 1fr auto 32px;
+    grid-template-areas:
+      'name    score  expand'
+      'bar     bar    bar'
+      'today   premium action'
+      'sub     sub    sub';
+    gap: 6px 12px;
+  }
+
+  .sell-strategy__row-main > .sell-strategy__premium { text-align: left; }
+}
+
+/* ── Featured setup: the auto pick, or the top one ── */
+
+.sell-strategy__row--featured {
+  border-color: rgba(var(--indigo-rgb), 0.35);
+  background: rgba(var(--indigo-rgb), 0.05);
+}
+
+.sell-strategy__featured {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.sell-strategy__featured-label {
+  align-self: flex-start;
+  padding: 2px 8px;
   border-radius: 4px;
   font-size: 10px;
   font-weight: 700;
-  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
   background: rgba(var(--indigo-rgb), 0.15);
   color: var(--accent);
 }
 
-.sell-strategy__row-main {
+.sell-strategy__featured-head {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  cursor: pointer;
-  user-select: none;
+  flex-wrap: wrap;
+  gap: 10px 12px;
+}
+
+.sell-strategy__featured-head .sell-strategy__strike {
+  font-size: 18px;
+}
+
+.sell-strategy__featured-score {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 2px;
+}
+
+.sell-strategy__featured-score .sell-strategy__score-value {
+  font-size: 22px;
+}
+
+.sell-strategy__featured-of {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.sell-strategy__featured .sell-strategy__segments {
+  height: 10px;
+}
+
+.sell-strategy__featured .sell-strategy__expand {
+  margin-left: 0;
+}
+
+.sell-strategy__facts {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 16px;
+}
+
+/* ── Score split into its parts ── */
+
+.sell-strategy__segments {
+  display: flex;
+  height: 6px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--sidebar-hover);
+}
+
+.sell-strategy__segment {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+
+.sell-strategy__segment--direction { background: var(--indigo); }
+.sell-strategy__segment--today { background: var(--cyan); }
+.sell-strategy__segment--oiwall,
+.sell-strategy__segment--flow { background: var(--orange); }
+.sell-strategy__segment--velocity,
+.sell-strategy__segment--breakout { background: var(--emerald); }
+.sell-strategy__segment--regime { background: var(--pink); }
+
+.sell-strategy__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.sell-strategy__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sell-strategy__legend-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 2px;
+  flex-shrink: 0;
 }
 
 /* ── Type badge ── */
@@ -228,30 +425,6 @@
   min-width: 100px;
 }
 
-/* ── Score bar ── */
-
-.sell-strategy__score-area {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 120px;
-}
-
-.sell-strategy__score-track {
-  flex: 1;
-  height: 6px;
-  background: var(--sidebar-hover);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.sell-strategy__score-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.3s ease;
-}
-
 .sell-strategy__score-value {
   font-size: 13px;
   font-weight: 700;
@@ -260,12 +433,7 @@
   text-align: right;
 }
 
-/* Score colors */
-.sell-strategy__score-fill--low { background: var(--loss-light); }
-.sell-strategy__score-fill--medium { background: var(--warn); }
-.sell-strategy__score-fill--high { background: var(--profit-light); }
-.sell-strategy__score-fill--very-high { background: var(--profit); }
-
+/* Score colours */
 .sell-strategy__score-value--low { color: var(--loss-light); }
 .sell-strategy__score-value--medium { color: var(--warn); }
 .sell-strategy__score-value--high { color: var(--profit-light); }
@@ -310,7 +478,6 @@
   font-weight: 500;
   color: var(--text-secondary);
   white-space: nowrap;
-  min-width: 110px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -362,6 +529,9 @@
 }
 
 .sell-strategy__breakdown-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-size: 10px;
   font-weight: 500;
   color: var(--text-secondary);

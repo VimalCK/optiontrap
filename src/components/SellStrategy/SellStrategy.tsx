@@ -15,7 +15,6 @@ import { useStrategyTrade } from './useStrategyTrade';
 import StrategySummaryBar from './StrategySummaryBar';
 import StrategyModeToggle from './StrategyModeToggle';
 import RecommendationRow from './RecommendationRow';
-import DayLeanStrip from './DayLeanStrip';
 
 /** How many setups a tab lists. */
 const SHOWN_SETUPS = 5;
@@ -76,7 +75,7 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
   avgVolume,
   flowByToken,
 }) => {
-  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
 
   // Build effective data (snapshot fallback for market closed)
   const { effectiveOi, effectivePrices, effectiveSpot } = useMemo(
@@ -111,15 +110,46 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
 
   const handleModeChange = useCallback((newMode: StrategyModeId) => {
     onModeChange(newMode);
-    setExpandedIdx(null);
+    setExpandedKey(null);
   }, [onModeChange]);
 
   const recommendations = setupsFor(mode, ranked, sellRecs, buyRecs);
   const gapSides = GAP_SIDES[mode] ?? [];
   const gaps = overview.gaps.filter((gap) => gapSides.includes(gap.side));
 
-  const summaryBar = <StrategySummaryBar maxPain={maxPain} pcr={pcr} spot={effectiveSpot} expectedMove={expectedMove} />;
-  const toggle = <StrategyModeToggle mode={mode} onChange={handleModeChange} />;
+  const featured = recommendations.find((rec) => rec === autoPick) ?? recommendations[0];
+  const others = recommendations.filter((rec) => rec !== featured);
+
+  const summaryBar = (
+    <StrategySummaryBar maxPain={maxPain} pcr={pcr} spot={effectiveSpot} expectedMove={expectedMove} day={overview.day} />
+  );
+  const toggle = (
+    <div className="sell-strategy__tabs">
+      <StrategyModeToggle mode={mode} onChange={handleModeChange} />
+      {gaps.length > 0 && (
+        <ul className="sell-strategy__gaps">
+          {gaps.map((gap) => <li key={gap.text} className="sell-strategy__gap" title={gap.detail}>{gap.text}</li>)}
+        </ul>
+      )}
+    </div>
+  );
+  const rowOf = (rec: StrategySetup, isFeatured: boolean) => {
+    const key = `${rec.type}-${rec.strikes.join('-')}`;
+    return (
+      <RecommendationRow
+        key={key}
+        rec={rec}
+        spot={effectiveSpot}
+        orderMode={orderMode}
+        expiry={expiry}
+        featured={isFeatured}
+        autoPick={rec === autoPick}
+        expanded={expandedKey === key}
+        onToggle={() => setExpandedKey(expandedKey === key ? null : key)}
+        onTrade={handleTrade}
+      />
+    );
+  };
   const trapAnalyzer = (
     <TrapAnalyzer
       chain={chain}
@@ -154,7 +184,6 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
     <div className="sell-strategy">
       {summaryBar}
       {toggle}
-      {mode !== StrategyMode.Analyzer && overview.day && <DayLeanStrip day={overview.day} />}
 
       {mode === StrategyMode.Analyzer ? trapAnalyzer : recommendations.length === 0 ? (
         <div className="sell-strategy__empty">
@@ -162,26 +191,9 @@ const SellStrategy: React.FC<SellStrategyProps> = ({
         </div>
       ) : (
         <div className="sell-strategy__list">
-          {recommendations.map((rec, idx) => (
-            <RecommendationRow
-              key={`${rec.type}-${rec.strikes.join('-')}`}
-              rec={rec}
-              spot={effectiveSpot}
-              orderMode={orderMode}
-              expiry={expiry}
-              autoPick={rec === autoPick}
-              expanded={expandedIdx === idx}
-              onToggle={() => setExpandedIdx(expandedIdx === idx ? null : idx)}
-              onTrade={handleTrade}
-            />
-          ))}
+          {featured && rowOf(featured, true)}
+          {others.map((rec) => rowOf(rec, false))}
         </div>
-      )}
-
-      {gaps.length > 0 && (
-        <ul className="sell-strategy__gaps">
-          {gaps.map((gap) => <li key={gap.text} className="sell-strategy__gap">{gap.text}</li>)}
-        </ul>
       )}
     </div>
   );

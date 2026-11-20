@@ -26,6 +26,12 @@ export const trapPositionOf = (side: SideId, optionType: OptionTypeId): TrapPosi
 
 const CALL_POSITIONS: OptionSetupId[] = [OptionSetup.BuyCe, OptionSetup.SellCe];
 
+/** Trap scores from this one up read Caution, and from the next Likely Trapped. */
+export const TRAP_CAUTION_SCORE = 2;
+export const TRAP_LIKELY_SCORE = 4;
+/** The highest score a position can reach (a bought option with every warning and expiry a day away). */
+export const MAX_TRAP_SCORE = 9;
+
 export interface TrapAnalysis {
   verdict: TrapVerdictId;
   verdictLabel: string;
@@ -201,9 +207,9 @@ export function analyzeTrap(
   }
 
   let verdict: TrapVerdictId;
-  if (trapScore >= 4) {
+  if (trapScore >= TRAP_LIKELY_SCORE) {
     verdict = TrapVerdict.LikelyTrapped;
-  } else if (trapScore >= 2) {
+  } else if (trapScore >= TRAP_CAUTION_SCORE) {
     verdict = TrapVerdict.Caution;
   } else {
     verdict = TrapVerdict.Safe;

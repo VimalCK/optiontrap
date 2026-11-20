@@ -18,19 +18,25 @@ const buyCall = {
 } as StrategySetup;
 
 const render = (props: Partial<React.ComponentProps<typeof RecommendationRow>> = {}) => renderToStaticMarkup(
-  <RecommendationRow rec={buyCall} spot={25010} orderMode={TradingMode.Paper} expiry="2026-11-24" autoPick={false} expanded={false} onToggle={() => {}} onTrade={() => {}} {...props} />,
+  <RecommendationRow rec={buyCall} spot={25010} orderMode={TradingMode.Paper} expiry="2026-11-24" expanded={false} onToggle={() => {}} onTrade={() => {}} {...props} />,
 );
 
 describe('RecommendationRow', () => {
-  it('trades the setup\'s own side and shows its breakeven', () => {
+  it('trades the setup\'s own side, splits its score bar into parts and shows its breakeven', () => {
     const html = render();
     expect(html).toContain('>Buy</button>');
+    expect(html).toContain('title="Direction 36/40"');
+    expect(html).toContain('width:25%');
     expect(html).toContain('BE 25,135 · +125');
     expect(html).not.toContain('Auto pick');
   });
 
-  it('marks the automation\'s pick', () => {
-    expect(render({ autoPick: true })).toContain('Auto pick');
+  it('features the automation\'s pick with every part in view, and calls any other featured setup the top one', () => {
+    const auto = render({ featured: true, autoPick: true });
+    expect(auto).toContain('Auto pick');
+    expect(auto).toContain('OI Flow 25');
+    expect(auto).toContain('/100');
+    expect(render({ featured: true })).toContain('Top setup');
   });
 
   it('opens the score details from a labelled button, each part with its own reasons', () => {

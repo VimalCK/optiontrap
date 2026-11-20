@@ -14,7 +14,7 @@
 import { OptionType, Side } from '../tradeEnums.js';
 import { LevelSide, OiSignal, OptionSetup, SetupPattern } from '../analysisEnums.js';
 import { calculatePCR, findOiWalls, classifyOiSignal } from './oiLevels.js';
-import { MIN_PREMIUM_SHARE, TREND_AGAINST_SHARE, mergePartReasons, optionChange, recentSpotMove, strikeGap, volumeMultiplier } from './setupScoring.js';
+import { MIN_PREMIUM_SHARE, TREND_AGAINST_SHARE, mergePartReasons, trendGap, optionChange, recentSpotMove, strikeGap, volumeMultiplier } from './setupScoring.js';
 import { dayContext, scoreDirection } from './dayBias.js';
 import { sessionOutcome, winChanceShare } from './sessionOutcome.js';
 
@@ -149,17 +149,15 @@ const rowsNearSpot = (chain, spotPrice) => chain.filter((r) => Math.abs(r.strike
  * @param {OiSnapshot[]} snapshots  at least two
  * @param {number} spotPrice
  * @param {number} expectedMove
- * @returns {string | null}
+ * @returns {import('./setupScoring.js').SideGapReason | null}
  */
 export function buySideGap(type, chain, oiData, livePrices, snapshots, spotPrice, expectedMove) {
   const share = moveInFavour(type, snapshots, spotPrice, expectedMove);
-  if (share < -TREND_AGAINST_SHARE) {
-    const move = recentSpotMove(snapshots, spotPrice);
-    return `No ${type} buys · spot ${move > 0 ? 'up' : 'down'} ${Math.abs(move).toFixed(0)} in 30 min`;
-  }
+  if (share < -TREND_AGAINST_SHARE) return trendGap(`No ${type} buys`, recentSpotMove(snapshots, spotPrice));
   if (share >= EARLY_MOVE_SHARE) return null;
   const buyers = longBuildupShare(type, rowsNearSpot(chain, spotPrice), snapshots[0], oiData, livePrices);
-  return buyers.score > 0 ? null : `No ${type} buys · no sign of a move: spot not moving its way and no ${type} buyers entering`;
+  if (buyers.score > 0) return null;
+  return { text: `No ${type} buys · no move yet`, detail: `Spot isn't moving the ${type}'s way and no ${type} buyers are entering near spot.` };
 }
 
 /**

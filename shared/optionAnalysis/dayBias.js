@@ -32,23 +32,32 @@ const WEIGHTS = Object.freeze({ dayMove: 0.3, flow: 0.3, pcr: 0.2, recentMove: 0
 /**
  * @typedef {import('./chain.js').ChainRow} ChainRow
  * @typedef {import('./velocityPattern.js').OiSnapshot} OiSnapshot
- * @typedef {{ bias: number, lean: import('../analysisEnums.js').DayLeanId, reasons: string[] }} DayBias
+ */
+
+/**
+ * What the lean was read from.
+ * @typedef {object} DayReadings
+ * @property {string} since  the first snapshot's time label
+ * @property {number} dayMove  spot's move since the first snapshot, in points
+ * @property {number} recentMove  spot's move over the last 30 minutes, in points
+ * @property {number} putOiAdded  put OI added near spot since the first snapshot
+ * @property {number} callOiAdded  call OI added near spot since the first snapshot
+ * @property {number} pcrFrom  PCR at the first snapshot
+ * @property {number} pcrTo  PCR now
+ */
+
+/**
+ * @typedef {{ bias: number, lean: import('../analysisEnums.js').DayLeanId, readings: DayReadings | null }} DayBias
  */
 
 /** @type {DayBias} */
-const NO_READING = Object.freeze({ bias: 0, lean: DayLean.Neutral, reasons: [] });
+const NO_READING = Object.freeze({ bias: 0, lean: DayLean.Neutral, readings: null });
 
 /** @param {number} value */
 const clampUnit = (value) => Math.min(1, Math.max(-1, value));
 
-/** @param {number} value */
-const lakhs = (value) => `${value >= 0 ? '+' : '−'}${(Math.abs(value) / 1e5).toFixed(1)}L`;
-
 /** @param {number} bias */
 const signedBias = (bias) => `${bias >= 0 ? '+' : '−'}${Math.abs(bias).toFixed(2)}`;
-
-/** @param {number} value */
-const signed = (value) => `${value >= 0 ? '+' : '−'}${Math.abs(value).toFixed(0)}`;
 
 /**
  * Total call and put OI of the chain in one OI record (token → OI).
@@ -66,7 +75,7 @@ function sideTotals(rows, oiOf) {
 }
 
 /**
- * Today's lean, or neutral with no reasons before there are two snapshots and an expected move.
+ * Today's lean, or neutral with no readings before there are two snapshots and an expected move.
  * @param {ChainRow[]} chain
  * @param {Map<number, number>} oiData
  * @param {OiSnapshot[]} snapshots  today's, oldest first, with spot
@@ -95,25 +104,30 @@ export function dayBias(chain, oiData, snapshots, spotPrice, expectedMove, windo
   const firstPcr = firstTotals.ce > 0 ? firstTotals.pe / firstTotals.ce : 0;
   const pcr = calculatePCR(chain, oiData);
 
-  const readings = {
+  const leans = {
     dayMove: clampUnit(dayMove / (DAY_MOVE_FULL * spread)),
     recentMove: clampUnit(recentMove / recentSpread),
     flow: flowSize > 0 ? (added.pe - added.ce) / flowSize : 0,
     pcr: firstPcr > 0 ? clampUnit((pcr - firstPcr) / PCR_CHANGE_FULL) : 0,
   };
   const bias = clampUnit(
-    WEIGHTS.dayMove * readings.dayMove + WEIGHTS.recentMove * readings.recentMove
-    + WEIGHTS.flow * readings.flow + WEIGHTS.pcr * readings.pcr,
+    WEIGHTS.dayMove * leans.dayMove + WEIGHTS.recentMove * leans.recentMove
+    + WEIGHTS.flow * leans.flow + WEIGHTS.pcr * leans.pcr,
   );
 
   const lean = Math.abs(bias) < NEUTRAL_BIAS ? DayLean.Neutral : bias > 0 ? DayLean.Bullish : DayLean.Bearish;
   return {
     bias,
     lean,
-    reasons: [
-      `Spot ${signed(dayMove)} since ${first.timeLabel}, ${signed(recentMove)} in 30 min`,
-      `Near spot: put OI ${lakhs(added.pe)}, call OI ${lakhs(added.ce)} · PCR ${firstPcr.toFixed(2)} → ${pcr.toFixed(2)}`,
-    ],
+    readings: {
+      since: first.timeLabel,
+      dayMove,
+      recentMove,
+      putOiAdded: added.pe,
+      callOiAdded: added.ce,
+      pcrFrom: firstPcr,
+      pcrTo: pcr,
+    },
   };
 }
 
@@ -127,7 +141,7 @@ export function dayBias(chain, oiData, snapshots, spotPrice, expectedMove, windo
  */
 export function scoreDirection(day, favoursRise, max) {
   const aligned = favoursRise ? day.bias : -day.bias;
-  return { score: Math.round(max * (0.5 + aligned / 2)), reasons: day.reasons.length > 0 ? [directionReason(day, aligned)] : [] };
+  return { score: Math.round(max * (0.5 + aligned / 2)), reasons: day.readings ? [directionReason(day, aligned)] : [] };
 }
 
 /**

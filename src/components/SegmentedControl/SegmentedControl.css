@@ -1,0 +1,50 @@
+/* Joined buttons choosing one option; only as wide as the buttons. */
+.segmented {
+  display: inline-flex;
+  width: fit-content;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.segmented__option {
+  padding: 5px 16px;
+  font-size: 12px;
+  font-weight: 600;
+  font-family: inherit;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.segmented__option:not(:last-child) {
+  border-right: 1px solid var(--card-border);
+}
+
+.segmented__option:hover:not(.segmented__option--active) {
+  color: var(--text-primary);
+  background: var(--sidebar-hover);
+}
+
+.segmented__option--accent {
+  background: rgba(var(--indigo-rgb), 0.15);
+  color: var(--accent);
+}
+
+.segmented__option--positive {
+  background: rgba(var(--profit-light-rgb), 0.15);
+  color: var(--profit-light);
+}
+
+.segmented__option--negative {
+  background: rgba(var(--loss-rgb), 0.15);
+  color: var(--loss);
+}
+
+.segmented__option--neutral {
+  background: var(--sidebar-hover);
+  color: var(--text-primary);
+}

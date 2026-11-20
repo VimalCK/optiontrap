@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isLabelledStrike, strikeLabelStep } from './trapMap';
+import { isLabelledStrike, strikeLabelStep } from './strikeLabels';
 import type { OptionChainRow } from '@/services/optionChain';
 
 /** 31 strikes, as the map shows, `gap` apart from `first`. */

@@ -81,6 +81,26 @@ export const mergePartReasons = (first, second) => /** @type {Reasons} */ (Objec
   Object.keys(first).map((part) => [part, [...new Set([...first[part], ...second[part]])]]),
 ));
 
+/**
+ * Why a side has no setups: a short text, and the detail behind it.
+ * @typedef {{ text: string, detail: string }} SideGapReason
+ */
+
+/**
+ * A side left out because spot moved against it over the last 30 minutes.
+ * @param {string} side  e.g. 'No CE sells'
+ * @param {number} move  spot's 30-minute move, in points
+ * @returns {SideGapReason}
+ */
+export function trendGap(side, move) {
+  const direction = move > 0 ? 'up' : 'down';
+  const points = Math.abs(move).toFixed(0);
+  return {
+    text: `${side} · spot ${direction} ${points} in 30 min`,
+    detail: `Spot moved ${direction} ${points} points in the last 30 minutes, more than a quarter of the expected move, against these options.`,
+  };
+}
+
 /** No strike paying less than this share of the ATM option's premium (half the straddle) is scored. */
 export const MIN_PREMIUM_SHARE = 0.3;
 /** A recent move against a side larger than this share of the expected move is a trend against it: no setups on that side. */

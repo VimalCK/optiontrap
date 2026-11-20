@@ -12,7 +12,7 @@ import { buySideGap } from './buySetups.js';
 
 /**
  * @typedef {import('./sellSetups.js').SellRecommendation | import('./buySetups.js').BuyRecommendation} Setup
- * @typedef {{ side: import('../tradeEnums.js').SideId, text: string }} SideGap
+ * @typedef {import('./setupScoring.js').SideGapReason & { side: import('../tradeEnums.js').SideId }} SideGap
  */
 
 /**
@@ -68,9 +68,9 @@ export function setupOverview(chain, oiData, livePrices, snapshots, spotPrice, t
   /** @type {SideGap[]} */ const gaps = [];
   for (const type of [OptionType.CE, OptionType.PE]) {
     const sellGap = sellSideGap(type, snapshots, spotPrice, expectedMove);
-    if (sellGap) gaps.push({ side: Side.SELL, text: sellGap });
+    if (sellGap) gaps.push({ side: Side.SELL, ...sellGap });
     const buyGap = buySideGap(type, chain, oiData, livePrices, snapshots, spotPrice, expectedMove);
-    if (buyGap) gaps.push({ side: Side.BUY, text: buyGap });
+    if (buyGap) gaps.push({ side: Side.BUY, ...buyGap });
   }
-  return { day: day.reasons.length > 0 ? day : null, gaps };
+  return { day: day.readings ? day : null, gaps };
 }

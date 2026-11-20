@@ -14,7 +14,9 @@ describe('dayBias', () => {
     const day = dayBias(chain, now.oiData, snapshotsOf([24900, 24950, 24980], market()), 25010, 200, WINDOW);
     expect(day.bias).toBeGreaterThan(0.5);
     expect(day.lean).toBe(DayLean.Bullish);
-    expect(day.reasons[0]).toMatch(/^Spot \+110 since /);
+    expect(day.readings?.dayMove).toBe(110);
+    expect(day.readings?.putOiAdded).toBeGreaterThan(0);
+    expect(day.readings?.callOiAdded).toBe(0);
   });
 
   it('reads a day falling with call writing as bearish', () => {
@@ -28,18 +30,18 @@ describe('dayBias', () => {
     const day = dayBias(chain, market().oiData, snapshotsOf([25000, 25000, 25000]), 25000, 200, WINDOW);
     expect(day.bias).toBe(0);
     expect(day.lean).toBe(DayLean.Neutral);
-    expect(day.reasons).toHaveLength(2);
+    expect(day.readings?.dayMove).toBe(0);
   });
 
   it('has no lean before there are two snapshots or an expected move', () => {
-    const none = { bias: 0, lean: DayLean.Neutral, reasons: [] };
+    const none = { bias: 0, lean: DayLean.Neutral, readings: null };
     expect(dayBias(chain, market().oiData, snapshotsOf([25000]), 25100, 200, WINDOW)).toEqual(none);
     expect(dayBias(chain, market().oiData, snapshotsOf([25000, 25050]), 25100, 0, WINDOW)).toEqual(none);
   });
 });
 
 describe('scoreDirection', () => {
-  const day = (bias, lean = DayLean.Neutral) => ({ bias, lean, reasons: ['read'] });
+  const day = (bias, lean = DayLean.Neutral) => ({ bias, lean, readings: {} });
 
   it('gives half the points on a neutral day, all of them when the day leans fully the trade\'s way, none against it', () => {
     expect(scoreDirection(day(0), true, 40).score).toBe(20);
@@ -52,6 +54,6 @@ describe('scoreDirection', () => {
     expect(scoreDirection(day(0.6, DayLean.Bullish), true, 40).reasons).toEqual(['Day leans bullish (+0.60) · with this trade']);
     expect(scoreDirection(day(0.6, DayLean.Bullish), false, 40).reasons).toEqual(['Day leans bullish (+0.60) · against this trade']);
     expect(scoreDirection(day(0.1), true, 40).reasons).toEqual(['Day neutral (+0.10)']);
-    expect(scoreDirection({ bias: 0, lean: DayLean.Neutral, reasons: [] }, true, 40).reasons).toEqual([]);
+    expect(scoreDirection({ bias: 0, lean: DayLean.Neutral, readings: null }, true, 40).reasons).toEqual([]);
   });
 });

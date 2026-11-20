@@ -49,8 +49,11 @@ export const BUY_SCORE_PARTS: ScorePart[] = [
   { label: 'Breakout', key: 'breakout', max: BUY_SCORE_MAX.breakout },
 ];
 
+/** One score part of a setup: its points and the reasons behind them. */
+export type ScorePartPoints = ScorePart & { points: number; reasons: string[] };
+
 /** A setup's score parts with their points and reasons, in display order. */
-export function scorePartsOf(setup: StrategySetup): (ScorePart & { points: number; reasons: string[] })[] {
+export function scorePartsOf(setup: StrategySetup): ScorePartPoints[] {
   const parts = setupSide(setup.type) === Side.SELL ? SELL_SCORE_PARTS : BUY_SCORE_PARTS;
   const breakdown = setup.breakdown as unknown as Record<string, number>;
   const reasons = setup.reasons as unknown as Record<string, string[]>;

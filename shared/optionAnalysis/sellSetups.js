@@ -14,7 +14,7 @@ import { analyzeVelocityPattern } from './velocityPattern.js';
 import { OptionType, Side } from '../tradeEnums.js';
 import { LevelSide, OiSignal, OptionSetup, SetupPattern, VelocityTrend } from '../analysisEnums.js';
 import { calculateMaxPain, calculatePCR, findOiWalls, classifyOiSignal } from './oiLevels.js';
-import { MIN_PREMIUM_SHARE, TREND_AGAINST_SHARE, mergePartReasons, optionChange, recentSpotMove, strikeGap, volumeMultiplier } from './setupScoring.js';
+import { MIN_PREMIUM_SHARE, TREND_AGAINST_SHARE, mergePartReasons, trendGap, optionChange, recentSpotMove, strikeGap, volumeMultiplier } from './setupScoring.js';
 import { dayContext, scoreDirection } from './dayBias.js';
 import { sessionOutcome, winChanceShare } from './sessionOutcome.js';
 
@@ -225,12 +225,11 @@ export function trendsAgainst(type, snapshots, spotPrice, expectedMove) {
  * @param {OiSnapshot[]} snapshots
  * @param {number} spotPrice
  * @param {number} expectedMove
- * @returns {string | null}
+ * @returns {import('./setupScoring.js').SideGapReason | null}
  */
 export function sellSideGap(type, snapshots, spotPrice, expectedMove) {
   if (!trendsAgainst(type, snapshots, spotPrice, expectedMove)) return null;
-  const move = recentSpotMove(snapshots, spotPrice);
-  return `No ${type} sells · spot ${move > 0 ? 'up' : 'down'} ${Math.abs(move).toFixed(0)} in 30 min`;
+  return trendGap(`No ${type} sells`, recentSpotMove(snapshots, spotPrice));
 }
 
 /**
