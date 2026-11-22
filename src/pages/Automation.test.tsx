@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { defaultAutomationConfig } from '../../shared/automation.js';
 import type { AutoTrade } from '@/services/automation';
+import type { PaperOrder } from '@/services/orders';
 import { marketDate } from '../../shared/marketTime.js';
 import { formatNumericDate } from '@/utils/marketStatus';
 import Automation, { AutoTradesTable, TradeRow, automationStatus } from './Automation';
@@ -137,6 +138,13 @@ describe('AutoTradesTable', () => {
   });
 });
 
+const waitingOrder = (extra: Partial<PaperOrder> = {}): PaperOrder => ({
+  id: 'o1', tradingsymbol: 'NIFTY26N0924550PE', instrumentToken: 1, instrumentType: 'PE', exchange: 'NFO', strike: 24550, optionType: 'PE',
+  expiry: '2026-11-09', side: 'SELL', quantity: 65, orderType: 'Limit', limitPrice: 101, status: 'Open', statusReason: null, fillPrice: null,
+  positionId: null, closesPosition: false, note: '', targetPrice: null, stopLossPrice: null, confidence: null, source: 'Auto',
+  horizon: Horizon.Intraday, autoTradeId: 't', createdAt: '2026-11-06T07:00:29.000Z', updatedAt: '2026-11-06T07:00:29.000Z', ...extra, // Fri 12:30 IST
+});
+
 describe('TradeRow', () => {
   it('shows the lifecycle as a timeline of plain sentences when open, the IST time only on the row', () => {
     const trade: AutoTrade = {
@@ -155,6 +163,32 @@ describe('TradeRow', () => {
     expect(html).toContain('<p class="automation-timeline__text">Option Analyzer setups · Wall Defense · score 53</p>');
     expect(html).toContain('<p class="automation-timeline__text">Opened a paper position at ₹98.80</p>');
     expect(html).not.toContain('strategyId');
+  });
+});
+
+describe('TradeRow modify', () => {
+  const validated: AutoTrade = {
+    id: 't', horizon: Horizon.Intraday, kind: 'IndexOption', mode: 'Paper', tradingsymbol: 'NIFTY26N0924550PE', instrumentToken: 1,
+    side: 'SELL', quantity: 65, stage: 'Validated', reason: null, entryPrice: null, exitPrice: null, charges: null, positionId: null,
+    createdAt: '2026-11-06T07:00:29.000Z', updatedAt: '2026-11-06T07:00:29.000Z', events: [],
+  };
+  const row = (order?: PaperOrder) => renderToStaticMarkup(
+    <table><tbody><TradeRow trade={validated} open={false} onToggle={() => {}} waitingOrder={order} onModify={() => {}} /></tbody></table>,
+  );
+  const modifyButton = (html: string) => html.match(/<button[^>]*aria-label="(?:Modify entry order|Only option orders can be modified)"[^>]*>/)?.[0];
+
+  it('offers to modify the entry order of a trade waiting on one', () => {
+    const button = modifyButton(row(waitingOrder()));
+    expect(button).toContain('type="button"');
+    expect(button).not.toContain('disabled');
+  });
+
+  it('offers nothing to a trade with no waiting order', () => {
+    expect(modifyButton(row())).toBeUndefined();
+  });
+
+  it("shows it disabled with the reason when the order isn't for an option", () => {
+    expect(modifyButton(row(waitingOrder({ instrumentType: 'FUT', strike: null, optionType: null })))).toMatch(/aria-label="Only option orders can be modified"[^>]*disabled|disabled[^>]*aria-label="Only option orders can be modified"/);
   });
 });
 

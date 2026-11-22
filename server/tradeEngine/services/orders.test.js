@@ -360,11 +360,16 @@ describe('the order service', () => {
       expect(await service.modify('U2', 'o1', { limitPrice: 55 }, USER_KITE)).toEqual(NOT_MODIFIED);
     });
 
-    it('refuses to modify an automated order: those are only cancelled', async () => {
+    it('modifies an automated order, and tells listeners when the modified order fills', async () => {
+      const settledOrders = [];
+      service.onSettled((order) => { settledOrders.push(order); });
       db.getUserOrder.mockResolvedValueOnce(stored('o1', { source: 'Auto', autoTradeId: 't1' }));
-      expect(await service.modify('U1', 'o1', { limitPrice: 55 }, USER_KITE))
-        .toEqual({ ok: false, code: 'INVALID_TRADE', message: 'Automated orders can only be cancelled, not modified' });
-      expect(db.modifyOpenOrder).not.toHaveBeenCalled();
+      db.modifyOpenOrder.mockResolvedValueOnce(stored('o1', { source: 'Auto', autoTradeId: 't1', limitPrice: 65 }));
+      const result = await service.modify('U1', 'o1', { limitPrice: 65 }, USER_KITE);
+      expect(db.modifyOpenOrder).toHaveBeenCalledWith('U1', 'o1', expect.objectContaining({ limitPrice: 65 }));
+      expect(positions.openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ entryPrice: 60 }), { now: NOON, source: 'Auto' });
+      expect(result).toEqual({ ok: true, order: expect.objectContaining({ status: 'Filled' }) });
+      expect(settledOrders).toEqual([expect.objectContaining({ id: 'o1', status: 'Filled', positionId: 'pos1' })]);
     });
 
     it('refuses invalid terms before quoting, leaving the order as it was and still watched', async () => {

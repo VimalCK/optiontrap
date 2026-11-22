@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { AutoTrade } from '@/services/automation';
 import { TEST_STRATEGIES } from '@/services/strategies.fixture';
-import { closedPnl, eventSummary, horizonLabel, sideTone, stageIsLive, stageTone, stepTone, tradesByDay } from './autoTradeView';
+import type { PaperOrder } from '@/services/orders';
+import { closedPnl, eventSummary, horizonLabel, sideTone, stageIsLive, stageTone, stepTone, tradesByDay, waitingOrdersByTrade } from './autoTradeView';
 import { Horizon, LifecycleStage, Side } from '../../../shared/tradeEnums.js';
 import { Tone } from '@/utils/uiEnums';
 
@@ -94,5 +95,14 @@ describe('eventSummary', () => {
   it('still says something for an event with no detail', () => {
     expect(eventSummary({ stage: 'Selected', at, detail: null }, trade, TEST_STRATEGIES)).toBe('Selected');
     expect(eventSummary({ stage: 'Executed', at, detail: null }, trade, TEST_STRATEGIES)).toBe('Opened a paper position');
+  });
+});
+
+describe('waitingOrdersByTrade', () => {
+  it("maps each automated trade's open entry order by trade id, leaving out manual orders", () => {
+    const order = (id: string, autoTradeId: string | null) => ({ id, autoTradeId } as PaperOrder);
+    const waiting = waitingOrdersByTrade([order('o1', 't1'), order('o2', null), order('o3', 't3')]);
+    expect([...waiting.keys()]).toEqual(['t1', 't3']);
+    expect(waiting.get('t3')?.id).toBe('o3');
   });
 });

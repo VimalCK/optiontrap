@@ -2,7 +2,7 @@
  * Automated trades and their lifecycle (selected → validated → executed → closed).
  * Rules: shared/automation.js; strategies: GET /api/strategies.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { marketDate } from '../../shared/marketTime.js';
 import { rangeProblem } from '@/components/TradeJournal/journalRange';
@@ -12,11 +12,17 @@ import EmptyState from '@/components/EmptyState/EmptyState';
 import DateRangePicker, { type DateRange } from '@/components/DateRangePicker/DateRangePicker';
 import Badge from '@/components/Badge/Badge';
 import TradeHorizon from '@/components/TradeSource/TradeHorizon';
-import { AnalyticsIcon, AutomationIcon, ChevronDownIcon, SettingsIcon } from '@/components/icons/Icons';
+import { AnalyticsIcon, AutomationIcon, ChevronDownIcon, EditIcon, SettingsIcon } from '@/components/icons/Icons';
+import ModifyOrderModal from '@/components/OrderModal/ModifyOrderModal';
+import { unmodifiableReason } from '@/components/OrderModal/orderTicket';
+import ToastStack from '@/components/Toast/ToastStack';
+import { useToasts } from '@/hooks/useToasts';
+import { useLastPrices } from '@/hooks/useLastPrices';
 import {
-  closedPnl, eventSummary, sideLabel, sideTone, stageIsLive, stageLabel, stageTone, stepTone, tradesByDay,
+  closedPnl, eventSummary, sideLabel, sideTone, stageIsLive, stageLabel, stageTone, stepTone, tradesByDay, waitingOrdersByTrade,
 } from '@/components/Automation/autoTradeView';
 import { AutomationConfig, AutoTrade, fetchAutomationConfig, fetchAutoTrades } from '@/services/automation';
+import { fetchOpenOrders, type PaperOrder } from '@/services/orders';
 import { isAbortError } from '@/services/apiClient';
 import { useStrategies } from '@/hooks/useStrategies';
 import type { StrategyInfo } from '@/services/strategies';
@@ -68,8 +74,17 @@ const TradeTimeline: React.FC<{ trade: AutoTrade }> = ({ trade }) => {
   );
 };
 
-/** One trade's row; clicking it (or its chevron) shows the lifecycle beneath. */
-export const TradeRow: React.FC<{ trade: AutoTrade; open: boolean; onToggle: () => void }> = ({ trade: t, open, onToggle }) => {
+/**
+ * One trade's row; clicking it (or its chevron) shows the lifecycle beneath. A trade waiting on its entry order
+ * offers to modify that order.
+ */
+export const TradeRow: React.FC<{
+  trade: AutoTrade;
+  open: boolean;
+  onToggle: () => void;
+  waitingOrder?: PaperOrder;
+  onModify?: (order: PaperOrder) => void;
+}> = ({ trade: t, open, onToggle, waitingOrder, onModify }) => {
   return (
     <>
       <tr className={`automation-trades__row${open ? ' automation-trades__row--open' : ''}`} onClick={onToggle}>
@@ -87,6 +102,15 @@ export const TradeRow: React.FC<{ trade: AutoTrade; open: boolean; onToggle: () 
         <PnlCell pnl={closedPnl(t)} />
         <td className="automation-trades__stage"><Badge tone={stageTone(t.stage)} dot={stageIsLive(t.stage)}>{stageLabel(t.stage)}</Badge></td>
         <td className="automation-trades__toggle" onClick={(e) => e.stopPropagation()}>
+          {waitingOrder && onModify && (
+            <IconButton
+              icon={<EditIcon />}
+              label={unmodifiableReason(waitingOrder) ?? 'Modify entry order'}
+              onClick={() => onModify(waitingOrder)}
+              disabled={unmodifiableReason(waitingOrder) !== null}
+              className="automation-trades__chevron"
+            />
+          )}
           <IconButton
             icon={<ChevronDownIcon />}
             label={open ? 'Hide lifecycle' : 'Show lifecycle'}
@@ -127,7 +151,15 @@ const AutoTradesFrame: React.FC<{ children: React.ReactNode }> = ({ children }) 
   </div>
 );
 
-export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean; error?: string | null; controls?: React.ReactNode }> = ({ trades, loading, error, controls }) => {
+export const AutoTradesTable: React.FC<{
+  trades: AutoTrade[];
+  loading?: boolean;
+  error?: string | null;
+  controls?: React.ReactNode;
+  /** The entry orders of trades waiting to execute, by trade id. */
+  waitingOrders?: ReadonlyMap<string, PaperOrder>;
+  onModify?: (order: PaperOrder) => void;
+}> = ({ trades, loading, error, controls, waitingOrders, onModify }) => {
   const [open, setOpen] = useState<string | null>(null);
   const days = useDayGroups();
 
@@ -165,7 +197,8 @@ export const AutoTradesTable: React.FC<{ trades: AutoTrade[]; loading?: boolean;
                 onToggle={() => days.toggle(group.day)}
               />
               {days.isExpanded(group.day) && group.trades.map((t) => (
-                <TradeRow key={t.id} trade={t} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)} />
+                <TradeRow key={t.id} trade={t} open={open === t.id} onToggle={() => setOpen(open === t.id ? null : t.id)}
+                  waitingOrder={waitingOrders?.get(t.id)} onModify={onModify} />
               ))}
             </tbody>
           ))}
@@ -195,6 +228,14 @@ const Automation: React.FC = () => {
   const [trades, setTrades] = useState<AutoTrade[]>([]);
   const [tradesLoading, setTradesLoading] = useState(true);
   const [tradesError, setTradesError] = useState<string | null>(null);
+  const [openOrders, setOpenOrders] = useState<PaperOrder[]>([]);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
+  const [modifying, setModifying] = useState<PaperOrder | null>(null);
+  // Bumped after a modify, which may have filled the order and moved its trade on.
+  const [reloads, setReloads] = useState(0);
+  const { toasts, showToast } = useToasts();
+  const waitingOrders = useMemo(() => waitingOrdersByTrade(openOrders), [openOrders]);
+  const prices = useLastPrices('algo-trading', [...waitingOrders.values()]);
   const problem = rangeProblem(range.from, range.to);
   const status = automationStatus(config, strategies);
 
@@ -219,7 +260,16 @@ const Automation: React.FC = () => {
         .finally(() => { if (!controller.signal.aborted) setTradesLoading(false); });
     }, FETCH_DELAY_MS);
     return () => { clearTimeout(timer); controller.abort(); };
-  }, [range, problem]);
+  }, [range, problem, reloads]);
+
+  // The open orders, for the trades still waiting on their entry order.
+  useEffect(() => {
+    const controller = new AbortController();
+    fetchOpenOrders(controller.signal)
+      .then((orders) => { setOpenOrders(orders); setOrdersError(null); })
+      .catch((err) => { if (!isAbortError(err)) setOrdersError(errorText(err, 'Could not load the waiting entry orders')); });
+    return () => controller.abort();
+  }, [reloads]);
 
   return (
     <div className="automation automation--trades">
@@ -233,7 +283,9 @@ const Automation: React.FC = () => {
       <AutoTradesTable
         trades={trades}
         loading={tradesLoading && !problem}
-        error={problem ?? tradesError}
+        error={problem ?? tradesError ?? ordersError}
+        waitingOrders={waitingOrders}
+        onModify={setModifying}
         controls={(
           <div className="automation-section__actions">
             <DateRangePicker range={range} onChange={setRange} />
@@ -250,6 +302,18 @@ const Automation: React.FC = () => {
           </div>
         )}
       />
+
+      {modifying && (
+        <ModifyOrderModal
+          key={modifying.id}
+          order={modifying}
+          lastPrice={prices.get(modifying.instrumentToken)}
+          onClose={() => setModifying(null)}
+          onModified={() => setReloads((n) => n + 1)}
+          onToast={showToast}
+        />
+      )}
+      <ToastStack toasts={toasts} />
     </div>
   );
 };

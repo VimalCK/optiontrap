@@ -2,6 +2,7 @@ import { LIFECYCLE_STAGES } from '../../../shared/automation.js';
 import { tradePnl, tradePnlPercent } from '../../../shared/tradePnl.js';
 import { Tone, type ToneId } from '@/utils/uiEnums';
 import type { AutoTrade, AutoTradeEvent } from '@/services/automation';
+import type { PaperOrder } from '@/services/orders';
 import type { StrategyInfo } from '@/services/strategies';
 import { formatAmount } from '@/utils/formatAmount';
 import { groupByMarketDay } from '@/utils/groupByMarketDay';
@@ -44,6 +45,11 @@ export interface TradeDay {
   trades: AutoTrade[];
   /** The day's closed trades' P&L before charges; null while none has closed. */
   pnl: number | null;
+}
+
+/** The open entry orders of automated trades waiting to execute, by trade id: the ones Algo Trading can modify. */
+export function waitingOrdersByTrade(openOrders: PaperOrder[]): Map<string, PaperOrder> {
+  return new Map(openOrders.flatMap((order) => (order.autoTradeId ? [[order.autoTradeId, order] as const] : [])));
 }
 
 /** Groups by the IST day created, keeping the server's order (newest first). */

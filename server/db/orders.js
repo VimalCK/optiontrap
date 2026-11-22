@@ -1,6 +1,6 @@
 import crypto from 'crypto';
 import { addDays, marketDateTime } from '../../shared/marketTime.js';
-import { oppositeSide, OrderStatus, OrderType, TradeSource } from '../../shared/tradeEnums.js';
+import { LifecycleStage, oppositeSide, OrderStatus, OrderType, TradeSource } from '../../shared/tradeEnums.js';
 import { sqlEnum } from '../sql.js';
 import { firstRow, query, rows } from './pool.js';
 import { instrumentColumns, positionMetaValues } from './positions.js';
@@ -122,18 +122,26 @@ export async function getUserOrder(userId, id) {
 }
 
 /**
- * Only if still open and placed by hand, so a modify never changes an order that has filled or was cancelled.
- * Served by the primary key.
+ * Only if still open, so a modify never changes an order that has filled or was cancelled. An automated
+ * order's trade (still waiting to execute) takes the new quantity in the same statement, so its P&L counts
+ * what the order fills. Served by the primary keys.
  * @param {string} userId
  * @param {string} id
  * @param {import('../shared/orders.js').Order} order  the modified order
  */
 export async function modifyOpenOrder(userId, id, order) {
   const row = await firstRow(
-    `UPDATE orders SET quantity = $3, order_type = $4, limit_price = $5, note = $6, target_price = $7, stop_loss_price = $8,
-       confidence = $9, updated_at = now()
-     WHERE id = $1 AND user_id = $2 AND status = ${sqlEnum(OrderStatus.Open)} AND source = ${sqlEnum(TradeSource.Manual)}
-     RETURNING *`,
+    `WITH modified AS (
+       UPDATE orders SET quantity = $3, order_type = $4, limit_price = $5, note = $6, target_price = $7, stop_loss_price = $8,
+         confidence = $9, updated_at = now()
+       WHERE id = $1 AND user_id = $2 AND status = ${sqlEnum(OrderStatus.Open)}
+       RETURNING *
+     ), trade AS (
+       UPDATE algo_trades t SET quantity = m.quantity, updated_at = now()
+       FROM modified m
+       WHERE t.id = m.algo_trade_id AND t.user_id = m.user_id AND t.stage = ${sqlEnum(LifecycleStage.Validated)}
+     )
+     SELECT * FROM modified`,
     [id, userId, order.quantity, order.orderType, order.limitPrice, ...positionMetaValues(order)],
   );
   return row ? toOrder(row) : null;

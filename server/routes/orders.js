@@ -40,9 +40,10 @@ orderRoutes.post('/api/orders', subscriber, withFailureMessage('Failed to place 
   sendResult(res, result, { data: result.order, created: true });
 }));
 
-// Change an open order: { status: 'Cancelled' } cancels it; otherwise the body modifies a manual
-// order's terms (shared/orders.js MODIFIABLE_ORDER_FIELDS), only while it is still open (404 once
-// it has filled or was cancelled). A modified order fills at once when it can fill now.
+// Change an open order: { status: 'Cancelled' } cancels it; otherwise the body modifies its terms
+// (shared/orders.js MODIFIABLE_ORDER_FIELDS), only while it is still open (404 once it has filled
+// or was cancelled). An automated order's trade takes the new quantity. A modified order fills at
+// once when it can fill now.
 orderRoutes.patch('/api/orders/:id', subscriber, withFailureMessage('Failed to modify the order', async (req, res) => {
   const { userId, apiKey, accessToken } = req.session.kiteSession;
   const body = req.body || {};

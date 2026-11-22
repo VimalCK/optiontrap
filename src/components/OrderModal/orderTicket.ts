@@ -69,6 +69,10 @@ export function pendingOrderOption(order: PaperOrder, lotSize: number): OrderOpt
   return { tradingsymbol: order.tradingsymbol, instrumentToken: order.instrumentToken, lotSize, strike, optionType, expiry };
 }
 
+/** Why the popup can't modify a pending order (it is the option chain's), or null when it can. */
+export const unmodifiableReason = (order: PaperOrder): string | null =>
+  (pendingOrderOption(order, order.quantity) === null ? 'Only option orders can be modified' : null);
+
 /** A pending order's terms as the popup's fields; a market order's price field starts at `price` (its last price). */
 export function pendingOrderFields(order: PaperOrder, price: number): OrderTicketFields {
   return {

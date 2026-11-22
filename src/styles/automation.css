@@ -293,6 +293,7 @@
 .automation-trades .automation-trades__toggle {
   width: 40px;
   text-align: right;
+  white-space: nowrap;
 }
 
 /* A smaller chevron than the shared 32px one, so it doesn't set the row height. */

@@ -22,9 +22,11 @@
  * - An exit is an order too: it closes the whole position at the bid / ask at
  *   once (market hours only), and is recorded as a filled closing order. So is
  *   the engine's square-off after the close (squareOff), at the closing price.
- * - A manual order still open can be modified (quantity, type, limit, target,
+ * - An order still open can be modified (quantity, type, limit, target,
  *   stop-loss, confidence, note): it is checked and priced like a new one,
- *   saved only if still open, then filled at once or watched again. A fill is
+ *   saved only if still open (an automated order's trade takes its new
+ *   quantity), then filled at once or watched again; listeners hear of the
+ *   fill as usual. A fill is
  *   claimed only on the terms it was priced on, so a tick priced before the
  *   modify can't fill the modified order.
  * - Whenever an order fills or is cancelled (by the user, at the close, or
@@ -57,7 +59,7 @@ import { openSharedTickerFeed } from '../../sharedTickerFeed.js';
 import { findWorkingAdminSession } from '../../oiHistoryScheduler.js';
 import { fetchQuotes } from '../../kiteQuotes.js';
 import { isMarketOpen, lastSessionEnd } from '../../../shared/marketTime.js';
-import { RULE_CODES, normalizeTradeInput } from '../../../shared/tradeRules.js';
+import { normalizeTradeInput } from '../../../shared/tradeRules.js';
 import { CANCELLED_AT_CLOSE, CANCELLED_BY_USER, canFill, modifiedOrderInput, parseOrder } from '../../../shared/orders.js';
 import { quotedFillPrice } from '../fillPrice.js';
 import { OrderStatus, OrderType, TradeSource, oppositeSide } from '../../../shared/tradeEnums.js';
@@ -69,7 +71,6 @@ export const ORDERS_SERVICE_ID = 'orders';
 export const NO_PRICE = 'NO_PRICE';
 const NOT_OPEN_MESSAGE = 'Order not found or no longer open';
 const NOT_MODIFIED_MESSAGE = 'The order is no longer pending (it filled or was cancelled), so it was not modified';
-const AUTO_NOT_MODIFIABLE_MESSAGE = 'Automated orders can only be cancelled, not modified';
 /** How often, in market hours, the feed is started if orders wait and it isn't running (e.g. no admin login yet). */
 const FEED_CHECK_MS = 60 * 1000;
 const LOG_PREFIX = '[Orders]';
@@ -303,7 +304,7 @@ export function createOrderService({
     },
 
     /**
-     * Modify one of the user's pending manual orders: checked and priced like a
+     * Modify one of the user's pending orders, manual or automated: checked and priced like a
      * new order, saved only while it is still open (one that filled or was
      * cancelled meanwhile is left as it is), then filled at once when it can
      * fill now, otherwise watched on its new terms.
@@ -316,7 +317,6 @@ export function createOrderService({
     async modify(userId, id, changes, kite) {
       const current = await db.getUserOrder(userId, id);
       if (!current || current.status !== OrderStatus.Open) return { ok: false, code: NOT_FOUND, message: NOT_MODIFIED_MESSAGE };
-      if (current.source !== TradeSource.Manual) return { ok: false, code: RULE_CODES.INVALID_TRADE, message: AUTO_NOT_MODIFIABLE_MESSAGE };
       const checked = await checkAndQuote(modifiedOrderInput(current, changes), kite);
       if (!checked.ok) return checked;
       // Off the watch first, so no tick fills it on its old terms while it changes.

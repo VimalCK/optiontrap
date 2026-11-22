@@ -78,14 +78,14 @@ describe('PaperOrdersTable', () => {
     const auto = renderToStaticMarkup(<PaperOrdersTable orders={[order('c', { source: 'Auto', autoTradeId: 't1' })]} prices={new Map()} onCancel={() => {}} onModify={() => {}} />);
     const button = auto.match(/<button[^>]*>MODIFY<\/button>/)?.[0] ?? '';
     expect(button).toContain('disabled');
-    expect(button).toContain('title="Automated orders can only be cancelled"');
+    expect(button).toContain('title="Modify automated orders on Algo Trading"');
   });
 });
 
 describe('modifyBlockedReason', () => {
   it('lets a manual option order be modified, not an automated one or one for a stock or future', () => {
     expect(modifyBlockedReason(order('a'))).toBeNull();
-    expect(modifyBlockedReason(order('a', { source: 'Auto', autoTradeId: 't1' }))).toBe('Automated orders can only be cancelled');
+    expect(modifyBlockedReason(order('a', { source: 'Auto', autoTradeId: 't1' }))).toBe('Modify automated orders on Algo Trading');
     expect(modifyBlockedReason(order('a', { instrumentType: 'FUT', strike: null, optionType: null }))).toBe('Only option orders can be modified');
   });
 });

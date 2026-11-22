@@ -11,18 +11,14 @@ import Message from '@/components/Message/Message';
 import EmptyState from '@/components/EmptyState/EmptyState';
 import { PaperTradingIcon } from '@/components/icons/Icons';
 import PositionInstrument from '@/components/PositionInstrument/PositionInstrument';
-import OrderModal from '@/components/OrderModal/OrderModal';
-import { pendingOrderOption, type OrderOption } from '@/components/OrderModal/orderTicket';
-import { usePendingOrderChoices } from '@/components/OrderModal/useOrderChoices';
+import ModifyOrderModal from '@/components/OrderModal/ModifyOrderModal';
+import { unmodifiableReason } from '@/components/OrderModal/orderTicket';
 import ToastStack from '@/components/Toast/ToastStack';
 import { useToasts } from '@/hooks/useToasts';
 import { cancelOrder, fetchOpenOrders, type PaperOrder } from '@/services/orders';
 import { tradeErrorMessage } from '@/services/positions';
-import { loadInstruments, getLotSizeByToken } from '@/services/instruments';
-import { getLotSize } from '@/services/optionChain';
 import { isAbortError } from '@/services/apiClient';
 import { istTimeLabel, isMarketLive } from '@/utils/marketStatus';
-import type { ToastColorId } from '@/utils/uiEnums';
 import { OrderStatus, TradeSource } from '../../../shared/tradeEnums.js';
 import '@/styles/positions.css';
 
@@ -54,9 +50,8 @@ export const lastPriceLabel = (order: PaperOrder, prices: LastPrices): string =>
 
 /** Why an open order can't be modified, shown on its disabled Modify button; null when it can be. */
 export function modifyBlockedReason(order: PaperOrder): string | null {
-  if (order.source !== TradeSource.Manual) return 'Automated orders can only be cancelled';
-  if (pendingOrderOption(order, order.quantity) === null) return 'Only option orders can be modified';
-  return null;
+  if (order.source !== TradeSource.Manual) return 'Modify automated orders on Algo Trading';
+  return unmodifiableReason(order);
 }
 
 export const PaperOrdersTable: React.FC<{
@@ -174,36 +169,6 @@ export function usePaperOrders(onFilled: () => void): PaperOrderBook {
   return { orders, error, cancel, reload };
 }
 
-/**
- * The order popup on a pending order, to modify it. Drawn from document.body: the orders sit in a card whose
- * hover transform would otherwise position the popup against the card and move it as the hover toggles.
- */
-const ModifyOrder: React.FC<{
-  order: PaperOrder;
-  option: OrderOption;
-  lastPrice: number;
-  onClose: () => void;
-  onModified: () => void;
-  onToast: (text: string, color: ToastColorId) => void;
-}> = ({ order, option, lastPrice, onClose, onModified, onToast }) => {
-  const choices = usePendingOrderChoices(order);
-  return createPortal(
-    <OrderModal option={option} initialPrice={lastPrice} priceLabel="LTP" choices={choices} editing={order}
-      onClose={onClose} onModified={onModified} onToast={onToast} />,
-    document.body,
-  );
-};
-
-/** The order's lot size from the instruments list (loaded once and cached), else the option chain's. */
-async function orderLotSize(instrumentToken: number): Promise<number> {
-  try {
-    await loadInstruments();
-  } catch {
-    // The option chain's lot size stands in when the instruments list can't load.
-  }
-  return getLotSizeByToken(instrumentToken) ?? getLotSize(instrumentToken);
-}
-
 const PaperOrders: React.FC<{
   orders: PaperOrder[];
   prices: LastPrices;
@@ -213,18 +178,13 @@ const PaperOrders: React.FC<{
 }> = ({ orders, prices, error, onCancel, onModified }) => {
   const pending = pendingOrders(orders);
   const { toasts, showToast } = useToasts();
-  const [modifying, setModifying] = useState<{ order: PaperOrder; option: OrderOption } | null>(null);
-
-  const openModify = async (order: PaperOrder) => {
-    const option = pendingOrderOption(order, await orderLotSize(order.instrumentToken));
-    if (option) setModifying({ order, option });
-  };
+  const [modifying, setModifying] = useState<PaperOrder | null>(null);
 
   return (
     <div className="paper-orders" role="region" aria-label="Pending orders">
       {error && <Message tone={MessageTone.Error} className="paper-orders__error">{error}</Message>}
       {pending.length > 0 ? (
-        <PaperOrdersTable orders={pending} prices={prices} onCancel={onCancel} onModify={openModify} />
+        <PaperOrdersTable orders={pending} prices={prices} onCancel={onCancel} onModify={setModifying} />
       ) : (
         <EmptyState
           icon={<PaperTradingIcon size={64} />}
@@ -233,11 +193,10 @@ const PaperOrders: React.FC<{
         />
       )}
       {modifying && (
-        <ModifyOrder
-          key={modifying.order.id}
-          order={modifying.order}
-          option={modifying.option}
-          lastPrice={prices.get(modifying.order.instrumentToken) ?? modifying.order.limitPrice ?? 0}
+        <ModifyOrderModal
+          key={modifying.id}
+          order={modifying}
+          lastPrice={prices.get(modifying.instrumentToken)}
           onClose={() => setModifying(null)}
           onModified={onModified}
           onToast={showToast}

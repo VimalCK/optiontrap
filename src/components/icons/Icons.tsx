@@ -464,6 +464,14 @@ export const BellIcon: React.FC<StrokeIconProps> = (props) => (
   </StrokeIcon>
 );
 
+/** Edit something: a pencil. */
+export const EditIcon: React.FC<StrokeIconProps> = (props) => (
+  <StrokeIcon {...props}>
+    <path d="M12 20h9" />
+    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+  </StrokeIcon>
+);
+
 export const TrashIcon: React.FC<StrokeIconProps> = (props) => (
   <StrokeIcon {...props}>
     <path d="M3 6h18" />
