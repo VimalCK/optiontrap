@@ -25,7 +25,7 @@ describe('the exit rule list', () => {
   it('starts every rule inactive; only square off has a time filled in, the 15:00 asked for', () => {
     expect(defaultRuleSettings(EXIT_RULES)).toEqual({
       'stop-loss': { active: false, params: { percent: null } },
-      target: { active: false, params: { percent: null } },
+      target: { active: false, params: { percent: null, trailPercent: null } },
       'square-off': { active: false, params: { time: '15:00' } },
       'max-daily-loss': { active: false, params: { amount: null } },
     });

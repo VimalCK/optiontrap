@@ -20,7 +20,7 @@ afterEach(() => {
 const order = (extra: Partial<PaperOrder> = {}): PaperOrder => ({
   id: 'o1', tradingsymbol: 'NIFTY26N1024000CE', instrumentToken: 101, instrumentType: 'CE', exchange: 'NFO', strike: 24000,
   optionType: 'CE', expiry: '2026-11-10', side: 'BUY', quantity: 75, orderType: 'Limit', limitPrice: 50, status: 'Open', statusReason: null,
-  fillPrice: null, positionId: null, closesPosition: false, note: '', targetPrice: null, stopLossPrice: null, confidence: null, source: 'Manual', horizon: Horizon.Intraday, autoTradeId: null, createdAt: '2026-11-05T06:30:00.000Z', updatedAt: '2026-11-05T06:30:00.000Z', ...extra,
+  fillPrice: null, positionId: null, closesPosition: false, note: '', targetPrice: null, stopLossPrice: null, trailAmount: null, confidence: null, source: 'Manual', horizon: Horizon.Intraday, autoTradeId: null, createdAt: '2026-11-05T06:30:00.000Z', updatedAt: '2026-11-05T06:30:00.000Z', ...extra,
 });
 
 describe('placeOrder', () => {

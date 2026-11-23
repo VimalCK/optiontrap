@@ -26,7 +26,7 @@ It never places real orders. The user is the sole developer; prod (optiontrap.co
     is the generic host (also used by the scheduled jobs); `createTradeEngine` builds the engine's. It holds a Postgres
     advisory lock so one engine runs; a plug-in that fails is logged and shown on Admin Services while the others keep running.
   - **Services** (`services/`): `orders` (every order, manual or automated, entry or exit), `signals` (a strategy's signals →
-    each user's settings and entry rules → orders), `tradeMonitor` (exit rules on open automated positions),
+    each user's settings and entry rules → orders), `tradeMonitor` (exits on every open position, one channel per source),
     `sessionSquareOff` (no intraday position outlives its session).
   - **Strategies** (`strategies/`, server-only, one file each): metadata + `prepare`/`select` + `start(ctx)`; each decides its own
     schedule. The browser gets their descriptions from `GET /api/strategies` (`useStrategies`).
@@ -375,10 +375,14 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   validation; rejected only after validation, when a trade can't be placed). Automated trades go to paper trading only.
   - Entry and exit rules are plug-ins: one file per rule in `shared/entryRules/` / `shared/exitRules/`, sharing the rule
     shape and settings logic in `shared/rules/`. Add a rule by adding its file to the list; never add `if`s in callers.
-  - The trade monitor service closes open automated positions when an exit rule fires, on live ticks from the server's
-    own Kite ticker feed (`server/kiteTickerFeed.js`, admin session, LTP mode, one feed for all users). Rules compare P&L
-    at the last traded price; the exit is an order (`orders.exit`) filled at the bid / ask. It reloads a user's positions
-    when they exit one by hand (a manual closing order) or change their settings.
+  - The trade monitor service watches every open paper position, on live ticks from the server's own Kite ticker feed
+    (`server/kiteTickerFeed.js`, admin session, LTP mode, one feed for all users), through one channel per source
+    (`services/monitorChannels/`), never mixed: automated positions exit when the owner's exit rule fires (P&L at the
+    last traded price); manual ones at the target / stop-loss price from their order. A trailing stop-loss (the Target
+    rule's Trail by %, or the order popup's Trail by ₹) starts at the target instead of exiting there and exits once the
+    gain falls back that much from its best (best price kept in memory while watched). The exit is an order
+    (`orders.exit`, source Auto) filled at the bid / ask. It reloads a user's positions when they fill an order by hand
+    or change their settings.
   - Every exit (`closePosition` in `server/tradeEngine/positions.js`) closes the automated trades behind an automated position:
     with the exit rule's reason from the monitor, or "Exited manually" (`MANUAL_EXIT`) from the Exit button. Positions are never deleted.
   - The session square-off service closes every open intraday paper position (manual and automated) its session left:

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Modal from '@/components/Modal/Modal';
+import Toggle from '@/components/Toggle/Toggle';
 import { ChevronDownIcon, ChevronRightIcon } from '@/components/icons/Icons';
 import { modifiedOrderMessage, modifyOrder, placeOrder, placedOrderMessage, placedOrderRefused, type PaperOrder } from '@/services/orders';
 import { instrumentName, tradeErrorMessage } from '@/services/positions';
@@ -42,10 +43,10 @@ export interface OrderModalProps {
 
 /** The fields a new order starts from: one lot at the premium clicked. */
 const newOrderFields = (option: OrderOption, price: number): OrderTicketFields => ({
-  quantity: option.lotSize, price, targetPrice: '', stopLossPrice: '', confidence: DEFAULT_CONFIDENCE, note: '',
+  quantity: option.lotSize, price, targetPrice: '', stopLossPrice: '', trailing: false, trailAmount: '', confidence: DEFAULT_CONFIDENCE, note: '',
 });
 
-const hasDetails = (fields: OrderTicketFields) => Boolean(fields.targetPrice || fields.stopLossPrice || fields.note);
+const hasDetails = (fields: OrderTicketFields) => Boolean(fields.targetPrice || fields.stopLossPrice || fields.trailing || fields.note);
 
 const NumberField: React.FC<{
   label: string;
@@ -80,6 +81,8 @@ const OrderModal: React.FC<OrderModalProps> = ({ option, initialPrice, priceLabe
   const [showDetails, setShowDetails] = useState(hasDetails(start));
   const [targetPrice, setTargetPrice] = useState(start.targetPrice);
   const [stopLossPrice, setStopLossPrice] = useState(start.stopLossPrice);
+  const [trailing, setTrailing] = useState(start.trailing);
+  const [trailAmount, setTrailAmount] = useState(start.trailAmount);
   const [confidence, setConfidence] = useState(start.confidence);
   const [note, setNote] = useState(start.note);
 
@@ -87,7 +90,7 @@ const OrderModal: React.FC<OrderModalProps> = ({ option, initialPrice, priceLabe
   const isLimit = isPaper && choices.orderType === OrderType.Limit;
   const title = `${instrumentName({ instrumentType: option.optionType, tradingsymbol: option.tradingsymbol })} ${option.strike} ${option.optionType}`;
   const tradeLabel = `${side} ${option.strike}${option.optionType}`;
-  const fields = { quantity, price, targetPrice, stopLossPrice, confidence, note };
+  const fields = { quantity, price, targetPrice, stopLossPrice, trailing, trailAmount, confidence, note };
 
   const place = async () => {
     try {
@@ -165,7 +168,7 @@ const OrderModal: React.FC<OrderModalProps> = ({ option, initialPrice, priceLabe
 
             <button type="button" className="order-modal__details-toggle" aria-expanded={showDetails} onClick={() => setShowDetails(!showDetails)}>
               {showDetails ? <ChevronDownIcon size={14} /> : <ChevronRightIcon size={14} />}
-              Add target, stop-loss, note
+              Add target, stop-loss, trailing, note
             </button>
             {showDetails && (
               <div className="order-modal__details">
@@ -179,6 +182,22 @@ const OrderModal: React.FC<OrderModalProps> = ({ option, initialPrice, priceLabe
                     <input type="number" value={stopLossPrice} onChange={(e) => setStopLossPrice(e.target.value)} min={0} step={0.05} placeholder="Optional" />
                   </label>
                 </div>
+                <div className="order-modal__fields">
+                  <div className="order-modal__field">
+                    <span>Trailing stop-loss</span>
+                    <Toggle checked={trailing} label="Trailing stop-loss" onText="On" offText="Off" onChange={setTrailing} />
+                  </div>
+                  {trailing && (
+                    <label className="order-modal__field">
+                      <span>Trail by (₹)</span>
+                      <input type="number" value={trailAmount} onChange={(e) => setTrailAmount(e.target.value)} min={0} step={0.05}
+                        placeholder="Points from the best price" />
+                    </label>
+                  )}
+                </div>
+                {trailing && (
+                  <p className="order-modal__hint">Starts at the target: instead of exiting there, it follows the best price and exits once the price falls back this much.</p>
+                )}
                 <label className="order-modal__field">
                   <span>Confidence: {confidence}%</span>
                   <input type="range" value={confidence} onChange={(e) => setConfidence(Number(e.target.value))} min={0} max={100} step={5} />

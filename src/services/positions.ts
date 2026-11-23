@@ -42,6 +42,8 @@ export interface Position {
   note?: string;
   targetPrice?: number | null;
   stopLossPrice?: number | null;
+  /** A trailing stop-loss from the target, in ₹ (the trade monitor trails the best price by it); null when off. */
+  trailAmount?: number | null;
   confidence?: number | null;
   /** What Zerodha would charge for its entry and exit (shared/tradeCharges.js); set when it closes. */
   charges?: number | null;

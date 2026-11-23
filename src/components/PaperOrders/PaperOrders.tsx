@@ -9,7 +9,8 @@ import Badge from '@/components/Badge/Badge';
 import { MessageTone, Tone, type ToneId } from '@/utils/uiEnums';
 import Message from '@/components/Message/Message';
 import EmptyState from '@/components/EmptyState/EmptyState';
-import { PaperTradingIcon } from '@/components/icons/Icons';
+import IconButton from '@/components/IconButton/IconButton';
+import { CloseIcon, EditIcon, PaperTradingIcon } from '@/components/icons/Icons';
 import PositionInstrument from '@/components/PositionInstrument/PositionInstrument';
 import ModifyOrderModal from '@/components/OrderModal/ModifyOrderModal';
 import { unmodifiableReason } from '@/components/OrderModal/orderTicket';
@@ -71,7 +72,7 @@ export const PaperOrdersTable: React.FC<{
           <th className="table-num">Limit</th>
           <th className="table-num">LTP</th>
           <th>Status</th>
-          <th aria-label="Actions" />
+          <th className="positions-table__actions-col" aria-label="Actions" />
         </tr>
       </thead>
       <tbody>
@@ -87,16 +88,13 @@ export const PaperOrdersTable: React.FC<{
               <td className="table-num">{order.limitPrice === null ? 'Market' : order.limitPrice.toFixed(2)}</td>
               <td className="table-num">{lastPriceLabel(order, prices)}</td>
               <td><Badge tone={status.tone} dot={order.status === OrderStatus.Open}>{status.text}</Badge></td>
-              <td>
+              <td className="positions-table__actions-col">
                 {order.status === OrderStatus.Open && (
                   <span className="positions-table__actions">
-                    <button type="button" className="positions-table__exit positions-table__exit--modify" onClick={() => onModify(order)}
-                      disabled={modifyBlocked !== null} title={modifyBlocked ?? 'Modify order'}>
-                      MODIFY
-                    </button>
-                    <button type="button" className="positions-table__exit" onClick={() => onCancel(order.id)} title="Cancel order">
-                      CANCEL
-                    </button>
+                    <IconButton icon={<EditIcon size={14} strokeWidth={1.75} />} label={modifyBlocked ?? 'Modify order'} onClick={() => onModify(order)}
+                      disabled={modifyBlocked !== null} className="positions-table__action" />
+                    <IconButton icon={<CloseIcon size={14} strokeWidth={1.75} />} label="Cancel order" onClick={() => onCancel(order.id)}
+                      className="positions-table__action positions-table__action--cancel" />
                   </span>
                 )}
               </td>

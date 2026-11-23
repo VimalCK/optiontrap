@@ -24,6 +24,8 @@ function toOrder(row) {
     note: row.note || '',
     targetPrice: row.target_price,
     stopLossPrice: row.stop_loss_price,
+    /** A trailing stop-loss from the target, in ₹; null when off. */
+    trailAmount: row.trail_amount ?? null,
     confidence: row.confidence === null || row.confidence === undefined ? null : Number(row.confidence),
     status: row.status,
     statusReason: row.status_reason,
@@ -51,8 +53,8 @@ export async function createOrder(userId, order, { source = TradeSource.Manual, 
   const { strike, optionType, expiry } = instrumentColumns(order);
   const row = await firstRow(
     `INSERT INTO orders (id, user_id, tradingsymbol, instrument_token, instrument_type, exchange, strike, option_type, expiry,
-       side, quantity, order_type, limit_price, note, target_price, stop_loss_price, confidence, source, algo_trade_id, horizon)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+       side, quantity, order_type, limit_price, note, target_price, stop_loss_price, confidence, trail_amount, source, algo_trade_id, horizon)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
      RETURNING *`,
     [crypto.randomUUID(), userId, order.tradingsymbol, order.instrumentToken, order.instrumentType, order.exchange, strike, optionType, expiry,
      order.side, order.quantity, order.orderType, order.limitPrice, ...positionMetaValues(order), source, autoTradeId, order.horizon],
@@ -133,7 +135,7 @@ export async function modifyOpenOrder(userId, id, order) {
   const row = await firstRow(
     `WITH modified AS (
        UPDATE orders SET quantity = $3, order_type = $4, limit_price = $5, note = $6, target_price = $7, stop_loss_price = $8,
-         confidence = $9, updated_at = now()
+         confidence = $9, trail_amount = $10, updated_at = now()
        WHERE id = $1 AND user_id = $2 AND status = ${sqlEnum(OrderStatus.Open)}
        RETURNING *
      ), trade AS (

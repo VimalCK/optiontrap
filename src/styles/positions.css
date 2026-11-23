@@ -193,7 +193,7 @@
   color: var(--loss);
 }
 
-/* The P&L's percentage, on its own line under the amount so the column stays narrow. */
+/* A second figure on its own line under a cell's value, so the column stays narrow: the P&L's percentage, an exited position's LTP. */
 .positions-table__pct {
   display: block;
   font-size: 11px;
@@ -219,15 +219,23 @@
   background: rgba(var(--loss-rgb), 0.1);
 }
 
-.positions-table__actions {
-  display: inline-flex;
-  gap: 6px;
+/* The table's columns share its width (fixed layout); this one is as wide as its two icon buttons side by side. */
+.positions-table .positions-table__actions-col {
+  width: 80px;
 }
 
-.positions-table__exit--modify:hover {
-  color: var(--accent);
-  border-color: var(--accent);
-  background: var(--sidebar-active);
+.positions-table__actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.positions-table .positions-table__action {
+  width: 28px;
+  height: 28px;
+}
+
+.positions-table__action--cancel:hover:not(:disabled) {
+  color: var(--loss);
 }
 
 .positions-table__exit:disabled {

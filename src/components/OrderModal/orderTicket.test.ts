@@ -9,20 +9,20 @@ const option: OrderOption = {
 const pending = (extra: Partial<PaperOrder> = {}): PaperOrder => ({
   id: 'o1', tradingsymbol: 'NIFTY26NOV24000PE', instrumentToken: 222, instrumentType: OptionType.PE, exchange: 'NFO', strike: 24000,
   optionType: OptionType.PE, expiry: '2026-11-26', side: Side.SELL, quantity: 150, orderType: OrderType.Limit, limitPrice: 55, status: OrderStatus.Open,
-  statusReason: null, fillPrice: null, positionId: null, closesPosition: false, note: 'fade the spike', targetPrice: 40, stopLossPrice: null,
+  statusReason: null, fillPrice: null, positionId: null, closesPosition: false, note: 'fade the spike', targetPrice: 40, stopLossPrice: null, trailAmount: null,
   confidence: 60, source: TradeSource.Manual, horizon: Horizon.Intraday, autoTradeId: null,
   createdAt: '2026-11-05T06:30:00.000Z', updatedAt: '2026-11-05T06:30:00.000Z', // Thu 12:00 IST
   ...extra,
 });
-const fields: OrderTicketFields = { quantity: 150, price: 101.5, targetPrice: '', stopLossPrice: '', confidence: 70, note: '  why  ' };
+const fields: OrderTicketFields = { quantity: 150, price: 101.5, targetPrice: '', stopLossPrice: '', trailing: false, trailAmount: '', confidence: 70, note: '  why  ' };
 
 describe('ticketOrder', () => {
   it('places a market order without a limit price, with the trimmed note and no target or stop-loss', () => {
     const order = ticketOrder(option, Side.BUY, fields, { orderType: OrderType.Market, horizon: Horizon.Intraday });
     expect(order).toEqual({
       tradingsymbol: 'NIFTY26NOV24000CE', instrumentToken: 111, strike: 24000, optionType: OptionType.CE, expiry: '2026-11-26',
-      side: Side.BUY, quantity: 150, horizon: Horizon.Intraday, note: 'why', targetPrice: null, stopLossPrice: null, confidence: 70,
-      orderType: OrderType.Market,
+      side: Side.BUY, quantity: 150, horizon: Horizon.Intraday, note: 'why', targetPrice: null, stopLossPrice: null, trailAmount: null,
+      confidence: 70, orderType: OrderType.Market,
     });
   });
 
@@ -35,9 +35,17 @@ describe('ticketOrder', () => {
 describe('ticketChanges', () => {
   it("is the ticket's terms without the contract, side or trade type: what a modify sends", () => {
     expect(ticketChanges({ ...fields, targetPrice: '80' }, OrderType.Limit)).toEqual({
-      quantity: 150, orderType: OrderType.Limit, limitPrice: 101.5, note: 'why', targetPrice: 80, stopLossPrice: null, confidence: 70,
+      quantity: 150, orderType: OrderType.Limit, limitPrice: 101.5, note: 'why', targetPrice: 80, stopLossPrice: null, trailAmount: null,
+      confidence: 70,
     });
     expect(ticketChanges(fields, OrderType.Market)).not.toHaveProperty('limitPrice');
+  });
+
+  it('sends the trail only while trailing is switched on, an empty one as 0 for the server to refuse', () => {
+    const trailing = { ...fields, targetPrice: '80', trailAmount: '5' };
+    expect(ticketChanges(trailing, OrderType.Market).trailAmount).toBeNull();
+    expect(ticketChanges({ ...trailing, trailing: true }, OrderType.Market).trailAmount).toBe(5);
+    expect(ticketChanges({ ...trailing, trailing: true, trailAmount: '' }, OrderType.Market).trailAmount).toBe(0);
   });
 });
 
@@ -53,8 +61,12 @@ describe('pendingOrderOption', () => {
 describe('pendingOrderFields', () => {
   it("fills the ticket from the order's terms, empty where it has no target or stop-loss", () => {
     expect(pendingOrderFields(pending(), 61.4)).toEqual({
-      quantity: 150, price: 55, targetPrice: '40', stopLossPrice: '', confidence: 60, note: 'fade the spike',
+      quantity: 150, price: 55, targetPrice: '40', stopLossPrice: '', trailing: false, trailAmount: '', confidence: 60, note: 'fade the spike',
     });
+  });
+
+  it('starts with trailing switched on when the order has a trail', () => {
+    expect(pendingOrderFields(pending({ trailAmount: 2.5 }), 61.4)).toMatchObject({ trailing: true, trailAmount: '2.5' });
   });
 
   it('starts a market order at the price given, and confidence at the default when the order has none', () => {

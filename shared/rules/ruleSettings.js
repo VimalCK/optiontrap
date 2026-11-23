@@ -6,10 +6,11 @@
  *   id           stable name, the key of its setting in the user's config
  *   label        what the settings page calls it
  *   description  one line on what it does
- *   params       the values the user sets for it: { key, label, type, default?, hideLabel? }
+ *   params       the values the user sets for it: { key, label, type, default?, hideLabel?, optional? }
  *                (types in paramTypes.js; default only when the user has named one;
  *                hideLabel when the rule's own name already says what the value is, so
- *                the label is only the input's accessible name and appears in messages)
+ *                the label is only the input's accessible name and appears in messages;
+ *                optional when the rule works without it, left empty to leave it off)
  *   check(subject, ctx, params)  null to let it pass, or the reason it fires
  */
 import { PARAM_TYPES } from './paramTypes.js';
@@ -17,7 +18,7 @@ import { PARAM_TYPES } from './paramTypes.js';
 /**
  * @typedef {import('./paramTypes.js').ParamTypeId} ParamTypeId
  * @typedef {number | string | null} ParamValue
- * @typedef {{ key: string, label: string, type: ParamTypeId, default?: number | string, hideLabel?: boolean }} RuleParam
+ * @typedef {{ key: string, label: string, type: ParamTypeId, default?: number | string, hideLabel?: boolean, optional?: boolean }} RuleParam
  * @typedef {{ active: boolean, params: Record<string, ParamValue> }} RuleSetting
  * @typedef {Record<string, RuleSetting>} RuleSettings
  * @typedef {{ id: string, label: string, description: string, params: RuleParam[] }} RuleInfo
@@ -40,8 +41,8 @@ export function defaultRuleSettings(rules) {
 }
 
 /**
- * Check one rule's setting from the client. An active rule needs every value;
- * an inactive one may leave values empty, but what it has must be valid.
+ * Check one rule's setting from the client. An active rule needs every value
+ * except optional ones; an inactive one may leave values empty, but what it has must be valid.
  * @param {RuleInfo} rule
  * @param {any} input
  * @param {string} field  where the settings sit in the config, for messages
@@ -56,7 +57,7 @@ function parseRuleSetting(rule, input, field) {
     const raw = input.params?.[param.key];
     const type = PARAM_TYPES[param.type];
     if (raw === null || raw === undefined || raw === '') {
-      if (input.active) return { error: `${rule.label}: set ${param.label} to make it active` };
+      if (input.active && !param.optional) return { error: `${rule.label}: set ${param.label} to make it active` };
       params[param.key] = null;
       continue;
     }

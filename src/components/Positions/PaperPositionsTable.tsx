@@ -53,7 +53,11 @@ const PaperPositionRow: React.FC<{ pos: Position; ltp: number | undefined; onExi
       <td><span className={`positions-table__side positions-table__side--${pos.side.toLowerCase()}`}>{pos.side}</span></td>
       <td className="table-num">{pos.quantity}</td>
       <td className="table-num">{pos.entryPrice.toFixed(2)}</td>
-      <td className="table-num">{pos.exited ? pos.exitPrice!.toFixed(2) : (ltp !== undefined ? ltp.toFixed(2) : '-')}</td>
+      <td className="table-num">
+        {pos.exited ? pos.exitPrice!.toFixed(2) : (ltp !== undefined ? ltp.toFixed(2) : '-')}
+        {/* Still ticking after the exit, to see where the price went since; the P&L stays at the exit. */}
+        {pos.exited && ltp !== undefined && <span className="positions-table__pct">LTP {ltp.toFixed(2)}</span>}
+      </td>
       <td className={`table-num ${pnlTone(pnl.value)}`}>
         {pnl.value >= 0 ? '+' : ''}{pnl.value.toFixed(2)}
         <span className="positions-table__pct">{pnl.pct >= 0 ? '+' : ''}{pnl.pct.toFixed(2)}%</span>

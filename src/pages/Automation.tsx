@@ -104,7 +104,7 @@ export const TradeRow: React.FC<{
         <td className="automation-trades__toggle" onClick={(e) => e.stopPropagation()}>
           {waitingOrder && onModify && (
             <IconButton
-              icon={<EditIcon />}
+              icon={<EditIcon size={14} strokeWidth={1.75} />}
               label={unmodifiableReason(waitingOrder) ?? 'Modify entry order'}
               onClick={() => onModify(waitingOrder)}
               disabled={unmodifiableReason(waitingOrder) !== null}

@@ -107,9 +107,19 @@
   min-width: 0;
 }
 
-.order-modal__field span {
+.order-modal__field > span {
   font-size: 10px;
   font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.order-modal__field > .toggle {
+  align-self: flex-start;
+}
+
+.order-modal__hint {
+  margin: 0;
+  font-size: 11px;
   color: var(--text-secondary);
 }
 

@@ -11,12 +11,15 @@ export interface OrderOption {
   expiry: string;
 }
 
-/** What the user filled in; target and stop-loss are the inputs' text, empty when not set. */
+/** What the user filled in; target, stop-loss and trail are the inputs' text, empty when not set. */
 export interface OrderTicketFields {
   quantity: number;
   price: number;
   targetPrice: string;
   stopLossPrice: string;
+  /** Whether the trailing stop-loss is switched on; trailAmount counts only then. */
+  trailing: boolean;
+  trailAmount: string;
   confidence: number;
   note: string;
 }
@@ -33,6 +36,8 @@ export function ticketChanges(fields: OrderTicketFields, orderType: OrderTypeId)
     note: fields.note.trim(),
     targetPrice: optionalPrice(fields.targetPrice),
     stopLossPrice: optionalPrice(fields.stopLossPrice),
+    // Sent as typed while switched on (an empty one is 0, which the server refuses with why).
+    trailAmount: fields.trailing ? Number(fields.trailAmount) : null,
     confidence: fields.confidence,
   };
   return orderType === OrderType.Limit
@@ -80,6 +85,8 @@ export function pendingOrderFields(order: PaperOrder, price: number): OrderTicke
     price: order.limitPrice ?? price,
     targetPrice: priceText(order.targetPrice),
     stopLossPrice: priceText(order.stopLossPrice),
+    trailing: order.trailAmount !== null,
+    trailAmount: priceText(order.trailAmount),
     confidence: order.confidence ?? DEFAULT_CONFIDENCE,
     note: order.note,
   };

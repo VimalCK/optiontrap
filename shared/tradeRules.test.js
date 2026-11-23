@@ -101,6 +101,23 @@ describe('horizon-given rule', () => {
   });
 });
 
+describe('trailing-stop-loss rule (placing an order)', () => {
+  const place = (input) => checkTrade('Place', { trade: normalizeTradeInput(input), now: OPEN });
+
+  it('takes an order without a trail, or with a trail and a target', () => {
+    expect(rulesHit(place(validInput))).toEqual([]);
+    expect(rulesHit(place({ ...validInput, targetPrice: 120, trailAmount: 5 }))).toEqual([]);
+  });
+
+  it('refuses a trail without a target, where it would start, and a trail that is not above 0', () => {
+    expect(place({ ...validInput, trailAmount: 5 }).violations).toEqual([
+      { rule: 'trailing-stop-loss', code: 'INVALID_TRADE', message: 'Trailing stop-loss: set a target, where the trailing starts' },
+    ]);
+    expect(place({ ...validInput, targetPrice: 120, trailAmount: 0 }).violations[0].message).toBe('Trailing stop-loss: Trail by must be more than 0');
+    expect(place({ ...validInput, targetPrice: 120, trailAmount: '' }).violations[0].message).toBe('Trailing stop-loss: Trail by must be more than 0');
+  });
+});
+
 describe('instrument-fields rule', () => {
   const stock = { tradingsymbol: 'RELIANCE', instrumentToken: '738561', instrumentType: 'EQ', side: 'BUY', quantity: '10', entryPrice: '1400', horizon: Horizon.Intraday };
   const future = { tradingsymbol: 'NIFTY26NOVFUT', instrumentToken: '13238786', instrumentType: 'FUT', side: 'SELL', quantity: '75', entryPrice: '24100', expiry: '2026-11-24', horizon: Horizon.Positional };

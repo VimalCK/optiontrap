@@ -42,6 +42,7 @@ const RuleRow: React.FC<{ rule: RuleInfo; setting: RuleSetting; onChange: (setti
               type={type.input}
               aria-label={param.hideLabel ? param.label : undefined}
               step={type.step}
+              placeholder={param.optional ? 'Off' : undefined}
               className="app-input automation-rule__input"
               value={setting.params[param.key] ?? ''}
               onChange={(e) => onChange({ ...setting, params: { ...setting.params, [param.key]: paramValueFromInput(param.type, e.target.value) } })}

@@ -74,6 +74,7 @@ export function normalizeTradeInput(input = /** @type {Record<string, any>} */ (
     targetPrice: input.targetPrice,
     stopLossPrice: input.stopLossPrice,
     confidence: input.confidence,
+    trailAmount: input.trailAmount,
   };
 }
 
@@ -112,6 +113,20 @@ export const TRADE_RULES = [
     appliesTo: [TradeAction.Open, TradeAction.Place],
     code: RULE_CODES.INVALID_TRADE,
     check: ({ trade }) => (isHorizon(trade.horizon) ? null : `Choose ${HORIZONS.map((h) => h.label).join(' or ')}`),
+  },
+  {
+    // A trailing stop-loss starts at the target (the trade monitor's manual channel), so it needs one.
+    id: 'trailing-stop-loss',
+    appliesTo: [TradeAction.Place],
+    code: RULE_CODES.INVALID_TRADE,
+    check: ({ trade }) => {
+      const { trailAmount, targetPrice } = trade;
+      if (trailAmount === undefined || trailAmount === null) return null;
+      if (!(Number(trailAmount) > 0)) return 'Trailing stop-loss: Trail by must be more than 0';
+      return targetPrice === undefined || targetPrice === null || targetPrice === ''
+        ? 'Trailing stop-loss: set a target, where the trailing starts'
+        : null;
+    },
   },
   {
     id: 'exit-price-given',

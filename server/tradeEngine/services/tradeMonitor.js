@@ -1,49 +1,44 @@
 /**
- * The trade monitor service: closes open automated paper positions when one
- * of their owner's active exit rules fires (shared/exitRules/: stop-loss,
- * target, square off at a time, max loss per day), on the live tick that
- * crosses it. A trade engine service (server/tradeEngine/host.js).
+ * The trade monitor service: watches every open paper position, manual and
+ * automated, and exits it when its exit fires, on the live tick that crosses
+ * it. A trade engine service (server/tradeEngine/host.js).
  *
- * - Runs on the market clock (ctx.market): at each open it loads every open
- *   automated position, across all users, and watches them; after the close
- *   it stops. One user's are loaded again when their positions or settings
- *   change: refreshUser, from the settings route and the signals service, and
- *   on every position the user exits by hand (an order service closing order).
+ * Each source has its own channel (monitorChannels/), which loads its
+ * positions and decides when they exit; the two never mix:
+ * - automated (autoPositions.js): the owner's exit rules from their
+ *   automation settings (shared/exitRules/);
+ * - manual (manualPositions.js): the target, stop-loss and trailing stop-loss
+ *   each position took from its order (the order popup).
+ *
+ * The monitor itself only runs them:
+ * - On the market clock (ctx.market): at each open every channel loads its
+ *   open positions, across all users; after the close it stops. One user's are
+ *   loaded again when their positions or settings change: refreshUser, from
+ *   the settings route and the signals service, and on every order the user
+ *   fills by hand (a manual entry or exit).
  * - Prices come from the server's own Kite ticker feed (kiteTickerFeed.js,
  *   admin session, LTP mode, shared with the order service through
  *   sharedTickerFeed.js): one feed for all users, subscribed to exactly the
- *   instruments held. Each tick runs the exit rules of every position in that
- *   instrument. A check every second runs them on the last price too, so
- *   "square off at" fires on time even if an instrument goes quiet.
- * - Rules compare the position's P&L at the last traded price. The owner's
- *   P&L for the day (booked, loaded from the DB and reloaded after each exit,
- *   plus open at the last prices) is there too, for the max loss per day rule.
+ *   instruments held. Each tick checks every position in that instrument.
+ *   A check every second checks them on the last price too, so time-based
+ *   exits fire on time even if an instrument goes quiet.
+ * - It keeps each position's best price while watched, for the trailing
+ *   stop-loss. In memory only: after a restart it starts again from the price then.
  * - An exit is an order through the order service (ctx.services.orders.exit):
- *   a market order filled at the bid / ask, which also closes the automated
- *   trades behind the position, with the rule's reason.
- * - Exit rules protect open positions whether automation is switched on or
- *   off; switching it off stops new trades, not exits.
- * - A rule that closes positions at a time (square off at) also cancels the
- *   owner's waiting automated entry orders, on the same every-second check,
- *   so none fills only to be closed at once.
+ *   a market order filled at the bid / ask, with the exit's reason (which also
+ *   closes the automated trades behind an automated position).
  */
-import {
-  getAllOpenAutoPositions,
-  getOpenAutoPositions,
-  getTodayAutoRealisedPnl,
-} from '../../db.js';
-import { getAutomationConfigs } from '../automationConfigs.js';
 import { NOT_FOUND } from '../positions.js';
 import { openSharedTickerFeed } from '../../sharedTickerFeed.js';
 import { findWorkingAdminSession } from '../../oiHistoryScheduler.js';
-import { marketDate, marketDayStartMs } from '../../../shared/marketTime.js';
-import { checkEntryOrderBlocked, checkExitRules } from '../../../shared/exitRules/index.js';
-import { cancelledByRule } from '../../../shared/orders.js';
-import { tradePnl, tradePnlPercent } from '../../../shared/tradePnl.js';
+import { marketDate } from '../../../shared/marketTime.js';
+import { betterPrice } from '../../../shared/trailingStop.js';
 import { engineLogger } from '../../engineLog.js';
-import { TradeSource } from '../../../shared/tradeEnums.js';
+import { OrderStatus, TradeSource } from '../../../shared/tradeEnums.js';
 import { HealthStatus } from '../../../shared/appEnums.js';
 import { countLabel, healthTime } from '../../serviceHealth.js';
+import { createAutoChannel } from './monitorChannels/autoPositions.js';
+import { createManualChannel } from './monitorChannels/manualPositions.js';
 
 /** This trade engine service's id: its key in ctx.services and on Admin Services. */
 export const TRADE_MONITOR_SERVICE_ID = 'tradeMonitor';
@@ -51,6 +46,25 @@ export const TRADE_MONITOR_SERVICE_ID = 'tradeMonitor';
 /**
  * @typedef {{ marketOpen: boolean, feedConnected: boolean, waitingForLogin: boolean, watchedPositions: number,
  *             watchedInstruments: number, lastTickAt: number | null, lastError: string | null }} MonitorStatus
+ * @typedef {{ id: string, userId: string, instrumentToken: number, tradingsymbol: string,
+ *             side: import('../../../shared/tradeEnums.js').SideId, quantity: number, entryPrice: number,
+ *             horizon: import('../../../shared/tradeEnums.js').HorizonId }} WatchedPosition
+ * @typedef {{ position: WatchedPosition, exitPrice: number, ruleId: string, reason: string }} DueExit
+ * @typedef {{ last: Map<number, number>, best: Map<string, number> }} MonitorPrices
+ *   last: instrument token → last traded price; best: position id → its best price while watched
+ * @typedef {{
+ *   source: import('../../../shared/tradeEnums.js').TradeSourceId,
+ *   positions: () => WatchedPosition[],
+ *   loadAll: () => Promise<void>,
+ *   loadUser: (userId: string) => Promise<void>,
+ *   dueExits: (positions: WatchedPosition[]) => DueExit[],
+ *   exited: (position: WatchedPosition) => Promise<void>,
+ *   clockCheck?: (orders: OrderService) => Promise<void>,
+ *   clear: () => void,
+ * }} MonitorChannel
+ *   positions: what it watches; dueExits: which of these (its own) exit now, at their last prices;
+ *   exited: a position is closed (or was closed elsewhere); clockCheck: its own every-second work
+ * @typedef {ReturnType<typeof import('./orders.js').createOrderService>} OrderService
  */
 
 /** A failing check, named as the trade monitor's within the engine's check. */
@@ -58,98 +72,32 @@ const monitorFailure = (/** @type {string} */ output) => ({ status: HealthStatus
 
 /**
  * The monitor's health from its status: fails when loading the open positions
- * failed, or when open automated positions go unwatched for want of an admin
+ * failed, or when open positions go unwatched for want of an admin
  * Kite login; otherwise says what it is watching, timed at the last tick.
  * @param {MonitorStatus} status
  * @returns {import('../../serviceHealth.js').HealthCheck}
  */
 export function monitorHealth(status) {
   if (status.lastError !== null) return monitorFailure(`Loading positions failed · ${status.lastError}`);
-  if (!status.marketOpen) return { status: HealthStatus.Pass, output: 'Market closed · watches automated positions in market hours', time: null };
+  if (!status.marketOpen) return { status: HealthStatus.Pass, output: 'Market closed · watches open positions in market hours', time: null };
   if (status.waitingForLogin) return monitorFailure(`${countLabel(status.watchedPositions, 'open position')} unwatched · no admin Kite login`);
-  if (!status.feedConnected) return { status: HealthStatus.Pass, output: 'No open automated positions', time: null };
+  if (!status.feedConnected) return { status: HealthStatus.Pass, output: 'No open positions to watch', time: null };
   const watching = `Watching ${countLabel(status.watchedPositions, 'position')} in ${countLabel(status.watchedInstruments, 'instrument')}`;
   if (status.lastTickAt === null) return { status: HealthStatus.Pass, output: `${watching} · no tick yet`, time: null };
   return { status: HealthStatus.Pass, output: `${watching} · last tick`, time: healthTime(status.lastTickAt) };
 }
 
-/** How often every position is checked on its last price, for time-based rules. */
+/** How often every position is checked on its last price, for time-based exits. */
 const CLOCK_CHECK_MS = 1000;
 /** How often, in market hours, the feed is started if positions are watched and it isn't running (e.g. no admin login yet). */
 const FEED_CHECK_MS = 60 * 1000;
 
 /**
- * @typedef {{ id: string, userId: string, instrumentToken: number, tradingsymbol: string, side: string, quantity: number, entryPrice: number }} WatchedPosition
- * @typedef {import('../../../shared/rules/ruleSettings.js').RuleSettings} RuleSettings
- * @typedef {{ position: WatchedPosition, exitPrice: number, ruleId: string, reason: string }} DueExit
- * @typedef {{ id: string, userId: string, instrumentToken: number, tradingsymbol: string, side: string, quantity: number,
- *             horizon: import('../../../shared/tradeEnums.js').HorizonId }} WaitingOrder
- * @typedef {{ order: WaitingOrder, ruleId: string, reason: string }} DueCancellation
- */
-
-/**
- * Each user's open P&L at the last prices; positions with no price yet count as 0.
- * @param {Iterable<WatchedPosition>} positions
- * @param {Map<number, number>} lastPrices  instrument token → last traded price
- * @returns {Map<string, number>} user id → open P&L in ₹
- */
-export function openPnlByUser(positions, lastPrices) {
-  const totals = new Map();
-  for (const position of positions) {
-    const price = lastPrices.get(position.instrumentToken);
-    if (price !== undefined) totals.set(position.userId, (totals.get(position.userId) ?? 0) + tradePnl(position, price));
-  }
-  return totals;
-}
-
-/**
- * The positions an exit rule says to close now, each at its last price.
- * Positions with no price yet, or whose owner has no rules loaded, stay open.
- * `todayPnlByUser` is each owner's automated P&L today, booked plus open
- * (0 when missing), for the max loss per day rule.
- * @param {WatchedPosition[]} positions
- * @param {{ lastPrices: Map<number, number>, exitRulesByUser: Map<string, RuleSettings>, todayPnlByUser: Map<string, number>, now: Date }} state
- * @returns {DueExit[]}
- */
-export function dueExits(positions, { lastPrices, exitRulesByUser, todayPnlByUser, now }) {
-  /** @type {DueExit[]} */
-  const due = [];
-  for (const position of positions) {
-    const price = lastPrices.get(position.instrumentToken);
-    const rules = exitRulesByUser.get(position.userId);
-    if (price === undefined || !rules) continue;
-    const ctx = { now, todayAutoPnl: todayPnlByUser.get(position.userId) ?? 0 };
-    const fired = checkExitRules({ ...position, pnl: tradePnl(position, price), pnlPercent: tradePnlPercent(position, price) }, ctx, rules);
-    if (fired) due.push({ position, exitPrice: price, ...fired });
-  }
-  return due;
-}
-
-
-/**
- * The waiting automated entry orders a rule says to cancel now. Orders whose owner has no rules loaded stay.
- * @param {WaitingOrder[]} orders
- * @param {{ exitRulesByUser: Map<string, RuleSettings>, todayPnlByUser: Map<string, number>, now: Date }} state
- * @returns {DueCancellation[]}
- */
-export function dueCancellations(orders, { exitRulesByUser, todayPnlByUser, now }) {
-  /** @type {DueCancellation[]} */
-  const due = [];
-  for (const order of orders) {
-    const rules = exitRulesByUser.get(order.userId);
-    if (!rules) continue;
-    const fired = checkEntryOrderBlocked(order, { now, todayAutoPnl: todayPnlByUser.get(order.userId) ?? 0 }, rules);
-    if (fired) due.push({ order, ...fired });
-  }
-  return due;
-}
-
-/**
  * A trade monitor service. Everything it talks to is injectable, for tests;
- * the order service comes from the engine (ctx.services.orders).
+ * the order service comes from the engine (ctx.services.orders); `db` holds
+ * the channels' database functions (theirs when not given).
  * @param {{
- *   db?: { getAllOpenAutoPositions: typeof getAllOpenAutoPositions, getOpenAutoPositions: typeof getOpenAutoPositions,
- *          getAutomationConfigs: typeof getAutomationConfigs, getTodayAutoRealisedPnl: typeof getTodayAutoRealisedPnl },
+ *   db?: Parameters<typeof createAutoChannel>[0]['db'] & Parameters<typeof createManualChannel>[0]['db'],
  *   findKiteSession?: typeof findWorkingAdminSession,
  *   createFeed?: typeof openSharedTickerFeed,
  *   clock?: () => Date,
@@ -157,24 +105,22 @@ export function dueCancellations(orders, { exitRulesByUser, todayPnlByUser, now 
  * }} [deps]
  */
 export function createTradeMonitor({
-  db = { getAllOpenAutoPositions, getOpenAutoPositions, getAutomationConfigs, getTodayAutoRealisedPnl },
+  db,
   findKiteSession = findWorkingAdminSession,
   createFeed = openSharedTickerFeed,
   clock = () => new Date(),
   log = engineLogger('Monitor'),
 } = {}) {
-  /** @type {Map<string, WatchedPosition>} position id → position */
-  const watched = new Map();
-  /** @type {Map<string, RuleSettings>} */
-  const exitRulesByUser = new Map();
-  /** @type {Map<string, number>} user id → automated P&L booked today */
-  const bookedPnlByUser = new Map();
-  /** @type {Map<number, number>} */
-  const lastPrices = new Map();
+  /** @type {MonitorPrices} */
+  const prices = { last: new Map(), best: new Map() };
+  const autoChannel = createAutoChannel({ db, prices, clock, log });
+  /** @type {MonitorChannel[]} */
+  const channels = [autoChannel, createManualChannel({ db, prices })];
   /** Positions being exited right now, so a burst of ticks exits each once. */
   const exiting = new Set();
   /** The order service exits go through, and the market clock (from the engine at start). */
-  let orders = null;
+  /** @type {OrderService} */
+  let orders = /** @type {any} */ (null);
   /** @type {import('../market.js').PluginMarket | null} */
   let market = null;
   /** @type {ReturnType<typeof openSharedTickerFeed> | null} */
@@ -192,54 +138,50 @@ export function createTradeMonitor({
   /** @type {string | null} */
   let lastError = null;
 
-  const watchedTokens = () => [...new Set([...watched.values()].map((p) => p.instrumentToken))];
+  const watchedPositions = () => channels.flatMap((channel) => channel.positions());
+  const watchedTokens = () => [...new Set(watchedPositions().map((p) => p.instrumentToken))];
 
-  /** Reload the user's automated P&L booked today from the DB. */
-  async function loadBookedPnl(/** @type {string} */ userId) {
-    const todayStart = new Date(marketDayStartMs(clock().getTime())).toISOString();
-    bookedPnlByUser.set(userId, await db.getTodayAutoRealisedPnl(userId, todayStart));
+  /** Forget the best prices of positions no channel watches any more. */
+  function pruneBestPrices() {
+    const watched = new Set(watchedPositions().map((p) => p.id));
+    for (const id of prices.best.keys()) if (!watched.has(id)) prices.best.delete(id);
   }
 
-  async function loadExitRules(/** @type {string[]} */ userIds) {
-    const configs = await db.getAutomationConfigs(userIds);
-    for (const userId of userIds) exitRulesByUser.set(userId, configs.get(userId).exitRules);
-  }
-
-  /** Track exactly these users' positions, exit rules and booked P&L, replacing what was held for them. */
-  async function track(userIds, positions) {
-    await Promise.all([loadExitRules(userIds), ...userIds.map(loadBookedPnl)]);
-    for (const [id, position] of watched) if (userIds.includes(position.userId)) watched.delete(id);
-    for (const position of positions) watched.set(position.id, position);
-    feed?.watch(watchedTokens());
+  /** Raise each position's best price to its last price where that is better. */
+  function updateBestPrices(/** @type {WatchedPosition[]} */ positions) {
+    for (const position of positions) {
+      const price = prices.last.get(position.instrumentToken);
+      if (price !== undefined) prices.best.set(position.id, betterPrice(position.side, prices.best.get(position.id), price));
+    }
   }
 
   async function loadAll() {
-    const positions = await db.getAllOpenAutoPositions();
-    watched.clear();
-    exitRulesByUser.clear();
-    bookedPnlByUser.clear();
-    await track([...new Set(positions.map((p) => p.userId))], positions);
-    log('loaded positions', { watching: watched.size });
+    await Promise.all(channels.map((channel) => channel.loadAll()));
+    prices.best.clear();
+    log('loaded positions', Object.fromEntries(channels.map((channel) => [channel.source, channel.positions().length])));
   }
 
-  /** Exit one position at its due price through the order service; the exit closes the automated trades behind it with the rule's reason. */
-  async function exit({ position, exitPrice, ruleId, reason }) {
+  /**
+   * Exit one position at its due price through the order service, as the engine (source Auto, like the session
+   * square-off), with the exit's reason; then its channel lets it go.
+   * @param {MonitorChannel} channel
+   * @param {DueExit} due
+   */
+  async function exit(channel, { position, exitPrice, ruleId, reason }) {
     if (exiting.has(position.id)) return;
     exiting.add(position.id);
     try {
       // A market exit: at the bid / ask from a quote with the feed's session (exitPrice when it has none).
       const result = await orders.exit(position.userId, position.id, { exitPrice, kite: feedKite, source: TradeSource.Auto, exitReason: { ruleId, reason } });
       if (result.ok) {
-        log('exit fired', { position: `${position.side} ${position.quantity} ${position.tradingsymbol}`, price: result.order.fillPrice, last: exitPrice, user: position.userId, reason });
+        log('exit fired', { position: `${position.side} ${position.quantity} ${position.tradingsymbol}`, source: channel.source, price: result.order.fillPrice, last: exitPrice, user: position.userId, reason });
       } else if (result.code !== NOT_FOUND) {
         log('could not exit', { position: position.tradingsymbol, user: position.userId, reason: result.message, next: 'tries again on the next tick' });
         return; // still open: the next tick or clock check tries again
       }
-      watched.delete(position.id); // exited now, or already exited elsewhere
+      prices.best.delete(position.id); // exited now, or already exited elsewhere
+      await channel.exited(position);
       feed?.watch(watchedTokens());
-      // After the delete, so the exit is never counted as both open and booked.
-      await loadBookedPnl(position.userId)
-        .catch((err) => log("could not reload today's booked P&L", { user: position.userId, error: err.message }));
     } catch (err) {
       log('exit failed', { position: position.tradingsymbol, user: position.userId, error: /** @type {Error} */ (err).message });
     } finally {
@@ -247,46 +189,26 @@ export function createTradeMonitor({
     }
   }
 
-  /** Run the exit rules on these positions at their last prices, and exit the ones due. */
-  function check(positions) {
-    const state = { lastPrices, exitRulesByUser, todayPnlByUser: todayPnlByUser(), now: clock() };
-    return Promise.all(dueExits(positions, state).map(exit));
+  /** Check each channel's positions that pass `filter` at their last prices, and exit the ones due. */
+  function check(/** @type {(position: WatchedPosition) => boolean} */ filter) {
+    return Promise.all(channels.map((channel) => {
+      const positions = channel.positions().filter(filter);
+      updateBestPrices(positions);
+      return Promise.all(channel.dueExits(positions).map((due) => exit(channel, due)));
+    }));
   }
 
-  async function cancelWaitingOrder(/** @type {DueCancellation} */ { order, reason }) {
-    const result = await orders.cancel(order.userId, order.id, cancelledByRule(reason));
-    if (result.ok) log('order cancelled', { order: `${order.side} ${order.quantity} ${order.tradingsymbol}`, user: order.userId, reason });
-  }
-
-  /** Cancel the waiting automated entry orders a rule says to, e.g. once the square-off time has come. */
-  async function cancelDueWaitingOrders() {
-    const waiting = orders.waitingAutoOrders();
-    if (waiting.length === 0) return;
-    // Owners with waiting orders but no open position aren't tracked yet; their settings changes reload them (refreshUser).
-    const untracked = [...new Set(waiting.map((order) => order.userId))].filter((userId) => !exitRulesByUser.has(userId));
-    if (untracked.length > 0) await loadExitRules(untracked);
-    const state = { exitRulesByUser, todayPnlByUser: todayPnlByUser(), now: clock() };
-    await Promise.all(dueCancellations(waiting, state).map(cancelWaitingOrder));
-  }
-
-  /** The every-second check: time rules on positions with no new tick, and on waiting orders. */
+  /** The every-second check: time-based exits on positions with no new tick, and each channel's own work. */
   function clockCheck() {
-    return Promise.all([feed ? check([...watched.values()]) : null, cancelDueWaitingOrders()]);
-  }
-
-  /** Each user's automated P&L today: booked plus every watched position at its last price. */
-  function todayPnlByUser() {
-    const totals = openPnlByUser(watched.values(), lastPrices);
-    for (const [userId, booked] of bookedPnlByUser) totals.set(userId, (totals.get(userId) ?? 0) + booked);
-    return totals;
+    return Promise.all([feed ? check(() => true) : null, ...channels.map((channel) => channel.clockCheck?.(orders))]);
   }
 
   /** @param {import('../../../shared/kiteTicks.js').Tick[]} ticks */
   function onTicks(ticks) {
     if (ticks.length > 0) lastTickAt = clock().getTime();
-    for (const tick of ticks) lastPrices.set(tick.instrumentToken, tick.lastPrice);
+    for (const tick of ticks) prices.last.set(tick.instrumentToken, tick.lastPrice);
     const tokens = new Set(ticks.map((t) => t.instrumentToken));
-    return check([...watched.values()].filter((p) => tokens.has(p.instrumentToken)));
+    return check((position) => tokens.has(position.instrumentToken));
   }
 
   function stopFeed() {
@@ -294,17 +216,17 @@ export function createTradeMonitor({
     feed = null;
     feedKite = null;
     waitingForLogin = false;
-    lastPrices.clear();
+    prices.last.clear();
   }
 
   /** Start the feed while the session is loaded and positions are watched, if it isn't running (needs an admin login). */
   async function ensureFeed() {
-    if (!loaded || feed || watched.size === 0) return;
+    if (!loaded || feed || watchedPositions().length === 0) return;
     const kite = await findKiteSession();
     waitingForLogin = !kite;
     if (!kite) {
       const date = marketDate(clock());
-      if (waitingLoggedDate !== date) log('waiting for an admin Kite login', { why: 'to watch automated positions today' });
+      if (waitingLoggedDate !== date) log('waiting for an admin Kite login', { why: 'to watch open positions today' });
       waitingLoggedDate = date;
       return;
     }
@@ -317,7 +239,7 @@ export function createTradeMonitor({
     feed.watch(watchedTokens());
   }
 
-  /** At the open: load every open automated position and its owner's exit rules, then watch them. */
+  /** At the open: every channel loads its open positions, then they are watched. */
   async function openSession() {
     try {
       await loadAll();
@@ -330,32 +252,37 @@ export function createTradeMonitor({
     await ensureFeed();
   }
 
-  /** Reload one user's open automated positions and exit rules (after a change). */
+  /** Reload one user's open positions in every channel (after a change). */
   async function refreshUser(/** @type {string} */ userId) {
     if (!loaded) return; // not watching yet: the open's load will include them
-    await track([userId], await db.getOpenAutoPositions(userId));
+    await Promise.all(channels.map((channel) => channel.loadUser(userId)));
+    pruneBestPrices();
+    feed?.watch(watchedTokens());
     await ensureFeed();
   }
 
-  /** A position exited by hand may be an automated one this watches: reload its owner's. */
-  async function onOrderSettled(/** @type {{ userId: string, source: string, closesPosition: boolean }} */ order) {
-    if (order.closesPosition && order.source === TradeSource.Manual) await refreshUser(order.userId);
+  /**
+   * An order the user filled by hand opened, added to or closed a position (manual, or an automated one they
+   * exited): reload theirs. The engine's own orders (source Auto) are its channels' business.
+   */
+  async function onOrderSettled(/** @type {{ userId: string, source: string, status: string }} */ order) {
+    if (order.source === TradeSource.Manual && order.status === OrderStatus.Filled) await refreshUser(order.userId);
   }
 
-  /** After the close: stop watching until the next open. */
   /** @returns {MonitorStatus} */
   function monitorStatus() {
     return {
       marketOpen: market?.isOpen() ?? false,
       feedConnected: feed !== null,
       waitingForLogin,
-      watchedPositions: watched.size,
+      watchedPositions: watchedPositions().length,
       watchedInstruments: watchedTokens().length,
       lastTickAt,
       lastError,
     };
   }
 
+  /** After the close: stop watching until the next open. */
   function closeSession() {
     if (feed) log('market closed', { feed: 'stopped watching' });
     stopFeed();
@@ -365,7 +292,7 @@ export function createTradeMonitor({
   return {
     id: TRADE_MONITOR_SERVICE_ID,
 
-    /** Run on the market clock: watch from each open, check time rules every second, stop after the close. */
+    /** Run on the market clock: watch from each open, check time-based exits every second, stop after the close. */
     start(/** @type {import('../host.js').PluginContext} */ ctx) {
       orders = ctx.services.orders;
       market = ctx.market;
@@ -379,16 +306,17 @@ export function createTradeMonitor({
     stop() {
       stopListening();
       closeSession();
-      watched.clear();
+      for (const channel of channels) channel.clear();
+      prices.best.clear();
     },
 
     onTicks,
 
     refreshUser,
     /** The user's open automated P&L at the last prices (positions with no price yet count as 0). */
-    openPnl: (/** @type {string} */ userId) => openPnlByUser(watched.values(), lastPrices).get(userId) ?? 0,
+    openPnl: autoChannel.openPnl,
     /** What is being watched, for tests and logs. */
-    watchedPositionIds: () => [...watched.keys()],
+    watchedPositionIds: () => watchedPositions().map((p) => p.id),
     /** How the monitor is doing, for Admin Services. */
     status: monitorStatus,
 

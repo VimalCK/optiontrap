@@ -8,7 +8,7 @@ import { Tone } from '@/utils/uiEnums';
 const order = (id: string, extra: Partial<PaperOrder> = {}): PaperOrder => ({
   id, tradingsymbol: 'NIFTY26N1024000CE', instrumentToken: 101, instrumentType: 'CE', exchange: 'NFO', strike: 24000,
   optionType: 'CE', expiry: '2026-11-10', side: 'BUY', quantity: 75, orderType: 'Limit', limitPrice: 50, status: 'Open', statusReason: null,
-  fillPrice: null, positionId: null, closesPosition: false, note: '', targetPrice: null, stopLossPrice: null, confidence: null, source: 'Manual', horizon: Horizon.Intraday, autoTradeId: null, createdAt: '2026-11-05T06:30:00.000Z', updatedAt: '2026-11-05T06:30:00.000Z', ...extra, // Thu 12:00 IST
+  fillPrice: null, positionId: null, closesPosition: false, note: '', targetPrice: null, stopLossPrice: null, trailAmount: null, confidence: null, source: 'Manual', horizon: Horizon.Intraday, autoTradeId: null, createdAt: '2026-11-05T06:30:00.000Z', updatedAt: '2026-11-05T06:30:00.000Z', ...extra, // Thu 12:00 IST
 });
 
 describe('orderStatus', () => {
@@ -76,7 +76,7 @@ describe('PaperOrdersTable', () => {
     expect(html.match(/title="Modify order"/g)).toHaveLength(1);
     expect(html.match(/<button[^>]*title="Modify order"[^>]*>/)?.[0]).not.toContain('disabled');
     const auto = renderToStaticMarkup(<PaperOrdersTable orders={[order('c', { source: 'Auto', autoTradeId: 't1' })]} prices={new Map()} onCancel={() => {}} onModify={() => {}} />);
-    const button = auto.match(/<button[^>]*>MODIFY<\/button>/)?.[0] ?? '';
+    const button = auto.match(/<button[^>]*title="Modify automated orders on Algo Trading"[^>]*>/)?.[0] ?? '';
     expect(button).toContain('disabled');
     expect(button).toContain('title="Modify automated orders on Algo Trading"');
   });

@@ -7,7 +7,7 @@
  *       services    the engine's ongoing work: orders (place, fill, cancel,
  *                   every order manual or automated), signals (a strategy's
  *                   signals → each user's settings and entry rules → orders),
- *                   tradeMonitor (exit rules on open automated positions)
+ *                   tradeMonitor (exits on every open position: automated and manual channels)
  *       strategies  what to trade; each decides when and how it runs
  *                   (server/tradeEngine/strategies/)
  *   the scheduled jobs (server/scheduledJobs.js): OI snapshots, OI history,

@@ -31,6 +31,22 @@ export async function getOpenAutoPositions(userId) {
   return result.map(mapPositionRow);
 }
 
+/** Open manual paper positions the trade monitor exits: those with a target or stop-loss. */
+const OPEN_MANUAL_WITH_EXITS = `source = ${sqlEnum(TradeSource.Manual)} AND NOT exited AND (target_price IS NOT NULL OR stop_loss_price IS NOT NULL)
+  AND mode = ${sqlEnum(TradingMode.Paper)}`;
+
+/** Served by positions_open_manual_exits_idx. */
+export async function getAllOpenManualPositionsWithExits() {
+  const result = await rows(`SELECT * FROM positions WHERE ${OPEN_MANUAL_WITH_EXITS}`);
+  return result.map(mapPositionRow);
+}
+
+/** Served by positions_open_manual_exits_idx. */
+export async function getOpenManualPositionsWithExits(userId) {
+  const result = await rows(`SELECT * FROM positions WHERE user_id = $1 AND ${OPEN_MANUAL_WITH_EXITS}`, [userId]);
+  return result.map(mapPositionRow);
+}
+
 /** The filter comes from parsePositionsQuery (positionsQuery.js). */
 export async function getPositions(userId, filter = {}) {
   const todayStart = new Date(getTodayMidnight()).toISOString();
@@ -93,6 +109,7 @@ function mapPositionRow(row) {
     note: row.note || '',
     targetPrice: row.target_price,
     stopLossPrice: row.stop_loss_price,
+    trailAmount: row.trail_amount ?? null,
     confidence: row.confidence === null || row.confidence === undefined ? null : Number(row.confidence),
     // Set when it closes (shared/tradeCharges.js); null while open or if closed before charges were recorded.
     charges: row.charges == null ? null : Number(row.charges),
@@ -116,12 +133,16 @@ export async function closeOpenPosition(id, { exitPrice, exitTime, charges }) {
   return row ? mapPositionRow(row) : null;
 }
 
+const optionalNumber = (value) => (value === undefined || value === null || value === '' ? null : Number(value));
+
+/** note, target_price, stop_loss_price, confidence, trail_amount: in this order. */
 export function positionMetaValues(position) {
   return [
     position.note?.trim() || null,
-    position.targetPrice === undefined || position.targetPrice === null || position.targetPrice === '' ? null : Number(position.targetPrice),
-    position.stopLossPrice === undefined || position.stopLossPrice === null || position.stopLossPrice === '' ? null : Number(position.stopLossPrice),
-    position.confidence === undefined || position.confidence === null || position.confidence === '' ? null : Number(position.confidence),
+    optionalNumber(position.targetPrice),
+    optionalNumber(position.stopLossPrice),
+    optionalNumber(position.confidence),
+    optionalNumber(position.trailAmount),
   ];
 }
 
@@ -150,8 +171,8 @@ export async function insertPosition(userId, position, quantity, entryTime) {
   const { strike, optionType, expiry } = instrumentColumns(position);
   const row = await firstRow(
     `INSERT INTO positions (id, user_id, mode, source, tradingsymbol, instrument_token, instrument_type, exchange, strike, option_type,
-       side, quantity, entry_price, entry_time, expiry, note, target_price, stop_loss_price, confidence, horizon)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+       side, quantity, entry_price, entry_time, expiry, note, target_price, stop_loss_price, confidence, trail_amount, horizon)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
      RETURNING *`,
     [crypto.randomUUID(), userId, position.mode, position.source, position.tradingsymbol, position.instrumentToken,
      position.instrumentType, position.exchange, strike, optionType, position.side, quantity, position.entryPrice, entryTime, expiry,
@@ -175,8 +196,8 @@ export async function findOpenPosition(userId, { mode, instrumentToken, side, so
 }
 
 /**
- * Sets an open position's merged quantity and average price; the trade's note, target, stop-loss and confidence
- * replace the position's where the trade gives them.
+ * Sets an open position's merged quantity and average price; the trade's note, target, stop-loss, confidence and
+ * trailing stop-loss replace the position's where the trade gives them.
  * @param {string} id
  * @param {{ quantity: number, entryPrice: number }} merged
  * @param {any} trade
@@ -185,8 +206,8 @@ export async function averageIntoPosition(id, { quantity, entryPrice }, trade) {
   const row = await firstRow(
     `UPDATE positions SET
        quantity = $1, entry_price = $2, note = COALESCE($3, note), target_price = COALESCE($4, target_price),
-       stop_loss_price = COALESCE($5, stop_loss_price), confidence = COALESCE($6, confidence)
-     WHERE id = $7
+       stop_loss_price = COALESCE($5, stop_loss_price), confidence = COALESCE($6, confidence), trail_amount = COALESCE($7, trail_amount)
+     WHERE id = $8
      RETURNING *`,
     [quantity, entryPrice, ...positionMetaValues(trade), id],
   );

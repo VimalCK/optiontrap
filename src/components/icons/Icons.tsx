@@ -464,11 +464,11 @@ export const BellIcon: React.FC<StrokeIconProps> = (props) => (
   </StrokeIcon>
 );
 
-/** Edit something: a pencil. */
+/** Edit something: a pencil over an open square, which stays clear at small sizes. */
 export const EditIcon: React.FC<StrokeIconProps> = (props) => (
   <StrokeIcon {...props}>
-    <path d="M12 20h9" />
-    <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z" />
+    <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <path d="M18.4 2.6a2 2 0 0 1 3 3L12 15l-4 1 1-4Z" />
   </StrokeIcon>
 );
 

@@ -58,7 +58,9 @@ export function parseOrder(input, { now = new Date(), lastPrice } = {}) {
  * What a pending order's modify may change. Like Zerodha's, the instrument, side and product (intraday /
  * positional) stay as placed.
  */
-export const MODIFIABLE_ORDER_FIELDS = Object.freeze(['quantity', 'orderType', 'limitPrice', 'targetPrice', 'stopLossPrice', 'confidence', 'note']);
+export const MODIFIABLE_ORDER_FIELDS = Object.freeze([
+  'quantity', 'orderType', 'limitPrice', 'targetPrice', 'stopLossPrice', 'trailAmount', 'confidence', 'note',
+]);
 
 /**
  * The changes asked for in a modify request; a field that can't change is refused rather than ignored.

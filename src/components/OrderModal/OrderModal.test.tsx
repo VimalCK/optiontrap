@@ -15,7 +15,7 @@ const render = (mode: TradingModeId, orderType: OrderTypeId = OrderType.Limit) =
 const pending = (extra: Partial<PaperOrder> = {}): PaperOrder => ({
   id: 'o1', tradingsymbol: 'NIFTY26NOV24000PE', instrumentToken: 222, instrumentType: OptionType.PE, exchange: 'NFO', strike: 24000,
   optionType: OptionType.PE, expiry: '2026-11-26', side: Side.SELL, quantity: 150, orderType: OrderType.Limit, limitPrice: 55, status: OrderStatus.Open,
-  statusReason: null, fillPrice: null, positionId: null, closesPosition: false, note: 'fade the spike', targetPrice: 40, stopLossPrice: null,
+  statusReason: null, fillPrice: null, positionId: null, closesPosition: false, note: 'fade the spike', targetPrice: 40, stopLossPrice: null, trailAmount: null,
   confidence: 60, source: TradeSource.Manual, horizon: Horizon.Intraday, autoTradeId: null,
   createdAt: '2026-11-05T06:30:00.000Z', updatedAt: '2026-11-05T06:30:00.000Z', // Thu 12:00 IST
   ...extra,
@@ -55,10 +55,11 @@ describe('OrderModal', () => {
     expect(priceInput).toContain('value="88.25"');
   });
 
-  it('keeps target, stop-loss and note folded away until asked for', () => {
+  it('keeps target, stop-loss, trailing and note folded away until asked for', () => {
     const html = render(TradingMode.Paper);
-    expect(html).toMatch(/aria-expanded="false"[^>]*>[\s\S]*?Add target, stop-loss, note/);
+    expect(html).toMatch(/aria-expanded="false"[^>]*>[\s\S]*?Add target, stop-loss, trailing, note/);
     expect(html).not.toContain('Stop-loss</span>');
+    expect(html).not.toContain('Trailing stop-loss');
   });
 
   it('in live mode only says live trading is not available yet', () => {

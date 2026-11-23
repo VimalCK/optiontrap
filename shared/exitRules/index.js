@@ -13,8 +13,10 @@ import maxDailyLoss from './maxDailyLoss.js';
 
 /**
  * @typedef {import('../rules/ruleSettings.js').RuleSettings} RuleSettings
- * @typedef {{ instrumentToken: number, tradingsymbol: string, horizon: import('../tradeEnums.js').HorizonId, pnl: number, pnlPercent: number }} OpenAutoPosition
- *   pnl in ₹; pnlPercent as a percentage of its entry price
+ * @typedef {{ instrumentToken: number, tradingsymbol: string, horizon: import('../tradeEnums.js').HorizonId, pnl: number, pnlPercent: number,
+ *             peakPnlPercent: number }} OpenAutoPosition
+ *   pnl in ₹; pnlPercent as a percentage of its entry price; peakPnlPercent the same at its best price
+ *   since the trade monitor started watching it (in memory: a restart starts it again from the price then)
  * @typedef {{ now: Date, todayAutoPnl: number }} ExitRuleContext
  *   todayAutoPnl is the owner's automated P&L today in ₹: booked plus open positions at their last price
  * @typedef {import('../rules/ruleSettings.js').Rule<OpenAutoPosition, ExitRuleContext> & { blocksEntryOrders?: boolean }} ExitRule
@@ -52,5 +54,5 @@ export function checkExitRules(position, ctx, settings) {
  * @returns {{ ruleId: string, reason: string } | null}
  */
 export function checkEntryOrderBlocked(order, ctx, settings) {
-  return firstRuleThatFires(ENTRY_BLOCKING_RULES, { ...order, pnl: 0, pnlPercent: 0 }, ctx, settings);
+  return firstRuleThatFires(ENTRY_BLOCKING_RULES, { ...order, pnl: 0, pnlPercent: 0, peakPnlPercent: 0 }, ctx, settings);
 }

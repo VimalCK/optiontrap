@@ -141,7 +141,7 @@ describe('AutoTradesTable', () => {
 const waitingOrder = (extra: Partial<PaperOrder> = {}): PaperOrder => ({
   id: 'o1', tradingsymbol: 'NIFTY26N0924550PE', instrumentToken: 1, instrumentType: 'PE', exchange: 'NFO', strike: 24550, optionType: 'PE',
   expiry: '2026-11-09', side: 'SELL', quantity: 65, orderType: 'Limit', limitPrice: 101, status: 'Open', statusReason: null, fillPrice: null,
-  positionId: null, closesPosition: false, note: '', targetPrice: null, stopLossPrice: null, confidence: null, source: 'Auto',
+  positionId: null, closesPosition: false, note: '', targetPrice: null, stopLossPrice: null, trailAmount: null, confidence: null, source: 'Auto',
   horizon: Horizon.Intraday, autoTradeId: 't', createdAt: '2026-11-06T07:00:29.000Z', updatedAt: '2026-11-06T07:00:29.000Z', ...extra, // Fri 12:30 IST
 });
 

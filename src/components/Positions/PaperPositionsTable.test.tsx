@@ -34,6 +34,12 @@ describe('PaperPositionsTable', () => {
     expect(markup).toContain('<span class="positions-table__labels"><span class="positions-table__detail">14:19</span>');
   });
 
+  it("shows an exited position's live LTP under its exit price, keeping its P&L at the exit", () => {
+    const markup = renderToStaticMarkup(<MemoryRouter><PaperPositionsTable positions={[position('100', '2026-11-17T06:51:00.000Z')]} livePrices={new Map([[100, 64.5]])} onExit={() => {}} /></MemoryRouter>);
+    expect(markup).toContain('70.00<span class="positions-table__pct">LTP 64.50</span>');
+    expect(dayHeadings(markup)).toEqual([['Tue, 17 Nov, 2026', ' · 1 position', '+650.00']]);
+  });
+
   it("prices an open position's day at its live price", () => {
     const open = position('100', '2026-11-17T06:51:00.000Z', { exited: false, exitPrice: undefined });
     const markup = renderToStaticMarkup(<MemoryRouter><PaperPositionsTable positions={[open]} livePrices={new Map([[100, 75]])} onExit={() => {}} /></MemoryRouter>);

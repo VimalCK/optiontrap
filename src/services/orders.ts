@@ -35,6 +35,8 @@ export interface PaperOrder extends Pick<Position, 'tradingsymbol' | 'instrument
   note: string;
   targetPrice: number | null;
   stopLossPrice: number | null;
+  /** A trailing stop-loss from the target, in ₹; null when off. */
+  trailAmount: number | null;
   confidence: number | null;
   createdAt: string; // ISO timestamp
   updatedAt: string;
@@ -44,7 +46,7 @@ export interface PaperOrder extends Pick<Position, 'tradingsymbol' | 'instrument
  * What a pending order's modify changes (shared/orders.js MODIFIABLE_ORDER_FIELDS): like Zerodha's, never the
  * instrument, side or trade type. A limit order has its limit price.
  */
-export type OrderChanges = Pick<NewOrder, 'quantity' | 'note' | 'targetPrice' | 'stopLossPrice' | 'confidence'>
+export type OrderChanges = Pick<NewOrder, 'quantity' | 'note' | 'targetPrice' | 'stopLossPrice' | 'trailAmount' | 'confidence'>
   & ({ orderType: typeof OrderType.Limit; limitPrice: number } | { orderType: typeof OrderType.Market });
 
 /** A trade to place as an order: no entry price, as the server prices it (from a quote, or the limit). */

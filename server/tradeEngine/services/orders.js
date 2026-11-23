@@ -23,7 +23,7 @@
  *   once (market hours only), and is recorded as a filled closing order. So is
  *   the engine's square-off after the close (squareOff), at the closing price.
  * - An order still open can be modified (quantity, type, limit, target,
- *   stop-loss, confidence, note): it is checked and priced like a new one,
+ *   stop-loss, trailing stop-loss, confidence, note): it is checked and priced like a new one,
  *   saved only if still open (an automated order's trade takes its new
  *   quantity), then filled at once or watched again; listeners hear of the
  *   fill as usual. A fill is
