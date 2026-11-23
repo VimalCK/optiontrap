@@ -290,8 +290,9 @@
   font-weight: 600;
 }
 
+/* Room for the lifecycle chevron and, on a trade waiting on its entry order, the modify button beside it. */
 .automation-trades .automation-trades__toggle {
-  width: 40px;
+  width: 72px;
   text-align: right;
   white-space: nowrap;
 }
@@ -300,6 +301,13 @@
 .automation-trades .automation-trades__chevron {
   width: 24px;
   height: 24px;
+  vertical-align: middle;
+}
+
+.automation-trades .automation-trades__modify {
+  width: 30px;
+  height: 30px;
+  vertical-align: middle;
 }
 
 .automation-trades__chevron svg {
