@@ -296,7 +296,7 @@ const Automation: React.FC = () => {
             />
             <IconButton
               icon={<SettingsIcon size={18} />}
-              label="Algo Trading settings"
+              label="Trading Strategies"
               onClick={() => navigate('/automation/settings')}
             />
           </div>

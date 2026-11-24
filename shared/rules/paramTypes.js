@@ -22,7 +22,8 @@ export const PARAM_TYPES = {
   },
   [ParamType.Amount]: {
     input: 'number',
-    step: '0.01',
+    // The arrows move by ₹1; a typed amount keeps its paise (there's no form, so the browser doesn't refuse it).
+    step: '1',
     mustBe: 'an amount above 0',
     parse: (value) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined),
   },

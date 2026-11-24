@@ -39,48 +39,11 @@
   margin: 0;
 }
 
-/* ── Configuration ── */
+/* ── Entry and exit rules ── */
 
-.automation-config__row {
-  display: flex;
-  align-items: baseline;
-  gap: 16px;
-  padding: 8px 0;
-  border-top: 1px solid var(--card-border);
+.automation-rules__description {
+  margin-top: 16px;
 }
-
-.automation-config__label {
-  width: 90px;
-  flex-shrink: 0;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-secondary);
-}
-
-.automation-config__options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 20px;
-}
-
-.automation-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 13px;
-  cursor: pointer;
-}
-
-.automation-option small {
-  color: var(--text-secondary);
-}
-
-.automation-option--unavailable {
-  opacity: 0.55;
-  cursor: not-allowed;
-}
-
-/* ── Entry rules ── */
 
 .automation-rules__empty {
   margin: 12px 0 0;
@@ -90,16 +53,37 @@
 
 .automation-rules {
   list-style: none;
-  margin: 8px 0 0;
+  margin: 12px 0 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
+/* Each rule a row of its own: an accent edge while active, dimmed while inactive. */
 .automation-rule {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 8px 0;
-  border-top: 1px solid var(--card-border);
+  padding: 12px 14px;
+  border: 1px solid var(--card-border);
+  border-left: 3px solid var(--card-border);
+  border-radius: 10px;
+  background: var(--card-bg);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.automation-rule:hover {
+  background: var(--card-hover-bg);
+}
+
+.automation-rule--active {
+  border-left-color: var(--accent);
+}
+
+.automation-rule:not(.automation-rule--active) .automation-rule__text,
+.automation-rule:not(.automation-rule--active) .automation-rule__params {
+  opacity: 0.55;
 }
 
 .automation-rule__text {
@@ -161,9 +145,133 @@
   flex-direction: column;
 }
 
+/* The strategy tabs, at the top of the card. */
+.automation-settings__tabs {
+  margin-bottom: 12px;
+}
+
 .automation-settings__body {
   flex: 1;
   margin-bottom: 12px;
+}
+
+/* ── A strategy: its header, its setting tiles, then its rule tabs ── */
+
+.automation-strategy {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 4px 0 16px;
+}
+
+.automation-strategy__text {
+  min-width: 0;
+}
+
+.automation-strategy__name {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.automation-strategy__description {
+  margin: 4px 0 0;
+  max-width: 760px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.automation-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 12px;
+}
+
+.automation-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 14px 16px;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  background: var(--card-bg);
+}
+
+.automation-tile__title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.automation-tile__control {
+  display: flex;
+  align-items: center;
+  min-height: 30px;
+}
+
+.automation-tile__toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+}
+
+/* A tile's setting inputs (Signal filters): each label above its input, side by side, filling the tile. */
+.automation-tile .automation-rule__params {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 12px;
+  width: 100%;
+}
+
+.automation-tile .automation-rule__param {
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+}
+
+.automation-tile .automation-rule__input {
+  width: 100%;
+}
+
+.automation-tile__hint {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.automation-rules-panel {
+  margin-top: 24px;
+}
+
+/* The number of active rules, beside a rule tab's name. */
+.automation-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--sidebar-active);
+  color: var(--accent);
+}
+
+@media (max-width: 768px) {
+  .automation-strategy {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .automation-rule {
+    flex-wrap: wrap;
+  }
 }
 
 /* ── Tables ── */
@@ -416,11 +524,6 @@
 
 
 /* Setting rows in outline while the configuration loads. */
-.automation-settings-shimmer__row {
-  align-items: center;
-}
-
-.automation-settings-shimmer__control {
-  flex: 1;
-  height: 28px;
+.automation-settings-shimmer__tile {
+  height: 96px;
 }

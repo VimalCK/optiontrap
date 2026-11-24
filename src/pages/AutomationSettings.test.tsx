@@ -1,22 +1,26 @@
 import { describe, it, expect } from 'vitest';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
-import AutomationSettings, { sectionFromParams } from './AutomationSettings';
-import { AutomationSettingsSection } from '@/utils/uiEnums';
+import AutomationSettings, { strategyFromParams } from './AutomationSettings';
+import { TEST_STRATEGIES } from '@/services/strategies.fixture';
+import type { StrategyInfo } from '@/services/strategies';
+
+const OTHER: StrategyInfo = { ...TEST_STRATEGIES[0], id: 'other-strategy', label: 'Other strategy' };
 
 describe('AutomationSettings', () => {
-  it('has General, Strategies, Entry rules and Exit rules tabs as its first row, General picked by default', () => {
+  it('has a title row above the card, then its strategy tabs at the top of the card', () => {
     const html = renderToStaticMarkup(<MemoryRouter><AutomationSettings /></MemoryRouter>);
-    const tabs = [...html.matchAll(/<button[^>]*role="tab"[^>]*>.*?<\/button>/g)].map((m) => m[0]);
-    expect(tabs.map((t) => t.replace(/<[^>]+>/g, ''))).toEqual(['General', 'Strategies', 'Entry rules', 'Exit rules']);
-    expect(tabs[0]).toContain('aria-selected="true"');
-    expect(html.indexOf('role="tablist"')).toBeLessThan(html.indexOf('class="card'));
+    expect(html.indexOf('<h1 class="automation-header__title">Trading Strategies</h1>')).toBeGreaterThan(-1);
+    expect(html.indexOf('automation-header__title')).toBeLessThan(html.indexOf('class="card'));
+    expect(html).toContain('aria-label="Strategies"');
+    expect(html.indexOf('class="card')).toBeLessThan(html.indexOf('aria-label="Strategies"'));
+    expect(html.indexOf('aria-label="Strategies"')).toBeLessThan(html.indexOf('automation-settings__body'));
   });
 
-  it('has one Save / Cancel for every tab, at the bottom of the one card, Save off until the settings load', () => {
-    for (const url of ['/automation/settings', '/automation/settings?tab=EntryRules', '/automation/settings?tab=ExitRules']) {
+  it('has one Save / Cancel for every strategy, at the bottom of the one card, Save off until the settings load', () => {
+    for (const url of ['/automation/settings', `/automation/settings?strategy=${TEST_STRATEGIES[0].id}`]) {
       const html = renderToStaticMarkup(<MemoryRouter initialEntries={[url]}><AutomationSettings /></MemoryRouter>);
-      const card = html.match(/<section class="card automation-settings__card">.*<\/section>/s)?.[0] ?? '';
+      const card = html.match(/<section class="card automation-settings__card"[^>]*>.*<\/section>/s)?.[0] ?? '';
       expect(html.match(/class="form-footer"/g)).toHaveLength(1);
       expect(card).toMatch(/<div class="automation-settings__body">.*<\/div><div class="form-footer">.*<\/div><\/section>$/s);
       expect(card.match(/<button[^>]*>Save<\/button>/)?.[0]).toContain('disabled');
@@ -24,17 +28,11 @@ describe('AutomationSettings', () => {
     }
   });
 
-  it('opens the tab named in the URL, and General for anything else', () => {
-    expect(sectionFromParams(new URLSearchParams('tab=EntryRules'))).toBe(AutomationSettingsSection.EntryRules);
-    expect(sectionFromParams(new URLSearchParams('tab=ExitRules'))).toBe(AutomationSettingsSection.ExitRules);
-    expect(sectionFromParams(new URLSearchParams('tab=Strategies'))).toBe(AutomationSettingsSection.Strategies);
-    expect(sectionFromParams(new URLSearchParams('tab=nope'))).toBe(AutomationSettingsSection.General);
-    expect(sectionFromParams(new URLSearchParams(''))).toBe(AutomationSettingsSection.General);
-  });
-
-  it('still opens links saved before the tabs were enums', () => {
-    expect(sectionFromParams(new URLSearchParams('tab=entry-rules'))).toBe(AutomationSettingsSection.EntryRules);
-    expect(sectionFromParams(new URLSearchParams('tab=exit-rules'))).toBe(AutomationSettingsSection.ExitRules);
-    expect(sectionFromParams(new URLSearchParams('tab=general'))).toBe(AutomationSettingsSection.General);
+  it('opens the strategy named in the URL, and the first one for anything else', () => {
+    const strategies = [...TEST_STRATEGIES, OTHER];
+    expect(strategyFromParams(new URLSearchParams('strategy=other-strategy'), strategies)).toBe(OTHER);
+    expect(strategyFromParams(new URLSearchParams('strategy=nope'), strategies)).toBe(TEST_STRATEGIES[0]);
+    expect(strategyFromParams(new URLSearchParams(''), strategies)).toBe(TEST_STRATEGIES[0]);
+    expect(strategyFromParams(new URLSearchParams(''), [])).toBeNull();
   });
 });

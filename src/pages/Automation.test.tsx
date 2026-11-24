@@ -22,8 +22,8 @@ describe('Automation screen', () => {
   it('has the settings gear at the top right of the trades card, not in the page header, and no settings form of its own', () => {
     const firstCard = html.match(/<section class="card[ "].*?<\/section>/s)?.[0] ?? '';
     expect(firstCard).toMatch(/<h3[^>]*>Automated trades<\/h3>/);
-    expect(firstCard).toMatch(/<div class="automation-section__actions">.*<button[^>]*aria-label="Algo Trading settings"/s);
-    expect(html.match(/<header.*?<\/header>/s)?.[0]).not.toContain('Algo Trading settings');
+    expect(firstCard).toMatch(/<div class="automation-section__actions">.*<button[^>]*aria-label="Trading Strategies"/s);
+    expect(html.match(/<header.*?<\/header>/s)?.[0]).not.toContain('Trading Strategies');
     expect(html).not.toContain('automation-config');
   });
 

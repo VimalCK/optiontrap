@@ -67,13 +67,13 @@ export type AllocationViewId = typeof AllocationView[keyof typeof AllocationView
 export const PaperTab = Object.freeze({ Positions: 'Positions', Orders: 'Orders', Risk: 'Risk' });
 export type PaperTabId = typeof PaperTab[keyof typeof PaperTab];
 
+/** A strategy's rule tabs on the Trading Strategies page. */
+export const StrategyRulesTab = Object.freeze({ EntryRules: 'EntryRules', ExitRules: 'ExitRules' });
+export type StrategyRulesTabId = typeof StrategyRulesTab[keyof typeof StrategyRulesTab];
+
 /** Kite's two live position lists: net, or today's. */
 export const LiveView = Object.freeze({ Net: 'Net', Day: 'Day' });
 export type LiveViewId = typeof LiveView[keyof typeof LiveView];
-
-/** Algo Trading settings sections (?tab=). */
-export const AutomationSettingsSection = Object.freeze({ General: 'General', Strategies: 'Strategies', EntryRules: 'EntryRules', ExitRules: 'ExitRules' });
-export type AutomationSettingsSectionId = typeof AutomationSettingsSection[keyof typeof AutomationSettingsSection];
 
 /** The trap analyzer's views: one strike, or the map of all. */
 export const AnalyzerView = Object.freeze({ Single: 'Single', Map: 'Map' });

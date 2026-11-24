@@ -1,18 +1,18 @@
 /**
- * Algo Trading settings. One Save / Cancel serves every tab: Save stores the
- * whole configuration and stays on the page ("Saved"); Cancel leaves unsaved.
+ * Trading Strategies (the Algo Trading settings): one tab per strategy, each with its own execution, trades and
+ * entry / exit rules (the account's Algo Trading switch is on the Settings page). One Save / Cancel serves every tab: Save stores the whole configuration and
+ * stays on the page ("Saved"); Cancel leaves unsaved.
  */
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
-import AutomationConfigForm, {
-  AUTOMATION_SETTINGS_SECTIONS,
-} from '@/components/Automation/AutomationConfigForm';
+import AutomationConfigForm from '@/components/Automation/AutomationConfigForm';
 import FormFooter from '@/components/FormFooter/FormFooter';
 import TabBar from '@/components/TabBar/TabBar';
 import { AutomationConfig, fetchAutomationConfig, saveAutomationConfig } from '@/services/automation';
 import { isAbortError } from '@/services/apiClient';
+import type { StrategyInfo } from '@/services/strategies';
 import { useStrategies } from '@/hooks/useStrategies';
-import { AutomationSettingsSection, type AutomationSettingsSectionId, enumFromParam, MessageTone } from '@/utils/uiEnums';
+import { MessageTone } from '@/utils/uiEnums';
 import Message from '@/components/Message/Message';
 import '@/styles/analytics.css'; // reuse the shared tab-bar CSS
 import Shimmer, { ShimmerGroup, shimmerKeys } from '@/components/Shimmer/Shimmer';
@@ -21,27 +21,34 @@ import '@/styles/automation.css';
 
 const errorText = (err: unknown, fallback: string) => (err instanceof Error ? err.message : fallback);
 
-/** Placeholder setting rows while the configuration loads. */
-const PLACEHOLDER_SETTINGS = shimmerKeys(4);
+const PLACEHOLDER_TILES = shimmerKeys(3);
+const PLACEHOLDER_RULES = shimmerKeys(4);
 
+/** Placeholders in the strategy's own layout while the configuration loads. */
 const SettingsShimmer: React.FC = () => (
-  <ShimmerGroup label="Loading Algo Trading settings">
-    {PLACEHOLDER_SETTINGS.map((row) => (
-      <div key={row} className="automation-config__row automation-settings-shimmer__row">
-        <span className="automation-config__label"><Shimmer width="5em" /></span>
-        <Shimmer shape={ShimmerShape.Block} className="automation-settings-shimmer__control" />
+  <ShimmerGroup label="Loading Trading Strategies">
+    <div className="automation-strategy">
+      <div className="automation-strategy__text">
+        <Shimmer width="12em" />
+        <Shimmer width="30em" />
       </div>
-    ))}
+    </div>
+    <div className="automation-tiles">
+      {PLACEHOLDER_TILES.map((tile) => <Shimmer key={tile} shape={ShimmerShape.Block} className="automation-tile automation-settings-shimmer__tile" />)}
+    </div>
+    <ul className="automation-rules">
+      {PLACEHOLDER_RULES.map((rule) => <li key={rule} className="automation-rule"><Shimmer width="14em" /></li>)}
+    </ul>
   </ShimmerGroup>
 );
 
-export const sectionFromParams = (params: URLSearchParams): AutomationSettingsSectionId =>
-  enumFromParam(AutomationSettingsSection, params.get('tab'), AutomationSettingsSection.General);
+/** The strategy named in the URL, or the first one. */
+export const strategyFromParams = (params: URLSearchParams, strategies: StrategyInfo[]): StrategyInfo | null =>
+  strategies.find((s) => s.id === params.get('strategy')) ?? strategies[0] ?? null;
 
 const AutomationSettings: React.FC = () => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const section = sectionFromParams(searchParams);
   const [config, setConfig] = useState<AutomationConfig | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -49,6 +56,7 @@ const AutomationSettings: React.FC = () => {
   const [saved, setSaved] = useState(false);
   const { strategies, error: strategiesError } = useStrategies();
   const error = loadError ?? strategiesError;
+  const strategy = strategies ? strategyFromParams(searchParams, strategies) : null;
 
   useEffect(() => {
     const controller = new AbortController();
@@ -59,6 +67,7 @@ const AutomationSettings: React.FC = () => {
   }, []);
 
   const back = () => navigate('/automation');
+  const change = (next: AutomationConfig) => { setConfig(next); setSaveError(null); setSaved(false); };
 
   const save = async () => {
     if (!config) return;
@@ -76,27 +85,27 @@ const AutomationSettings: React.FC = () => {
 
   return (
     <div className="automation automation-settings">
-      <TabBar
-        items={AUTOMATION_SETTINGS_SECTIONS}
-        activeId={section}
-        onChange={(id) => setSearchParams({ tab: id }, { replace: true })}
-        className="analytics-tabs"
-        tabClassName="analytics-tab"
-        ariaLabel="Algo Trading settings sections"
-      />
+      <header className="automation-header">
+        <h1 className="automation-header__title">Trading Strategies</h1>
+      </header>
 
-      <section className="card automation-settings__card">
+      <section className="card automation-settings__card" aria-label="Trading Strategies">
+        <div className="automation-settings__tabs">
+          <TabBar
+            items={(strategies ?? []).map(({ id, label }) => ({ id, label }))}
+            activeId={strategy?.id ?? null}
+            onChange={(id) => setSearchParams({ strategy: id }, { replace: true })}
+            className="analytics-tabs"
+            tabClassName="analytics-tab"
+            ariaLabel="Strategies"
+          />
+        </div>
         <div className="automation-settings__body">
           {error && <Message tone={MessageTone.Error}>{error}</Message>}
           {(!config || !strategies) && !error && <SettingsShimmer />}
-          {config && strategies && (
-            <AutomationConfigForm
-              config={config}
-              strategies={strategies}
-              section={section}
-              onChange={(next) => { setConfig(next); setSaveError(null); setSaved(false); }}
-            />
-          )}
+          {config && strategies && (strategy
+            ? <AutomationConfigForm config={config} strategy={strategy} onChange={change} />
+            : <Message tone={MessageTone.Info}>No strategies yet</Message>)}
         </div>
         <FormFooter onSave={save} onCancel={back} saving={saving} error={saveError} saved={saved} saveDisabled={!config} />
       </section>

@@ -10,6 +10,8 @@ import { saveTradingMode, storedTradingMode } from '@/utils/tradingModeStorage';
 import '@/styles/settings.css';
 import Message from '@/components/Message/Message';
 import { MessageTone } from '@/utils/uiEnums';
+import Toggle from '@/components/Toggle/Toggle';
+import { fetchAutomationConfig, saveAutomationConfig, type AutomationConfig } from '@/services/automation';
 
 const TRADING_MODE_CHOICES: { id: TradingModeId; label: string; hint: string }[] = [
   { id: TradingMode.Paper, label: 'Paper', hint: 'Orders are simulated: nothing is sent to Kite and no money is used.' },
@@ -113,6 +115,47 @@ const AlwaysSnapshotSetting: React.FC = () => {
   );
 };
 
+/**
+ * The account's Algo Trading switch, over every strategy. Saved straight away; the strategies' own settings are on the
+ * Trading Strategies page.
+ */
+export const AlgoTradingSetting: React.FC = () => {
+  const signal = useAbortSignal();
+  const [config, setConfig] = useState<AutomationConfig | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetchAutomationConfig(signal)
+      .then(setConfig)
+      .catch((err) => { if (!signal.aborted) setError(err.message); });
+  }, [signal]);
+
+  const toggle = async (enabled: boolean) => {
+    if (!config) return;
+    setSaving(true);
+    setError(null);
+    try {
+      setConfig(await saveAutomationConfig({ ...config, enabled }));
+    } catch (err) {
+      setError(`Could not switch Algo Trading ${enabled ? 'on' : 'off'}: ${(err as Error).message}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <SettingCard
+      eyebrow="Automation"
+      title="Algo Trading"
+      description="Lets your active strategies place automated trades. Off stops every strategy's new trades; open positions still exit by their rules."
+    >
+      <Toggle checked={config?.enabled ?? false} label="Algo Trading" disabled={!config || saving} onChange={toggle} />
+      {error && <Message tone={MessageTone.Error}>{error}</Message>}
+    </SettingCard>
+  );
+};
+
 const Settings: React.FC = () => {
   const { session } = useKiteSession();
   const { accent, setAccent } = useTheme();
@@ -180,6 +223,8 @@ const Settings: React.FC = () => {
             ))}
           </div>
         </SettingCard>
+
+        <AlgoTradingSetting />
 
         {session?.isAdmin === true && <AlwaysSnapshotSetting />}
 

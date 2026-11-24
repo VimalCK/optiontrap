@@ -26,31 +26,36 @@ export function paramValueFromInput(type: ParamTypeId, text: string): ParamValue
   return PARAM_TYPES[type].input === 'number' ? Number(text) : text;
 }
 
+/** A rule's (or strategy's) setting inputs, e.g. Min score and Min premium. */
+export const RuleParams: React.FC<{ rule: RuleInfo; setting: RuleSetting; onChange: (setting: RuleSetting) => void }> = ({ rule, setting, onChange }) => (
+  <div className="automation-rule__params">
+    {rule.params.map((param) => {
+      const type = PARAM_TYPES[param.type];
+      return (
+        <label key={param.key} className="automation-rule__param">
+          {!param.hideLabel && param.label}
+          <input
+            type={type.input}
+            aria-label={param.hideLabel ? param.label : undefined}
+            step={type.step}
+            placeholder={param.optional ? 'Off' : undefined}
+            className="app-input automation-rule__input"
+            value={setting.params[param.key] ?? ''}
+            onChange={(e) => onChange({ ...setting, params: { ...setting.params, [param.key]: paramValueFromInput(param.type, e.target.value) } })}
+          />
+        </label>
+      );
+    })}
+  </div>
+);
+
 const RuleRow: React.FC<{ rule: RuleInfo; setting: RuleSetting; onChange: (setting: RuleSetting) => void }> = ({ rule, setting, onChange }) => (
-  <li className="automation-rule">
+  <li className={`automation-rule${setting.active ? ' automation-rule--active' : ''}`}>
     <div className="automation-rule__text">
       <span className="automation-rule__label">{rule.label}</span>
       <span className="automation-rule__description">{rule.description}</span>
     </div>
-    <div className="automation-rule__params">
-      {rule.params.map((param) => {
-        const type = PARAM_TYPES[param.type];
-        return (
-          <label key={param.key} className="automation-rule__param">
-            {!param.hideLabel && param.label}
-            <input
-              type={type.input}
-              aria-label={param.hideLabel ? param.label : undefined}
-              step={type.step}
-              placeholder={param.optional ? 'Off' : undefined}
-              className="app-input automation-rule__input"
-              value={setting.params[param.key] ?? ''}
-              onChange={(e) => onChange({ ...setting, params: { ...setting.params, [param.key]: paramValueFromInput(param.type, e.target.value) } })}
-            />
-          </label>
-        );
-      })}
-    </div>
+    <RuleParams rule={rule} setting={setting} onChange={onChange} />
     <div className="automation-rule__toggle">
       <Toggle
         checked={setting.active}
@@ -65,7 +70,7 @@ const RuleRow: React.FC<{ rule: RuleInfo; setting: RuleSetting; onChange: (setti
 
 const RuleSettingsForm: React.FC<RuleSettingsFormProps> = ({ rules, settings, onChange, label, description, emptyText }) => (
   <div role="group" aria-label={label}>
-    <p className="card__description">{description}</p>
+    <p className="card__description automation-rules__description">{description}</p>
     {rules.length === 0 && emptyText && <p className="automation-rules__empty">{emptyText}</p>}
     <ul className="automation-rules">
       {rules.map((rule) => (
