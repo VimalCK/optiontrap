@@ -55,13 +55,13 @@ describe('openPosition', () => {
     }), 75, expect.any(String));
   });
 
-  it('records a trade as manual unless the caller says it is automated, never from the request', async () => {
+  it('records a trade as manual, of no strategy, unless the caller says otherwise, never from the request', async () => {
     db.insertPosition.mockResolvedValue({ id: 'p1' });
-    await openPosition('U1', { ...input, source: 'Auto' }, { now: OPEN });
-    expect(db.insertPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ source: 'Manual' }), 75, expect.any(String));
+    await openPosition('U1', { ...input, source: 'Auto', strategyId: 'from-request' }, { now: OPEN });
+    expect(db.insertPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ source: 'Manual', strategyId: null }), 75, expect.any(String));
 
-    await openPosition('U1', input, { now: OPEN, source: 'Auto' });
-    expect(db.insertPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ source: 'Auto' }), 75, expect.any(String));
+    await openPosition('U1', input, { now: OPEN, source: 'Auto', strategyId: 'test-strategy' });
+    expect(db.insertPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ source: 'Auto', strategyId: 'test-strategy' }), 75, expect.any(String));
   });
 
   it('records a stock trade with no strike or expiry', async () => {
@@ -91,10 +91,10 @@ describe('openPosition', () => {
 });
 
 describe('openPosition merging with an open position', () => {
-  it('looks only at open positions in the same instrument, source, mode and horizon', async () => {
+  it("looks only at open positions in the same instrument, source, strategy, mode and horizon, so each strategy keeps its own leg", async () => {
     db.insertPosition.mockResolvedValue({ id: 'p1' });
-    await openPosition('U1', input, { now: OPEN, source: 'Auto' });
-    const match = { mode: 'Paper', instrumentToken: 12345, source: 'Auto', horizon: Horizon.Intraday };
+    await openPosition('U1', input, { now: OPEN, source: 'Auto', strategyId: 'test-strategy' });
+    const match = { mode: 'Paper', instrumentToken: 12345, source: 'Auto', strategyId: 'test-strategy', horizon: Horizon.Intraday };
     expect(db.findOpenPosition).toHaveBeenNthCalledWith(1, 'U1', { ...match, side: 'BUY' });
     expect(db.findOpenPosition).toHaveBeenNthCalledWith(2, 'U1', { ...match, side: 'SELL' });
   });

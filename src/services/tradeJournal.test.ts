@@ -17,6 +17,7 @@ function position(overrides: Partial<Position>): Position {
     instrumentType: 'CE',
     exchange: 'NFO',
     source: 'Manual',
+    strategyId: null,
     horizon: Horizon.Intraday,
     strike: 24000,
     optionType: 'CE',

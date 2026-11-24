@@ -17,7 +17,7 @@
  *   on its first tick, at the bid / ask (the tick's last price when the quote
  *   has none).
  * - A fill opens or adds to the position (positions.js) with the order's
- *   source, so it merges like any trade from that source. It is claimed in the
+ *   source and strategy, so it merges like any trade placed by the same. It is claimed in the
  *   database first, so an order fills once even when a cancel or a tick races it.
  * - An exit is an order too: it closes the whole position at the bid / ask at
  *   once (market hours only), and is recorded as a filled closing order. So is
@@ -134,7 +134,7 @@ export function createOrderService({
   async function fill(order, price) {
     const claimed = await db.claimOrderFill(order.id, price, order);
     if (!claimed) return order; // cancelled, filled or modified meanwhile
-    const opened = await positions.openPosition(order.userId, { ...order, entryPrice: price }, { now: clock(), source: order.source });
+    const opened = await positions.openPosition(order.userId, { ...order, entryPrice: price }, { now: clock(), source: order.source, strategyId: order.strategyId });
     if (!opened.ok) {
       const cancelled = (await db.cancelUnfilledOrder(order.id, opened.message))
         ?? { ...claimed, status: OrderStatus.Cancelled, statusReason: opened.message, fillPrice: null };
@@ -340,13 +340,14 @@ export function createOrderService({
      * automated position, and listeners are told when it fills or is cancelled.
      * @param {string} userId
      * @param {Record<string, unknown>} input  the trade, with orderType and, for a limit order, limitPrice
-     * @param {{ lastPrice: number, fillPrice?: number | null, autoTradeId: string }} placement
+     * @param {{ lastPrice: number, fillPrice?: number | null, autoTradeId: string, strategyId: string }} placement
+     *   strategyId: the strategy that placed it, whose position it opens
      * @returns {Promise<OrderResult>}
      */
-    async placeAuto(userId, input, { lastPrice, fillPrice = null, autoTradeId }) {
+    async placeAuto(userId, input, { lastPrice, fillPrice = null, autoTradeId, strategyId }) {
       const parsed = parseOrder(input, { now: clock(), lastPrice });
       if (parsed.error !== undefined) return { ok: false, code: parsed.code, message: parsed.error };
-      return enter(userId, parsed.order, lastPrice, { source: TradeSource.Auto, autoTradeId }, { fill: fillPrice });
+      return enter(userId, parsed.order, lastPrice, { source: TradeSource.Auto, autoTradeId, strategyId }, { fill: fillPrice });
     },
 
     /**

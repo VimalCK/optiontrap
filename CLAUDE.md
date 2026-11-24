@@ -377,8 +377,8 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
     shape and settings logic in `shared/rules/`. Add a rule by adding its file to the list; never add `if`s in callers.
   - The trade monitor service watches every open paper position, on live ticks from the server's own Kite ticker feed
     (`server/kiteTickerFeed.js`, admin session, LTP mode, one feed for all users), through one channel per source
-    (`services/monitorChannels/`), never mixed: automated positions exit when the owner's exit rule fires (P&L at the
-    last traded price); manual ones at the target / stop-loss price from their order. A trailing stop-loss (the Target
+    (`services/monitorChannels/`), never mixed: automated positions exit when an exit rule of their strategy, or a
+    general rule of their owner, fires (P&L at the last traded price); manual ones at the target / stop-loss price from their order. A trailing stop-loss (the Target
     rule's Trail by %, or the order popup's Trail by ₹) starts at the target instead of exiting there and exits once the
     gain falls back that much from its best (best price kept in memory while watched). The exit is an order
     (`orders.exit`, source Auto) filled at the bid / ask. It reloads a user's positions when they fill an order by hand
@@ -391,9 +391,13 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
     market hours, any left from an earlier session as an ordinary exit at the bid / ask. Exit reason `session-square-off`.
   - Strategies (`server/tradeEngine/strategies/`) run on their own schedule and hand what they `prepare` to the signals
     service (`ctx.services.signals.submit`), which runs `select` (returning `{ instrumentToken, side, reason }` signals) for every
-    user with automation on and the strategy active. Each signal is sized at the Max lots entry rule's value (1 lot while it's off) × lot size, checked against the General settings
-    (`GENERAL_CHECKS`) then the entry rules *before anything is saved* (a refused signal is only logged: entry rules decide
+    user with automation on and the strategy active. Each strategy has its own settings (`config.strategies[id]`: active, params, execution modes, horizons, entry and exit
+    rules); the account has the Algo Trading switch and the general rules over every strategy (`shared/generalRules/`:
+    Maximum open positions, Max loss per day). Each signal is sized at the strategy's Max lots value (1 lot while it's off)
+    × lot size, once per execution mode, checked against the strategy's settings (`checkStrategySettings`), then the
+    general and the strategy's entry rules *before anything is saved* (a refused signal is only logged: entry rules decide
     whether to enter, they don't make trade records), then placed as an auto order (`orders.placeAuto`): a market order filled at
-    the bid / ask, or a limit order. The first strategy, Option Analyzer setups, checks for a new OI snapshot every 30 s
+    the bid / ask, or a limit order. Each strategy keeps its own position in an instrument (`positions.strategy_id` is in
+    the merge key) and exits only its own lots; the Positions page shows the legs combined, as the broker nets them. The first strategy, Option Analyzer setups, checks for a new OI snapshot every 30 s
     (the latest one at the open is marked seen, so a restart doesn't trade it again) and trades the Strategy card's
     suggestions, scored by the same code (`shared/optionAnalysis/`, which the card re-exports).

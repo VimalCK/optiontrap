@@ -145,7 +145,21 @@
   flex-direction: column;
 }
 
-/* The strategy tabs, at the top of the card. */
+/* The rules for all strategies, above the strategy tabs. */
+.automation-general {
+  padding-bottom: 20px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.automation-general__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* The strategy tabs, under the rules for all strategies. */
 .automation-settings__tabs {
   margin-bottom: 12px;
 }
@@ -174,6 +188,34 @@
   font-size: 17px;
   font-weight: 700;
   color: var(--text-primary);
+}
+
+/* Settings locked while Algo Trading is off (LockedFields): a plain block, dimmed when locked. */
+.automation-fields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.automation-fields--locked {
+  opacity: 0.55;
+}
+
+.automation-settings__off {
+  margin-bottom: 16px;
+}
+
+.automation-strategy__title-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.automation-strategy__state-reason {
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 
 .automation-strategy__description {

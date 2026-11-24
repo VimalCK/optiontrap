@@ -11,6 +11,7 @@ vi.mock('../strategies/index.js', () => ({ STRATEGIES: [] }));
 
 const { createSignalsService, planTrade, refusal, signalsHealth } = await import('./signals.js');
 const { defaultAutomationConfig } = await import('../../../shared/automation.js');
+const { entryRuleContexts } = await import('../../../shared/entryRules/index.js');
 const { checkTrade, normalizeTradeInput } = await import('../../../shared/tradeRules.js');
 
 const NOON = new Date('2026-11-05T06:30:00Z'); // Thu 12:00 IST
@@ -22,20 +23,23 @@ const instruments = [option, stock];
 const byToken = new Map(instruments.map((i) => [i.instrumentToken, i]));
 const indexNames = new Set(['NIFTY']);
 
-/** Automation on, 2 lots (Max lots active at 2), selling index options allowed, the test strategy active. */
-const userConfig = (changes = {}) => {
-  const config = defaultAutomationConfig([]);
+const TEST_STRATEGY = { id: 'test', label: 'Test', description: '', params: [] };
+
+/** Automation on, the test strategy active on paper, intraday, trading 2 lots (its Max lots active at 2). */
+const userConfig = () => {
+  const config = defaultAutomationConfig([TEST_STRATEGY]);
   config.enabled = true;
-  config.entryRules['max-lots'] = { active: true, params: { max: 2 } };
-  config.kinds.IndexOption.SELL = true;
-  config.strategies = { test: { active: true, params: {} } };
-  return { ...config, ...changes };
+  config.strategies.test.active = true;
+  config.strategies.test.entryRules['max-lots'] = { active: true, params: { max: 2 } };
+  return config;
 };
+/** The test strategy's own settings in a config. */
+const own = (config) => config.strategies.test;
 
 const sellOption = { instrumentToken: 101, side: 'SELL', reason: 'test signal' };
-/** A strategy that gives each user the prepared signals their General settings allow. */
+/** A strategy that gives each user the prepared signals it can place for them. */
 const strategy = () => ({
-  id: 'test', label: 'Test', description: '', params: [], start: () => {},
+  ...TEST_STRATEGY, start: () => {},
   prepare: vi.fn(),
   select: vi.fn((prepared, _params, { allows }) => prepared.filter(allows)),
 });
@@ -60,9 +64,9 @@ function setup({ config = userConfig(), users = [{ userId: 'U1', config }], pric
   let listener = null;
   const orders = {
     onSettled: vi.fn((fn) => { listener = fn; return () => { listener = null; }; }),
-    placeAuto: vi.fn(async (userId, order, { lastPrice, fillPrice, autoTradeId }) => {
+    placeAuto: vi.fn(async (userId, order, { lastPrice, fillPrice, autoTradeId, strategyId }) => {
       if (order.orderType !== 'Market') return placed;
-      const base = { userId, autoTradeId, source: 'Auto', side: order.side, quantity: order.quantity, tradingsymbol: order.tradingsymbol, orderType: 'Market', closesPosition: false };
+      const base = { userId, autoTradeId, strategyId, source: 'Auto', side: order.side, quantity: order.quantity, tradingsymbol: order.tradingsymbol, orderType: 'Market', closesPosition: false };
       const settled = fillRefused
         ? { ...base, status: 'Cancelled', statusReason: fillRefused }
         : { ...base, status: 'Filled', fillPrice: fillPrice ?? lastPrice, positionId: 'pos1' };
@@ -93,63 +97,76 @@ describe('planTrade', () => {
     const future = { ...option, instrumentToken: 404, tradingsymbol: 'NIFTY26NOVFUT', instrumentType: 'FUT', strike: null };
     const instruments = new Map([...byToken, [404, future]]);
     for (const signal of [sellOption, { instrumentToken: 404, side: 'BUY', reason: '' }, { instrumentToken: 202, side: 'BUY', reason: '' }]) {
-      const config = userConfig();
-      const { trade } = planTrade(signal, instruments, indexNames, config);
+      const { trade } = planTrade(signal, instruments, indexNames, own(userConfig()), 'Paper');
       const verdict = checkTrade('Open', { trade: normalizeTradeInput({ ...trade, entryPrice: 100 }), now: NOON });
       expect(verdict).toEqual({ ok: true });
     }
   });
 
-  it('sizes the trade at the Max lots value × the lot size, with details from the instrument list', () => {
-    const { trade } = planTrade(sellOption, byToken, indexNames, userConfig());
+  it("sizes the trade at the strategy's Max lots value × the lot size, in the mode given, with details from the instrument list", () => {
+    const { trade } = planTrade(sellOption, byToken, indexNames, own(userConfig()), 'Paper');
     expect(trade).toMatchObject({ kind: 'IndexOption', side: 'SELL', tradingsymbol: 'NIFTY26NOV24000PE', exchange: 'NFO', lotSize: 75, quantity: 150, horizon: Horizon.Intraday, mode: 'Paper' });
   });
 
   it('trades 1 lot while the Max lots rule is off', () => {
-    const config = userConfig();
-    config.entryRules['max-lots'] = { active: false, params: { max: 5 } };
-    expect(planTrade(sellOption, byToken, indexNames, config).trade?.quantity).toBe(75);
+    const settings = own(userConfig());
+    settings.entryRules['max-lots'] = { active: false, params: { max: 5 } };
+    expect(planTrade(sellOption, byToken, indexNames, settings, 'Paper').trade?.quantity).toBe(75);
   });
 
   it('takes index or stock from the underlyings, and trades a stock in shares', () => {
-    const { trade } = planTrade({ instrumentToken: 202, side: 'BUY', reason: '' }, byToken, indexNames, userConfig());
+    const { trade } = planTrade({ instrumentToken: 202, side: 'BUY', reason: '' }, byToken, indexNames, own(userConfig()), 'Paper');
     expect(trade).toMatchObject({ kind: 'Stock', lotSize: 1, quantity: 2 });
   });
 
   it('refuses an instrument not in the list, or an index itself', () => {
-    expect(planTrade({ instrumentToken: 999, side: 'BUY', reason: '' }, byToken, indexNames, userConfig()).error).toMatch(/999/);
+    expect(planTrade({ instrumentToken: 999, side: 'BUY', reason: '' }, byToken, indexNames, own(userConfig()), 'Paper').error).toMatch(/999/);
     const index = { ...stock, instrumentToken: 303, tradingsymbol: 'NIFTY 50', name: 'NIFTY' };
-    expect(planTrade({ instrumentToken: 303, side: 'BUY', reason: '' }, new Map([[303, index]]), indexNames, userConfig()).error).toMatch(/can't be traded/);
+    expect(planTrade({ instrumentToken: 303, side: 'BUY', reason: '' }, new Map([[303, index]]), indexNames, own(userConfig()), 'Paper').error).toMatch(/can't be traded/);
   });
 });
 
 describe('refusal', () => {
-  const ctx = { openAutoPositions: [], waitingAutoOrders: [], todayAutoPnl: 0 };
-  const trade = planTrade(sellOption, byToken, indexNames, userConfig()).trade;
+  const account = (extra = {}) => ({ now: NOON, openAutoPositions: [], waitingAutoOrders: [], todayAutoPnl: 0, todayAutoExits: [], ...extra });
+  const contexts = (extra) => entryRuleContexts(account(extra), 'test');
+  const trade = planTrade(sellOption, byToken, indexNames, own(userConfig()), 'Paper').trade;
 
   it('allows a trade the settings allow', () => {
-    expect(refusal(trade, userConfig(), ctx)).toBeNull();
+    expect(refusal(trade, userConfig(), 'test', contexts())).toBeNull();
   });
 
-  it('checks the General settings before the entry rules', () => {
+  it("checks the account switch and the strategy's own settings before any rule", () => {
     const config = userConfig();
-    config.kinds.IndexOption.SELL = false;
-    config.entryRules['max-lots'] = { active: true, params: { max: 1 } };
-    expect(refusal(trade, config, ctx)).toEqual({ ruleId: null, reason: 'Sell Index option is off' });
+    own(config).active = false;
+    own(config).entryRules['max-lots'] = { active: true, params: { max: 1 } };
+    expect(refusal(trade, config, 'test', contexts())).toEqual({ ruleId: null, reason: 'The strategy is inactive' });
+    expect(refusal(trade, { ...userConfig(), enabled: false }, 'test', contexts())).toEqual({ ruleId: null, reason: 'Algo Trading is off' });
   });
 
-  it('refuses it once the square-off time has come, as the square-off would close it at once', () => {
+  it("refuses it once the strategy's square-off time has come, as the square-off would close it at once", () => {
     const config = userConfig();
-    config.exitRules['square-off'] = { active: true, params: { time: '15:00' } };
-    expect(refusal(trade, config, { ...ctx, now: new Date('2026-11-05T09:29:59Z') })).toBeNull(); // Thu 14:59 IST
-    expect(refusal(trade, config, { ...ctx, now: new Date('2026-11-05T09:30:00Z') })) // Thu 15:00 IST
+    own(config).exitRules['square-off'] = { active: true, params: { time: '15:00' } };
+    expect(refusal(trade, config, 'test', contexts({ now: new Date('2026-11-05T09:29:59Z') }))).toBeNull(); // Thu 14:59 IST
+    expect(refusal(trade, config, 'test', contexts({ now: new Date('2026-11-05T09:30:00Z') }))) // Thu 15:00 IST
       .toEqual({ ruleId: 'square-off', reason: 'Squared off at 15:00 IST' });
   });
 
-  it('names the entry rule that refuses it', () => {
+  it('refuses every entry once the general max loss per day is hit', () => {
     const config = userConfig();
-    config.entryRules['max-open-positions'] = { active: true, params: { max: 1 } };
-    expect(refusal(trade, config, { ...ctx, openAutoPositions: [{ instrumentToken: 5 }] })?.ruleId).toBe('max-open-positions');
+    config.generalRules['max-daily-loss'] = { active: true, params: { amount: 1000 } };
+    expect(refusal(trade, config, 'test', contexts({ todayAutoPnl: -1000 })))
+      .toEqual({ ruleId: 'max-daily-loss', reason: "Max loss per day hit: today's automated P&L ₹-1000.00, limit ₹1000" });
+  });
+
+  it("counts every strategy's positions for the general rules, only the strategy's own for its rules", () => {
+    const config = userConfig();
+    config.generalRules['max-open-positions'] = { active: true, params: { max: 1 } };
+    expect(refusal(trade, config, 'test', contexts({ openAutoPositions: [{ instrumentToken: 5, strategyId: 'other' }] }))?.ruleId).toBe('max-open-positions');
+
+    const perInstrument = userConfig();
+    own(perInstrument).entryRules['one-trade-per-instrument'] = { active: true, params: {} };
+    expect(refusal(trade, perInstrument, 'test', contexts({ openAutoPositions: [{ instrumentToken: 101, strategyId: 'other' }] }))).toBeNull();
+    expect(refusal(trade, perInstrument, 'test', contexts({ openAutoPositions: [{ instrumentToken: 101, strategyId: 'test' }] }))?.ruleId).toBe('one-trade-per-instrument');
   });
 });
 
@@ -159,7 +176,7 @@ describe('submitting a strategy\'s signals', () => {
     await submit();
     expect(db.createAutoTrade).toHaveBeenCalledWith('U1', expect.objectContaining({ quantity: 150, side: 'SELL' }), { strategyId: 'test', setup: null, reason: 'test signal' });
     expect(orders.placeAuto).toHaveBeenCalledWith('U1', expect.objectContaining({ tradingsymbol: 'NIFTY26NOV24000PE', quantity: 150, orderType: 'Market' }),
-      { lastPrice: 120, fillPrice: null, autoTradeId: 'T1' });
+      { lastPrice: 120, fillPrice: null, autoTradeId: 'T1', strategyId: 'test' });
     expect(moves(db)).toEqual(['Selected→Validated', 'Validated→Executed']);
     expect(db.advanceAutoTrade.mock.calls[1][4]).toEqual({ entryPrice: 120, positionId: 'pos1' });
     expect(monitor.refreshUser).toHaveBeenCalledWith('U1');
@@ -169,7 +186,7 @@ describe('submitting a strategy\'s signals', () => {
     const { db, submit, orders, quotes } = setup();
     quotes.mockResolvedValue({ 'NFO:NIFTY26NOV24000PE': { last_price: 120, depth: { buy: [{ price: 119.6 }], sell: [{ price: 120.4 }] } } });
     await submit();
-    expect(orders.placeAuto.mock.calls[0][2]).toEqual({ lastPrice: 120, fillPrice: 119.6, autoTradeId: 'T1' });
+    expect(orders.placeAuto.mock.calls[0][2]).toEqual({ lastPrice: 120, fillPrice: 119.6, autoTradeId: 'T1', strategyId: 'test' });
     expect(db.advanceAutoTrade.mock.calls[1][4]).toEqual({ entryPrice: 119.6, positionId: 'pos1' });
   });
 
@@ -180,9 +197,9 @@ describe('submitting a strategy\'s signals', () => {
     expect(quotes).toHaveBeenCalledWith(KITE, ['NFO:NIFTY26NOV24000PE']);
   });
 
-  it('saves nothing when an entry rule refuses the signal: it only logs why, and places nothing', async () => {
+  it('saves nothing when a rule refuses the signal: it only logs why, and places nothing', async () => {
     const config = userConfig();
-    config.entryRules['max-daily-loss'] = { active: true, params: { amount: 1000 } };
+    config.generalRules['max-daily-loss'] = { active: true, params: { amount: 1000 } };
     const run = setup({ config });
     run.db.getTodayAutoRealisedPnl.mockResolvedValue(-800);
     run.monitor.openPnl.mockReturnValue(-300); // booked + open = -1100
@@ -190,14 +207,14 @@ describe('submitting a strategy\'s signals', () => {
     expect(run.db.createAutoTrade).not.toHaveBeenCalled();
     expect(run.db.advanceAutoTrade).not.toHaveBeenCalled();
     expect(run.orders.placeAuto).not.toHaveBeenCalled();
-    expect(run.log).toHaveBeenCalledWith('not entered', expect.objectContaining({ trade: 'SELL 150 NIFTY26NOV24000PE', user: 'U1', strategy: 'test', reason: expect.stringContaining("Today's automated loss ₹1100.00") }));
+    expect(run.log).toHaveBeenCalledWith('not entered', expect.objectContaining({ trade: 'SELL 150 NIFTY26NOV24000PE', user: 'U1', strategy: 'test', reason: expect.stringContaining("today's automated P&L ₹-1100.00") }));
   });
 
-  it("doesn't re-enter an instrument within the Wait after exit minutes of its last exit today", async () => {
+  it("doesn't re-enter an instrument within the Wait after exit minutes of the strategy's last exit today", async () => {
     const config = userConfig();
-    config.entryRules['wait-after-exit'] = { active: true, params: { minutes: 15 } };
+    own(config).entryRules['wait-after-exit'] = { active: true, params: { minutes: 15 } };
     const run = setup({ config });
-    run.db.getTodayAutoExits.mockResolvedValue([{ instrumentToken: 101, exitTime: new Date(NOON.getTime() - 10 * 60_000) }]);
+    run.db.getTodayAutoExits.mockResolvedValue([{ instrumentToken: 101, strategyId: 'test', exitTime: new Date(NOON.getTime() - 10 * 60_000) }]);
     await run.submit();
     expect(run.db.getTodayAutoExits).toHaveBeenCalledWith('U1', '2026-11-04T18:30:00.000Z'); // the IST day's start
     expect(run.db.createAutoTrade).not.toHaveBeenCalled();
@@ -220,8 +237,18 @@ describe('submitting a strategy\'s signals', () => {
     expect(run.monitor.refreshUser).not.toHaveBeenCalled();
   });
 
+  it("doesn't trade a strategy with paper and live both off", async () => {
+    const config = userConfig();
+    own(config).execution.Paper = false;
+    const run = setup({ config });
+    await run.submit();
+    expect(run.db.createAutoTrade).not.toHaveBeenCalled();
+  });
+
   it('does no work when no user has the strategy active, or it gives no signals', async () => {
-    const inactive = setup({ config: userConfig({ strategies: { test: { active: false, params: {} } } }) });
+    const inactiveConfig = userConfig();
+    own(inactiveConfig).active = false;
+    const inactive = setup({ config: inactiveConfig });
     await inactive.submit();
     expect(inactive.db.getAutomatedUsers).toHaveBeenCalledWith('test');
     expect(inactive.strategies[0].select).not.toHaveBeenCalled();
@@ -235,7 +262,7 @@ describe('submitting a strategy\'s signals', () => {
 
   it("selects each user's signals with their own settings, from one prepared result", async () => {
     const u2 = userConfig();
-    u2.strategies = { test: { active: true, params: { minScore: 90 } } };
+    own(u2).params = { minScore: 90 };
     const run = setup({ users: [{ userId: 'U1', config: userConfig() }, { userId: 'U2', config: u2 }] });
     await run.submit();
     expect(run.strategies[0].select.mock.calls.map(([prepared, params]) => [prepared, params])).toEqual([[[sellOption], {}], [[sellOption], { minScore: 90 }]]);
@@ -262,10 +289,11 @@ describe('submitting a strategy\'s signals', () => {
     expect(order).toEqual(['check', 'place', 'check', 'place']);
   });
 
-  it('lets a strategy pick only what the General settings allow, so nothing switched off is recorded', async () => {
-    const buyOption = { instrumentToken: 101, side: 'BUY', reason: 'buy signal' };
-    const run = setup(); // buying index options is off
-    await run.submit([buyOption, sellOption]);
+  it('lets a strategy pick only what it can place, so nothing it would skip is recorded', async () => {
+    const unknown = { instrumentToken: 999, side: 'BUY', reason: 'not in the list' };
+    const run = setup();
+    await run.submit([unknown, sellOption]);
+    expect(run.strategies[0].select.mock.results[0].value).toEqual([sellOption]);
     expect(run.db.createAutoTrade).toHaveBeenCalledTimes(1);
     expect(run.db.createAutoTrade.mock.calls[0][1]).toMatchObject({ side: 'SELL' });
   });
@@ -304,7 +332,7 @@ describe('entering through a limit order (Entry limit offset on)', () => {
   /** userConfig with Entry limit offset at `percent`. */
   const offsetConfig = (percent = 20) => {
     const config = userConfig();
-    config.entryRules['entry-limit-offset'] = { active: true, params: { percent } };
+    own(config).entryRules['entry-limit-offset'] = { active: true, params: { percent } };
     return config;
   };
 
@@ -312,7 +340,7 @@ describe('entering through a limit order (Entry limit offset on)', () => {
     const { db, submit, orders, monitor } = setup({ config: offsetConfig(20) });
     await submit();
     expect(orders.placeAuto).toHaveBeenCalledWith('U1', expect.objectContaining({ tradingsymbol: 'NIFTY26NOV24000PE', side: 'SELL', quantity: 150, orderType: 'Limit', limitPrice: 144 }),
-      { lastPrice: 120, fillPrice: null, autoTradeId: 'T1' });
+      { lastPrice: 120, fillPrice: null, autoTradeId: 'T1', strategyId: 'test' });
     expect(moves(db)).toEqual(['Selected→Validated']); // validated while the order waits
     expect(monitor.refreshUser).not.toHaveBeenCalled();
   });
@@ -326,9 +354,9 @@ describe('entering through a limit order (Entry limit offset on)', () => {
 
   it("doesn't place a second order in an instrument whose automated order is still waiting", async () => {
     const config = offsetConfig();
-    config.entryRules['one-trade-per-instrument'] = { active: true, params: {} };
+    own(config).entryRules['one-trade-per-instrument'] = { active: true, params: {} };
     const run = setup({ config });
-    run.db.getWaitingAutoOrders.mockResolvedValue([{ instrumentToken: 101 }]);
+    run.db.getWaitingAutoOrders.mockResolvedValue([{ instrumentToken: 101, strategyId: 'test' }]);
     await run.submit();
     expect(run.orders.placeAuto).not.toHaveBeenCalled();
     expect(run.log).toHaveBeenCalledWith('not entered', expect.objectContaining({ reason: expect.stringContaining('An automated limit order in NIFTY26NOV24000PE is already waiting') }));

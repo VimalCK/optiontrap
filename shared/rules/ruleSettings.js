@@ -21,6 +21,7 @@ import { PARAM_TYPES } from './paramTypes.js';
  * @typedef {{ key: string, label: string, type: ParamTypeId, default?: number | string, hideLabel?: boolean, optional?: boolean }} RuleParam
  * @typedef {{ active: boolean, params: Record<string, ParamValue> }} RuleSetting
  * @typedef {Record<string, RuleSetting>} RuleSettings
+ * @typedef {{ general: RuleSettings, strategy: RuleSettings }} ScopedRuleSettings  the account's general rules and a strategy's own
  * @typedef {{ id: string, label: string, description: string, params: RuleParam[] }} RuleInfo
  */
 

@@ -5,7 +5,7 @@ export const ONE_TRADE_PER_INSTRUMENT_RULE_ID = 'one-trade-per-instrument';
 export default {
   id: ONE_TRADE_PER_INSTRUMENT_RULE_ID,
   label: 'One position per instrument',
-  description: 'A trade in an instrument that already has an open automated position, or a waiting automated limit order, is rejected.',
+  description: 'A trade in an instrument this strategy already holds, or has a waiting limit order in, is rejected. Other strategies may hold it too.',
   params: [],
   check: (trade, ctx) => {
     if (ctx.openAutoPositions.some((p) => p.instrumentToken === trade.instrumentToken)) return `An automated position in ${trade.tradingsymbol} is already open`;

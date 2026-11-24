@@ -642,6 +642,26 @@
 }
 
 /* Notifications: one row per channel. */
+/* A part of a card below its main setting, e.g. the strategies under Algo Trading. */
+.settings-card__section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--card-border);
+}
+
+.settings-card__section-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.settings-card__section-description {
+  margin: 4px 0 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .settings-rows {
   display: flex;
   flex-direction: column;

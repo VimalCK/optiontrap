@@ -55,14 +55,16 @@ const PaperPositions: React.FC = () => {
   const livePrices = useLastPrices('paper-positions', [...positions, ...pendingOrders(orderBook.orders)]);
   const spotPrices = useSpotPrices(positions);
 
-  const handleExit = async (pos: Position) => {
+  /** Exit each in turn (every strategy's leg of a combined row), then reload once. */
+  const handleExit = async (toExit: Position[]) => {
     setExitError(null);
     try {
-      await exitPosition(pos.id, livePrices.get(pos.instrumentToken) || 0);
-      await loadPositions();
+      for (const pos of toExit) await exitPosition(pos.id, livePrices.get(pos.instrumentToken) || 0);
     } catch (err) {
       // e.g. the market is closed: say why rather than doing nothing.
       setExitError(tradeErrorMessage(err, 'Failed to exit position'));
+    } finally {
+      await loadPositions();
     }
   };
 

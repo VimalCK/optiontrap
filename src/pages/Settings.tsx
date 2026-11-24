@@ -11,7 +11,9 @@ import '@/styles/settings.css';
 import Message from '@/components/Message/Message';
 import { MessageTone } from '@/utils/uiEnums';
 import Toggle from '@/components/Toggle/Toggle';
-import { fetchAutomationConfig, saveAutomationConfig, type AutomationConfig } from '@/services/automation';
+import { fetchAutomationConfig, setAutomationEnabled, setStrategyActive, type AutomationConfig } from '@/services/automation';
+import type { StrategyInfo } from '@/services/strategies';
+import { useStrategies } from '@/hooks/useStrategies';
 
 const TRADING_MODE_CHOICES: { id: TradingModeId; label: string; hint: string }[] = [
   { id: TradingMode.Paper, label: 'Paper', hint: 'Orders are simulated: nothing is sent to Kite and no money is used.' },
@@ -116,11 +118,46 @@ const AlwaysSnapshotSetting: React.FC = () => {
 };
 
 /**
- * The account's Algo Trading switch, over every strategy. Saved straight away; the strategies' own settings are on the
- * Trading Strategies page.
+ * Each strategy's own switch, under Algo Trading. While Algo Trading is off they show off and can't be changed; each
+ * strategy keeps its own setting, so turning Algo Trading back on brings back the ones that were on.
+ */
+export const StrategySwitches: React.FC<{
+  strategies: StrategyInfo[];
+  config: AutomationConfig;
+  saving: boolean;
+  onToggle: (strategy: StrategyInfo, active: boolean) => void;
+}> = ({ strategies, config, saving, onToggle }) => (
+  <section className="settings-card__section" aria-labelledby="settings-strategies-title">
+    <h3 id="settings-strategies-title" className="settings-card__section-title">Strategies</h3>
+    <p className="settings-card__section-description">
+      {config.enabled ? 'The strategies that place trades. Set each one up on the Trading Strategies page.' : 'Off while Algo Trading is off · each keeps its own setting'}
+    </p>
+    <ul className="settings-rows">
+      {strategies.map((strategy) => (
+        <li key={strategy.id} className="settings-row">
+          <div>
+            <span className="settings-row__title">{strategy.label}</span>
+            <span className="settings-row__detail">{strategy.description}</span>
+          </div>
+          <Toggle
+            checked={config.enabled && config.strategies[strategy.id]?.active === true}
+            label={strategy.label}
+            disabled={!config.enabled || saving}
+            onChange={(on) => onToggle(strategy, on)}
+          />
+        </li>
+      ))}
+    </ul>
+  </section>
+);
+
+/**
+ * The account's Algo Trading switch, over every strategy, then each strategy's own switch. Saved straight away; the
+ * strategies' own settings are on the Trading Strategies page.
  */
 export const AlgoTradingSetting: React.FC = () => {
   const signal = useAbortSignal();
+  const { strategies } = useStrategies();
   const [config, setConfig] = useState<AutomationConfig | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -131,27 +168,34 @@ export const AlgoTradingSetting: React.FC = () => {
       .catch((err) => { if (!signal.aborted) setError(err.message); });
   }, [signal]);
 
-  const toggle = async (enabled: boolean) => {
-    if (!config) return;
+  /** Save one switch; the configuration comes back as saved. */
+  const save = async (change: () => Promise<AutomationConfig>, failure: string) => {
     setSaving(true);
     setError(null);
     try {
-      setConfig(await saveAutomationConfig({ ...config, enabled }));
+      setConfig(await change());
     } catch (err) {
-      setError(`Could not switch Algo Trading ${enabled ? 'on' : 'off'}: ${(err as Error).message}`);
+      setError(`${failure}: ${(err as Error).message}`);
     } finally {
       setSaving(false);
     }
   };
+
+  const toggleAlgoTrading = (on: boolean) =>
+    save(() => setAutomationEnabled(on), `Could not switch Algo Trading ${on ? 'on' : 'off'}`);
+  const toggleStrategy = (strategy: StrategyInfo, on: boolean) =>
+    save(() => setStrategyActive(strategy.id, on), `Could not switch ${strategy.label} ${on ? 'on' : 'off'}`);
 
   return (
     <SettingCard
       eyebrow="Automation"
       title="Algo Trading"
       description="Lets your active strategies place automated trades. Off stops every strategy's new trades; open positions still exit by their rules."
+      wide
     >
-      <Toggle checked={config?.enabled ?? false} label="Algo Trading" disabled={!config || saving} onChange={toggle} />
+      <Toggle checked={config?.enabled ?? false} label="Algo Trading" disabled={!config || saving} onChange={toggleAlgoTrading} />
       {error && <Message tone={MessageTone.Error}>{error}</Message>}
+      {config && strategies && <StrategySwitches strategies={strategies} config={config} saving={saving} onToggle={toggleStrategy} />}
     </SettingCard>
   );
 };

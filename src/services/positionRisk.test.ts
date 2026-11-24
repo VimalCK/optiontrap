@@ -12,6 +12,7 @@ const leg = (overrides: Partial<Position>): Position => ({
   instrumentType: 'PE',
   exchange: 'NFO',
   source: 'Manual',
+  strategyId: null,
   horizon: Horizon.Intraday,
   strike: 22500,
   optionType: 'PE',

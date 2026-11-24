@@ -84,20 +84,21 @@ export async function getTodayAutoRealisedPnl(userId, todayStart) {
 }
 
 /**
- * For the Wait after exit entry rule. Served by positions_closed_idx (user_id, mode, exit_time).
+ * Each strategy's last exit today per instrument, for the Wait after exit entry rule. Served by positions_closed_idx
+ * (user_id, mode, exit_time).
  * @param {string} userId
  * @param {string} todayStart
- * @returns {Promise<{ instrumentToken: number, exitTime: Date }[]>}
+ * @returns {Promise<{ instrumentToken: number, strategyId: string, exitTime: Date }[]>}
  */
 export async function getTodayAutoExits(userId, todayStart) {
   const result = await rows(
-    `SELECT instrument_token, MAX(exit_time) AS exit_time
+    `SELECT instrument_token, strategy_id, MAX(exit_time) AS exit_time
      FROM positions
      WHERE user_id = $1 AND mode = ${sqlEnum(TradingMode.Paper)} AND exited AND exit_time >= $2 AND source = ${sqlEnum(TradeSource.Auto)}
-     GROUP BY instrument_token`,
+     GROUP BY instrument_token, strategy_id`,
     [userId, todayStart],
   );
-  return result.map((row) => ({ instrumentToken: Number(row.instrument_token), exitTime: new Date(row.exit_time) }));
+  return result.map((row) => ({ instrumentToken: Number(row.instrument_token), strategyId: row.strategy_id, exitTime: new Date(row.exit_time) }));
 }
 
 /**

@@ -61,6 +61,8 @@ export {
   getStoredAutomationConfig,
   getStoredAutomationConfigs,
   storeAutomationConfig,
+  storeAutomationEnabled,
+  storeStrategyActive,
 } from './db/automationConfigs.js';
 export {
   advanceAutoTrade,

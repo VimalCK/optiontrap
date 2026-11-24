@@ -16,7 +16,9 @@ describe('getAutomatedUsers', () => {
     stored.mockResolvedValueOnce([{ userId: 'U1', config: config({ active: true, params: { minScore: 70 } }) }]);
     const users = await getAutomatedUsers('test');
     expect(stored).toHaveBeenCalledWith('test');
-    expect(users).toEqual([{ userId: 'U1', config: expect.objectContaining({ enabled: true, strategies: { test: { active: true, params: { minScore: 70 } } } }) }]);
+    expect(users).toEqual([{ userId: 'U1', config: expect.objectContaining({ enabled: true }) }]);
+    // Completed: the strategy's own settings come in with their defaults.
+    expect(users[0].config.strategies.test).toMatchObject({ active: true, params: { minScore: 70 }, execution: { Paper: true, Live: false } });
   });
 
   it('leaves out a user whose stored setting no longer holds, as completing turns it off', async () => {

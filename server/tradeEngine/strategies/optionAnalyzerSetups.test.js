@@ -8,6 +8,7 @@ vi.mock('../../instruments.js', () => ({ getOrFetchInstruments: vi.fn() }));
 const { createOptionAnalyzerSetups, optionAnalyzerSetups, underlyingSetups } = await import('./optionAnalyzerSetups.js');
 const { StrategyId } = await import('./index.js');
 const { setupPatternLabel } = await import('../../../shared/analysisEnums.js');
+const { defaultAutomationConfig, withStrategyActive } = await import('../../../shared/automation.js');
 
 const NOON = new Date('2026-11-05T06:30:00Z'); // Thu 12:00 IST
 const SPOT_TOKEN = 900;
@@ -94,7 +95,7 @@ describe('optionAnalyzerSetups', () => {
     expect(pick({ minScore: 65, minPremium: 10 })).toEqual([2]);
   });
 
-  it('takes only what the user\'s General settings allow (e.g. sells only)', () => {
+  it('takes only what it can place for the user (e.g. sells only)', () => {
     expect(pick({ minScore: 50, minPremium: 10 }, (s) => s.side === 'SELL')).toEqual([3, 4]);
   });
 
@@ -178,5 +179,13 @@ describe('optionAnalyzerSetups running on the market clock', () => {
     await run.check();
     expect(run.submit).not.toHaveBeenCalled();
     expect(run.logs).toEqual([['skipped snapshot', { reason: 'no admin Kite login for the instrument list' }]]);
+  });
+});
+
+describe('optionAnalyzerSetups defaults', () => {
+  it('starts a new user at Min score 70 and Min premium 30, so the strategy can be switched on straight away', () => {
+    const config = defaultAutomationConfig([optionAnalyzerSetups]);
+    expect(config.strategies[optionAnalyzerSetups.id].params).toEqual({ minScore: 70, minPremium: 30 });
+    expect(withStrategyActive(config, optionAnalyzerSetups, true).config?.strategies[optionAnalyzerSetups.id].active).toBe(true);
   });
 });

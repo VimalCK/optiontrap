@@ -21,7 +21,7 @@ interface RecommendationRowProps {
   onTrade: (rec: StrategySetup) => void;
 }
 
-export const AUTO_PICK_HINT = 'The setup the Option Analyzer setups automation takes for this underlying, if your General settings allow it and it reaches your Min score and Min premium';
+export const AUTO_PICK_HINT = 'The setup the Option Analyzer setups automation takes for this underlying, if it reaches your Min score and Min premium';
 
 /** A sold option's profit-chance tone; a bought option's is below 50% by nature (it pays time decay), so it isn't coloured. */
 const sellWinTone = (winChance: number): string => (winChance >= 70 ? 'positive' : winChance >= 50 ? '' : 'negative');

@@ -253,6 +253,44 @@
   opacity: 0.5;
 }
 
+/* A combined row's strategies toggle, and each strategy's own position (a leg) under it. */
+.positions-table__legs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
+.positions-table .positions-table__legs-toggle {
+  width: 22px;
+  height: 22px;
+}
+
+.positions-table__legs-toggle svg {
+  transition: transform var(--transition-speed);
+}
+
+.positions-table__legs-toggle[aria-expanded='true'] svg {
+  transform: rotate(180deg);
+}
+
+.positions-table__row--leg > td {
+  background: rgba(var(--tint-rgb), 0.03);
+}
+
+.positions-table__row--leg > td:first-child {
+  padding-left: 28px;
+}
+
+.positions-table__strategy {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+
 .positions-table__exited-badge {
   font-size: 9px;
   font-weight: 600;

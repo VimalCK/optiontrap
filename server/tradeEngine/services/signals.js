@@ -3,22 +3,24 @@
  * trades, a trade engine service (server/tradeEngine/host.js).
  *
  * A strategy (server/tradeEngine/strategies/) does its market work once for
- * all users and calls submit(strategyId, prepared). For every user with
- * automation switched on and that strategy active, the strategy then selects
- * the user's signals with their settings (select), picking only trades their
- * General settings allow. Each signal becomes an automated trade that moves
- * through the lifecycle in shared/automation.js, recorded stage by stage:
+ * all users and calls submit(strategyId, prepared). For every user with Algo
+ * Trading on and that strategy active, the strategy selects the user's
+ * signals with its settings (select), picking only trades it can place. Each signal becomes an automated trade in
+ * each mode the strategy trades in (paper, and later live), and moves through
+ * the lifecycle in shared/automation.js, recorded stage by stage:
  *
- *   selected   the strategy picked it; sized at tradeLots (the Max lots entry
- *              rule's value, 1 lot while it is off) × the lot size
+ *   selected   the strategy picked it; sized at tradeLots (the strategy's Max
+ *              lots entry rule's value, 1 lot while it is off) × the lot size
  *   rejected   it could not be placed after validation: no price, the order
  *              rules refused it, or its order was cancelled
- *   validated  it passed the General settings and every active entry rule
- *   executed   its order filled into an automated position (source Auto),
- *              which the trade monitor closes when an exit rule fires
+ *   validated  it passed the strategy's settings, the account's general rules
+ *              and every active entry rule of the strategy
+ *   executed   its order filled into the strategy's automated position
+ *              (source Auto), which the trade monitor closes when an exit
+ *              rule fires
  *
- * The General settings and entry rules decide whether to enter at all, so a
- * signal they refuse is only logged, never saved. A validated trade is placed
+ * The settings and entry rules decide whether to enter at all, so a signal
+ * they refuse is only logged, never saved. A validated trade is placed
  * as an order with the order service (ctx.services.orders): a market order
  * filled at once at the bid / ask from the engine's quote, or, with the Entry
  * limit offset entry rule on, a limit order at a better price than the last
@@ -42,8 +44,8 @@ import { fetchQuotes } from '../../kiteQuotes.js';
 import { findWorkingAdminSession } from '../../oiHistoryScheduler.js';
 import { getOrFetchInstruments } from '../../instruments.js';
 import { marketFillPrice } from '../fillPrice.js';
-import { checkGeneralSettings, tradeKind } from '../../../shared/automation.js';
-import { checkEntryRules, entryLimitPrice, tradeLots } from '../../../shared/entryRules/index.js';
+import { checkStrategySettings, executionModes, tradeKind } from '../../../shared/automation.js';
+import { checkEntryRules, entryLimitPrice, entryRuleContexts, tradeLots } from '../../../shared/entryRules/index.js';
 import { checkEntryOrderBlocked } from '../../../shared/exitRules/index.js';
 import { STRATEGIES } from '../strategies/index.js';
 import { marketDayStartMs } from '../../../shared/marketTime.js';
@@ -63,9 +65,11 @@ const HORIZON = Horizon.Intraday;
  * @typedef {import('../strategies/index.js').Strategy} Strategy
  * @typedef {import('../strategies/index.js').Signal} Signal
  * @typedef {import('../../../shared/automation.js').AutomationConfig} AutomationConfig
+ * @typedef {import('../../../shared/automation.js').StrategySettings} StrategySettings
+ * @typedef {import('../../../shared/tradeEnums.js').TradingModeId} TradingModeId
  * @typedef {{ instrumentToken: number, tradingsymbol: string, name: string, exchange: string, instrumentType: string,
  *             strike: number | null, expiry: string | null, lotSize: number | null }} Instrument
- * @typedef {{ horizon: import('../../../shared/tradeEnums.js').HorizonId, kind: import('../../../shared/automation.js').TradeKindId, mode: string, side: import('../../../shared/tradeEnums.js').SideId,
+ * @typedef {{ horizon: import('../../../shared/tradeEnums.js').HorizonId, kind: import('../../../shared/automation.js').TradeKindId, mode: TradingModeId, side: import('../../../shared/tradeEnums.js').SideId,
  *             tradingsymbol: string, instrumentToken: number, exchange: string, instrumentType: string,
  *             optionType: string | null, strike: number | null, expiry: string | null, lotSize: number, quantity: number }} PlannedTrade
  * @typedef {{ users: number, signals: number, failed: number }} RunCounts
@@ -102,15 +106,16 @@ export function signalsHealth(lastRun) {
 }
 
 /**
- * The trade a signal means for a user, sized by tradeLots; or the
+ * The trade a signal means for a user in one mode, sized by the strategy's tradeLots; or the
  * reason it can't be traded at all (unknown instrument, an index itself).
  * @param {Signal} signal
  * @param {Map<number, Instrument>} instrumentsByToken
  * @param {Set<string>} indexNames  F&O names of the underlyings that are indices
- * @param {AutomationConfig} config
+ * @param {StrategySettings} settings  the user's settings for the signal's strategy
+ * @param {TradingModeId} mode
  * @returns {{ trade: PlannedTrade, error?: undefined } | { error: string, trade?: undefined }}
  */
-export function planTrade(signal, instrumentsByToken, indexNames, config) {
+export function planTrade(signal, instrumentsByToken, indexNames, settings, mode) {
   const instrument = instrumentsByToken.get(signal.instrumentToken);
   if (!instrument) return { error: `instrument ${signal.instrumentToken} is not in today's instrument list` };
   const kind = tradeKind(instrument.instrumentType, indexNames.has(instrument.name));
@@ -120,7 +125,7 @@ export function planTrade(signal, instrumentsByToken, indexNames, config) {
     trade: {
       horizon: HORIZON,
       kind,
-      mode: config.mode,
+      mode,
       side: signal.side,
       tradingsymbol: instrument.tradingsymbol,
       instrumentToken: instrument.instrumentToken,
@@ -130,25 +135,28 @@ export function planTrade(signal, instrumentsByToken, indexNames, config) {
       strike: instrument.strike,
       expiry: instrument.expiry,
       lotSize,
-      quantity: tradeLots(config.entryRules) * lotSize,
+      quantity: tradeLots(settings.entryRules) * lotSize,
     },
   };
 }
 
 /**
- * Why the user's settings refuse this trade (General settings, an exit rule that would close it at once, then the
- * entry rules in order), or null when it may be executed.
+ * Why the user's settings refuse this trade of a strategy (the account switch and the strategy's settings, an exit
+ * rule that would close it at once, then the general and the strategy's entry rules in order), or null when it may
+ * be executed.
  * @param {PlannedTrade} trade
  * @param {AutomationConfig} config
- * @param {import('../../../shared/entryRules/index.js').EntryRuleContext} ctx
+ * @param {string} strategyId
+ * @param {import('../../../shared/entryRules/index.js').EntryRuleContexts} contexts
  * @returns {{ ruleId: string | null, reason: string } | null}
  */
-export function refusal(trade, config, ctx) {
-  const general = checkGeneralSettings(trade, config);
-  if (general) return { ruleId: null, reason: general };
-  const blocked = checkEntryOrderBlocked(trade, ctx, config.exitRules);
+export function refusal(trade, config, strategyId, contexts) {
+  const off = checkStrategySettings(trade, config, strategyId);
+  if (off) return { ruleId: null, reason: off };
+  const { entryRules, exitRules } = config.strategies[strategyId];
+  const blocked = checkEntryOrderBlocked(trade, contexts.account, { strategy: exitRules, general: config.generalRules });
   if (blocked) return blocked;
-  const entry = checkEntryRules(trade, ctx, config.entryRules);
+  const entry = checkEntryRules(trade, contexts, { strategy: entryRules, general: config.generalRules });
   return entry.ok ? null : { ruleId: entry.ruleId, reason: entry.reason };
 }
 
@@ -159,7 +167,7 @@ export function refusal(trade, config, ctx) {
  *   db?: { getAutomatedUsers: typeof getAutomatedUsers, getUnderlyings: typeof getUnderlyings,
  *          createAutoTrade: typeof createAutoTrade, advanceAutoTrade: typeof advanceAutoTrade,
  *          getOpenAutoPositions: typeof getOpenAutoPositions, getTodayAutoRealisedPnl: typeof getTodayAutoRealisedPnl,
- *          getTodayAutoExits: typeof getTodayAutoExits, getWaitingAutoOrders: typeof getWaitingAutoOrders },
+ *          getTodayAutoExits: typeof getTodayAutoExits, getWaitingAutoOrders: typeof getWaitingAutoOrders, },
  *   strategies?: Strategy[],
  *   quotes?: typeof fetchQuotes,
  *   findKiteSession?: typeof findWorkingAdminSession,
@@ -169,7 +177,10 @@ export function refusal(trade, config, ctx) {
  * }} [deps]
  */
 export function createSignalsService({
-  db = { getAutomatedUsers, getUnderlyings, createAutoTrade, advanceAutoTrade, getOpenAutoPositions, getTodayAutoRealisedPnl, getTodayAutoExits, getWaitingAutoOrders },
+  db = {
+    getAutomatedUsers, getUnderlyings, createAutoTrade, advanceAutoTrade, getOpenAutoPositions, getTodayAutoRealisedPnl, getTodayAutoExits,
+    getWaitingAutoOrders,
+  },
   strategies = STRATEGIES,
   quotes = fetchQuotes,
   findKiteSession = findWorkingAdminSession,
@@ -185,17 +196,12 @@ export function createSignalsService({
   let lastRun = null;
 
   /**
-   * Take one signal through the lifecycle for one user: check it, record it
-   * validated, and place its order. The order service settles it later
-   * (settleOrder), at once for a market order that fills now.
+   * The facts the entry rules check, across all the user's strategies.
+   * @param {string} userId
+   * @param {Date} now
+   * @returns {Promise<import('../../../shared/entryRules/index.js').EntryRuleContext>}
    */
-  async function take(userId, config, signal, { instrumentsByToken, indexNames, quotesByKey, now }) {
-    const planned = planTrade(signal, instrumentsByToken, indexNames, config);
-    if (planned.error !== undefined) {
-      log('skipped signal', { user: userId, strategy: signal.strategyId, reason: planned.error });
-      return;
-    }
-    const { trade } = planned;
+  async function accountContext(userId, now) {
     const todayStart = new Date(marketDayStartMs(now.getTime())).toISOString();
     const [openAutoPositions, waitingAutoOrders, todayRealisedPnl, todayAutoExits] = await Promise.all([
       db.getOpenAutoPositions(userId),
@@ -203,38 +209,58 @@ export function createSignalsService({
       db.getTodayAutoRealisedPnl(userId, todayStart),
       db.getTodayAutoExits(userId, todayStart),
     ]);
-    const ctx = { now, openAutoPositions, waitingAutoOrders, todayAutoPnl: todayRealisedPnl + monitor.openPnl(userId), todayAutoExits };
-    const refused = refusal(trade, config, ctx);
+    return { now, openAutoPositions, waitingAutoOrders, todayAutoPnl: todayRealisedPnl + monitor.openPnl(userId), todayAutoExits };
+  }
+
+  /**
+   * Take one signal through the lifecycle for one user in one mode: check it, record it
+   * validated, and place its order. The order service settles it later
+   * (settleOrder), at once for a market order that fills now.
+   * @param {string} userId
+   * @param {AutomationConfig} config
+   * @param {Signal & { strategyId: string }} signal
+   * @param {TradingModeId} mode
+   */
+  async function take(userId, config, signal, mode, { instrumentsByToken, indexNames, quotesByKey, now }) {
+    const { strategyId } = signal;
+    const settings = config.strategies[strategyId];
+    const planned = planTrade(signal, instrumentsByToken, indexNames, settings, mode);
+    if (planned.error !== undefined) {
+      log('skipped signal', { user: userId, strategy: strategyId, reason: planned.error });
+      return;
+    }
+    const { trade } = planned;
+    const contexts = entryRuleContexts(await accountContext(userId, now), strategyId);
+    const refused = refusal(trade, config, strategyId, contexts);
     if (refused) {
-      log('not entered', { trade: tradeLabel(trade), user: userId, strategy: signal.strategyId, reason: refused.reason });
+      log('not entered', { trade: tradeLabel(trade), user: userId, strategy: strategyId, reason: refused.reason });
       return;
     }
 
-    const id = await db.createAutoTrade(userId, trade, { strategyId: signal.strategyId, setup: signal.setup ?? null, reason: signal.reason });
+    const id = await db.createAutoTrade(userId, trade, { strategyId, setup: signal.setup ?? null, reason: signal.reason });
     await db.advanceAutoTrade(userId, id, LifecycleStage.Selected, LifecycleStage.Validated, {}, {});
-    log(LifecycleStage.Validated, { trade: tradeLabel(trade), user: userId, strategy: signal.strategyId, signal: signal.reason });
+    log(LifecycleStage.Validated, { trade: tradeLabel(trade), user: userId, strategy: strategyId, signal: signal.reason });
     const reject = (/** @type {string} */ reason) => {
-      log(LifecycleStage.Rejected, { trade: tradeLabel(trade), user: userId, strategy: signal.strategyId, reason });
+      log(LifecycleStage.Rejected, { trade: tradeLabel(trade), user: userId, strategy: strategyId, reason });
       return db.advanceAutoTrade(userId, id, LifecycleStage.Validated, LifecycleStage.Rejected, { reason }, { ruleId: null, reason });
     };
 
     const quote = quotesByKey.get(`${trade.exchange}:${trade.tradingsymbol}`);
     const lastPrice = quote?.last_price;
     if (!lastPrice) return reject(`No last price for ${trade.tradingsymbol}`);
-    const limitPrice = entryLimitPrice(config.entryRules, trade.side, lastPrice);
+    const limitPrice = entryLimitPrice(settings.entryRules, trade.side, lastPrice);
     const order = limitPrice === null ? { ...trade, orderType: OrderType.Market } : { ...trade, orderType: OrderType.Limit, limitPrice };
     // A market entry fills at the bid / ask in the same quote, as on Zerodha (the last price when it has none).
-    const placed = await orders.placeAuto(userId, order, { lastPrice, fillPrice: marketFillPrice(quote, trade.side), autoTradeId: id });
+    const placed = await orders.placeAuto(userId, order, { lastPrice, fillPrice: marketFillPrice(quote, trade.side), autoTradeId: id, strategyId });
     if (!placed.ok) return reject(placed.message);
     if (placed.order.status === OrderStatus.Open) {
-      log('limit order placed', { trade: tradeLabel(trade), limit: limitPrice, last: lastPrice, user: userId, strategy: signal.strategyId });
+      log('limit order placed', { trade: tradeLabel(trade), limit: limitPrice, last: lastPrice, user: userId, strategy: strategyId });
     }
   }
 
   /**
-   * Every user with automation on and this strategy active: their signals
-   * from the strategy's market work, each taken through the lifecycle; a
-   * signal that fails is logged and counted.
+   * Every user with automation on and this strategy active: their signals from the strategy's market work, each
+   * taken through the lifecycle in each mode the strategy trades in; a signal that fails is logged and counted.
    * @param {Strategy} strategy
    * @param {unknown} prepared
    * @returns {Promise<RunCounts>}
@@ -248,10 +274,13 @@ export function createSignalsService({
     const [instruments, underlyings] = await Promise.all([loadInstruments(kite.apiKey, kite.accessToken), db.getUnderlyings()]);
     const instrumentsByToken = new Map(instruments.map((i) => [i.instrumentToken, i]));
     const indexNames = new Set(underlyings.filter((u) => u.isIndex).map((u) => u.name));
-    /** Whether the user's General settings allow the trade a signal means. */
+    /** Whether the strategy can place the trade a signal means for the user: a tradeable instrument, a horizon it trades. */
     const allowsFor = (/** @type {AutomationConfig} */ config) => (/** @type {Signal} */ signal) => {
-      const planned = planTrade(signal, instrumentsByToken, indexNames, config);
-      return planned.error === undefined && checkGeneralSettings(planned.trade, config) === null;
+      const settings = config.strategies[strategy.id];
+      return executionModes(settings).some((mode) => {
+        const planned = planTrade(signal, instrumentsByToken, indexNames, settings, mode);
+        return planned.error === undefined && checkStrategySettings(planned.trade, config, strategy.id) === null;
+      });
     };
 
     const work = users
@@ -275,11 +304,13 @@ export function createSignalsService({
     // Users are independent; one user's signals stay in turn, so each is checked against the positions the one before opened.
     await forEachLimited(work, USERS_AT_ONCE, async ({ userId, config, signals }) => {
       for (const signal of signals) {
-        try {
-          await take(userId, config, signal, { instrumentsByToken, indexNames, quotesByKey, now });
-        } catch (err) {
-          failed += 1;
-          log('signal failed', { user: userId, strategy: signal.strategyId, error: /** @type {Error} */ (err).message });
+        for (const mode of executionModes(config.strategies[strategy.id])) {
+          try {
+            await take(userId, config, signal, mode, { instrumentsByToken, indexNames, quotesByKey, now });
+          } catch (err) {
+            failed += 1;
+            log('signal failed', { user: userId, strategy: strategy.id, mode, error: /** @type {Error} */ (err).message });
+          }
         }
       }
     });

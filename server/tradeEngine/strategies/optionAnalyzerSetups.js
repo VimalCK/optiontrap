@@ -17,10 +17,9 @@
  * newest one. Only single options are taken (sell or buy a CE or PE);
  * straddles and strangles are left out.
  *
- * For each user it takes, per underlying, the highest-scored setup that
- * their General settings allow (buy or sell, index or stock option), if its
- * score reaches their Min score and its premium their Min premium, so a
- * setup with a tiny premium isn't taken.
+ * For each user it takes, per underlying, the highest-scored setup it can
+ * place for them, if its score reaches their Min score and its premium their
+ * Min premium, so a setup with a tiny premium isn't taken.
  */
 import { atmStrikeOf, averageVolume, buildOptionChain, optionOf, strikeWindow, upcomingExpiries } from '../../../shared/optionAnalysis/chain.js';
 import { computeSellRecommendations } from '../../../shared/optionAnalysis/sellSetups.js';
@@ -110,10 +109,10 @@ export const createOptionAnalyzerSetups = ({
   // Stored in users' settings and trade records, so it never changes. Code elsewhere names it StrategyId.OptionAnalyzerSetups.
   id: 'option-analyzer-setups',
   label: 'Option Analyzer setups',
-  description: 'Takes the Strategy card\'s best single-option setup for each snapshotted underlying (nearest expiry), after every OI snapshot (every 10 minutes): the highest score among the trades your General settings allow, if it reaches Min score and its premium reaches Min premium. Straddles and strangles are skipped.',
+  description: 'Takes the Strategy card\'s best single-option setup for each snapshotted underlying (nearest expiry), after every OI snapshot (every 10 minutes): the highest score among the trades it can place, if it reaches Min score and its premium reaches Min premium. Straddles and strangles are skipped.',
   params: [
-    { key: 'minScore', label: 'Min score (of 100)', type: ParamType.Count },
-    { key: 'minPremium', label: 'Min premium (₹)', type: ParamType.Amount },
+    { key: 'minScore', label: 'Min score (of 100)', type: ParamType.Count, default: 70 },
+    { key: 'minPremium', label: 'Min premium (₹)', type: ParamType.Amount, default: 30 },
   ],
 
   /** Every snapshotted underlying's setups, scored once per run for all users. */
@@ -133,7 +132,7 @@ export const createOptionAnalyzerSetups = ({
     });
   },
 
-  /** Per underlying, the best setup this user allows that reaches their minimums. */
+  /** Per underlying, the best setup it can place for this user that reaches their minimums. */
   select(setups, params, { allows }) {
     /** @type {Map<string, Setup>} */
     const best = new Map();

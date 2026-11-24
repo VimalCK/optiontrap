@@ -35,6 +35,8 @@ function toOrder(row) {
     /** Whether it closes a position (an exit) rather than opening or adding to one. */
     closesPosition: row.closes_position,
     source: row.source,
+    /** The strategy whose position it opens or closes; null for a manual position's. */
+    strategyId: row.strategy_id ?? null,
     horizon: row.horizon,
     autoTradeId: row.algo_trade_id,
     createdAt: row.created_at.toISOString(),
@@ -44,54 +46,58 @@ function toOrder(row) {
 
 /**
  * Who placed it is set by the caller, never read from the order: by hand (Manual), or by the trade engine for an
- * automated trade (Auto, with that trade's id).
+ * automated trade (Auto, with that trade's id and its strategy).
  * @param {string} userId
  * @param {import('../shared/orders.js').Order} order
- * @param {{ source?: import('../shared/tradeEnums.js').TradeSourceId, autoTradeId?: string | null }} [placedBy]
+ * @param {{ source?: import('../shared/tradeEnums.js').TradeSourceId, autoTradeId?: string | null, strategyId?: string | null }} [placedBy]
  */
-export async function createOrder(userId, order, { source = TradeSource.Manual, autoTradeId = null } = {}) {
+export async function createOrder(userId, order, { source = TradeSource.Manual, autoTradeId = null, strategyId = null } = {}) {
   const { strike, optionType, expiry } = instrumentColumns(order);
   const row = await firstRow(
     `INSERT INTO orders (id, user_id, tradingsymbol, instrument_token, instrument_type, exchange, strike, option_type, expiry,
-       side, quantity, order_type, limit_price, note, target_price, stop_loss_price, confidence, trail_amount, source, algo_trade_id, horizon)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+       side, quantity, order_type, limit_price, note, target_price, stop_loss_price, confidence, trail_amount, source, algo_trade_id, horizon,
+       strategy_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
      RETURNING *`,
     [crypto.randomUUID(), userId, order.tradingsymbol, order.instrumentToken, order.instrumentType, order.exchange, strike, optionType, expiry,
-     order.side, order.quantity, order.orderType, order.limitPrice, ...positionMetaValues(order), source, autoTradeId, order.horizon],
+     order.side, order.quantity, order.orderType, order.limitPrice, ...positionMetaValues(order), source, autoTradeId, order.horizon, strategyId],
   );
   return toOrder(row);
 }
 
 /**
- * Who placed it is set by the caller: by hand (Manual) or an exit rule (Auto).
+ * Who placed it is set by the caller: by hand (Manual) or the engine (Auto). It names the position's strategy.
  * @param {string} userId
  * @param {{ id: string, tradingsymbol: string, instrumentToken: number, instrumentType: string, exchange: string,
  *           strike: number | null, optionType: string | null, expiry: string | null, side: string, quantity: number,
- *           horizon: import('../shared/tradeEnums.js').HorizonId }} position  the position it closed
+ *           horizon: import('../shared/tradeEnums.js').HorizonId, strategyId: string | null }} position  the position it closed
  * @param {number} fillPrice
  * @param {import('../shared/tradeEnums.js').TradeSourceId} source
  */
 export async function recordClosingOrder(userId, position, fillPrice, source) {
   const row = await firstRow(
     `INSERT INTO orders (id, user_id, tradingsymbol, instrument_token, instrument_type, exchange, strike, option_type, expiry,
-       side, quantity, order_type, limit_price, status, fill_price, position_id, closes_position, source, horizon)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, ${sqlEnum(OrderType.Market)}, NULL, ${sqlEnum(OrderStatus.Filled)}, $12, $13, true, $14, $15)
+       side, quantity, order_type, limit_price, status, fill_price, position_id, closes_position, source, horizon, strategy_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, ${sqlEnum(OrderType.Market)}, NULL, ${sqlEnum(OrderStatus.Filled)}, $12, $13, true, $14, $15, $16)
      RETURNING *`,
     [crypto.randomUUID(), userId, position.tradingsymbol, position.instrumentToken, position.instrumentType, position.exchange,
      position.strike, position.optionType, position.expiry, oppositeSide(position.side), position.quantity,
-     fillPrice, position.id, source, position.horizon],
+     fillPrice, position.id, source, position.horizon, position.strategyId],
   );
   return toOrder(row);
 }
 
 /**
- * Each counts as the position it will open, for the entry rules. Served by orders_open_auto_idx.
+ * Every strategy's; each counts as the position it will open, for the entry rules. Served by orders_open_auto_strategy_idx.
  * @param {string} userId
- * @returns {Promise<{ instrumentToken: number }[]>}
+ * @returns {Promise<{ instrumentToken: number, strategyId: string }[]>}
  */
 export async function getWaitingAutoOrders(userId) {
-  const result = await rows(`SELECT instrument_token FROM orders WHERE user_id = $1 AND status = ${sqlEnum(OrderStatus.Open)} AND source = ${sqlEnum(TradeSource.Auto)}`, [userId]);
-  return result.map((row) => ({ instrumentToken: Number(row.instrument_token) }));
+  const result = await rows(
+    `SELECT instrument_token, strategy_id FROM orders WHERE user_id = $1 AND status = ${sqlEnum(OrderStatus.Open)} AND source = ${sqlEnum(TradeSource.Auto)}`,
+    [userId],
+  );
+  return result.map((row) => ({ instrumentToken: Number(row.instrument_token), strategyId: row.strategy_id }));
 }
 
 /** Served by orders_user_created_idx (user_id, created_at DESC). */

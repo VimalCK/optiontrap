@@ -7,7 +7,7 @@ import type { Position } from '@/services/positions';
 const position = (id: string, entryTime: string, extra: Partial<Position> = {}): Position => ({
   id, tradingsymbol: `NIFTY26N1725${id}PE`, instrumentToken: Number(id), strike: 25000, optionType: 'PE', expiry: '2026-11-24',
   side: 'SELL', quantity: 65, entryPrice: 80, entryTime, exited: true, exitPrice: 70, exitTime: '2026-11-17T09:00:00.000Z',
-  mode: 'Paper', instrumentType: 'PE', exchange: 'NFO', source: 'Auto', horizon: 'Intraday', ...extra,
+  mode: 'Paper', instrumentType: 'PE', exchange: 'NFO', source: 'Auto', strategyId: 'a', horizon: 'Intraday', ...extra,
 } as Position);
 
 const dayHeadings = (markup: string) => [...markup.matchAll(/<tr class="day-group-row"><th[^>]*>([^<]+)<span[^>]*>([^<]+)<\/span><\/th><td[^>]*>([^<]+)</g)]
@@ -38,6 +38,20 @@ describe('PaperPositionsTable', () => {
     const markup = renderToStaticMarkup(<MemoryRouter><PaperPositionsTable positions={[position('100', '2026-11-17T06:51:00.000Z')]} livePrices={new Map([[100, 64.5]])} onExit={() => {}} /></MemoryRouter>);
     expect(markup).toContain('70.00<span class="positions-table__pct">LTP 64.50</span>');
     expect(dayHeadings(markup)).toEqual([['Tue, 17 Nov, 2026', ' · 1 position', '+650.00']]);
+  });
+
+  it("shows two strategies' open positions in one instrument as one row, the legs folded under it", () => {
+    const open = { exited: false, exitPrice: undefined };
+    const positions = [
+      position('100', '2026-11-17T06:51:00.000Z', { ...open, quantity: 65, entryPrice: 80 }),
+      position('100', '2026-11-17T06:55:00.000Z', { ...open, id: '101', strategyId: 'b', quantity: 130, entryPrice: 86 }),
+    ];
+    const markup = renderToStaticMarkup(<MemoryRouter><PaperPositionsTable positions={positions} livePrices={new Map([[100, 75]])} onExit={() => {}} /></MemoryRouter>);
+    // 65 × (80 − 75) + 130 × (86 − 75) = 325 + 1,430
+    expect(dayHeadings(markup)).toEqual([['Tue, 17 Nov, 2026', ' · 1 position', '+1,755.00']]);
+    expect(markup).toContain('<td class="table-num">195</td><td class="table-num">84.00</td>');
+    expect(markup).toContain('2 strategies');
+    expect(markup).not.toContain('positions-table__row--leg');
   });
 
   it("prices an open position's day at its live price", () => {

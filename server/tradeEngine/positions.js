@@ -54,15 +54,16 @@ const refused = ({ rule, code, message }) => ({ ok: false, code, message, rule }
  * @param {Record<string, unknown>} input tradingsymbol, instrumentToken, instrumentType (CE, PE, FUT
  *   or EQ), side, quantity, entryPrice, horizon; strike and expiry for options, expiry for futures; and
  *   optionally exchange, mode, note, targetPrice, stopLossPrice, confidence
- * @param {{ now?: Date, source?: import('../../shared/tradeEnums.js').TradeSourceId }} [options] now: when the trade happens.
- *   source: who placed it, set by the caller and never taken from the request; a trade merges
- *   only with open positions from the same source.
+ * @param {{ now?: Date, source?: import('../../shared/tradeEnums.js').TradeSourceId, strategyId?: string | null }} [options]
+ *   now: when the trade happens. source and strategyId: who placed it (an automated trade's strategy; none for a
+ *   manual one), set by the caller and never taken from the request; a trade merges only with open positions
+ *   placed by the same.
  */
-export async function openPosition(userId, input, { now = new Date(), source = TradeSource.Manual } = {}) {
+export async function openPosition(userId, input, { now = new Date(), source = TradeSource.Manual, strategyId = null } = {}) {
   const trade = normalizeTradeInput(input);
   const result = checkTrade(TradeAction.Open, { trade, now });
   if (!result.ok) return refused(result.violations[0]);
-  return { ok: true, position: await bookTrade(userId, { ...trade, mode: trade.mode || TradingMode.Paper, source }) };
+  return { ok: true, position: await bookTrade(userId, { ...trade, mode: trade.mode || TradingMode.Paper, source, strategyId }) };
 }
 
 /**
@@ -107,17 +108,18 @@ export function averagedIn(position, trade) {
 }
 
 /**
- * Books a trade. It merges with the user's open position in the same instrument from the same source and of the
- * same horizon (intraday or positional): the same side averages in, the opposite side nets out (closing it, at the
- * trade's price, when the trade covers it, and opening the rest the other way). Manual trades merge with manual
- * positions and automated trades (source Auto) with automated ones, so 100 bought by the automation then 500 more
- * shows as one automated position of 600, and the automation never changes a manual position (or the other way round).
+ * Books a trade. It merges with the user's open position in the same instrument placed by the same (source and
+ * strategy) and of the same horizon (intraday or positional): the same side averages in, the opposite side nets out
+ * (closing it, at the trade's price, when the trade covers it, and opening the rest the other way). Manual trades
+ * merge with manual positions and a strategy's trades with that strategy's positions, so 100 bought by a strategy
+ * then 500 more shows as one position of 600; the automation never changes a manual position (or the other way
+ * round), and each strategy keeps its own leg of an instrument, so it exits only its own lots.
  * @param {string} userId
- * @param {any} trade  normalized, with its mode and source
+ * @param {any} trade  normalized, with its mode, source and strategyId
  */
 async function bookTrade(userId, trade) {
   const now = new Date();
-  const match = { mode: trade.mode, instrumentToken: trade.instrumentToken, source: trade.source, horizon: trade.horizon };
+  const match = { mode: trade.mode, instrumentToken: trade.instrumentToken, source: trade.source, strategyId: trade.strategyId, horizon: trade.horizon };
 
   const sameSide = await findOpenPosition(userId, { ...match, side: trade.side });
   if (sameSide) return averageIntoPosition(sameSide.id, averagedIn(sameSide, trade), trade);

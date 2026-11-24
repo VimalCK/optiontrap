@@ -256,3 +256,24 @@
 .sidebar.collapsed .sidebar__admin-badge {
   display: none;
 }
+
+/* A menu entry's state (Algo Trading on/off) as a dot beside its label. */
+.sidebar__state-dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  margin-left: -6px; /* 6px from the label: the row's 12px gap is for icon and label */
+  border-radius: 50%;
+}
+
+.sidebar__state-dot--on {
+  background: var(--profit);
+}
+
+.sidebar__state-dot--off {
+  background: var(--loss);
+}
+
+.sidebar.collapsed .sidebar__state-dot {
+  display: none;
+}

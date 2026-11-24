@@ -48,7 +48,8 @@ export const TRADE_MONITOR_SERVICE_ID = 'tradeMonitor';
  *             watchedInstruments: number, lastTickAt: number | null, lastError: string | null }} MonitorStatus
  * @typedef {{ id: string, userId: string, instrumentToken: number, tradingsymbol: string,
  *             side: import('../../../shared/tradeEnums.js').SideId, quantity: number, entryPrice: number,
- *             horizon: import('../../../shared/tradeEnums.js').HorizonId }} WatchedPosition
+ *             horizon: import('../../../shared/tradeEnums.js').HorizonId, strategyId?: string | null }} WatchedPosition
+ *   strategyId: an automated position's strategy, whose exit rules it follows
  * @typedef {{ position: WatchedPosition, exitPrice: number, ruleId: string, reason: string }} DueExit
  * @typedef {{ last: Map<number, number>, best: Map<string, number> }} MonitorPrices
  *   last: instrument token → last traded price; best: position id → its best price while watched

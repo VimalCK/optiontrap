@@ -1,14 +1,17 @@
 /**
- * Trading Strategies (the Algo Trading settings): one tab per strategy, each with its own execution, trades and
- * entry / exit rules (the account's Algo Trading switch is on the Settings page). One Save / Cancel serves every tab: Save stores the whole configuration and
- * stays on the page ("Saved"); Cancel leaves unsaved.
+ * Trading Strategies (the Algo Trading settings): the rules for all strategies, then one tab per strategy, each with
+ * its own execution, trades and entry / exit rules (the account's Algo Trading switch is on the Settings page). One
+ * Save / Cancel serves everything: Save stores the whole configuration and stays on the page ("Saved"); Cancel
+ * leaves unsaved.
  */
 import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import AutomationConfigForm from '@/components/Automation/AutomationConfigForm';
+import GeneralRulesSection from '@/components/Automation/GeneralRulesSection';
+import LockedFields from '@/components/Automation/LockedFields';
 import FormFooter from '@/components/FormFooter/FormFooter';
 import TabBar from '@/components/TabBar/TabBar';
-import { AutomationConfig, fetchAutomationConfig, saveAutomationConfig } from '@/services/automation';
+import { AutomationConfig, StrategySettings, fetchAutomationConfig, saveAutomationConfig } from '@/services/automation';
 import { isAbortError } from '@/services/apiClient';
 import type { StrategyInfo } from '@/services/strategies';
 import { useStrategies } from '@/hooks/useStrategies';
@@ -68,6 +71,7 @@ const AutomationSettings: React.FC = () => {
 
   const back = () => navigate('/automation');
   const change = (next: AutomationConfig) => { setConfig(next); setSaveError(null); setSaved(false); };
+  const changeStrategy = (id: string) => (settings: StrategySettings) => config && change({ ...config, strategies: { ...config.strategies, [id]: settings } });
 
   const save = async () => {
     if (!config) return;
@@ -90,6 +94,16 @@ const AutomationSettings: React.FC = () => {
       </header>
 
       <section className="card automation-settings__card" aria-label="Trading Strategies">
+        {config && !config.enabled && (
+          <Message tone={MessageTone.Info} className="automation-settings__off">
+            Algo Trading is off · switch it on in Settings to change these settings
+          </Message>
+        )}
+        {config && (
+          <LockedFields locked={!config.enabled}>
+            <GeneralRulesSection settings={config.generalRules} onChange={(generalRules) => change({ ...config, generalRules })} />
+          </LockedFields>
+        )}
         <div className="automation-settings__tabs">
           <TabBar
             items={(strategies ?? []).map(({ id, label }) => ({ id, label }))}
@@ -104,10 +118,10 @@ const AutomationSettings: React.FC = () => {
           {error && <Message tone={MessageTone.Error}>{error}</Message>}
           {(!config || !strategies) && !error && <SettingsShimmer />}
           {config && strategies && (strategy
-            ? <AutomationConfigForm config={config} strategy={strategy} onChange={change} />
+            ? <AutomationConfigForm key={strategy.id} strategy={strategy} settings={config.strategies[strategy.id]} onChange={changeStrategy(strategy.id)} algoTradingOn={config.enabled} />
             : <Message tone={MessageTone.Info}>No strategies yet</Message>)}
         </div>
-        <FormFooter onSave={save} onCancel={back} saving={saving} error={saveError} saved={saved} saveDisabled={!config} />
+        <FormFooter onSave={save} onCancel={back} saving={saving} error={saveError} saved={saved} saveDisabled={!config?.enabled} />
       </section>
     </div>
   );

@@ -10,24 +10,26 @@ vi.mock('../../oiHistoryScheduler.js', () => ({ findWorkingAdminSession: vi.fn()
 const { createTradeMonitor, monitorHealth } = await import('./tradeMonitor.js');
 const { defaultRuleSettings } = await import('../../../shared/rules/ruleSettings.js');
 const { EXIT_RULES } = await import('../../../shared/exitRules/index.js');
+const { GENERAL_RULES } = await import('../../../shared/generalRules/index.js');
 
 const NOON = new Date('2026-11-05T06:30:00Z'); // Thu 12:00 IST, market open
 const AFTER_CLOSE = new Date('2026-11-05T10:30:00Z'); // Thu 16:00 IST
 
-/** Exit rules all inactive, except those given (active, with these values). */
-const exitRules = (active = {}) => {
-  const rules = defaultRuleSettings(EXIT_RULES);
-  for (const [id, params] of Object.entries(active)) rules[id] = { active: true, params: { ...rules[id].params, ...params } };
+/** Rules all inactive, except those given (active, with these values): the test strategy's exit rules and the general rules. */
+const rulesOf = (list, active) => {
+  const rules = defaultRuleSettings(list);
+  for (const [id, params] of Object.entries(active)) if (rules[id]) rules[id] = { active: true, params: { ...rules[id].params, ...params } };
   return rules;
 };
-const config = (active) => ({ exitRules: exitRules(active) });
+/** A user's configuration, as far as exits read it. */
+const config = (active = {}) => ({ generalRules: rulesOf(GENERAL_RULES, active), strategies: { test: { exitRules: rulesOf(EXIT_RULES, active) } } });
 
 // Sold 75 at 100: loses as the price rises.
-const sold = { id: 'p1', userId: 'U1', instrumentToken: 101, tradingsymbol: 'NIFTY26NOV24000PE', horizon: Horizon.Intraday, side: 'SELL', quantity: 75, entryPrice: 100 };
+const sold = { id: 'p1', userId: 'U1', strategyId: 'test', instrumentToken: 101, tradingsymbol: 'NIFTY26NOV24000PE', horizon: Horizon.Intraday, side: 'SELL', quantity: 75, entryPrice: 100 };
 // Bought 50 at 200, another user, another instrument.
-const bought = { id: 'p2', userId: 'U2', instrumentToken: 202, tradingsymbol: 'NIFTY26NOV24000CE', horizon: Horizon.Intraday, side: 'BUY', quantity: 50, entryPrice: 200 };
+const bought = { id: 'p2', userId: 'U2', strategyId: 'test', instrumentToken: 202, tradingsymbol: 'NIFTY26NOV24000CE', horizon: Horizon.Intraday, side: 'BUY', quantity: 50, entryPrice: 200 };
 // An automated limit order still waiting to fill, and a positional one.
-const waiting = { id: 'o1', userId: 'U3', instrumentToken: 303, tradingsymbol: 'NIFTY26NOV24100PE', horizon: Horizon.Intraday, side: 'SELL', quantity: 75 };
+const waiting = { id: 'o1', userId: 'U3', strategyId: 'test', instrumentToken: 303, tradingsymbol: 'NIFTY26NOV24100PE', horizon: Horizon.Intraday, side: 'SELL', quantity: 75 };
 // A manual position bought at 100 with the order popup's target 120 and stop-loss 90, held by U1.
 const manual = { id: 'm1', userId: 'U1', instrumentToken: 505, tradingsymbol: 'NIFTY26NOV24100CE', horizon: Horizon.Intraday, side: 'BUY', quantity: 75,
   entryPrice: 100, targetPrice: 120, stopLossPrice: 90, trailAmount: null };

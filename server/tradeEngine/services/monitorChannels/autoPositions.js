@@ -1,16 +1,19 @@
 /**
- * The trade monitor's automated channel: open automated paper positions, closed when one of their owner's active
- * exit rules fires (shared/exitRules/: stop-loss, target and its trailing stop-loss, square off at a time, max loss
- * per day). Rules compare the position's P&L at the last traded price, and at its best price while watched for the
- * trailing stop-loss. The owner's automated P&L for the day (booked, loaded from the DB and reloaded after each
- * exit, plus open at the last prices) is there too, for the max loss per day rule.
+ * The trade monitor's automated channel: open automated paper positions, each closed when an active exit rule of
+ * its strategy (shared/exitRules/: stop-loss, target and its trailing stop-loss, square off at a time) or one of its
+ * owner's general rules (max loss per day, over every strategy) fires. Rules compare the position's P&L at the last
+ * traded price, and at its best price while watched for the trailing stop-loss. The owner's automated P&L for the
+ * day across strategies (booked, loaded from the DB and reloaded after each exit, plus open at the last prices) is
+ * there too, for the max loss per day rule.
  *
- * Exit rules protect open positions whether automation is switched on or off; switching it off stops new trades,
- * not exits. A rule that closes positions at a time (square off at) also cancels the owner's waiting automated
- * entry orders, on the monitor's every-second check, so none fills only to be closed at once.
+ * Exit rules protect open positions whether automation, the strategy or an admin's switch for it is on or off;
+ * switching off stops new trades, not exits. A rule that blocks entries (square off at, once its time has come; max
+ * loss per day, once hit) also cancels the waiting automated entry orders it covers, on the monitor's every-second
+ * check, so none fills only to be closed at once.
  */
 import { getAllOpenAutoPositions, getOpenAutoPositions, getTodayAutoRealisedPnl } from '../../../db.js';
 import { getAutomationConfigs } from '../../automationConfigs.js';
+import { exitRuleSettings } from '../../../../shared/automation.js';
 import { marketDayStartMs } from '../../../../shared/marketTime.js';
 import { checkEntryOrderBlocked, checkExitRules } from '../../../../shared/exitRules/index.js';
 import { cancelledByRule } from '../../../../shared/orders.js';
@@ -22,9 +25,9 @@ import { createPositionBook } from './positionBook.js';
  * @typedef {import('../tradeMonitor.js').WatchedPosition} WatchedPosition
  * @typedef {import('../tradeMonitor.js').DueExit} DueExit
  * @typedef {import('../tradeMonitor.js').MonitorPrices} MonitorPrices
- * @typedef {import('../../../../shared/rules/ruleSettings.js').RuleSettings} RuleSettings
+ * @typedef {import('../../../../shared/automation.js').AutomationConfig} AutomationConfig
  * @typedef {{ id: string, userId: string, instrumentToken: number, tradingsymbol: string, side: string, quantity: number,
- *             horizon: import('../../../../shared/tradeEnums.js').HorizonId }} WaitingOrder
+ *             horizon: import('../../../../shared/tradeEnums.js').HorizonId, strategyId: string | null }} WaitingOrder
  * @typedef {{ order: WaitingOrder, ruleId: string, reason: string }} DueCancellation
  */
 
@@ -44,23 +47,23 @@ export function openPnlByUser(positions, lastPrices) {
 }
 
 /**
- * The positions an exit rule says to close now, each at its last price.
- * Positions with no price yet, or whose owner has no rules loaded, stay open.
+ * The positions an exit rule says to close now, each at its last price: its strategy's rules, then its owner's
+ * general ones. Positions with no price yet, or whose owner's configuration isn't loaded, stay open.
  * `todayPnlByUser` is each owner's automated P&L today, booked plus open
  * (0 when missing), for the max loss per day rule. `bestPrices` holds each
  * position's best price while watched (its last price when missing).
  * @param {WatchedPosition[]} positions
- * @param {{ lastPrices: Map<number, number>, bestPrices: Map<string, number>, exitRulesByUser: Map<string, RuleSettings>,
+ * @param {{ lastPrices: Map<number, number>, bestPrices: Map<string, number>, configsByUser: Map<string, AutomationConfig>,
  *           todayPnlByUser: Map<string, number>, now: Date }} state
  * @returns {DueExit[]}
  */
-export function dueExits(positions, { lastPrices, bestPrices, exitRulesByUser, todayPnlByUser, now }) {
+export function dueExits(positions, { lastPrices, bestPrices, configsByUser, todayPnlByUser, now }) {
   /** @type {DueExit[]} */
   const due = [];
   for (const position of positions) {
     const price = lastPrices.get(position.instrumentToken);
-    const rules = exitRulesByUser.get(position.userId);
-    if (price === undefined || !rules) continue;
+    const config = configsByUser.get(position.userId);
+    if (price === undefined || !config) continue;
     const ctx = { now, todayAutoPnl: todayPnlByUser.get(position.userId) ?? 0 };
     const subject = {
       ...position,
@@ -68,25 +71,26 @@ export function dueExits(positions, { lastPrices, bestPrices, exitRulesByUser, t
       pnlPercent: tradePnlPercent(position, price),
       peakPnlPercent: tradePnlPercent(position, bestPrices.get(position.id) ?? price),
     };
-    const fired = checkExitRules(subject, ctx, rules);
+    const fired = checkExitRules(subject, ctx, exitRuleSettings(config, position.strategyId ?? null));
     if (fired) due.push({ position, exitPrice: price, ...fired });
   }
   return due;
 }
 
 /**
- * The waiting automated entry orders a rule says to cancel now. Orders whose owner has no rules loaded stay.
+ * The waiting automated entry orders a rule of their strategy or a general rule says to cancel now. Orders whose
+ * owner's configuration isn't loaded stay.
  * @param {WaitingOrder[]} orders
- * @param {{ exitRulesByUser: Map<string, RuleSettings>, todayPnlByUser: Map<string, number>, now: Date }} state
+ * @param {{ configsByUser: Map<string, AutomationConfig>, todayPnlByUser: Map<string, number>, now: Date }} state
  * @returns {DueCancellation[]}
  */
-export function dueCancellations(orders, { exitRulesByUser, todayPnlByUser, now }) {
+export function dueCancellations(orders, { configsByUser, todayPnlByUser, now }) {
   /** @type {DueCancellation[]} */
   const due = [];
   for (const order of orders) {
-    const rules = exitRulesByUser.get(order.userId);
-    if (!rules) continue;
-    const fired = checkEntryOrderBlocked(order, { now, todayAutoPnl: todayPnlByUser.get(order.userId) ?? 0 }, rules);
+    const config = configsByUser.get(order.userId);
+    if (!config) continue;
+    const fired = checkEntryOrderBlocked(order, { now, todayAutoPnl: todayPnlByUser.get(order.userId) ?? 0 }, exitRuleSettings(config, order.strategyId));
     if (fired) due.push({ order, ...fired });
   }
   return due;
@@ -108,8 +112,8 @@ export function createAutoChannel({
   log,
 }) {
   const book = createPositionBook();
-  /** @type {Map<string, RuleSettings>} */
-  const exitRulesByUser = new Map();
+  /** @type {Map<string, AutomationConfig>} */
+  const configsByUser = new Map();
   /** @type {Map<string, number>} user id → automated P&L booked today */
   const bookedPnlByUser = new Map();
 
@@ -119,14 +123,14 @@ export function createAutoChannel({
     bookedPnlByUser.set(userId, await db.getTodayAutoRealisedPnl(userId, todayStart));
   }
 
-  async function loadExitRules(/** @type {string[]} */ userIds) {
+  async function loadConfigs(/** @type {string[]} */ userIds) {
     const configs = await db.getAutomationConfigs(userIds);
-    for (const userId of userIds) exitRulesByUser.set(userId, configs.get(userId).exitRules);
+    for (const userId of userIds) configsByUser.set(userId, configs.get(userId));
   }
 
-  /** Track exactly these users' positions, exit rules and booked P&L, replacing what was held for them. */
+  /** Track exactly these users' positions, configurations and booked P&L, replacing what was held for them. */
   async function track(/** @type {string[]} */ userIds, /** @type {WatchedPosition[]} */ positions) {
-    await Promise.all([loadExitRules(userIds), ...userIds.map(loadBookedPnl)]);
+    await Promise.all([loadConfigs(userIds), ...userIds.map(loadBookedPnl)]);
     book.replaceUsers(userIds, positions);
   }
 
@@ -137,14 +141,14 @@ export function createAutoChannel({
     return totals;
   }
 
-  /** Cancel the waiting automated entry orders a rule says to, e.g. once the square-off time has come. */
+  /** Cancel the waiting automated entry orders a rule says to, e.g. once the square-off time has come or the day's loss limit is hit. */
   async function cancelDueWaitingOrders(/** @type {import('../tradeMonitor.js').OrderService} */ orders) {
     const waiting = orders.waitingAutoOrders();
     if (waiting.length === 0) return;
     // Owners with waiting orders but no open position aren't tracked yet; their settings changes reload them (refreshUser).
-    const untracked = [...new Set(waiting.map((order) => order.userId))].filter((userId) => !exitRulesByUser.has(userId));
-    if (untracked.length > 0) await loadExitRules(untracked);
-    const state = { exitRulesByUser, todayPnlByUser: todayPnlByUser(), now: clock() };
+    const untracked = [...new Set(waiting.map((order) => order.userId))].filter((userId) => !configsByUser.has(userId));
+    if (untracked.length > 0) await loadConfigs(untracked);
+    const state = { configsByUser, todayPnlByUser: todayPnlByUser(), now: clock() };
     await Promise.all(dueCancellations(waiting, state).map(async ({ order, reason }) => {
       const result = await orders.cancel(order.userId, order.id, cancelledByRule(reason));
       if (result.ok) log('order cancelled', { order: `${order.side} ${order.quantity} ${order.tradingsymbol}`, user: order.userId, reason });
@@ -158,7 +162,7 @@ export function createAutoChannel({
     async loadAll() {
       const positions = await db.getAllOpenAutoPositions();
       book.clear();
-      exitRulesByUser.clear();
+      configsByUser.clear();
       bookedPnlByUser.clear();
       await track([...new Set(positions.map((p) => p.userId))], positions);
     },
@@ -166,7 +170,7 @@ export function createAutoChannel({
     loadUser: async (/** @type {string} */ userId) => track([userId], await db.getOpenAutoPositions(userId)),
 
     dueExits: (/** @type {WatchedPosition[]} */ positions) => dueExits(positions, {
-      lastPrices: prices.last, bestPrices: prices.best, exitRulesByUser, todayPnlByUser: todayPnlByUser(), now: clock(),
+      lastPrices: prices.last, bestPrices: prices.best, configsByUser, todayPnlByUser: todayPnlByUser(), now: clock(),
     }),
 
     /** After the delete, so the exit is never counted as both open and booked. */
@@ -183,7 +187,7 @@ export function createAutoChannel({
 
     clear() {
       book.clear();
-      exitRulesByUser.clear();
+      configsByUser.clear();
       bookedPnlByUser.clear();
     },
   };

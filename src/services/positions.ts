@@ -24,6 +24,8 @@ export interface Position {
   exchange: string;
   /** manual: placed by the user; auto: by the trade automation. */
   source: TradeSourceId;
+  /** An automated position's strategy (each strategy keeps its own position in an instrument); null for a manual one. */
+  strategyId: string | null;
   /** Intraday or positional (shared/tradeEnums.js): only intraday positions are squared off, and trades merge only within one. */
   horizon: HorizonId;
   /** Options only. */
@@ -139,7 +141,7 @@ export async function getPositionStats(mode: TradingModeId = TradingMode.Paper):
  * (the server takes them from optionType, on NFO). source is never sent: the
  * server records browser trades as manual.
  */
-export type NewPosition = Omit<Position, 'id' | 'entryTime' | 'mode' | 'instrumentType' | 'exchange' | 'source'> & {
+export type NewPosition = Omit<Position, 'id' | 'entryTime' | 'mode' | 'instrumentType' | 'exchange' | 'source' | 'strategyId'> & {
   mode?: TradingModeId;
   instrumentType?: Position['instrumentType'];
   exchange?: string;

@@ -13,9 +13,9 @@
  *   select(prepared, params, { allows })
  *                           one user's signals, with their settings:
  *                           { instrumentToken, side, reason, setup? }. `allows` says
- *                           whether their General settings allow a trade
- *                           (buy or sell, trade type), so a strategy can pick
- *                           its best allowed trade instead of one they'd refuse.
+ *                           whether the trade can be placed for them (a
+ *                           tradeable instrument, a horizon they trade), so a
+ *                           strategy can pick its best placeable trade.
  * The instrument's details (symbol, type, expiry, lot size, index or stock)
  * come from the instrument list, never from the strategy.
  *

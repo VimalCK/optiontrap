@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { DEFAULT_TRADE_LOTS, ENTRY_RULES, checkEntryRules, entryLimitPrice, tradeLots } from './index.js';
+import { DEFAULT_TRADE_LOTS, ENTRY_RULES, checkEntryRules, entryLimitPrice, entryRuleContexts, tradeLots } from './index.js';
 import { defaultRuleSettings, parseRuleSettings } from '../rules/ruleSettings.js';
+import { GENERAL_RULES } from '../generalRules/index.js';
 import { PARAM_TYPES } from '../rules/paramTypes.js';
 
 // 3 lots of 75.
@@ -19,9 +20,8 @@ const check = (id, params, extraCtx = {}, t = trade) =>
   ENTRY_RULES.find((r) => r.id === id).check(t, ctx(extraCtx), params);
 
 describe('the entry rule list', () => {
-  it('is max lots, max open positions, max loss per day, wait after exit, one position per instrument and entry limit offset', () => {
-    expect(ENTRY_RULES.map((r) => r.id))
-      .toEqual(['max-lots', 'max-open-positions', 'max-daily-loss', 'wait-after-exit', 'one-trade-per-instrument', 'entry-limit-offset']);
+  it("is a strategy's own: max lots, wait after exit, one position per instrument and entry limit offset", () => {
+    expect(ENTRY_RULES.map((r) => r.id)).toEqual(['max-lots', 'wait-after-exit', 'one-trade-per-instrument', 'entry-limit-offset']);
   });
 
   it('has unique ids, every value of a known kind, and no defaults: nothing is limited until the user sets it', () => {
@@ -61,26 +61,6 @@ describe('tradeLots', () => {
   });
 });
 
-describe('max-open-positions', () => {
-  const open = [{ instrumentToken: 1 }, { instrumentToken: 2 }];
-
-  it('rejects a trade that would open one position too many', () => {
-    expect(check('max-open-positions', { max: 3 }, { openAutoPositions: open })).toBeNull();
-    expect(check('max-open-positions', { max: 2 }, { openAutoPositions: open }))
-      .toBe('2 automated positions already open or waiting to fill, the most allowed is 2');
-  });
-
-  it('allows a trade that merges into a position already open', () => {
-    expect(check('max-open-positions', { max: 2 }, { openAutoPositions: open }, { ...trade, instrumentToken: 2 })).toBeNull();
-  });
-
-  it('counts a waiting automated limit order as the position it will open, once per instrument', () => {
-    const waiting = { openAutoPositions: [{ instrumentToken: 1 }], waitingAutoOrders: [{ instrumentToken: 2 }] };
-    expect(check('max-open-positions', { max: 2 }, waiting)).toBe('2 automated positions already open or waiting to fill, the most allowed is 2');
-    expect(check('max-open-positions', { max: 2 }, { ...waiting, waitingAutoOrders: [{ instrumentToken: 1 }] })).toBeNull(); // will merge into the open one
-  });
-});
-
 describe('one-trade-per-instrument', () => {
   it('rejects a trade in an instrument with an open automated position', () => {
     expect(check('one-trade-per-instrument', {}, { openAutoPositions: [{ instrumentToken: 5 }] })).toBeNull();
@@ -117,15 +97,6 @@ describe('entry-limit-offset', () => {
   });
 });
 
-describe('max-daily-loss', () => {
-  it("rejects once today's loss reaches the amount", () => {
-    expect(check('max-daily-loss', { amount: 5000 }, { todayAutoPnl: -4999.99 })).toBeNull();
-    expect(check('max-daily-loss', { amount: 5000 }, { todayAutoPnl: 2000 })).toBeNull();
-    expect(check('max-daily-loss', { amount: 5000 }, { todayAutoPnl: -5000 }))
-      .toBe("Today's automated loss ₹5000.00 has reached the ₹5000 limit");
-  });
-});
-
 describe('wait-after-exit', () => {
   const exitedAt = (minutesBeforeNoon, instrumentToken = 101) => ({ todayAutoExits: [{ instrumentToken, exitTime: new Date(NOON.getTime() - minutesBeforeNoon * 60_000) }] });
 
@@ -142,18 +113,60 @@ describe('wait-after-exit', () => {
   });
 });
 
+describe('entryRuleContexts', () => {
+  it("keeps the account's facts for the general rules and gives the strategy only its own, with the account's P&L", () => {
+    const exitTime = new Date(NOON.getTime() - 60_000);
+    const account = ctx({
+      openAutoPositions: [{ instrumentToken: 1, strategyId: 'a' }, { instrumentToken: 2, strategyId: 'b' }],
+      waitingAutoOrders: [{ instrumentToken: 3, strategyId: 'b' }],
+      todayAutoExits: [{ instrumentToken: 4, strategyId: 'a', exitTime }],
+      todayAutoPnl: -500,
+    });
+    const { account: general, strategy } = entryRuleContexts(account, 'a');
+    expect(general).toBe(account);
+    expect(strategy).toEqual({
+      ...account,
+      openAutoPositions: [{ instrumentToken: 1, strategyId: 'a' }],
+      waitingAutoOrders: [],
+      todayAutoExits: [{ instrumentToken: 4, strategyId: 'a', exitTime }],
+      todayAutoPnl: -500,
+    });
+  });
+});
+
 describe('checkEntryRules', () => {
+  const contexts = (account = {}, strategy = {}) => ({ account: ctx(account), strategy: ctx(strategy) });
+  const general = (active = {}) => {
+    const rules = defaultRuleSettings(GENERAL_RULES);
+    for (const [id, params] of Object.entries(active)) rules[id] = { active: true, params };
+    return rules;
+  };
+
   it('passes everything while every rule is inactive', () => {
-    expect(checkEntryRules(trade, ctx({ todayAutoPnl: -1e9 }), defaultRuleSettings(ENTRY_RULES))).toEqual({ ok: true });
+    expect(checkEntryRules(trade, contexts({ todayAutoPnl: -1e9 }), { general: general(), strategy: settings() })).toEqual({ ok: true });
   });
 
-  it('rejects with the first active rule that refuses, in list order', () => {
-    const verdict = checkEntryRules(trade, ctx({ todayAutoPnl: -100 }), settings({ 'max-daily-loss': { amount: 50 }, 'max-lots': { max: 1 } }));
-    expect(verdict).toEqual({ ok: false, ruleId: 'max-lots', reason: '3 lots is above the 1 allowed per trade' });
+  it("checks the account's general rules first, then the strategy's, each in list order", () => {
+    const verdict = checkEntryRules(trade, contexts({ openAutoPositions: [{ instrumentToken: 1 }] }), {
+      general: general({ 'max-open-positions': { max: 1 } }),
+      strategy: settings({ 'max-lots': { max: 1 } }),
+    });
+    expect(verdict).toEqual({ ok: false, ruleId: 'max-open-positions', reason: '1 automated positions already open or waiting to fill, the most allowed is 1' });
+    expect(checkEntryRules(trade, contexts(), { general: general({ 'max-open-positions': { max: 1 } }), strategy: settings({ 'max-lots': { max: 1 } }) }))
+      .toEqual({ ok: false, ruleId: 'max-lots', reason: '3 lots is above the 1 allowed per trade' });
+  });
+
+  it("gives the general rules every strategy's facts and the strategy's rules only its own", () => {
+    const heldByAnother = { openAutoPositions: [{ instrumentToken: 101 }] };
+    const rules = { general: general(), strategy: settings({ 'one-trade-per-instrument': {} }) };
+    expect(checkEntryRules(trade, contexts(heldByAnother, {}), rules)).toEqual({ ok: true });
+    expect(checkEntryRules(trade, contexts(heldByAnother, heldByAnother), rules))
+      .toEqual({ ok: false, ruleId: 'one-trade-per-instrument', reason: 'An automated position in NIFTY26NOV24000PE is already open' });
   });
 
   it('passes when every active rule passes', () => {
-    expect(checkEntryRules(trade, ctx(), settings({ 'max-lots': { max: 5 }, 'max-daily-loss': { amount: 1000 } }))).toEqual({ ok: true });
+    expect(checkEntryRules(trade, contexts(), { general: general({ 'max-open-positions': { max: 5 } }), strategy: settings({ 'max-lots': { max: 5 } }) }))
+      .toEqual({ ok: true });
   });
 });
 

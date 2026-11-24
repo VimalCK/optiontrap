@@ -29,7 +29,7 @@ const positionalMarket = (extra = {}) => positional({ orderType: 'Market', limit
 const stored = (id, extra = {}) => ({
   id, userId: 'U1', tradingsymbol: 'NIFTY26N1024000CE', instrumentToken: 101, instrumentType: 'CE', exchange: 'NFO', strike: 24000,
   optionType: 'CE', expiry: '2026-11-10', side: 'BUY', quantity: 75, orderType: 'Limit', limitPrice: 50, status: 'Open', fillPrice: null, positionId: null,
-  closesPosition: false, source: 'Manual', horizon: Horizon.Intraday, autoTradeId: null, ...extra,
+  closesPosition: false, source: 'Manual', strategyId: null, horizon: Horizon.Intraday, autoTradeId: null, ...extra,
 });
 const openPositionRow = (extra = {}) => ({
   id: 'pos9', userId: 'U1', tradingsymbol: 'NIFTY26N1024000CE', instrumentToken: 101, instrumentType: 'CE', exchange: 'NFO',
@@ -129,7 +129,7 @@ describe('the order service', () => {
       lastPrice = 40;
       const result = await service.place('U1', input(), USER_KITE);
       expect(db.claimOrderFill).toHaveBeenCalledWith('o1', 40, expect.objectContaining({ quantity: 75, orderType: 'Limit', limitPrice: 50 }));
-      expect(positions.openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ instrumentToken: 101, side: 'BUY', quantity: 75, entryPrice: 40 }), { now: NOON, source: 'Manual' });
+      expect(positions.openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ instrumentToken: 101, side: 'BUY', quantity: 75, entryPrice: 40 }), { now: NOON, source: 'Manual', strategyId: null });
       expect(db.setOrderPosition).toHaveBeenCalledWith('o1', 'pos1');
       expect(result).toEqual({ ok: true, order: expect.objectContaining({ status: 'Filled', fillPrice: 40, positionId: 'pos1' }) });
       expect(service.waitingOrderIds()).toEqual([]);
@@ -139,7 +139,7 @@ describe('the order service', () => {
     it('fills a sell at once when the last price is at or above its limit', async () => {
       lastPrice = 50;
       await service.place('U1', input({ side: 'SELL' }), USER_KITE);
-      expect(positions.openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ side: 'SELL', entryPrice: 50 }), { now: NOON, source: 'Manual' });
+      expect(positions.openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ side: 'SELL', entryPrice: 50 }), { now: NOON, source: 'Manual', strategyId: null });
     });
 
     it('refuses an invalid limit order or one outside market hours before quoting, saving nothing', async () => {
@@ -198,7 +198,7 @@ describe('the order service', () => {
       expect(db.claimOrderFill).not.toHaveBeenCalled();
       await service.onTicks([{ instrumentToken: 101, lastPrice: 49.5 }]);
       expect(db.claimOrderFill).toHaveBeenCalledWith('o1', 50, expect.anything());
-      expect(positions.openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ entryPrice: 50 }), { now: NOON, source: 'Manual' });
+      expect(positions.openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ entryPrice: 50 }), { now: NOON, source: 'Manual', strategyId: null });
       expect(db.setOrderPosition).toHaveBeenCalledWith('o1', 'pos1');
       expect(service.waitingOrderIds()).toEqual([]);
       expect(feeds[0].watching).toEqual([]);
@@ -363,11 +363,11 @@ describe('the order service', () => {
     it('modifies an automated order, and tells listeners when the modified order fills', async () => {
       const settledOrders = [];
       service.onSettled((order) => { settledOrders.push(order); });
-      db.getUserOrder.mockResolvedValueOnce(stored('o1', { source: 'Auto', autoTradeId: 't1' }));
-      db.modifyOpenOrder.mockResolvedValueOnce(stored('o1', { source: 'Auto', autoTradeId: 't1', limitPrice: 65 }));
+      db.getUserOrder.mockResolvedValueOnce(stored('o1', { source: 'Auto', strategyId: 'test-strategy', autoTradeId: 't1' }));
+      db.modifyOpenOrder.mockResolvedValueOnce(stored('o1', { source: 'Auto', strategyId: 'test-strategy', autoTradeId: 't1', limitPrice: 65 }));
       const result = await service.modify('U1', 'o1', { limitPrice: 65 }, USER_KITE);
       expect(db.modifyOpenOrder).toHaveBeenCalledWith('U1', 'o1', expect.objectContaining({ limitPrice: 65 }));
-      expect(positions.openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ entryPrice: 60 }), { now: NOON, source: 'Auto' });
+      expect(positions.openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ entryPrice: 60 }), { now: NOON, source: 'Auto', strategyId: 'test-strategy' });
       expect(result).toEqual({ ok: true, order: expect.objectContaining({ status: 'Filled' }) });
       expect(settledOrders).toEqual([expect.objectContaining({ id: 'o1', status: 'Filled', positionId: 'pos1' })]);
     });
@@ -391,33 +391,33 @@ describe('the order service', () => {
   });
 
   describe('automated orders', () => {
-    it("places a limit order for an automated trade at the engine's last price, linked to the trade, with no quote of its own", async () => {
-      const result = await service.placeAuto('U1', input({ limitPrice: 48 }), { lastPrice: 60, autoTradeId: 't1' });
+    it("places a limit order for an automated trade at the engine's last price, linked to the trade and its strategy, with no quote of its own", async () => {
+      const result = await service.placeAuto('U1', input({ limitPrice: 48 }), { lastPrice: 60, autoTradeId: 't1', strategyId: 'test-strategy' });
       expect(quotes).not.toHaveBeenCalled();
-      expect(db.createOrder).toHaveBeenCalledWith('U1', expect.objectContaining({ limitPrice: 48 }), { source: 'Auto', autoTradeId: 't1' });
-      expect(result).toEqual({ ok: true, order: expect.objectContaining({ status: 'Open', source: 'Auto', autoTradeId: 't1' }) });
+      expect(db.createOrder).toHaveBeenCalledWith('U1', expect.objectContaining({ limitPrice: 48 }), { source: 'Auto', autoTradeId: 't1', strategyId: 'test-strategy' });
+      expect(result).toEqual({ ok: true, order: expect.objectContaining({ status: 'Open', source: 'Auto', autoTradeId: 't1', strategyId: 'test-strategy' }) });
       expect(service.waitingOrderIds()).toEqual(['o1']);
     });
 
     it("fills an automated market order at once at the engine's quoted bid / ask, else its last price", async () => {
       const market = input({ orderType: 'Market', limitPrice: undefined });
-      await service.placeAuto('U1', market, { lastPrice: 60, fillPrice: 60.5, autoTradeId: 't1' });
+      await service.placeAuto('U1', market, { lastPrice: 60, fillPrice: 60.5, autoTradeId: 't1', strategyId: 'test-strategy' });
       expect(db.claimOrderFill).toHaveBeenLastCalledWith('o1', 60.5, expect.anything());
-      expect(positions.openPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ entryPrice: 60.5 }), { now: NOON, source: 'Auto' });
-      await service.placeAuto('U1', market, { lastPrice: 60, autoTradeId: 't2' });
+      expect(positions.openPosition).toHaveBeenLastCalledWith('U1', expect.objectContaining({ entryPrice: 60.5 }), { now: NOON, source: 'Auto', strategyId: 'test-strategy' });
+      await service.placeAuto('U1', market, { lastPrice: 60, autoTradeId: 't2', strategyId: 'test-strategy' });
       expect(db.claimOrderFill).toHaveBeenLastCalledWith('o1', 60, expect.anything());
       expect(quotes).not.toHaveBeenCalled();
     });
 
-    it('opens an automated position when its limit order fills', async () => {
-      await service.placeAuto('U1', input(), { lastPrice: 60, autoTradeId: 't1' });
+    it("opens its strategy's automated position when its limit order fills", async () => {
+      await service.placeAuto('U1', input(), { lastPrice: 60, autoTradeId: 't1', strategyId: 'test-strategy' });
       await service.onTicks([{ instrumentToken: 101, lastPrice: 49 }]);
-      expect(positions.openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ entryPrice: 50 }), { now: NOON, source: 'Auto' });
+      expect(positions.openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ entryPrice: 50 }), { now: NOON, source: 'Auto', strategyId: 'test-strategy' });
     });
 
     it('refuses an automated order the trade rules refuse, saving nothing', async () => {
       now = AFTER_CLOSE;
-      expect(await service.placeAuto('U1', input(), { lastPrice: 60, autoTradeId: 't1' }))
+      expect(await service.placeAuto('U1', input(), { lastPrice: 60, autoTradeId: 't1', strategyId: 'test-strategy' }))
         .toEqual({ ok: false, code: 'MARKET_CLOSED', message: INTRADAY_CLOSED_MESSAGE });
       expect(db.createOrder).not.toHaveBeenCalled();
     });
@@ -506,7 +506,7 @@ describe('the order service', () => {
       await service.onTicks([{ instrumentToken: 101, lastPrice: 51.5 }]);
       expect(quotes).toHaveBeenLastCalledWith(ADMIN_KITE, [QUOTE_KEY]);
       expect(db.claimOrderFill).toHaveBeenCalledWith('o9', 52, expect.anything());
-      expect(positions.openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ entryPrice: 52, horizon: Horizon.Positional }), { now: NOON, source: 'Manual' });
+      expect(positions.openPosition).toHaveBeenCalledWith('U1', expect.objectContaining({ entryPrice: 52, horizon: Horizon.Positional }), { now: NOON, source: 'Manual', strategyId: null });
       expect(service.waitingOrderIds()).toEqual([]);
     });
 

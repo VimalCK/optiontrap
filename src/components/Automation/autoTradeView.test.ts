@@ -75,7 +75,7 @@ describe('horizonLabel', () => {
 describe('eventSummary', () => {
   it('says each stage in plain words, not the stored JSON', () => {
     expect(eventSummary(selected, trade, TEST_STRATEGIES)).toBe('Option Analyzer setups · Wall Defense · score 62 · POP 54%');
-    expect(eventSummary({ stage: 'Validated', at, detail: {} }, trade, TEST_STRATEGIES)).toBe('Passed the General settings and every active entry rule');
+    expect(eventSummary({ stage: 'Validated', at, detail: {} }, trade, TEST_STRATEGIES)).toBe("Passed the strategy's settings and every active entry rule");
     expect(eventSummary({ stage: 'Executed', at, detail: { entryPrice: 731.9 } }, trade, TEST_STRATEGIES)).toBe('Opened a paper position at ₹731.90');
     expect(eventSummary({ stage: 'Closed', at, detail: { exitPrice: 700, ruleId: 'target', reason: 'Target hit (4%)' } }, trade, TEST_STRATEGIES))
       .toBe('Closed at ₹700.00 · P&L ₹957.00 (4.36%) · Target hit (4%)'); // sold 30 at 731.90

@@ -84,7 +84,7 @@ export function eventSummary(event: AutoTradeEvent, trade: AutoTrade, strategies
     case LifecycleStage.Selected:
       return joined(strategyLabel(detail.strategyId, strategies), text(detail.reason)) || 'Selected';
     case LifecycleStage.Validated:
-      return 'Passed the General settings and every active entry rule';
+      return "Passed the strategy's settings and every active entry rule";
     case LifecycleStage.Rejected:
       return text(detail.reason) ?? 'Rejected';
     case LifecycleStage.Executed:

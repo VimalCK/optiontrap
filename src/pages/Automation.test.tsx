@@ -52,12 +52,12 @@ describe('automationStatus', () => {
   });
 
   it('counts the active strategies once there are some', () => {
-    const strategies = [{ id: 'a' }, { id: 'b' }];
-    const config = (active: string[]) => ({
-      ...defaultAutomationConfig([]),
-      enabled: true,
-      strategies: Object.fromEntries(strategies.map((s) => [s.id, { active: active.includes(s.id), params: {} }])),
-    });
+    const strategies = [{ ...TEST_STRATEGIES[0], id: 'a' }, { ...TEST_STRATEGIES[0], id: 'b' }];
+    const config = (active: string[]) => {
+      const config = { ...defaultAutomationConfig(strategies), enabled: true };
+      for (const id of active) config.strategies[id].active = true;
+      return config;
+    };
     expect(automationStatus(config([]), strategies)).toBe('On · no strategy active');
     expect(automationStatus(config(['a']), strategies)).toBe('On · 1 strategy active');
     expect(automationStatus(config(['a', 'b']), strategies)).toBe('On · 2 strategies active');

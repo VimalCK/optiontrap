@@ -16,13 +16,13 @@ export async function getOpenIntradayPositionsBefore(before) {
   return result.map(mapPositionRow);
 }
 
-/** Served by positions_open_auto_idx. */
+/** Served by positions_open_auto_strategy_idx. */
 export async function getAllOpenAutoPositions() {
   const result = await rows(`SELECT * FROM positions WHERE source = ${sqlEnum(TradeSource.Auto)} AND NOT exited AND mode = ${sqlEnum(TradingMode.Paper)}`);
   return result.map(mapPositionRow);
 }
 
-/** Served by positions_open_auto_idx. */
+/** Every strategy's. Served by positions_open_auto_strategy_idx. */
 export async function getOpenAutoPositions(userId) {
   const result = await rows(
     `SELECT * FROM positions WHERE user_id = $1 AND source = ${sqlEnum(TradeSource.Auto)} AND NOT exited AND mode = ${sqlEnum(TradingMode.Paper)}`,
@@ -95,6 +95,8 @@ function mapPositionRow(row) {
     instrumentType: row.instrument_type,
     exchange: row.exchange,
     source: row.source,
+    /** The automated position's strategy; null for a manual one. */
+    strategyId: row.strategy_id ?? null,
     horizon: row.horizon,
     strike: row.strike,
     optionType: row.option_type,
@@ -163,7 +165,7 @@ export function instrumentColumns(position) {
 /**
  * A new open position of `quantity` (the trade's own, or what is left after netting) entered at `entryTime`.
  * @param {string} userId
- * @param {any} position  the trade, with its mode and source
+ * @param {any} position  the trade, with its mode, source and strategyId (null for a manual one)
  * @param {number} quantity
  * @param {string} entryTime  ISO timestamp
  */
@@ -171,26 +173,28 @@ export async function insertPosition(userId, position, quantity, entryTime) {
   const { strike, optionType, expiry } = instrumentColumns(position);
   const row = await firstRow(
     `INSERT INTO positions (id, user_id, mode, source, tradingsymbol, instrument_token, instrument_type, exchange, strike, option_type,
-       side, quantity, entry_price, entry_time, expiry, note, target_price, stop_loss_price, confidence, trail_amount, horizon)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+       side, quantity, entry_price, entry_time, expiry, note, target_price, stop_loss_price, confidence, trail_amount, horizon, strategy_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
      RETURNING *`,
     [crypto.randomUUID(), userId, position.mode, position.source, position.tradingsymbol, position.instrumentToken,
      position.instrumentType, position.exchange, strike, optionType, position.side, quantity, position.entryPrice, entryTime, expiry,
-     ...positionMetaValues(position), position.horizon],
+     ...positionMetaValues(position), position.horizon, position.strategyId],
   );
   return mapPositionRow(row);
 }
 
 /**
- * The user's open position a trade could merge with: same instrument, side, source, mode and horizon.
+ * The user's open position a trade could merge with: same instrument, side, source, strategy (none for a manual
+ * one), mode and horizon. Served by positions_open_idx.
  * @param {string} userId
- * @param {{ mode: string, instrumentToken: number, side: string, source: string, horizon: string }} match
+ * @param {{ mode: string, instrumentToken: number, side: string, source: string, strategyId: string | null, horizon: string }} match
  */
-export async function findOpenPosition(userId, { mode, instrumentToken, side, source, horizon }) {
+export async function findOpenPosition(userId, { mode, instrumentToken, side, source, strategyId, horizon }) {
   const row = await firstRow(
     `SELECT * FROM positions
-     WHERE user_id = $1 AND mode = $2 AND instrument_token = $3 AND side = $4 AND NOT exited AND source = $5 AND horizon = $6`,
-    [userId, mode, instrumentToken, side, source, horizon],
+     WHERE user_id = $1 AND mode = $2 AND instrument_token = $3 AND side = $4 AND NOT exited AND source = $5 AND horizon = $6
+       AND strategy_id IS NOT DISTINCT FROM $7`,
+    [userId, mode, instrumentToken, side, source, horizon, strategyId],
   );
   return row ? mapPositionRow(row) : null;
 }

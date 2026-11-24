@@ -10,7 +10,7 @@ export const WAIT_AFTER_EXIT_RULE_ID = 'wait-after-exit';
 export default {
   id: WAIT_AFTER_EXIT_RULE_ID,
   label: 'Wait after exit',
-  description: 'After an automated position is exited, that same instrument is not traded again until this many minutes have passed. Other instruments can still be traded.',
+  description: "After this strategy exits a position, it doesn't trade that same instrument again until this many minutes have passed. Other instruments can still be traded.",
   params: [{ key: 'minutes', label: 'Minutes', type: ParamType.Count }],
   check: (trade, ctx, { minutes }) => {
     const exit = ctx.todayAutoExits.find((e) => e.instrumentToken === trade.instrumentToken);

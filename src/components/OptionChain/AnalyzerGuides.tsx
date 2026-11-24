@@ -112,7 +112,7 @@ export const BestSetupsGuide: React.FC = () => (
       <GuideSection title="On this tab" subtitle="What each part shows" wide>
         <GuideRows rows={[
           { label: 'Day gauge', tone: GuideTone.Plain, rule: 'Top', meaning: "Which way the day leans, from −1 (bearish, left) to +1 (bullish, right): spot since the first snapshot and in the last 30 min, put vs call OI added near spot, PCR change. Every setup's Direction part reads it." },
-          { label: 'Auto pick', tone: GuideTone.Plain, rule: 'Featured', meaning: 'Shown first and large: the single option (CE or PE) the Option Analyzer setups automation takes for this underlying on the nearest expiry, if your General settings allow it and it reaches your Min score and Min premium. Straddles and strangles are never taken. Without one, the top setup is featured.' },
+          { label: 'Auto pick', tone: GuideTone.Plain, rule: 'Featured', meaning: 'Shown first and large: the single option (CE or PE) the Option Analyzer setups automation takes for this underlying on the nearest expiry, if it reaches your Min score and Min premium. Straddles and strangles are never taken. Without one, the top setup is featured.' },
           { label: 'Score bar', tone: GuideTone.Plain, rule: 'Colours', meaning: 'The score split into its parts, each in its own colour, so the bar shows why a setup scored what it did.' },
           { label: 'BE', tone: GuideTone.Plain, rule: 'Row', meaning: 'Breakeven at expiry, and its distance from spot.' },
           { label: 'Missing sides', tone: GuideTone.Plain, rule: 'Next to tabs', meaning: 'Why a side has no setups now, e.g. no call sells while spot rises fast. Hover one for the detail.' },

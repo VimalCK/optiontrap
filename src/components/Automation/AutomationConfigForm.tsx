@@ -1,33 +1,39 @@
 /**
- * One strategy's settings: whether it runs, how (paper or live), which trades (intraday or positional), the signals
- * it takes, and its own entry and exit rules, one tab each. Save and Cancel belong to the settings page. Options that
- * aren't built yet are shown but can't be chosen.
+ * One strategy's settings: whether it runs, how (paper, live or both at once), which trades (intraday or
+ * positional), the signals it takes, and its own entry and exit rules, one tab each. Save and Cancel belong to the
+ * settings page. Options that aren't built yet are shown but can't be chosen.
  */
 import React, { useState } from 'react';
 import { EXECUTION_MODES, HORIZONS } from '../../../shared/automation.js';
-import type { AutomationConfig } from '@/services/automation';
+import type { StrategySettings } from '@/services/automation';
 import Toggle from '@/components/Toggle/Toggle';
 import TabBar from '@/components/TabBar/TabBar';
+import Badge from '@/components/Badge/Badge';
+import LockedFields from './LockedFields';
 import type { StrategyInfo } from '@/services/strategies';
 import { ENTRY_RULES } from '../../../shared/entryRules/index.js';
 import { EXIT_RULES } from '../../../shared/exitRules/index.js';
 import RuleSettingsForm, { RuleParams } from './RuleSettingsForm';
 import type { RuleSettings } from '../../../shared/rules/ruleSettings.js';
-import { StrategyRulesTab, type StrategyRulesTabId } from '@/utils/uiEnums';
+import { StrategyRulesTab, Tone, type StrategyRulesTabId } from '@/utils/uiEnums';
 
 const NOT_AVAILABLE = 'not available yet';
 
 export interface AutomationConfigFormProps {
-  config: AutomationConfig;
   strategy: StrategyInfo;
-  onChange: (config: AutomationConfig) => void;
+  /** The user's settings for this strategy. */
+  settings: StrategySettings;
+  onChange: (settings: StrategySettings) => void;
+  /** The account's Algo Trading switch: the strategy places trades only while it and the strategy are on, and its
+   * settings can be changed only then. */
+  algoTradingOn: boolean;
   /** The rule tab shown first. */
   initialRulesTab?: StrategyRulesTabId;
 }
 
 interface SectionProps {
-  config: AutomationConfig;
-  onChange: (config: AutomationConfig) => void;
+  settings: StrategySettings;
+  onChange: (settings: StrategySettings) => void;
 }
 
 const activeCount = (settings: RuleSettings) => Object.values(settings).filter((s) => s.active).length;
@@ -67,57 +73,59 @@ const OptionToggles: React.FC<{
   </div>
 );
 
-// A strategy can run paper and live at once. The stored setting still holds one mode until the per-strategy
-// settings are built, so the switches are a preview: Save stores the mode as before.
-const ExecutionTile: React.FC<Pick<SectionProps, 'config'>> = ({ config }) => {
-  const [running, setRunning] = useState<Record<string, boolean>>(() => ({ [config.mode]: true }));
-  return (
-    <SettingTile title="Execution" hint={unavailableHint(EXECUTION_MODES)}>
-      <OptionToggles
-        options={EXECUTION_MODES}
-        isOn={(id) => running[id] ?? false}
-        onToggle={(id, on) => setRunning((current) => ({ ...current, [id]: on }))}
-      />
-    </SettingTile>
-  );
-};
-
-const TradesTile: React.FC<SectionProps> = ({ config, onChange }) => (
-  <SettingTile title="Trades" hint={unavailableHint(HORIZONS)}>
+/** Paper and live are separate switches: a strategy with both on places each signal in both. */
+const ExecutionTile: React.FC<SectionProps> = ({ settings, onChange }) => (
+  <SettingTile title="Execution" hint={unavailableHint(EXECUTION_MODES)}>
     <OptionToggles
-      options={HORIZONS}
-      isOn={(id) => config.horizons[id as keyof AutomationConfig['horizons']]}
-      onToggle={(id, on) => onChange({ ...config, horizons: { ...config.horizons, [id]: on } })}
+      options={EXECUTION_MODES}
+      isOn={(id) => settings.execution[id as keyof StrategySettings['execution']]}
+      onToggle={(id, on) => onChange({ ...settings, execution: { ...settings.execution, [id]: on } })}
     />
   </SettingTile>
 );
 
-const StrategyHeader: React.FC<SectionProps & { strategy: StrategyInfo }> = ({ strategy, config, onChange }) => {
-  const setting = config.strategies[strategy.id];
+const TradesTile: React.FC<SectionProps> = ({ settings, onChange }) => (
+  <SettingTile title="Trades" hint={unavailableHint(HORIZONS)}>
+    <OptionToggles
+      options={HORIZONS}
+      isOn={(id) => settings.horizons[id as keyof StrategySettings['horizons']]}
+      onToggle={(id, on) => onChange({ ...settings, horizons: { ...settings.horizons, [id]: on } })}
+    />
+  </SettingTile>
+);
+
+/** Whether the strategy places trades, and if not, what to switch on (both switches are on the Settings page). */
+export function strategyState(algoTradingOn: boolean, active: boolean): { on: boolean; reason: string | null } {
+  if (!algoTradingOn) return { on: false, reason: 'Algo Trading is off in Settings' };
+  if (!active) return { on: false, reason: 'Switch it on in Settings' };
+  return { on: true, reason: null };
+}
+
+const StrategyHeader: React.FC<{ strategy: StrategyInfo; active: boolean; algoTradingOn: boolean }> = ({ strategy, active, algoTradingOn }) => {
+  const state = strategyState(algoTradingOn, active);
   return (
     <header className="automation-strategy">
       <div className="automation-strategy__text">
-        <h2 className="automation-strategy__name">{strategy.label}</h2>
+        <div className="automation-strategy__title-row">
+          <h2 className="automation-strategy__name">{strategy.label}</h2>
+          <Badge tone={state.on ? Tone.Positive : Tone.Neutral} dot={state.on} label={`${strategy.label} ${state.on ? 'on' : 'off'}`}>
+            {state.on ? 'On' : 'Off'}
+          </Badge>
+          {state.reason && <span className="automation-strategy__state-reason">{state.reason}</span>}
+        </div>
         <p className="automation-strategy__description">{strategy.description}</p>
       </div>
-      <Toggle
-        checked={setting.active}
-        label={`${strategy.label} active`}
-        onText="Active"
-        offText="Inactive"
-        onChange={(active) => onChange({ ...config, strategies: { ...config.strategies, [strategy.id]: { ...setting, active } } })}
-      />
     </header>
   );
 };
 
-const RulesTab: React.FC<SectionProps & { tab: StrategyRulesTabId; strategyLabel: string }> = ({ tab, strategyLabel, config, onChange }) =>
+const RulesTab: React.FC<SectionProps & { tab: StrategyRulesTabId; strategyLabel: string }> = ({ tab, strategyLabel, settings, onChange }) =>
   tab === StrategyRulesTab.EntryRules
     ? (
       <RuleSettingsForm
         rules={ENTRY_RULES}
-        settings={config.entryRules}
-        onChange={(entryRules) => onChange({ ...config, entryRules })}
+        settings={settings.entryRules}
+        onChange={(entryRules) => onChange({ ...settings, entryRules })}
         label={`${strategyLabel} entry rules`}
         description="Every trade this strategy picks is checked against the active rules before it is executed; the first rule that refuses it rejects it."
       />
@@ -125,8 +133,8 @@ const RulesTab: React.FC<SectionProps & { tab: StrategyRulesTabId; strategyLabel
     : (
       <RuleSettingsForm
         rules={EXIT_RULES}
-        settings={config.exitRules}
-        onChange={(exitRules) => onChange({ ...config, exitRules })}
+        settings={settings.exitRules}
+        onChange={(exitRules) => onChange({ ...settings, exitRules })}
         label={`${strategyLabel} exit rules`}
         description="This strategy's open positions are watched against the active rules; the first rule that fires closes the position."
       />
@@ -139,31 +147,29 @@ const tabLabel = (text: string, count: number) => (
   </>
 );
 
-const AutomationConfigForm: React.FC<AutomationConfigFormProps> = ({ config, strategy, onChange, initialRulesTab = StrategyRulesTab.EntryRules }) => {
+const AutomationConfigForm: React.FC<AutomationConfigFormProps> = ({ strategy, settings, onChange, algoTradingOn, initialRulesTab = StrategyRulesTab.EntryRules }) => {
   const [rulesTab, setRulesTab] = useState<StrategyRulesTabId>(initialRulesTab);
-  const setting = config.strategies[strategy.id];
+  const locked = !strategyState(algoTradingOn, settings.active).on;
   const rulesTabs = [
-    { id: StrategyRulesTab.EntryRules, label: tabLabel('Entry rules', activeCount(config.entryRules)), title: 'Entry rules' },
-    { id: StrategyRulesTab.ExitRules, label: tabLabel('Exit rules', activeCount(config.exitRules)), title: 'Exit rules' },
+    { id: StrategyRulesTab.EntryRules, label: tabLabel('Entry rules', activeCount(settings.entryRules)), title: 'Entry rules' },
+    { id: StrategyRulesTab.ExitRules, label: tabLabel('Exit rules', activeCount(settings.exitRules)), title: 'Exit rules' },
   ];
 
   return (
     <div className="automation-config" role="group" aria-label={`Trading Strategies · ${strategy.label}`}>
-      <StrategyHeader strategy={strategy} config={config} onChange={onChange} />
+      <StrategyHeader strategy={strategy} active={settings.active} algoTradingOn={algoTradingOn} />
 
-      <div className="automation-tiles">
-        <ExecutionTile config={config} />
-        <TradesTile config={config} onChange={onChange} />
-        {strategy.params.length > 0 && (
-          <SettingTile title="Signal filters" hint="Only setups that reach every minimum are traded">
-            <RuleParams
-              rule={strategy}
-              setting={setting}
-              onChange={(next) => onChange({ ...config, strategies: { ...config.strategies, [strategy.id]: next } })}
-            />
-          </SettingTile>
-        )}
-      </div>
+      <LockedFields locked={locked}>
+        <div className="automation-tiles">
+          <ExecutionTile settings={settings} onChange={onChange} />
+          <TradesTile settings={settings} onChange={onChange} />
+          {strategy.params.length > 0 && (
+            <SettingTile title="Signal filters" hint="Only setups that reach every minimum are traded">
+              <RuleParams rule={strategy} setting={settings} onChange={(own) => onChange({ ...settings, ...own })} />
+            </SettingTile>
+          )}
+        </div>
+      </LockedFields>
 
       <section className="automation-rules-panel" aria-label={`${strategy.label} rules`}>
         <TabBar
@@ -174,7 +180,9 @@ const AutomationConfigForm: React.FC<AutomationConfigFormProps> = ({ config, str
           tabClassName="analytics-tab"
           ariaLabel={`${strategy.label} rules`}
         />
-        <RulesTab tab={rulesTab} strategyLabel={strategy.label} config={config} onChange={onChange} />
+        <LockedFields locked={locked}>
+          <RulesTab tab={rulesTab} strategyLabel={strategy.label} settings={settings} onChange={onChange} />
+        </LockedFields>
       </section>
     </div>
   );

@@ -5,10 +5,10 @@
  */
 import { apiClient } from './apiClient';
 
-import type { AutomationConfig, HorizonId, TradeKindId } from '../../shared/automation.js';
+import type { AutomationConfig, HorizonId, StrategySettings, TradeKindId } from '../../shared/automation.js';
 import type { LifecycleStageId, SideId, TradingModeId } from '../../shared/tradeEnums.js';
 
-export type { AutomationConfig, HorizonId, TradeKindId };
+export type { AutomationConfig, HorizonId, StrategySettings, TradeKindId };
 
 export interface AutoTradeEvent {
   stage: LifecycleStageId;
@@ -38,12 +38,43 @@ export interface AutoTrade {
   events: AutoTradeEvent[];
 }
 
+/**
+ * The Algo Trading switch as last read or saved, shared by every screen that shows it (the sidebar, Settings): null
+ * until a configuration has come back from the server. Every configuration reply goes through remember().
+ */
+let algoTradingOn: boolean | null = null;
+const algoTradingListeners = new Set<() => void>();
+
+function remember(config: AutomationConfig): AutomationConfig {
+  algoTradingOn = config.enabled;
+  algoTradingListeners.forEach((listener) => listener());
+  return config;
+}
+
+export const algoTradingSwitch = {
+  current: (): boolean | null => algoTradingOn,
+  subscribe(listener: () => void): () => void {
+    algoTradingListeners.add(listener);
+    return () => { algoTradingListeners.delete(listener); };
+  },
+};
+
 export function fetchAutomationConfig(signal?: AbortSignal): Promise<AutomationConfig> {
-  return apiClient.get('/api/automation/config', { signal });
+  return apiClient.get<AutomationConfig>('/api/automation/config', { signal }).then(remember);
 }
 
 export function saveAutomationConfig(config: AutomationConfig): Promise<AutomationConfig> {
-  return apiClient.put('/api/automation/config', config);
+  return apiClient.put<AutomationConfig>('/api/automation/config', config).then(remember);
+}
+
+/** The Algo Trading switch alone, over every strategy (Settings). */
+export function setAutomationEnabled(enabled: boolean): Promise<AutomationConfig> {
+  return apiClient.patch<AutomationConfig>('/api/automation/config', { enabled }).then(remember);
+}
+
+/** One strategy switched on or off alone (Settings); the whole configuration comes back. */
+export function setStrategyActive(strategyId: string, active: boolean): Promise<AutomationConfig> {
+  return apiClient.patch<AutomationConfig>(`/api/automation/strategies/${encodeURIComponent(strategyId)}`, { active }).then(remember);
 }
 
 /**

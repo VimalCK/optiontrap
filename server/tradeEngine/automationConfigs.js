@@ -1,13 +1,20 @@
 /**
  * Users' automation configurations, completed with the defaults for the trade
- * engine's strategies (and the shared entry/exit rules and trade types).
+ * engine's strategies (and the shared general, entry and exit rules).
  *
  * db.js stores and returns the configuration as saved; a saved one can predate a
  * strategy or rule, so everything that reads one goes through here and sees a
  * complete configuration. The defaults themselves live in shared/automation.js.
  */
-import { withDefaults } from '../../shared/automation.js';
-import { getStoredAutomatedUsers, getStoredAutomationConfig, getStoredAutomationConfigs, storeAutomationConfig } from '../db.js';
+import { defaultAutomationConfig, withDefaults, withStrategyActive } from '../../shared/automation.js';
+import {
+  getStoredAutomatedUsers,
+  getStoredAutomationConfig,
+  getStoredAutomationConfigs,
+  storeAutomationConfig,
+  storeAutomationEnabled,
+  storeStrategyActive,
+} from '../db.js';
 import { strategyInfos } from './strategies/index.js';
 
 /** @typedef {import('../../shared/automation.js').AutomationConfig} AutomationConfig */
@@ -21,6 +28,27 @@ export async function getAutomationConfig(/** @type {string} */ userId) {
 
 export async function saveAutomationConfig(/** @type {string} */ userId, /** @type {AutomationConfig} */ config) {
   return complete(await storeAutomationConfig(userId, config));
+}
+
+/** The Algo Trading switch alone, over every strategy; a user with no configuration yet gets the defaults with it. */
+export async function setAutomationEnabled(/** @type {string} */ userId, /** @type {boolean} */ enabled) {
+  const newConfig = { ...defaultAutomationConfig(strategyInfos()), enabled };
+  return complete(await storeAutomationEnabled(userId, enabled, newConfig));
+}
+
+/**
+ * Switch one of the user's strategies on or off alone (Settings): the configuration as saved, or why it can't be
+ * switched on.
+ * @param {string} userId
+ * @param {import('./strategies/index.js').StrategyInfo} strategy
+ * @param {boolean} active
+ * @returns {Promise<{ config: AutomationConfig, error?: undefined } | { error: string, config?: undefined }>}
+ */
+export async function setStrategyActive(userId, strategy, active) {
+  const switched = withStrategyActive(await getAutomationConfig(userId), strategy, active);
+  if (switched.error !== undefined) return { error: switched.error };
+  const defaults = { newConfig: switched.config, settings: switched.config.strategies[strategy.id] };
+  return { config: complete(await storeStrategyActive(userId, strategy.id, active, defaults)) };
 }
 
 /**

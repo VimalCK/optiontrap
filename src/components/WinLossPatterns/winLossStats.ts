@@ -3,7 +3,7 @@
  * only derives the ratios and labels from each group's totals.
  */
 import { RESULTS_ENTRY_SLOT_MINUTES } from '../../../shared/automation.js';
-import { ENGINE_EXITS, EXIT_RULES } from '../../../shared/exitRules/index.js';
+import { exitLabel } from '../../../shared/exitRules/index.js';
 import { sideLabel, strategyLabel } from '@/components/Automation/autoTradeView';
 import type { StrategyInfo } from '@/services/strategies';
 import type { ResultGroup } from '@/services/automation';
@@ -26,7 +26,7 @@ export const profitFactor = (g: ResultGroup<unknown>): number | null => (g.gross
 /** A null id is a manual exit. */
 export function exitRuleLabel(id: string | null): string {
   if (id === null) return 'Exited manually';
-  return [...EXIT_RULES, ...ENGINE_EXITS].find((exit) => exit.id === id)?.label ?? id;
+  return exitLabel(id);
 }
 
 /** Trades recorded before strategies were stored have no id. */

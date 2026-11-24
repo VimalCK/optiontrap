@@ -13,7 +13,10 @@ import {
   ShieldIcon,
 } from '../icons/Icons';
 import { KiteSession } from '@/services/kiteAuth';
+import { useAlgoTradingSwitch } from '@/hooks/useAlgoTradingSwitch';
 import '@/styles/sidebar.css';
+
+const ALGO_TRADING_PATH = '/automation';
 
 interface NavItem {
   path: string;
@@ -26,7 +29,7 @@ const navItems: NavItem[] = [
   { path: '/portfolio', label: 'Portfolio', icon: <TradesIcon /> },
   { path: '/analytics', label: 'Analytics', icon: <AnalyticsIcon /> },
   { path: '/watchlist', label: 'Watchlist', icon: <WatchlistIcon /> },
-  { path: '/automation', label: 'Algo Trading', icon: <AutomationIcon /> },
+  { path: ALGO_TRADING_PATH, label: 'Algo Trading', icon: <AutomationIcon /> },
 ];
 
 interface SidebarProps {
@@ -35,9 +38,24 @@ interface SidebarProps {
   session: KiteSession | null;
 }
 
+/** A menu entry's on/off state: null when it has none, or it isn't known yet. */
+type NavState = boolean | null;
+
+/** A menu entry's state as a green or red dot beside its label (nothing when it has none). */
+export const NavStateDot: React.FC<{ label: string; on: NavState }> = ({ label, on }) => {
+  if (on === null) return null;
+  const text = `${label} ${on ? 'on' : 'off'}`;
+  return <span className={`sidebar__state-dot sidebar__state-dot--${on ? 'on' : 'off'}`} role="img" aria-label={text} title={text} />;
+};
+
+/** The entry's tooltip while the sidebar is collapsed, its label and dot hidden. */
+const collapsedTitle = (label: string, on: NavState) => (on === null ? label : `${label} · ${on ? 'On' : 'Off'}`);
+
 const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, session }) => {
   const isSignedIn = session !== null;
   const isAdmin = session?.isAdmin === true;
+  const statesByPath: Partial<Record<string, NavState>> = { [ALGO_TRADING_PATH]: useAlgoTradingSwitch() };
+  const stateOf = (item: NavItem): NavState => statesByPath[item.path] ?? null;
 
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''}`} aria-label="Main navigation">
@@ -65,10 +83,11 @@ const Sidebar: React.FC<SidebarProps> = ({ collapsed, onToggle, session }) => {
             className={({ isActive }) =>
               `sidebar__nav-item ${isActive ? 'active' : ''}`
             }
-            title={collapsed ? item.label : undefined}
+            title={collapsed ? collapsedTitle(item.label, stateOf(item)) : undefined}
           >
             <span className="sidebar__nav-icon">{item.icon}</span>
             <span className="sidebar__nav-label">{item.label}</span>
+            <NavStateDot label={item.label} on={stateOf(item)} />
           </NavLink>
         ))}
         {isAdmin && (
