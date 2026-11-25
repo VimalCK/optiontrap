@@ -196,11 +196,6 @@
   white-space: normal;
 }
 
-.winloss-table th:last-child,
-.winloss-table td:last-child {
-  padding-right: 0;
-}
-
 .winloss-table th {
   height: var(--winloss-head-height);
   font-size: 11px;
