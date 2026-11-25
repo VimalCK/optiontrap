@@ -27,8 +27,8 @@ import { isAbortError } from '@/services/apiClient';
 import { useStrategies } from '@/hooks/useStrategies';
 import type { StrategyInfo } from '@/services/strategies';
 import { formatAmount, formatSignedAmount } from '@/utils/formatAmount';
-import { istTimeLabel } from '@/utils/marketStatus';
-import { AnalyticsTab, MessageTone } from '@/utils/uiEnums';
+import { istTime12Label, istTimeLabel } from '@/utils/marketStatus';
+import { AnalyticsTab, MessageTone, Tone } from '@/utils/uiEnums';
 import Message from '@/components/Message/Message';
 import { ShimmerGroup, ShimmerTableRows, ShimmerText } from '@/components/Shimmer/Shimmer';
 import '@/styles/automation.css';
@@ -66,7 +66,10 @@ const TradeTimeline: React.FC<{ trade: AutoTrade }> = ({ trade }) => {
           <div className="automation-timeline__head">
             <Badge tone={stepTone(event.stage)}>{stageLabel(event.stage)}</Badge>
           </div>
-          <p className="automation-timeline__text">{eventSummary(event, trade, strategies ?? [])}</p>
+          <div className="automation-timeline__detail">
+            <p className="automation-timeline__text">{eventSummary(event, trade, strategies ?? [])}</p>
+            <time className="automation-timeline__time" dateTime={event.at}>{istTime12Label(new Date(event.at))}</time>
+          </div>
         </div>
       </li>
     ))}
@@ -208,15 +211,28 @@ export const AutoTradesTable: React.FC<{
   );
 };
 
-/** "On" or "Off", and whether anything can trade: a strategy must exist and be active. null until both have loaded. */
-export function automationStatus(config: AutomationConfig | null, strategies: Pick<StrategyInfo, 'id'>[] | null): string | null {
-  if (!config || !strategies) return null;
-  const onOff = config.enabled ? 'On' : 'Off';
-  if (strategies.length === 0) return `${onOff} · no strategies yet, nothing trades`;
-  const active = strategies.filter((s) => config.strategies[s.id]?.active).length;
-  if (active === 0) return `${onOff} · no strategy active`;
-  return `${onOff} · ${active} strateg${active === 1 ? 'y' : 'ies'} active`;
+export interface AutomationStatus {
+  on: boolean;
+  /** Whether anything can trade: a strategy must exist and be active. */
+  detail: string;
 }
+
+/** null until both have loaded. */
+export function automationStatus(config: AutomationConfig | null, strategies: Pick<StrategyInfo, 'id'>[] | null): AutomationStatus | null {
+  if (!config || !strategies) return null;
+  const on = config.enabled;
+  if (strategies.length === 0) return { on, detail: 'no strategies yet, nothing trades' };
+  const active = strategies.filter((s) => config.strategies[s.id]?.active).length;
+  if (active === 0) return { on, detail: 'no strategy active' };
+  return { on, detail: `${active} strateg${active === 1 ? 'y' : 'ies'} active` };
+}
+
+export const AutomationStatusLabel: React.FC<{ status: AutomationStatus }> = ({ status }) => (
+  <>
+    <Badge tone={status.on ? Tone.Positive : Tone.Negative} label={`Algo Trading ${status.on ? 'on' : 'off'}`}>{status.on ? 'On' : 'Off'}</Badge>
+    {status.detail}
+  </>
+);
 
 const Automation: React.FC = () => {
   const navigate = useNavigate();
@@ -276,7 +292,7 @@ const Automation: React.FC = () => {
       <header className="automation-header">
         <h1 className="automation-header__title">Algo Trading</h1>
         <span className="automation-header__status">
-          {configError || strategiesError ? 'Settings could not be loaded' : <ShimmerText loading={status === null} width="12em">{status}</ShimmerText>}
+          {configError || strategiesError ? 'Settings could not be loaded' : <ShimmerText loading={status === null} width="12em">{status && <AutomationStatusLabel status={status} />}</ShimmerText>}
         </span>
       </header>
 

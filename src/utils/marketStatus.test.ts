@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest';
-import { formatCalendarDate, formatNumericDate, istDateString, istDaysUntil, istTimeLabel } from './marketStatus';
+import { formatCalendarDate, formatNumericDate, istDateString, istDaysUntil, istTime12Label, istTimeLabel } from './marketStatus';
+
+describe('istTime12Label', () => {
+  it('shows the IST time on a 12-hour clock', () => {
+    expect(istTime12Label(new Date('2026-11-03T03:45:00Z'))).toBe('9:15 AM'); // 09:15 IST
+    expect(istTime12Label(new Date('2026-11-03T06:30:00Z'))).toBe('12:00 PM'); // 12:00 IST
+    expect(istTime12Label(new Date('2026-11-03T07:35:00Z'))).toBe('1:05 PM'); // 13:05 IST
+    expect(istTime12Label(new Date('2026-11-02T18:30:00Z'))).toBe('12:00 AM'); // 00:00 IST, 3 Nov
+  });
+});
 
 describe('formatNumericDate', () => {
   it('shows the day first, then the month, then the year', () => {

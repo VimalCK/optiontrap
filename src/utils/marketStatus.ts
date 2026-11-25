@@ -2,7 +2,7 @@
  * Browser-side market clock. The time zone, session hours and holidays live
  * in shared/marketTime.js (shared with the server); this file adapts it.
  */
-import { daysUntil, marketDate, marketStatus, marketTimeLabel } from '../../shared/marketTime.js';
+import { daysUntil, marketClock, marketDate, marketStatus, marketTimeLabel } from '../../shared/marketTime.js';
 import { MarketStatus, type MarketStatusId } from '../../shared/tradeEnums.js';
 
 /** Pre-open, live, post-close (30 min after the close) or closed, by market time. */
@@ -22,6 +22,17 @@ export function istDateString(now: Date = new Date()): string {
 /** HH:MM in the market zone, whatever the browser's time zone. */
 export function istTimeLabel(now: Date = new Date()): string {
   return marketTimeLabel(now);
+}
+
+const MINUTES_PER_HOUR = 60;
+const HALF_DAY_HOURS = 12;
+
+/** h:MM AM/PM in the market zone, whatever the browser's time zone. */
+export function istTime12Label(now: Date = new Date()): string {
+  const { minutes } = marketClock(now);
+  const hour = Math.floor(minutes / MINUTES_PER_HOUR);
+  const minute = String(minutes % MINUTES_PER_HOUR).padStart(2, '0');
+  return `${hour % HALF_DAY_HOURS || HALF_DAY_HOURS}:${minute} ${hour < HALF_DAY_HOURS ? 'AM' : 'PM'}`;
 }
 
 /** Whole days from today (market zone) to a YYYY-MM-DD date; negative if it has passed. */

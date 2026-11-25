@@ -6,7 +6,7 @@ import type { AutoTrade } from '@/services/automation';
 import type { PaperOrder } from '@/services/orders';
 import { marketDate } from '../../shared/marketTime.js';
 import { formatNumericDate } from '@/utils/marketStatus';
-import Automation, { AutoTradesTable, TradeRow, automationStatus } from './Automation';
+import Automation, { AutoTradesTable, AutomationStatusLabel, TradeRow, automationStatus } from './Automation';
 import { Horizon } from '../../shared/tradeEnums.js';
 import { TEST_STRATEGIES } from '@/services/strategies.fixture';
 
@@ -43,12 +43,12 @@ describe('automationStatus', () => {
   it('says on or off, and that nothing trades while there are no strategies', () => {
     expect(automationStatus(null, TEST_STRATEGIES)).toBeNull();
     expect(automationStatus(defaultAutomationConfig(TEST_STRATEGIES), null)).toBeNull();
-    expect(automationStatus(defaultAutomationConfig([]), [])).toBe('Off · no strategies yet, nothing trades');
-    expect(automationStatus({ ...defaultAutomationConfig([]), enabled: true }, [])).toBe('On · no strategies yet, nothing trades');
+    expect(automationStatus(defaultAutomationConfig([]), [])).toEqual({ on: false, detail: 'no strategies yet, nothing trades' });
+    expect(automationStatus({ ...defaultAutomationConfig([]), enabled: true }, [])).toEqual({ on: true, detail: 'no strategies yet, nothing trades' });
   });
 
   it('says no strategy is active by default', () => {
-    expect(automationStatus(defaultAutomationConfig(TEST_STRATEGIES), TEST_STRATEGIES)).toBe('Off · no strategy active');
+    expect(automationStatus(defaultAutomationConfig(TEST_STRATEGIES), TEST_STRATEGIES)).toEqual({ on: false, detail: 'no strategy active' });
   });
 
   it('counts the active strategies once there are some', () => {
@@ -58,9 +58,16 @@ describe('automationStatus', () => {
       for (const id of active) config.strategies[id].active = true;
       return config;
     };
-    expect(automationStatus(config([]), strategies)).toBe('On · no strategy active');
-    expect(automationStatus(config(['a']), strategies)).toBe('On · 1 strategy active');
-    expect(automationStatus(config(['a', 'b']), strategies)).toBe('On · 2 strategies active');
+    expect(automationStatus(config([]), strategies)).toEqual({ on: true, detail: 'no strategy active' });
+    expect(automationStatus(config(['a']), strategies)).toEqual({ on: true, detail: '1 strategy active' });
+    expect(automationStatus(config(['a', 'b']), strategies)).toEqual({ on: true, detail: '2 strategies active' });
+  });
+
+  it('shows On as a green badge and Off as a red one, then the detail', () => {
+    const on = renderToStaticMarkup(<AutomationStatusLabel status={{ on: true, detail: '1 strategy active' }} />);
+    expect(on).toMatch(/<span class="badge badge--positive"[^>]*>On<\/span>1 strategy active/);
+    const off = renderToStaticMarkup(<AutomationStatusLabel status={{ on: false, detail: 'no strategy active' }} />);
+    expect(off).toMatch(/<span class="badge badge--negative"[^>]*>Off<\/span>no strategy active/);
   });
 });
 
@@ -146,7 +153,7 @@ const waitingOrder = (extra: Partial<PaperOrder> = {}): PaperOrder => ({
 });
 
 describe('TradeRow', () => {
-  it('shows the lifecycle as a timeline of plain sentences when open, the IST time only on the row', () => {
+  it('shows the lifecycle as a timeline of plain sentences when open, each with its IST time beneath', () => {
     const trade: AutoTrade = {
       id: 't', horizon: Horizon.Intraday, kind: 'IndexOption', mode: 'Paper', tradingsymbol: 'NIFTY26N0924550PE', instrumentToken: 1,
       side: 'SELL', quantity: 65, stage: 'Executed', reason: null, entryPrice: 98.8, exitPrice: null, charges: null, positionId: 'p',
@@ -159,7 +166,7 @@ describe('TradeRow', () => {
     const html = renderToStaticMarkup(<table><tbody><TradeRow trade={trade} open onToggle={() => {}} /></tbody></table>);
     expect(html).toContain('aria-label="Hide lifecycle"');
     expect(html).toContain('<span class="automation-trades__time">12:30</span>'); // 07:00 UTC
-    expect(html.match(/<ol class="automation-timeline">.*<\/ol>/s)?.[0]).not.toMatch(/12:30|6 Nov/);
+    expect(html).toContain('<time class="automation-timeline__time" dateTime="2026-11-06T07:00:29.000Z">12:30 PM</time>');
     expect(html).toContain('<p class="automation-timeline__text">Option Analyzer setups · Wall Defense · score 53</p>');
     expect(html).toContain('<p class="automation-timeline__text">Opened a paper position at ₹98.80</p>');
     expect(html).not.toContain('strategyId');
