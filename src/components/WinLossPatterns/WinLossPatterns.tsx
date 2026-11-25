@@ -141,22 +141,24 @@ export const DailyPnl: React.FC<{ days: AutoTradeResults['byDay'] }> = ({ days }
       </div>
       <details className="winloss-details">
         <summary>Show as table</summary>
-        <table className="winloss-table">
-          <thead className="sticky-head">
-            <tr><th>Day</th><th>Trades</th><th>Win rate</th><th>P&amp;L</th><th>Running total</th></tr>
-          </thead>
-          <tbody>
-            {bars.map((d) => (
-              <tr key={d.key}>
-                <td>{dayLabel(d.key)}</td>
-                <td>{d.trades}</td>
-                <td>{percent(winRate(d))}</td>
-                <td className={toneClass(d.pnl)}>{amount(d.pnl)}</td>
-                <td className={toneClass(d.total)}>{amount(d.total)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="winloss-panel__scroll">
+          <table className="winloss-table">
+            <thead className="sticky-head">
+              <tr><th>Day</th><th>Trades</th><th>Win rate</th><th>P&amp;L</th><th>Running total</th></tr>
+            </thead>
+            <tbody>
+              {bars.map((d) => (
+                <tr key={d.key}>
+                  <td>{dayLabel(d.key)}</td>
+                  <td>{d.trades}</td>
+                  <td>{percent(winRate(d))}</td>
+                  <td className={toneClass(d.pnl)}>{amount(d.pnl)}</td>
+                  <td className={toneClass(d.total)}>{amount(d.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </details>
     </section>
   );

@@ -169,7 +169,8 @@
 }
 
 .winloss-panel__scroll {
-  overflow-x: auto;
+  overflow: auto;
+  max-height: calc(var(--winloss-head-height) + var(--winloss-row-height) * var(--winloss-visible-rows));
 }
 
 /* ── Tables ── */
@@ -201,6 +202,7 @@
 }
 
 .winloss-table th {
+  height: var(--winloss-head-height);
   font-size: 11px;
   font-weight: 600;
   color: var(--text-secondary);
@@ -210,6 +212,7 @@
 }
 
 .winloss-table td {
+  height: var(--winloss-row-height);
   color: var(--text-primary);
   border-top: 1px solid var(--card-border);
 }
@@ -234,6 +237,11 @@
 
 .winloss {
   --winloss-chart-height: 180px;
+  /* Every table row is this tall (the win rate cell's text and bar fit), so a table scrolls after a fixed number of rows. */
+  --winloss-row-height: 41px;
+  --winloss-head-height: 32px;
+  /* Ten rows fit; from the eleventh the table scrolls, half a row peeking out to show there is more. */
+  --winloss-visible-rows: 10.5;
 }
 
 /* The Daily P&L chart's outline while the results load. */
@@ -333,7 +341,7 @@
   color: var(--text-primary);
 }
 
-.winloss-details .winloss-table {
+.winloss-details .winloss-panel__scroll {
   margin-top: 8px;
 }
 
