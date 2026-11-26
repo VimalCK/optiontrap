@@ -12,7 +12,7 @@ import { paperPositionPnl, paperPositionsPnl } from './paperPnl';
 import { pnlTone } from './riskLabels';
 import { positionRows, type PositionRow } from './strategyLegs';
 
-const hasJournalNotes = (pos: Position) => pos.confidence != null || pos.targetPrice != null || pos.stopLossPrice != null || !!pos.note;
+const hasExitPrices = (pos: Position) => pos.targetPrice != null || pos.stopLossPrice != null;
 
 /** The last column holds the Exit button or the Exited badge, so it has no heading. */
 export const PAPER_POSITION_COLUMNS = ['Instrument', 'Side', 'Qty', 'Avg', 'LTP/Exit', 'P&L', ''];
@@ -58,12 +58,10 @@ const PaperPositionRow: React.FC<PaperPositionRowProps> = ({ pos, ltp, onExit, e
           <TradingViewLink symbol={pos.tradingsymbol} exchange={pos.exchange} />
         </PositionInstrument>
         {extra}
-        {hasJournalNotes(pos) && (
+        {hasExitPrices(pos) && (
           <div className="positions-table__meta">
-            {pos.confidence != null && <span>Conf {pos.confidence}%</span>}
             {pos.targetPrice != null && <span>Tgt {pos.targetPrice.toFixed(2)}</span>}
             {pos.stopLossPrice != null && <span>SL {pos.stopLossPrice.toFixed(2)}</span>}
-            {pos.note && <span className="positions-table__note">{pos.note}</span>}
           </div>
         )}
       </td>

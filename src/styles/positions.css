@@ -134,12 +134,6 @@
   background: rgba(var(--tint-rgb), 0.05);
 }
 
-.positions-table__note {
-  max-width: 260px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
 .positions-table__strike {
   font-weight: 600;
 }
