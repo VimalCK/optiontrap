@@ -3,7 +3,7 @@
  * paper trading uses.
  */
 import React, { useEffect, useState } from 'react';
-import { addDays, marketDate } from '../../../shared/marketTime.js';
+import { marketDate } from '../../../shared/marketTime.js';
 import DateRangePicker, { type DateRange } from '@/components/DateRangePicker/DateRangePicker';
 import { rangeProblem } from '@/components/TradeJournal/journalRange';
 import { type AutoTradeResults, type ResultGroup, fetchAutoTradeResults } from '@/services/automation';
@@ -20,8 +20,6 @@ import { MessageTone, ShimmerShape } from '@/utils/uiEnums';
 import Shimmer, { ShimmerGroup, ShimmerTableRows, shimmerKeys } from '@/components/Shimmer/Shimmer';
 
 const FETCH_DELAY_MS = 400;
-/** The range it opens on: the last 30 IST days, today included. */
-const DEFAULT_RANGE_DAYS = 30;
 
 /** The summary's headline figures and smaller stats, named once for the results and their placeholder. */
 const KPI = { pnl: 'Total P&L', winRate: 'Win rate', profitFactor: 'Profit factor', drawdown: 'Max drawdown' };
@@ -210,7 +208,7 @@ export const ResultsView: React.FC<{ results: AutoTradeResults }> = ({ results }
 };
 
 const WinLossPatterns: React.FC = () => {
-  const [range, setRange] = useState<DateRange>(() => ({ from: addDays(marketDate(), 1 - DEFAULT_RANGE_DAYS), to: marketDate() }));
+  const [range, setRange] = useState<DateRange>(() => ({ from: marketDate(), to: marketDate() })); // opens on today (IST)
   const [results, setResults] = useState<AutoTradeResults | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
