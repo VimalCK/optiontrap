@@ -7,9 +7,9 @@ export const STOP_LOSS_RULE_ID = 'stop-loss';
 export default {
   id: STOP_LOSS_RULE_ID,
   label: 'Stop-loss',
-  description: 'Exits a position once its loss is this percentage of its entry price.',
-  params: [{ key: 'percent', label: 'Loss (%)', type: ParamType.Percent }],
-  check: (position, _ctx, { percent }) => (position.pnlPercent <= -percent
-    ? `Stop-loss hit (${percent}%)`
+  description: 'Exits a position once its price has moved this many rupees against it from its entry price (e.g. bought at ₹100 with ₹10: exits at ₹90).',
+  params: [{ key: 'points', label: 'Loss (₹)', type: ParamType.Amount }],
+  check: (position, _ctx, { points }) => (position.gain <= -points
+    ? `Stop-loss hit (₹${points})`
     : null),
 };

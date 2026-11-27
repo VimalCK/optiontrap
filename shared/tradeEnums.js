@@ -205,7 +205,7 @@ export const ChargeSegment = Object.freeze({ Option: 'Option', Future: 'Future',
 /** @typedef {typeof ChargeSegment[keyof typeof ChargeSegment]} ChargeSegmentId */
 
 /** The kinds of value an entry or exit rule's setting can be (shared/rules/paramTypes.js). */
-export const ParamType = Object.freeze({ Count: 'Count', Amount: 'Amount', Percent: 'Percent', Time: 'Time' });
+export const ParamType = Object.freeze({ Count: 'Count', Amount: 'Amount', Time: 'Time' });
 
 /** @typedef {typeof ParamType[keyof typeof ParamType]} ParamTypeId */
 

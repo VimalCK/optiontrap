@@ -54,8 +54,8 @@ describe('RuleSettingsForm', () => {
 
   it('shows an active rule as active, with its values', () => {
     const settings = defaultRuleSettings(EXIT_RULES);
-    settings['stop-loss'] = { active: true, params: { percent: 20 } };
-    settings.target = { active: false, params: { percent: 40 } };
+    settings['stop-loss'] = { active: true, params: { points: 20 } };
+    settings.target = { active: false, params: { points: 40, trailPoints: null } };
     const html = form(EXIT_RULES, settings);
     expect(toggleFor(html, 'Stop-loss')).toContain('aria-checked="true"');
     expect(toggleFor(html, 'Target')).toContain('aria-checked="false"');

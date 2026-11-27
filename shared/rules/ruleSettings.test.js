@@ -40,12 +40,12 @@ describe('parseRuleSettings', () => {
 
   it('lets an active rule leave an optional value empty, and still checks one that is given', () => {
     const rules = [{ id: 'target', label: 'Target', description: '', params: [
-      { key: 'percent', label: 'Profit (%)', type: 'Percent' }, { key: 'trail', label: 'Trail by (%)', type: 'Percent', optional: true },
+      { key: 'points', label: 'Profit (₹)', type: 'Amount' }, { key: 'trail', label: 'Trail by (₹)', type: 'Amount', optional: true },
     ], check: () => null }];
     const target = (params) => ({ target: { active: true, params } });
-    expect(parseRuleSettings(rules, target({ percent: 10, trail: null }), 'rules')).toEqual({ settings: target({ percent: 10, trail: null }) });
-    expect(parseRuleSettings(rules, target({ percent: 10, trail: -1 }), 'rules')).toEqual({ error: 'Target: Trail by (%) must be a percentage above 0' });
-    expect(parseRuleSettings(rules, target({ percent: null, trail: 5 }), 'rules')).toEqual({ error: 'Target: set Profit (%) to make it active' });
+    expect(parseRuleSettings(rules, target({ points: 10, trail: null }), 'rules')).toEqual({ settings: target({ points: 10, trail: null }) });
+    expect(parseRuleSettings(rules, target({ points: 10, trail: -1 }), 'rules')).toEqual({ error: 'Target: Trail by (₹) must be an amount above 0' });
+    expect(parseRuleSettings(rules, target({ points: null, trail: 5 }), 'rules')).toEqual({ error: 'Target: set Profit (₹) to make it active' });
   });
 
   it('refuses values of the wrong kind, active or not, without rewriting them', () => {

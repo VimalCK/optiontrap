@@ -62,11 +62,11 @@ describe('parseAutomationConfig', () => {
   it("keeps each strategy's own rules apart", () => {
     const config = valid();
     config.strategies['test-strategy'].entryRules['max-lots'] = { active: true, params: { max: 2 } };
-    config.strategies['other-strategy'].exitRules['stop-loss'] = { active: true, params: { percent: 20 } };
+    config.strategies['other-strategy'].exitRules['stop-loss'] = { active: true, params: { points: 20 } };
     const parsed = parse(config).config;
     expect(parsed.strategies['test-strategy'].entryRules['max-lots']).toEqual({ active: true, params: { max: 2 } });
     expect(parsed.strategies['other-strategy'].entryRules['max-lots'].active).toBe(false);
-    expect(parsed.strategies['other-strategy'].exitRules['stop-loss']).toEqual({ active: true, params: { percent: 20 } });
+    expect(parsed.strategies['other-strategy'].exitRules['stop-loss']).toEqual({ active: true, params: { points: 20 } });
     expect(parsed.strategies['test-strategy'].exitRules['stop-loss'].active).toBe(false);
   });
 
@@ -188,7 +188,7 @@ describe('executionModes', () => {
 describe('exitRuleSettings', () => {
   it("pairs a strategy's own exit rules with the general ones, and gives a strategy no longer there none of its own", () => {
     const config = valid();
-    config.strategies['test-strategy'].exitRules['stop-loss'] = { active: true, params: { percent: 10 } };
+    config.strategies['test-strategy'].exitRules['stop-loss'] = { active: true, params: { points: 10 } };
     expect(exitRuleSettings(config, 'test-strategy')).toEqual({ strategy: config.strategies['test-strategy'].exitRules, general: config.generalRules });
     expect(exitRuleSettings(config, 'gone')).toEqual({ strategy: {}, general: config.generalRules });
   });

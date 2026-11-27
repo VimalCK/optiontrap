@@ -52,7 +52,7 @@ describe('max-open-positions', () => {
 });
 
 describe('max-daily-loss', () => {
-  const position = (pnlPercent) => ({ instrumentToken: 101, tradingsymbol: 'NIFTY26NOV24000PE', pnlPercent, pnl: pnlPercent * 75 });
+  const position = (gain) => ({ instrumentToken: 101, tradingsymbol: 'NIFTY26NOV24000PE', gain, bestGain: gain, pnl: gain * 75 });
 
   it("fires once today's automated P&L reaches the loss, not before", () => {
     expect(check('max-daily-loss', { amount: 5000 }, { todayAutoPnl: -4999.99 }, position(0))).toBeNull();

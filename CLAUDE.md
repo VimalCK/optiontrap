@@ -365,7 +365,7 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
   Only the order popup (`src/components/OrderModal/`, opened by clicking a premium on the Option Analyzer or OI History) has Limit
   and Positional; the B/S buttons and other screens place intraday market orders (`placeMarketTrade`).
   The signals service enters through a limit order (source auto, linked by `algo_trade_id`) when the Entry limit offset entry
-  rule is on: a buy that % below the LTP, a sell that % above. The trade stays validated while it waits; the order service tells
+  rule is on: a buy that many ₹ below the LTP, a sell that many above. The trade stays validated while it waits; the order service tells
   listeners (`onSettled`) when it fills (executed) or is cancelled (rejected). Waiting auto orders count in the
   Max open positions and One position per instrument rules.
 - OI snapshots are taken every 10 minutes in market hours by `oiSnapshotScheduler.js`. OI history is fetched after close.
@@ -379,7 +379,7 @@ instrument tokens in conditions, lookups, keys, defaults, maps, URLs, SQL filter
     (`server/kiteTickerFeed.js`, admin session, LTP mode, one feed for all users), through one channel per source
     (`services/monitorChannels/`), never mixed: automated positions exit when an exit rule of their strategy, or a
     general rule of their owner, fires (P&L at the last traded price); manual ones at the target / stop-loss price from their order. A trailing stop-loss (the Target
-    rule's Trail by %, or the order popup's Trail by ₹) starts at the target instead of exiting there and exits once the
+    rule's Trail by ₹, or the order popup's) starts at the target instead of exiting there and exits once the
     gain falls back that much from its best (best price kept in memory while watched). The exit is an order
     (`orders.exit`, source Auto) filled at the bid / ask. It reloads a user's positions when they fill an order by hand
     or change their settings.

@@ -72,10 +72,10 @@ const PRICE_TICK = 0.05;
 const TICK_EPSILON = 1e-9;
 
 /**
- * The limit price an automated entry is placed at: the Entry limit offset
- * percentage better than `lastPrice` (a buy below, a sell above), rounded to
- * the tick in the trade's favour; or null while that rule is off (enter at
- * the last price).
+ * The limit price an automated entry is placed at: the Entry limit offset's
+ * rupees better than `lastPrice` (a buy below, a sell above), rounded to the
+ * tick in the trade's favour; or null while that rule is off (enter at the
+ * last price).
  * @param {RuleSettings} settings  the strategy's entry rules
  * @param {import('../tradeEnums.js').SideId} side
  * @param {number} lastPrice
@@ -83,10 +83,10 @@ const TICK_EPSILON = 1e-9;
 export function entryLimitPrice(settings, side, lastPrice) {
   const setting = settings[entryLimitOffset.id];
   if (!setting?.active) return null;
-  const factor = Number(setting.params.percent) / 100;
+  const offset = Number(setting.params.points);
   const ticks = side === Side.BUY
-    ? Math.floor((lastPrice * (1 - factor)) / PRICE_TICK + TICK_EPSILON)
-    : Math.ceil((lastPrice * (1 + factor)) / PRICE_TICK - TICK_EPSILON);
+    ? Math.floor((lastPrice - offset) / PRICE_TICK + TICK_EPSILON)
+    : Math.ceil((lastPrice + offset) / PRICE_TICK - TICK_EPSILON);
   return Number((ticks * PRICE_TICK).toFixed(2));
 }
 

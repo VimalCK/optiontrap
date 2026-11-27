@@ -17,7 +17,7 @@ import { exitRuleSettings } from '../../../../shared/automation.js';
 import { marketDayStartMs } from '../../../../shared/marketTime.js';
 import { checkEntryOrderBlocked, checkExitRules } from '../../../../shared/exitRules/index.js';
 import { cancelledByRule } from '../../../../shared/orders.js';
-import { tradePnl, tradePnlPercent } from '../../../../shared/tradePnl.js';
+import { tradeGain, tradePnl } from '../../../../shared/tradePnl.js';
 import { TradeSource } from '../../../../shared/tradeEnums.js';
 import { createPositionBook } from './positionBook.js';
 
@@ -68,8 +68,8 @@ export function dueExits(positions, { lastPrices, bestPrices, configsByUser, tod
     const subject = {
       ...position,
       pnl: tradePnl(position, price),
-      pnlPercent: tradePnlPercent(position, price),
-      peakPnlPercent: tradePnlPercent(position, bestPrices.get(position.id) ?? price),
+      gain: tradeGain(position, price),
+      bestGain: tradeGain(position, bestPrices.get(position.id) ?? price),
     };
     const fired = checkExitRules(subject, ctx, exitRuleSettings(config, position.strategyId ?? null));
     if (fired) due.push({ position, exitPrice: price, ...fired });

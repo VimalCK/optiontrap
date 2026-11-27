@@ -13,7 +13,7 @@ export const ENTRY_LIMIT_OFFSET_RULE_ID = 'entry-limit-offset';
 export default {
   id: ENTRY_LIMIT_OFFSET_RULE_ID,
   label: 'Entry limit offset',
-  description: 'Places each automated entry as a limit order this percentage better than the last price (a buy below it, a sell above it). It fills when the price gets there, or is cancelled at the market close.',
-  params: [{ key: 'percent', label: 'Better by (%)', type: ParamType.Percent }],
+  description: 'Places each automated entry as a limit order this many rupees better than the last price (a buy below it, a sell above it: ₹3 on a buy at ₹100 is a limit at ₹97). It fills when the price gets there, or is cancelled at the market close.',
+  params: [{ key: 'points', label: 'Better by (₹)', type: ParamType.Amount }],
   check: () => null,
 };

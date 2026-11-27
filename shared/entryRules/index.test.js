@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_TRADE_LOTS, ENTRY_RULES, checkEntryRules, entryLimitPrice, entryRuleContexts, tradeLots } from './index.js';
-import { defaultRuleSettings, parseRuleSettings } from '../rules/ruleSettings.js';
+import { defaultRuleSettings, parseRuleSettings, ruleSettingsWithDefaults } from '../rules/ruleSettings.js';
 import { GENERAL_RULES } from '../generalRules/index.js';
 import { PARAM_TYPES } from '../rules/paramTypes.js';
 
@@ -75,25 +75,30 @@ describe('one-trade-per-instrument', () => {
 });
 
 describe('entry-limit-offset', () => {
-  const offset = (percent, active = true) => settings(active ? { 'entry-limit-offset': { percent } } : {});
+  const offset = (points, active = true) => settings(active ? { 'entry-limit-offset': { points } } : {});
 
   it('never refuses a trade: it only prices the entry', () => {
-    expect(check('entry-limit-offset', { percent: 20 })).toBeNull();
+    expect(check('entry-limit-offset', { points: 12 })).toBeNull();
   });
 
-  it('prices a buy that percentage below the last price and a sell that percentage above it', () => {
-    expect(entryLimitPrice(offset(20), 'BUY', 60)).toBe(48);
-    expect(entryLimitPrice(offset(20), 'SELL', 60)).toBe(72);
-    expect(entryLimitPrice(offset(15), 'BUY', 300)).toBe(255);
+  it('prices a buy that many rupees below the last price and a sell that many above it', () => {
+    expect(entryLimitPrice(offset(12), 'BUY', 60)).toBe(48);
+    expect(entryLimitPrice(offset(12), 'SELL', 60)).toBe(72);
+    expect(entryLimitPrice(offset(3), 'BUY', 100)).toBe(97);
   });
 
   it('rounds to the 0.05 tick in the trade’s favour: a buy down, a sell up', () => {
-    expect(entryLimitPrice(offset(10), 'BUY', 123.45)).toBe(111.1); // 111.105 → 111.10
-    expect(entryLimitPrice(offset(10), 'SELL', 123.45)).toBe(135.8); // 135.795 → 135.80
+    expect(entryLimitPrice(offset(12.34), 'BUY', 123.45)).toBe(111.1); // 111.11 → 111.10
+    expect(entryLimitPrice(offset(12.34), 'SELL', 123.45)).toBe(135.8); // 135.79 → 135.80
   });
 
   it('is null while the rule is off: the engine enters at the last price', () => {
-    expect(entryLimitPrice(offset(20, false), 'BUY', 60)).toBeNull();
+    expect(entryLimitPrice(offset(12, false), 'BUY', 60)).toBeNull();
+  });
+
+  it('turns off an offset saved in percent, before it took rupees, until a rupee amount is set', () => {
+    const stored = { 'entry-limit-offset': { active: true, params: { percent: 3 } } };
+    expect(ruleSettingsWithDefaults(ENTRY_RULES, stored)['entry-limit-offset']).toEqual({ active: false, params: { points: null } });
   });
 });
 

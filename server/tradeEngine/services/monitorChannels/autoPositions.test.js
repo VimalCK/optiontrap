@@ -39,15 +39,15 @@ describe('openPnlByUser', () => {
 });
 
 describe('dueExits', () => {
-  const configs = new Map([['U1', config({ 'stop-loss': { percent: 20 } })], ['U2', config({ target: { percent: 5 } })]]);
+  const configs = new Map([['U1', config({ 'stop-loss': { points: 20 } })], ['U2', config({ target: { points: 10 } })]]);
   const state = (lastPrices, { configsByUser = configs, todayPnlByUser = new Map(), bestPrices = new Map() } = {}) =>
     ({ lastPrices, bestPrices, configsByUser, todayPnlByUser, now: NOON });
 
   it("fires the rules of each position's strategy, as its owner set them, on its P&L at the last price, exiting at that price", () => {
     const prices = new Map([[101, 120], [202, 210]]);
     expect(dueExits([sold, bought], state(prices))).toEqual([
-      { position: sold, exitPrice: 120, ruleId: 'stop-loss', reason: 'Stop-loss hit (20%)' },
-      { position: bought, exitPrice: 210, ruleId: 'target', reason: 'Target hit (5%)' },
+      { position: sold, exitPrice: 120, ruleId: 'stop-loss', reason: 'Stop-loss hit (₹20)' },
+      { position: bought, exitPrice: 210, ruleId: 'target', reason: 'Target hit (₹10)' },
     ]);
   });
 
@@ -68,18 +68,18 @@ describe('dueExits', () => {
     expect(due.map((d) => [d.position.id, d.ruleId])).toEqual([['p1', 'max-daily-loss'], ['p3', 'max-daily-loss']]);
   });
 
-  describe('with a trailing stop-loss on the target (target 10%, trail 5%)', () => {
-    const trailing = new Map([['U2', config({ target: { percent: 10, trailPercent: 5 } })]]);
+  describe('with a trailing stop-loss on the target (bought at ₹200, target ₹20, trail ₹10)', () => {
+    const trailing = new Map([['U2', config({ target: { points: 20, trailPoints: 10 } })]]);
     const at = (last, best) => dueExits([bought], state(new Map([[202, last]]), { configsByUser: trailing, bestPrices: new Map([['p2', best]]) }));
 
     it("doesn't exit at the target, and exits once the profit falls back the trail from its best", () => {
-      expect(at(220, 220)).toEqual([]); // +10%: trailing starts
-      expect(at(221, 230)).toEqual([]); // best +15%, now +10.5%
-      expect(at(220, 230)).toEqual([{ position: bought, exitPrice: 220, ruleId: 'target', reason: 'Trailing stop-loss hit (best 15%, trail 5%, target 10%)' }]);
+      expect(at(220, 220)).toEqual([]); // +₹20: trailing starts, the stop at ₹210
+      expect(at(221, 230)).toEqual([]); // best ₹230: the stop at ₹220
+      expect(at(220, 230)).toEqual([{ position: bought, exitPrice: 220, ruleId: 'target', reason: 'Trailing stop-loss hit (best +₹30, trail ₹10, target ₹20)' }]);
     });
 
     it('leaves a position that never reached the target to the other rules, however far it falls from its best', () => {
-      expect(at(200, 219)).toEqual([]); // best +9.5%
+      expect(at(200, 219)).toEqual([]); // best +₹19
     });
 
     it('starts from the last price when no best price is known yet', () => {

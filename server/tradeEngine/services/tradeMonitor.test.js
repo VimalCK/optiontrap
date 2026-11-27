@@ -84,7 +84,7 @@ describe('the monitor service', () => {
     db = {
       getAllOpenAutoPositions: vi.fn(async () => [sold, bought]),
       getOpenAutoPositions: vi.fn(async () => []),
-      getAutomationConfigs: vi.fn(async (ids) => new Map(ids.map((id) => [id, config(id === 'U1' ? { 'stop-loss': { percent: 20 } } : {})]))),
+      getAutomationConfigs: vi.fn(async (ids) => new Map(ids.map((id) => [id, config(id === 'U1' ? { 'stop-loss': { points: 20 } } : {})]))),
       getTodayAutoRealisedPnl: vi.fn(async () => 0),
       getAllOpenManualPositionsWithExits: vi.fn(async () => []),
       getOpenManualPositionsWithExits: vi.fn(async () => []),
@@ -121,7 +121,7 @@ describe('the monitor service', () => {
       exitPrice: 120,
       kite: ADMIN_KITE, // a market exit at the bid / ask, quoted with the feed's session
       source: 'Auto',
-      exitReason: { ruleId: 'stop-loss', reason: 'Stop-loss hit (20%)' },
+      exitReason: { ruleId: 'stop-loss', reason: 'Stop-loss hit (₹20)' },
     });
     expect(monitor.watchedPositionIds()).toEqual(['p2']);
     expect(feeds[0].watching).toEqual([202]);
@@ -212,7 +212,7 @@ describe('the monitor service', () => {
   it('applies changed exit rules from the next tick after a refresh', async () => {
     await market.open();
     db.getOpenAutoPositions.mockResolvedValueOnce([bought]);
-    db.getAutomationConfigs.mockResolvedValueOnce(new Map([['U2', config({ 'stop-loss': { percent: 1 } })]]));
+    db.getAutomationConfigs.mockResolvedValueOnce(new Map([['U2', config({ 'stop-loss': { points: 2 } })]]));
     await monitor.refreshUser('U2');
     expect(db.getOpenAutoPositions).toHaveBeenCalledWith('U2');
     await monitor.onTicks([{ instrumentToken: 202, lastPrice: 198 }]);
@@ -288,14 +288,31 @@ describe('the monitor service', () => {
   });
 
   it("trails an automated position from its owner's target and exits once the profit falls back the trail", async () => {
-    db.getAutomationConfigs.mockImplementation(async (ids) => new Map(ids.map((id) => [id, config({ target: { percent: 10, trailPercent: 5 } })])));
+    db.getAutomationConfigs.mockImplementation(async (ids) => new Map(ids.map((id) => [id, config({ target: { points: 20, trailPoints: 10 } })])));
     await market.open();
-    for (const lastPrice of [220, 230, 221]) await monitor.onTicks([{ instrumentToken: 202, lastPrice }]); // +10%, best +15%, +10.5%
+    for (const lastPrice of [220, 230, 221]) await monitor.onTicks([{ instrumentToken: 202, lastPrice }]); // +₹20, best +₹30, +₹21
     expect(orders.exit).not.toHaveBeenCalled();
     await monitor.onTicks([{ instrumentToken: 202, lastPrice: 220 }]);
     expect(orders.exit).toHaveBeenCalledWith('U2', 'p2', expect.objectContaining({
-      exitPrice: 220, exitReason: { ruleId: 'target', reason: 'Trailing stop-loss hit (best 15%, trail 5%, target 10%)' },
+      exitPrice: 220, exitReason: { ruleId: 'target', reason: 'Trailing stop-loss hit (best +₹30, trail ₹10, target ₹20)' },
     }));
+  });
+
+  it('gives a new position on an instrument no price from before it was unwatched: only ticks that come after', async () => {
+    db.getAutomationConfigs.mockImplementation(async (ids) => new Map(ids.map((id) => [id, config({ target: { points: 20, trailPoints: 10 } })])));
+    await market.open();
+    for (const lastPrice of [220, 230, 220]) await monitor.onTicks([{ instrumentToken: 202, lastPrice }]); // best +₹30, back to the stop at ₹220
+    expect(exitedIds()).toEqual(['p2']);
+    expect(feeds[0].watching).toEqual([101]);
+
+    // Bought again later at 190: the 220 seen before the instrument was unwatched is stale, not its price or best.
+    const again = { ...bought, id: 'p6', entryPrice: 190 };
+    db.getOpenAutoPositions.mockResolvedValueOnce([again]);
+    await monitor.refreshUser('U2');
+    await market.clockCheck();
+    await monitor.onTicks([{ instrumentToken: 202, lastPrice: 189 }]);
+    expect(exitedIds()).toEqual(['p2']);
+    expect(monitor.watchedPositionIds()).toEqual(['p1', 'p6']);
   });
 
   describe('the manual channel', () => {

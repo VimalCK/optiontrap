@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { tradePnl, tradePnlPercent } from './tradePnl.js';
+import { tradeGain, tradePnl, tradePnlPercent } from './tradePnl.js';
 
 describe('tradePnl', () => {
   const bought = { side: 'BUY', quantity: 50, entryPrice: 200 };
@@ -14,6 +14,15 @@ describe('tradePnl', () => {
 
   it('is 0 at the entry price', () => {
     expect(tradePnl(sold, 100)).toBe(0);
+  });
+});
+
+describe('tradeGain', () => {
+  it("is the rupees per unit the price moved in the trade's favour from its entry: up for a buy, down for a sell", () => {
+    expect(tradeGain({ side: 'BUY', entryPrice: 100 }, 115)).toBe(15);
+    expect(tradeGain({ side: 'BUY', entryPrice: 100 }, 90)).toBe(-10);
+    expect(tradeGain({ side: 'SELL', entryPrice: 100 }, 120)).toBe(-20);
+    expect(tradeGain({ side: 'SELL', entryPrice: 100 }, 85)).toBe(15);
   });
 });
 

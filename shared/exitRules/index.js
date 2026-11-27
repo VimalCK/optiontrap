@@ -14,9 +14,9 @@ import squareOff from './squareOff.js';
 
 /**
  * @typedef {import('../rules/ruleSettings.js').ScopedRuleSettings} ScopedRuleSettings
- * @typedef {{ instrumentToken: number, tradingsymbol: string, horizon: import('../tradeEnums.js').HorizonId, pnl: number, pnlPercent: number,
- *             peakPnlPercent: number }} OpenAutoPosition
- *   pnl in ₹; pnlPercent as a percentage of its entry price; peakPnlPercent the same at its best price
+ * @typedef {{ instrumentToken: number, tradingsymbol: string, horizon: import('../tradeEnums.js').HorizonId, pnl: number, gain: number,
+ *             bestGain: number }} OpenAutoPosition
+ *   pnl in ₹; gain the ₹ per unit its price has moved in its favour from the entry price; bestGain the same at its best price
  *   since the trade monitor started watching it (in memory: a restart starts it again from the price then)
  * @typedef {{ now: Date, todayAutoPnl: number }} ExitRuleContext
  *   todayAutoPnl is the owner's automated P&L today in ₹ across all strategies: booked plus open positions at their last price
@@ -63,7 +63,7 @@ export function checkExitRules(position, ctx, settings) {
  * @returns {{ ruleId: string, reason: string } | null}
  */
 export function checkEntryOrderBlocked(order, ctx, settings) {
-  const position = { ...order, pnl: 0, pnlPercent: 0, peakPnlPercent: 0 };
+  const position = { ...order, pnl: 0, gain: 0, bestGain: 0 };
   return firstRuleThatFires(ENTRY_BLOCKING_RULES, position, ctx, settings.strategy)
     ?? firstRuleThatFires(GENERAL_ENTRY_BLOCKING_RULES, position, ctx, settings.general);
 }

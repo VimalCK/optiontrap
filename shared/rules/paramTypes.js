@@ -27,12 +27,6 @@ export const PARAM_TYPES = {
     mustBe: 'an amount above 0',
     parse: (value) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined),
   },
-  [ParamType.Percent]: {
-    input: 'number',
-    step: '0.01',
-    mustBe: 'a percentage above 0',
-    parse: (value) => (typeof value === 'number' && Number.isFinite(value) && value > 0 ? value : undefined),
-  },
   [ParamType.Time]: {
     input: 'time',
     mustBe: 'a time as HH:MM',

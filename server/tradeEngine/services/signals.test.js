@@ -329,15 +329,15 @@ describe('submitting a strategy\'s signals', () => {
 });
 
 describe('entering through a limit order (Entry limit offset on)', () => {
-  /** userConfig with Entry limit offset at `percent`. */
-  const offsetConfig = (percent = 20) => {
+  /** userConfig with Entry limit offset at `points` rupees. */
+  const offsetConfig = (points = 24) => {
     const config = userConfig();
-    own(config).entryRules['entry-limit-offset'] = { active: true, params: { percent } };
+    own(config).entryRules['entry-limit-offset'] = { active: true, params: { points } };
     return config;
   };
 
-  it('places a sell limit that percentage above the last price, linked to the trade, and opens nothing yet', async () => {
-    const { db, submit, orders, monitor } = setup({ config: offsetConfig(20) });
+  it('places a sell limit that many rupees above the last price, linked to the trade, and opens nothing yet', async () => {
+    const { db, submit, orders, monitor } = setup({ config: offsetConfig(24) });
     await submit();
     expect(orders.placeAuto).toHaveBeenCalledWith('U1', expect.objectContaining({ tradingsymbol: 'NIFTY26NOV24000PE', side: 'SELL', quantity: 150, orderType: 'Limit', limitPrice: 144 }),
       { lastPrice: 120, fillPrice: null, autoTradeId: 'T1', strategyId: 'test' });

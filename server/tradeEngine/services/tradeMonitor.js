@@ -148,6 +148,17 @@ export function createTradeMonitor({
     for (const id of prices.best.keys()) if (!watched.has(id)) prices.best.delete(id);
   }
 
+  /**
+   * Watch exactly the watched positions' instruments, forgetting the last price of any no longer watched: it goes
+   * stale while unwatched, and a position opened on it later must start from its own ticks, not that old price.
+   */
+  function watchTokens() {
+    const tokens = watchedTokens();
+    const watched = new Set(tokens);
+    for (const token of prices.last.keys()) if (!watched.has(token)) prices.last.delete(token);
+    feed?.watch(tokens);
+  }
+
   /** Raise each position's best price to its last price where that is better. */
   function updateBestPrices(/** @type {WatchedPosition[]} */ positions) {
     for (const position of positions) {
@@ -182,7 +193,7 @@ export function createTradeMonitor({
       }
       prices.best.delete(position.id); // exited now, or already exited elsewhere
       await channel.exited(position);
-      feed?.watch(watchedTokens());
+      watchTokens();
     } catch (err) {
       log('exit failed', { position: position.tradingsymbol, user: position.userId, error: /** @type {Error} */ (err).message });
     } finally {
@@ -237,7 +248,7 @@ export function createTradeMonitor({
       onTicks: (ticks) => { onTicks(ticks); },
       onAuthError: () => { log('admin Kite session expired', { next: 'trying again at the next check' }); stopFeed(); },
     });
-    feed.watch(watchedTokens());
+    watchTokens();
   }
 
   /** At the open: every channel loads its open positions, then they are watched. */
@@ -258,7 +269,7 @@ export function createTradeMonitor({
     if (!loaded) return; // not watching yet: the open's load will include them
     await Promise.all(channels.map((channel) => channel.loadUser(userId)));
     pruneBestPrices();
-    feed?.watch(watchedTokens());
+    watchTokens();
     await ensureFeed();
   }
 

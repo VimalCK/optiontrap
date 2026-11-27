@@ -1,7 +1,7 @@
 /**
  * The trailing stop-loss, shared by the trade monitor's channels: it starts once the position's gain reaches its
- * target, then follows the best gain and fires once the gain falls back `trail` from it. The gains can be in any
- * one unit: ₹ per unit for a manual position, % of the entry price for an automated one.
+ * target, then follows the best gain and fires once the gain falls back `trail` from it. Gains are ₹ per unit from the
+ * entry price, for manual and automated positions alike.
  */
 import { Side } from './tradeEnums.js';
 
