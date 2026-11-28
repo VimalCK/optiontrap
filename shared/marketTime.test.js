@@ -18,6 +18,7 @@ import {
   marketMonth,
   marketStatus,
   marketTimeLabel,
+  clockLabel,
 } from './marketTime.js';
 
 // IST is UTC+05:30. 07:35 in Ireland (GMT) on Tue 3 Nov 2026 is 13:05 IST.
@@ -28,6 +29,7 @@ describe('marketClock', () => {
     expect(marketClock(utc('2026-11-03T07:35:00'))).toEqual({ date: '2026-11-03', weekday: 2, minutes: 13 * 60 + 5 });
     expect(marketTimeLabel(utc('2026-11-03T07:35:00'))).toBe('13:05');
     expect(marketTimeLabel(utc('2026-11-03T18:30:00'))).toBe('00:00');
+    expect(clockLabel(9 * 60 + 5)).toBe('09:05');
   });
 
   it('rolls over to the next market day before UTC does', () => {

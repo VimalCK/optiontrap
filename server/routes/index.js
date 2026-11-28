@@ -8,6 +8,7 @@ import { oiSnapshotRoutes } from './oiSnapshots.js';
 import { orderRoutes } from './orders.js';
 import { positionRoutes } from './positions.js';
 import { priceAlertRoutes } from './priceAlerts.js';
+import { replayRoutes } from './replay.js';
 import { stockRoutes } from './stocks.js';
 import { subscriptionRoutes } from './subscriptions.js';
 import { versionRoutes } from './version.js';
@@ -28,5 +29,6 @@ export const ROUTERS = [
   oiSnapshotRoutes,
   oiHistoryRoutes,
   stockRoutes,
+  replayRoutes,
   instrumentRoutes,
 ];

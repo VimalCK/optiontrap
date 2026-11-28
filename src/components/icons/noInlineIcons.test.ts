@@ -11,6 +11,7 @@ const ALLOWED: Record<string, string> = {
   'components/OiHistory/StrikeOiChart.tsx': 'strike OI and premium chart',
   'components/OptionChain/StrikeTooltip.tsx': 'OI move sparkline in the chart tooltip',
   'components/Positions/PayoffChart.tsx': 'payoff curve',
+  'components/Replay/ReplayCharts.tsx': 'replay index, premium and OI flow charts',
   'components/icons/Icons.tsx': 'the icons themselves',
 };
 

@@ -23,6 +23,8 @@ interface AppSelectProps {
   placeholder?: string;
   searchable?: boolean;
   disabled?: boolean;
+  /** The accessible name, when no visible label wraps the select. */
+  ariaLabel?: string;
 }
 
 const AppSelect: React.FC<AppSelectProps> = ({
@@ -34,6 +36,7 @@ const AppSelect: React.FC<AppSelectProps> = ({
   placeholder = 'Select...',
   searchable = false,
   disabled = false,
+  ariaLabel,
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState('');
@@ -182,6 +185,7 @@ const AppSelect: React.FC<AppSelectProps> = ({
         onKeyDown={!searchable ? handleKeyDown : undefined}
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-label={ariaLabel}
       >
         <span className="app-select-trigger__label">{selectedLabel}</span>
         <ChevronDownIcon size={16} className={`app-select-trigger__chevron ${open ? 'app-select-trigger__chevron--open' : ''}`} />

@@ -11,6 +11,7 @@ import {
   ChevronLeftIcon,
   LogoIcon,
   ShieldIcon,
+  ReplayIcon,
 } from '../icons/Icons';
 import { KiteSession } from '@/services/kiteAuth';
 import { useAlgoTradingSwitch } from '@/hooks/useAlgoTradingSwitch';
@@ -29,6 +30,7 @@ const navItems: NavItem[] = [
   { path: '/portfolio', label: 'Portfolio', icon: <TradesIcon /> },
   { path: '/analytics', label: 'Analytics', icon: <AnalyticsIcon /> },
   { path: '/watchlist', label: 'Watchlist', icon: <WatchlistIcon /> },
+  { path: '/replay', label: 'Replay', icon: <ReplayIcon /> },
   { path: ALGO_TRADING_PATH, label: 'Algo Trading', icon: <AutomationIcon /> },
 ];
 

@@ -531,6 +531,23 @@ export const TrendIcon: React.FC<StrokeIconProps> = (props) => (
   </StrokeIcon>
 );
 
+/** A play triangle inside a rewinding circle: replays a past session. */
+export const ReplayIcon: React.FC<StrokeIconProps> = ({ size = 20, ...props }) => (
+  <StrokeIcon size={size} {...props}>
+    <path d="M3.5 12a8.5 8.5 0 1 0 2.5-6" />
+    <path d="M3 3.5v4h4" />
+    <path d="M10 9l5 3-5 3z" />
+  </StrokeIcon>
+);
+
+export const PlayIcon: React.FC<StrokeIconProps> = (props) => (
+  <StrokeIcon {...props}><path d="M7 4.5l12 7.5-12 7.5z" /></StrokeIcon>
+);
+
+export const PauseIcon: React.FC<StrokeIconProps> = (props) => (
+  <StrokeIcon {...props}><path d="M8 5v14M16 5v14" /></StrokeIcon>
+);
+
 /** Six dots: a handle to drag a row by. Filled, so it takes no stroke. */
 export const DragHandleIcon: React.FC<IconProps> = ({ size = 14, className }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className={className} aria-hidden="true">

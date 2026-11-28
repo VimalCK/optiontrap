@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { formatAmount, formatSignedAmount } from './formatAmount';
+import { formatAmount, formatSignedAmount, formatSignedRupees } from './formatAmount';
+
+describe('formatSignedRupees', () => {
+  it('puts the sign before the rupee symbol', () => {
+    expect(formatSignedRupees(1512.61)).toBe('+₹1,512.61');
+    expect(formatSignedRupees(-747.13)).toBe('−₹747.13');
+    expect(formatSignedRupees(0)).toBe('+₹0.00');
+  });
+});
 
 describe('formatAmount', () => {
   it('always shows two decimals', () => {

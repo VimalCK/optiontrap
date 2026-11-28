@@ -195,3 +195,47 @@ export const ExportTable = Object.freeze({
 });
 
 /** @typedef {typeof ExportTable[keyof typeof ExportTable]} ExportTableId */
+
+/** A replay session is being played, or has reached the close (Replay page). */
+export const ReplaySessionStatus = Object.freeze({ Open: 'Open', Finished: 'Finished' });
+
+/** @typedef {typeof ReplaySessionStatus[keyof typeof ReplaySessionStatus]} ReplaySessionStatusId */
+
+/** Why a replay trade closed: the player exited it, or the session's square-off did. */
+export const ReplayExitReason = Object.freeze({ Manual: 'Manual', SquareOff: 'SquareOff' });
+
+/** @typedef {typeof ReplayExitReason[keyof typeof ReplayExitReason]} ReplayExitReasonId */
+
+/** @returns {value is ReplayExitReasonId} */
+export const isReplayExitReason = (/** @type {unknown} */ value) => Object.values(ReplayExitReason).includes(/** @type {ReplayExitReasonId} */ (value));
+
+/** What the player saw when taking a replay trade, tagged at entry so the results can be split by it. */
+export const ReplayReason = Object.freeze({
+  Breakout: 'Breakout',
+  LevelHeld: 'LevelHeld',
+  PullbackInTrend: 'PullbackInTrend',
+  Reversal: 'Reversal',
+  OiWriters: 'OiWriters',
+  MomentumBurst: 'MomentumBurst',
+  PremiumLeads: 'PremiumLeads',
+  GutFeel: 'GutFeel',
+});
+
+/** @typedef {typeof ReplayReason[keyof typeof ReplayReason]} ReplayReasonId */
+
+export const REPLAY_REASONS = /** @type {{ id: ReplayReasonId, label: string }[]} */ ([
+  { id: ReplayReason.Breakout, label: 'Breakout' },
+  { id: ReplayReason.LevelHeld, label: 'Support / resistance held' },
+  { id: ReplayReason.PullbackInTrend, label: 'Pullback in trend' },
+  { id: ReplayReason.Reversal, label: 'Reversal' },
+  { id: ReplayReason.OiWriters, label: 'OI writers' },
+  { id: ReplayReason.MomentumBurst, label: 'Momentum burst' },
+  { id: ReplayReason.PremiumLeads, label: 'Premium moving first' },
+  { id: ReplayReason.GutFeel, label: 'Gut feel' },
+]);
+
+/** @returns {value is ReplayReasonId} */
+export const isReplayReason = (/** @type {unknown} */ value) => REPLAY_REASONS.some((reason) => reason.id === value);
+
+/** A reason's label, or the value itself when unknown. */
+export const replayReasonLabel = (/** @type {unknown} */ reason) => REPLAY_REASONS.find((r) => r.id === reason)?.label ?? String(reason);

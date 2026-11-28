@@ -64,10 +64,12 @@ export function marketMonth(now = new Date()) {
   return marketDate(now).slice(0, 7);
 }
 
+/** 'HH:MM' of a number of minutes since midnight. */
+export const clockLabel = (/** @type {number} */ minutes) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
 /** 'HH:MM' in the market zone. */
 export function marketTimeLabel(now = new Date()) {
-  const { minutes } = marketClock(now);
-  return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+  return clockLabel(marketClock(now).minutes);
 }
 
 /**

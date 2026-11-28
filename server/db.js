@@ -57,6 +57,14 @@ export {
   triggerPriceAlert,
 } from './db/priceAlerts.js';
 export {
+  addReplayTrade,
+  createReplaySession,
+  finishReplaySession,
+  getOpenReplaySession,
+  getReplaySessions,
+  getReplayStats,
+} from './db/replay.js';
+export {
   getStoredAutomatedUsers,
   getStoredAutomationConfig,
   getStoredAutomationConfigs,
@@ -112,6 +120,7 @@ export {
   getInstruments,
   getInstrumentsDate,
   getMarketReference,
+  getNearestExpiryOptions,
   getStrikeStepSize,
   getUnderlying,
   getUnderlyings,

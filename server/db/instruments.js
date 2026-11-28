@@ -230,6 +230,30 @@ export async function getStrikeStepSize(scripName) {
   return bestGap;
 }
 
+/**
+ * The option contracts of an underlying's nearest expiry on or after `onOrAfter`, with strikes in [minStrike, maxStrike],
+ * by strike then type. The table holds live contracts only, so this is the nearest one Kite still serves.
+ * @returns {Promise<{ instrumentToken: number, tradingsymbol: string, strike: number, instrumentType: string, expiry: string, lotSize: number }[]>}
+ */
+export async function getNearestExpiryOptions(name, onOrAfter, minStrike, maxStrike) {
+  const options = `exchange = ${sqlEnum(Exchange.NFO)} AND instrument_type IN (${sqlEnumList(OptionType.CE, OptionType.PE)})`;
+  const result = await rows(
+    `SELECT instrument_token, tradingsymbol, strike, instrument_type, expiry, lot_size FROM instruments
+     WHERE name = $1 AND ${options} AND strike BETWEEN $3 AND $4
+       AND expiry = (SELECT MIN(expiry) FROM instruments WHERE name = $1 AND ${options} AND expiry >= $2)
+     ORDER BY strike, instrument_type`,
+    [name, onOrAfter, minStrike, maxStrike],
+  );
+  return result.map((row) => ({
+    instrumentToken: Number(row.instrument_token),
+    tradingsymbol: row.tradingsymbol,
+    strike: row.strike,
+    instrumentType: row.instrument_type,
+    expiry: row.expiry,
+    lotSize: Number(row.lot_size),
+  }));
+}
+
 /** An NSE or BSE cash stock by token, or null for anything else (indices are stored as NSE EQ but contain a space). */
 export async function getCashStock(instrumentToken) {
   const row = await firstRow(

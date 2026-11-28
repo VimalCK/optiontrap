@@ -3,6 +3,11 @@ export function formatAmount(value: number): string {
   return value.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+/** A signed rupee amount: +₹1,512.61, −₹747.13. */
+export function formatSignedRupees(value: number): string {
+  return `${value < 0 ? '−' : '+'}₹${formatAmount(Math.abs(value))}`;
+}
+
 /** formatAmount with a + in front of gains: +41,949.50, -1,200.00. */
 export function formatSignedAmount(value: number): string {
   return `${value >= 0 ? '+' : ''}${formatAmount(value)}`;

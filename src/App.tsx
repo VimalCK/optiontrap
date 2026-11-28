@@ -11,6 +11,7 @@ const Holdings = lazy(() => import('./pages/Holdings'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Analytics = lazy(() => import('./pages/Analytics'));
 const Watchlist = lazy(() => import('./pages/Watchlist'));
+const Replay = lazy(() => import('./pages/Replay'));
 const Automation = lazy(() => import('./pages/Automation'));
 const AutomationSettings = lazy(() => import('./pages/AutomationSettings'));
 const Profile = lazy(() => import('./pages/Profile'));
@@ -83,6 +84,7 @@ const App: React.FC = () => {
                       <Route path="/dashboard" element={<Dashboard />} />
                       <Route path="/analytics" element={<Analytics />} />
                       <Route path="/watchlist" element={<Watchlist />} />
+                      <Route path="/replay" element={<Replay />} />
                       <Route path="/automation" element={<Automation />} />
                       <Route path="/automation/settings" element={<AutomationSettings />} />
                       <Route path="/profile" element={<Profile />} />

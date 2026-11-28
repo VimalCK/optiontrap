@@ -51,6 +51,14 @@ export type AdminTabId = typeof AdminTab[keyof typeof AdminTab];
 export const AnalyticsTab = Object.freeze({ History: 'History', Analyzer: 'Analyzer', Journal: 'Journal', WinLoss: 'WinLoss' });
 export type AnalyticsTabId = typeof AnalyticsTab[keyof typeof AnalyticsTab];
 
+/** Replay's tabs (?tab=): play a day, or the results of the days played. */
+export const ReplayTab = Object.freeze({ Play: 'Play', Results: 'Results' });
+export type ReplayTabId = typeof ReplayTab[keyof typeof ReplayTab];
+
+/** A replay order waiting for the next minute's open: buying an option, or selling the one held. */
+export const ReplayOrderKind = Object.freeze({ Entry: 'Entry', Exit: 'Exit' });
+export type ReplayOrderKindId = typeof ReplayOrderKind[keyof typeof ReplayOrderKind];
+
 /** The trade journal range a link can open with (?range=). */
 export const JournalRange = Object.freeze({ Today: 'Today' });
 export type JournalRangeId = typeof JournalRange[keyof typeof JournalRange];
